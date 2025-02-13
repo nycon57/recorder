@@ -1,5 +1,6 @@
 import { createContext, useContext, useRef, useState } from 'react';
 
+import { RecordingModal } from 'components/RecordingModal';
 import { composeStreams } from 'services/composer';
 
 import { useLayout } from './layout';
@@ -12,6 +13,8 @@ type RecordingContextType = {
   stopRecording: () => void;
   pauseRecording: () => void;
   resumeRecording: () => void;
+  isModalOpen: boolean;
+  closeModal: () => void;
 };
 
 const RecordingContext = createContext<RecordingContextType | undefined>(
@@ -26,6 +29,8 @@ export const RecordingProvider = ({ children }: RecordingProviderProps) => {
   const { layout } = useLayout();
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
   const { cameraStream, microphoneStream, screenshareStream } = useStreams();
 
   const mediaRecorder = useRef<MediaRecorder>();
@@ -56,13 +61,8 @@ export const RecordingProvider = ({ children }: RecordingProviderProps) => {
 
       const blob = new Blob(chunks);
 
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'recording.webm';
-      link.click();
-
-      window.URL.revokeObjectURL(url);
+      setRecordingBlob(blob);
+      setIsModalOpen(true);
     };
 
     mediaRecorder.current.start();
@@ -84,6 +84,11 @@ export const RecordingProvider = ({ children }: RecordingProviderProps) => {
     mediaRecorder.current?.resume();
   };
 
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setRecordingBlob(null);
+  };
+
   return (
     <RecordingContext.Provider
       value={{
@@ -93,9 +98,16 @@ export const RecordingProvider = ({ children }: RecordingProviderProps) => {
         stopRecording,
         pauseRecording,
         resumeRecording,
+        isModalOpen,
+        closeModal,
       }}
     >
       {children}
+      <RecordingModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        recordingBlob={recordingBlob}
+      />
     </RecordingContext.Provider>
   );
 };
