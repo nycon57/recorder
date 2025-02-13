@@ -10,7 +10,14 @@ const BrowserNotSupported = () => {
     <div className={styles.root}>
       <Typography variant="h6">This browser is not yet supported</Typography>
       <Typography variant="subtitle1">
-        You can use the recorder with the following browser(s)
+        This app requires the following browser APIs which are currently only
+        supported in Chrome:
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        • Document Picture-in-Picture API
+        <br />
+        • MediaStreamTrack Processor API
+        <br />• MediaStreamTrack Generator API
       </Typography>
       <Link
         className={styles.chromeLink}
