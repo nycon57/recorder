@@ -184,18 +184,6 @@ export const RecordingModal = ({
             style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}
           >
             <button
-              onClick={downloadWebm}
-              style={{
-                padding: '0.5rem 1rem',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                backgroundColor: 'white',
-                cursor: 'pointer',
-              }}
-            >
-              Download (WEBM)
-            </button>
-            <button
               onClick={convertToMp4}
               style={{
                 padding: '0.5rem 1rem',
@@ -207,6 +195,18 @@ export const RecordingModal = ({
               }}
             >
               Convert to MP4
+            </button>
+            <button
+              onClick={downloadWebm}
+              style={{
+                padding: '0.5rem 1rem',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                backgroundColor: 'white',
+                cursor: 'pointer',
+              }}
+            >
+              Download (WEBM)
             </button>
           </div>
         )}

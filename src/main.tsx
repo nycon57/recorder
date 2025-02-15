@@ -11,6 +11,7 @@ import Compose from 'components/Compose';
 import { CountdownProvider } from 'contexts/countdown';
 import { LayoutProvider } from 'contexts/layout';
 import { MediaDevicesProvider } from 'contexts/mediaDevices';
+import { CameraShapeProvider } from 'contexts/cameraShape';
 import { PictureInPictureProvider } from 'contexts/pictureInPicture';
 import { RecordingProvider } from 'contexts/recording';
 import { ScreenshareProvider } from 'contexts/screenshare';
@@ -35,6 +36,7 @@ createRoot(document.getElementById('root') as HTMLElement).render(
               LayoutProvider,
               StreamsProvider,
               RecordingProvider,
+              CameraShapeProvider,
               PictureInPictureProvider,
               MediaDevicesProvider,
               ScreenshareProvider,

@@ -4,6 +4,11 @@ export const CAMERA_BORDER_RADIUS = 8;
 export const CAMERA_MARGIN_RIGHT = 40;
 export const CAMERA_MARGIN_BOTTOM = 40;
 
+const getCameraShape = () => {
+  const shape = localStorage.getItem('cameraShape');
+  return shape === 'circle' ? CAMERA_WIDTH / 2 : CAMERA_BORDER_RADIUS;
+};
+
 export const composeStreams = (
   cameraStream: MediaStream | null,
   microphoneStream: MediaStream | null,
@@ -86,7 +91,7 @@ export const composeStreams = (
           canvas.height - CAMERA_HEIGHT - CAMERA_MARGIN_BOTTOM,
           CAMERA_WIDTH,
           CAMERA_HEIGHT,
-          CAMERA_BORDER_RADIUS,
+          getCameraShape(),
         );
         ctx.clip();
 

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Placeholder from 'components/Placeholder';
 import { useLayout } from 'contexts/layout';
 import { useStreams } from 'contexts/streams';
+import { useCameraShape } from 'contexts/cameraShape';
 import useVideoSource from 'hooks/useVideoSource';
 import {
   CAMERA_BORDER_RADIUS,
@@ -28,6 +29,7 @@ const VideoStreams = () => {
   const updateScreenshareSource = useVideoSource(screenshareStream);
   const [screenshareSize, setScreenshareSize] =
     useState<ScreenshareSize | null>(null);
+  const { isCircle } = useCameraShape();
 
   if (!screenshareStream && screenshareSize) {
     setScreenshareSize(null);
@@ -41,6 +43,7 @@ const VideoStreams = () => {
         <video
           className={cx(styles.mainStream, {
             [styles.cameraStream]: layout === 'cameraOnly',
+            [styles.circle]: layout === 'cameraOnly' && isCircle,
           })}
           ref={
             layout === 'cameraOnly'
@@ -77,17 +80,21 @@ const VideoStreams = () => {
         cameraStream &&
         (!screenshareStream || screenshareSize) && (
           <video
-            className={cx(styles.pipStream, styles.cameraStream)}
+            className={cx(styles.pipStream, styles.cameraStream, {
+              [styles.circle]: isCircle,
+            })}
             ref={updateCameraSource}
             style={{
               right: percentage(CAMERA_MARGIN_RIGHT / screenshareWidth),
               bottom: percentage(CAMERA_MARGIN_BOTTOM / screenshareHeight),
               width: percentage(CAMERA_WIDTH / screenshareWidth),
               height: percentage(CAMERA_HEIGHT / screenshareHeight),
-              borderRadius: [
-                percentage(CAMERA_BORDER_RADIUS / CAMERA_WIDTH),
-                percentage(CAMERA_BORDER_RADIUS / CAMERA_HEIGHT),
-              ].join('/'),
+              borderRadius: isCircle
+                ? '50%'
+                : [
+                    percentage(CAMERA_BORDER_RADIUS / CAMERA_WIDTH),
+                    percentage(CAMERA_BORDER_RADIUS / CAMERA_HEIGHT),
+                  ].join('/'),
             }}
             autoPlay
             playsInline

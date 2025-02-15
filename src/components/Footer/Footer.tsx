@@ -1,6 +1,7 @@
 import CameraSelect from 'components/CameraSelect';
 import MainRecordButton from 'components/MainRecordButton';
 import MicrophoneSelect from 'components/MicrophoneSelect';
+import ShapeSelect from 'components/ShapeSelect';
 
 import styles from './Footer.module.css';
 
@@ -10,6 +11,7 @@ const Footer = () => {
       <div>&nbsp;</div>
       <MainRecordButton />
       <div className={styles.devices}>
+        <ShapeSelect />
         <MicrophoneSelect />
         <CameraSelect />
       </div>
