@@ -21,7 +21,7 @@
   display: grid;
   place-content: center;
   animation: 4s linear -350ms forwards iconPulse;
-  font-family: Gilroy, Arial, sans-serif;
+  font-family: Helvetica, Arial, sans-serif;
   font-size: 16px;
   font-weight: 700;
 

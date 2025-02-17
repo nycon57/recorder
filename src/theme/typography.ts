@@ -1,16 +1,12 @@
 import { TypographyOptions } from '@mui/material/styles/createTypography';
 
-import GilroyBold from './fonts/Gilroy-Bold.ttf';
-import GilroyMedium from './fonts/Gilroy-Medium.ttf';
-import GilroyRegular from './fonts/Gilroy-Regular.ttf';
-import GilroySemiBold from './fonts/Gilroy-SemiBold.ttf';
 import SFMonoBold from './fonts/SF-Mono-Bold.ttf';
 import SFMonoMedium from './fonts/SF-Mono-Medium.ttf';
 import SFMonoRegular from './fonts/SF-Mono-Regular.ttf';
 import SFMonoSemiBold from './fonts/SF-Mono-SemiBold.ttf';
 
 const typography: TypographyOptions = {
-  fontFamily: 'Gilroy, Arial, sans-serif',
+  fontFamily: 'Helvetica, Arial, sans-serif',
   button: {
     fontWeight: 600,
     textTransform: undefined,
@@ -18,38 +14,6 @@ const typography: TypographyOptions = {
 };
 
 export const fontFaces = `
-  @font-face {
-    font-family: 'Gilroy';
-    font-style: normal;
-    font-display: swap;
-    font-weight: 400;
-    src: local('Gilroy'), local('Gilroy-Regular'), url(${GilroyRegular}) format('truetype');
-  }
-
-  @font-face {
-    font-family: 'Gilroy';
-    font-style: normal;
-    font-display: swap;
-    font-weight: 500;
-    src: local('Gilroy'), local('Gilroy-Medium'), url(${GilroyMedium}) format('truetype');
-  }
-
-  @font-face {
-    font-family: 'Gilroy';
-    font-style: normal;
-    font-display: swap;
-    font-weight: 600;
-    src: local('Gilroy'), local('Gilroy-SemiBold'), url(${GilroySemiBold}) format('truetype');
-  }
-
-  @font-face {
-    font-family: 'Gilroy';
-    font-style: normal;
-    font-display: swap;
-    font-weight: 700;
-    src: local('Gilroy'), local('Gilroy-Bold'), url(${GilroyBold}) format('truetype');
-  }
-
   @font-face {
     font-family: 'SF Mono';
     font-style: normal;

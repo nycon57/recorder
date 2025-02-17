@@ -18,6 +18,7 @@
       var(--mui-palette-action-activeChannel) /
         var(--mui-palette-action-hoverOpacity)
     );
+    border-color: white;
   }
 }
 
