@@ -16,9 +16,9 @@ const Placeholder = () => {
         variant="h5"
         color="secondary.contrastText"
       >
-        Share screen to begin
+        Record your screen
       </Typography>
-      <Button startIcon={<PresentToAllIcon />} onClick={startScreenshare}>
+      <Button className={styles.cta} startIcon={<PresentToAllIcon />} onClick={startScreenshare}>
         Share screen
       </Button>
     </div>
