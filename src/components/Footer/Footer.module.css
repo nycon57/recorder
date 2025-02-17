@@ -11,21 +11,3 @@
   justify-self: end;
   column-gap: 8px;
 }
-
-.teleprompterButton {
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  border-radius: 6px;
-  color: white;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.2s;
-  display: flex;
-  align-items: center;
-  height: 40px;
-}
-
-.teleprompterButton:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
