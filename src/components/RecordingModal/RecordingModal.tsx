@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
+import Button from '@mui/material/Button';
+import styles from './RecordingModal.module.css';
 
 type RecordingModalProps = {
   isOpen: boolean;
@@ -183,31 +185,19 @@ export const RecordingModal = ({
           <div
             style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}
           >
-            <button
+            <Button
               onClick={convertToMp4}
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#007bff',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
+              className={styles.convertButton}
+
             >
-              Convert to MP4
-            </button>
-            <button
+              Convert (MP4)
+            </Button>
+            <Button
               onClick={downloadWebm}
-              style={{
-                padding: '0.5rem 1rem',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                backgroundColor: 'white',
-                cursor: 'pointer',
-              }}
+              className={styles.downloadButton}
             >
-              Download (WEBM)
-            </button>
+              Download (WebM)
+            </Button>
           </div>
         )}
       </div>
