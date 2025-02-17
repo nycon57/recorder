@@ -21,7 +21,7 @@ const TeleprompterSelect = () => {
         <MenuItem value="hide">Hide Teleprompter</MenuItem>
         <MenuItem value="show">Show Teleprompter</MenuItem>
       </DeviceSelect>
-      {showTeleprompter && <Teleprompter />}
+      {showTeleprompter && <Teleprompter onClose={() => setShowTeleprompter(false)} />}
     </>
   );
 };

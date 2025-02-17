@@ -3,10 +3,14 @@
 import { Teleprompter } from './Teleprompter';
 import styles from './TeleprompterContainer.module.css';
 
-export function TeleprompterContainer() {
+interface TeleprompterContainerProps {
+  onClose: () => void;
+}
+
+export function TeleprompterContainer({ onClose }: TeleprompterContainerProps) {
   return (
     <div className={styles.container}>
-      <Teleprompter />
+      <Teleprompter onClose={onClose} />
     </div>
   );
 }

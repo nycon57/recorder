@@ -16,7 +16,11 @@ import styles from './Teleprompter.module.css';
 
 const DEFAULT_SPEED = 0.2;
 
-export function Teleprompter() {
+interface TeleprompterProps {
+  onClose: () => void;
+}
+
+export function Teleprompter({ onClose }: TeleprompterProps) {
   const [text, setText] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
@@ -111,6 +115,7 @@ export function Teleprompter() {
           onClick={() => {
             setShowInput(true);
             setIsPlaying(false);
+            onClose();
           }}
         >
           <X className="h-4 w-4" />
