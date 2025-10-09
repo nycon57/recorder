@@ -7,14 +7,34 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build
 dist
 dist-ssr
+
+# Production
+/build
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 *.local
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/css-custom-data.json
 .idea
 .DS_Store
 *.suo
@@ -26,6 +46,25 @@ dist-ssr
 # Cache
 .eslintcache
 .stylelintcache
+*.tsbuildinfo
+next-env.d.ts
+
+# Testing
+coverage
+
+# Misc
+.DS_Store
+.env*.local
+.vercel
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Local Netlify folder
 .netlify
+
+# MCP
+.mcp.json

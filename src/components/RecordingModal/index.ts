@@ -1,1 +1,0 @@
-export { RecordingModal } from './RecordingModal';
