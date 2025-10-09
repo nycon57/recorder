@@ -1,0 +1,49 @@
+{
+  "version": 1.1,
+  "atDirectives": [
+    {
+      "name": "@tailwind",
+      "description": "Use the @tailwind directive to insert Tailwind's base, components, utilities and variants styles into your CSS."
+    },
+    {
+      "name": "@apply",
+      "description": "Use @apply to inline any existing utility classes into your own custom CSS."
+    },
+    {
+      "name": "@layer",
+      "description": "Use the @layer directive to tell Tailwind which 'bucket' a set of custom styles belong to."
+    },
+    {
+      "name": "@variants",
+      "description": "You can generate responsive, hover, focus, active, and other variants of your own utilities by wrapping their definitions in the @variants directive."
+    },
+    {
+      "name": "@responsive",
+      "description": "You can generate responsive variants of your own classes by wrapping their definitions in the @responsive directive."
+    },
+    {
+      "name": "@screen",
+      "description": "The @screen directive allows you to create media queries that reference your breakpoints by name instead of duplicating their values in your own CSS."
+    },
+    {
+      "name": "@config",
+      "description": "Use the @config directive to specify which config file Tailwind should use when compiling that CSS file."
+    },
+    {
+      "name": "@plugin",
+      "description": "Tailwind CSS v4 directive to import a plugin."
+    },
+    {
+      "name": "@theme",
+      "description": "Tailwind CSS v4 directive to define theme configuration inline in CSS."
+    },
+    {
+      "name": "@utility",
+      "description": "Tailwind CSS v4 directive to define custom utility classes."
+    },
+    {
+      "name": "@import",
+      "description": "Standard CSS import directive, used by Tailwind CSS v4 to import the framework."
+    }
+  ]
+}
