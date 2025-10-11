@@ -1,5 +1,7 @@
 import { ClerkProvider } from '@clerk/nextjs';
 import type { Metadata } from 'next';
+import { ThemeProvider } from 'next-themes';
+import { Toaster } from '@/app/components/ui/sonner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -55,7 +57,17 @@ export default function RootLayout({
             content="require-corp"
           />
         </head>
-        <body suppressHydrationWarning>{children}</body>
+        <body suppressHydrationWarning>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+            <Toaster />
+          </ThemeProvider>
+        </body>
       </html>
     </ClerkProvider>
   );

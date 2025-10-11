@@ -198,9 +198,7 @@ CREATE INDEX IF NOT EXISTS idx_shares_resource
 CREATE INDEX IF NOT EXISTS idx_shares_shareId
   ON shares(share_id);
 
--- User organizations (for auth checks)
-CREATE INDEX IF NOT EXISTS idx_user_orgs_user
-  ON user_organizations(user_id, org_id);
-CREATE INDEX IF NOT EXISTS idx_user_orgs_org
-  ON user_organizations(org_id, role);
+-- Users (for org/role lookups)
+CREATE INDEX IF NOT EXISTS idx_users_org_role
+  ON users(org_id, role);
 `;

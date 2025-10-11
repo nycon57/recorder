@@ -1,6 +1,8 @@
 'use client';
 
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { toast } from 'sonner';
+import { RECORDING_LIMITS, formatDuration, RECORDING_LIMITS_LABELS } from '@/lib/config/recording';
 
 export type RecordingLayout = 'screenAndCamera' | 'screenOnly' | 'cameraOnly';
 export type CameraShape = 'circle' | 'square';
@@ -23,6 +25,8 @@ interface RecordingContextType {
   setMicrophoneStream: (stream: MediaStream | null) => void;
   setScreenshareStream: (stream: MediaStream | null) => void;
   requestMediaStreams: () => Promise<boolean>;
+  changeScreenshare: () => Promise<boolean>;
+  isEntireScreenShared: boolean;
 
   // Layout
   layout: RecordingLayout;
@@ -42,11 +46,13 @@ interface RecordingContextType {
   isRecording: boolean;
   isPaused: boolean;
   recordingBlob: Blob | null;
+  recordingDuration: number; // Duration in milliseconds
   startRecording: () => Promise<void>;
   beginRecordingWithCountdown: () => void;
   stopRecording: () => void;
   pauseRecording: () => void;
   resumeRecording: () => void;
+  clearRecording: () => void;
 
   // Picture-in-Picture
   pipWindow: Window | null;
@@ -94,7 +100,11 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0); // Duration in ms
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStartTimeRef = useRef<number | null>(null);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasWarned25Min = useRef(false);
 
   // Picture-in-Picture
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
@@ -104,6 +114,16 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
 
   // Countdown
   const [countdown, setCountdown] = useState<number | null>(null);
+
+  // Track if entire screen is being shared (to hide baked-in camera)
+  const [isEntireScreenShared, setIsEntireScreenShared] = useState(false);
+
+  // Reset entire screen state when screenshare is removed
+  useEffect(() => {
+    if (!screenshareStream) {
+      setIsEntireScreenShared(false);
+    }
+  }, [screenshareStream]);
 
   // Auto-request camera on mount if layout includes camera
   useEffect(() => {
@@ -202,11 +222,65 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           audio: false,
         });
         setScreenshareStream(screenStream);
+
+        // Check if entire screen is being shared
+        const videoTrack = screenStream.getVideoTracks()[0];
+        const settings = videoTrack.getSettings();
+        const isEntireScreen = settings.displaySurface === 'monitor';
+        console.log('[RecordingContext] Screen share displaySurface:', settings.displaySurface);
+        setIsEntireScreenShared(isEntireScreen);
       }
 
       return true;
     } catch (error) {
-      console.error('Failed to get media streams:', error);
+      // Handle user cancellation gracefully (NotAllowedError is expected when user cancels)
+      if (error instanceof Error && error.name === 'NotAllowedError') {
+        console.log('[RecordingContext] Screen sharing cancelled by user');
+        return false;
+      }
+
+      // Log unexpected errors
+      console.error('[RecordingContext] Failed to get media streams:', error);
+      return false;
+    }
+  };
+
+  const changeScreenshare = async (): Promise<boolean> => {
+    try {
+      console.log('[RecordingContext] Changing screenshare selection...');
+
+      // Stop current screenshare if it exists
+      if (screenshareStreamRef.current) {
+        screenshareStreamRef.current.getTracks().forEach(track => track.stop());
+        setScreenshareStream(null);
+      }
+
+      // Request new screen share
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: 1920, height: 1080 },
+        audio: false,
+      });
+
+      console.log('[RecordingContext] New screenshare obtained:', screenStream.id);
+      setScreenshareStream(screenStream);
+
+      // Check if entire screen is being shared
+      const videoTrack = screenStream.getVideoTracks()[0];
+      const settings = videoTrack.getSettings();
+      const isEntireScreen = settings.displaySurface === 'monitor';
+      console.log('[RecordingContext] Screen share displaySurface:', settings.displaySurface);
+      setIsEntireScreenShared(isEntireScreen);
+
+      return true;
+    } catch (error) {
+      // Handle user cancellation gracefully (NotAllowedError is expected when user cancels)
+      if (error instanceof Error && error.name === 'NotAllowedError') {
+        console.log('[RecordingContext] Screen sharing selection cancelled by user');
+        return false;
+      }
+
+      // Log unexpected errors
+      console.error('[RecordingContext] Failed to change screenshare:', error);
       return false;
     }
   };
@@ -219,8 +293,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
 
     try {
       const pipWindowInstance = await window.documentPictureInPicture.requestWindow({
-        width: 400,
-        height: 200,
+        width: 500,
+        height: 450,
       });
 
       setPipWindow(pipWindowInstance);
@@ -257,12 +331,21 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Only open PiP for screen-based layouts (not cameraOnly)
-    if (layout !== 'cameraOnly' && !pipWindow) {
-      await openPipWindow();
-    } else if (layout === 'cameraOnly') {
-      // For camera-only mode, start recording immediately with countdown
+    // Determine whether to open PiP or start recording directly
+    const shouldSkipPip =
+      layout === 'cameraOnly' ||
+      (layout === 'screenOnly' && isEntireScreenShared);
+
+    if (shouldSkipPip) {
+      // Start recording directly (no PiP) for:
+      // 1. Camera-only mode
+      // 2. Screen-only mode with entire screen shared (PiP would be disruptive)
       beginRecordingWithCountdown();
+    } else if (layout !== 'cameraOnly' && !pipWindow) {
+      // Open PiP for screen-based layouts that need it:
+      // 1. Screen+camera mode (always needs PiP for camera display)
+      // 2. Screen-only mode with tab/window share (not entire screen)
+      await openPipWindow();
     }
   };
 
@@ -285,8 +368,39 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     }, 1000);
   };
 
+  const clearRecording = () => {
+    setRecordingBlob(null);
+  };
+
   const beginRecording = () => {
+    // Clear any previous recording blob
+    setRecordingBlob(null);
+    setRecordingDuration(0);
     setIsRecording(true);
+    hasWarned25Min.current = false;
+
+    // Start recording timer
+    recordingStartTimeRef.current = Date.now();
+    recordingTimerRef.current = setInterval(() => {
+      if (!recordingStartTimeRef.current) return;
+
+      const elapsed = Date.now() - recordingStartTimeRef.current;
+      setRecordingDuration(elapsed);
+
+      // Warn at 25 minutes
+      if (elapsed >= RECORDING_LIMITS.WARN_DURATION_MS && !hasWarned25Min.current) {
+        hasWarned25Min.current = true;
+        toast.warning(`Recording limit approaching: ${RECORDING_LIMITS_LABELS.WARN_DURATION} elapsed`, {
+          description: `Maximum recording time is ${RECORDING_LIMITS_LABELS.MAX_DURATION}`,
+        });
+      }
+
+      // Auto-stop at 30 minutes
+      if (elapsed >= RECORDING_LIMITS.MAX_DURATION_MS) {
+        toast.error(`Recording automatically stopped: ${RECORDING_LIMITS_LABELS.MAX_DURATION} limit reached`);
+        stopRecording();
+      }
+    }, 1000);
 
     // Import and use the composer dynamically
     // Use refs to get the latest stream values
@@ -295,7 +409,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         layout === 'screenOnly' ? null : cameraStreamRef.current,
         microphoneStreamRef.current,
         layout === 'cameraOnly' ? null : screenshareStreamRef.current,
-        cameraShape
+        cameraShape,
+        isEntireScreenShared // Skip camera overlay when entire screen is shared
       );
 
       const mediaRecorder = new MediaRecorder(composedStream, {
@@ -312,9 +427,24 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       mediaRecorder.onstop = () => {
         composedStream.getVideoTracks().forEach((track) => track.stop());
         const blob = new Blob(chunks, { type: 'video/webm' });
+
+        // Check file size limit
+        if (blob.size > RECORDING_LIMITS.MAX_FILE_SIZE_BYTES) {
+          toast.error('Recording exceeds maximum file size', {
+            description: `Maximum size is ${RECORDING_LIMITS_LABELS.MAX_FILE_SIZE}`,
+          });
+        }
+
         setRecordingBlob(blob);
         setIsRecording(false);
         setIsPaused(false);
+
+        // Clear timer
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+        recordingStartTimeRef.current = null;
       };
 
       mediaRecorder.start();
@@ -330,11 +460,44 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const pauseRecording = () => {
     mediaRecorderRef.current?.pause();
     setIsPaused(true);
+
+    // Pause timer by clearing interval
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
   };
 
   const resumeRecording = () => {
     mediaRecorderRef.current?.resume();
     setIsPaused(false);
+
+    // Resume timer - adjust start time to account for pause duration
+    if (recordingStartTimeRef.current) {
+      const pausedDuration = recordingDuration;
+      recordingStartTimeRef.current = Date.now() - pausedDuration;
+
+      recordingTimerRef.current = setInterval(() => {
+        if (!recordingStartTimeRef.current) return;
+
+        const elapsed = Date.now() - recordingStartTimeRef.current;
+        setRecordingDuration(elapsed);
+
+        // Warn at 25 minutes
+        if (elapsed >= RECORDING_LIMITS.WARN_DURATION_MS && !hasWarned25Min.current) {
+          hasWarned25Min.current = true;
+          toast.warning(`Recording limit approaching: ${RECORDING_LIMITS_LABELS.WARN_DURATION} elapsed`, {
+            description: `Maximum recording time is ${RECORDING_LIMITS_LABELS.MAX_DURATION}`,
+          });
+        }
+
+        // Auto-stop at 30 minutes
+        if (elapsed >= RECORDING_LIMITS.MAX_DURATION_MS) {
+          toast.error(`Recording automatically stopped: ${RECORDING_LIMITS_LABELS.MAX_DURATION} limit reached`);
+          stopRecording();
+        }
+      }, 1000);
+    }
   };
 
   return (
@@ -347,6 +510,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         setMicrophoneStream,
         setScreenshareStream,
         requestMediaStreams,
+        changeScreenshare,
+        isEntireScreenShared,
         layout,
         setLayout,
         cameraShape,
@@ -358,11 +523,13 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         isRecording,
         isPaused,
         recordingBlob,
+        recordingDuration,
         startRecording,
         beginRecordingWithCountdown,
         stopRecording,
         pauseRecording,
         resumeRecording,
+        clearRecording,
         pipWindow,
         setPipWindow,
         openPipWindow,

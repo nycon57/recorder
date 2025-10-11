@@ -4,295 +4,262 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Status**: ✅ **PHASES 1-3 COMPLETE** - MVP with recording, transcription, and AI processing is fully functional
+Record is a full-stack AI-powered knowledge management platform combining browser-based screen recording with automatic transcription, document generation, semantic search, and RAG-powered chat assistant.
 
-Record has evolved from a browser-based screen recorder into a comprehensive AI-powered knowledge management platform that combines:
-- Browser-based recording (screen + camera + audio)
-- Automatic transcription with OpenAI Whisper
-- AI-powered document generation (Docify) with GPT-5 Nano
-- Semantic search with pgvector embeddings
-- RAG-based AI assistant for Q&A
-- Multi-tenant collaboration features
+**Tech Stack**: Next.js 15, React 19, TypeScript, Supabase (PostgreSQL + pgvector + Storage), Clerk (Auth + Organizations), OpenAI (Whisper, GPT-5 Nano, Embeddings), Stripe, Upstash Redis, Tailwind CSS + shadcn/ui + Material-UI
 
-### Architecture Evolution
-
-**Previous (Vite)**: Client-side only, privacy-focused, no backend
-**Current (Next.js)**: Full-stack SaaS with cloud storage, AI processing, and collaboration
-
-### Tech Stack
-
-**Frontend**:
-- Next.js 14 with App Router
-- React 18 + TypeScript
-- Tailwind CSS + Material-UI
-- MediaRecorder API + FFMPEG.wasm
-
-**Backend**:
-- Next.js API Routes (serverless)
-- Supabase PostgreSQL (with pgvector extension)
-- Supabase Storage (S3-compatible)
-- Background job system
-
-**Auth & Payments**:
-- Clerk (authentication + organizations)
-- Stripe (billing - planned)
-
-**AI Services**:
-- OpenAI Whisper (transcription)
-- OpenAI GPT-5 Nano (document generation + chat)
-- OpenAI text-embedding-3-small (embeddings for semantic search)
-
-**Infrastructure**:
-- Vercel (hosting + serverless functions)
-- Upstash Redis (rate limiting - planned)
-- Resend (email notifications - planned)
-
-## Browser Requirements
-
-Recording features require Chrome/Chromium browsers:
-- `documentPictureInPicture` - for PiP recording interface
-- `MediaStreamTrackProcessor` - for video frame processing
-- `MediaStreamTrackGenerator` - for composited stream generation
-
-Legacy browser checks in [src/main.tsx](src/main.tsx:23-26) (to be migrated).
+**Browser Requirement**: Chrome/Chromium only (requires `documentPictureInPicture`, `MediaStreamTrackProcessor`, `MediaStreamTrackGenerator` APIs)
 
 ## Development Commands
 
 ```bash
-# Install dependencies
-yarn install
+# Development
+yarn dev                    # Start Next.js dev server (http://localhost:3000)
+yarn worker:dev             # Start background worker in watch mode
 
-# Start dev server (http://localhost:3000)
-yarn dev
+# Build & Production
+yarn build                  # Build for production
+yarn start                  # Start production server
+yarn worker                 # Run job processor (continuous mode)
+yarn worker:once            # Process one batch and exit
 
-# Build for production
-yarn build
+# Testing
+yarn test                   # Run Jest tests
+yarn test:watch             # Run tests in watch mode
+yarn test:coverage          # Run with coverage report
 
-# Start production server
-yarn start
-
-# Type checking
-yarn type:check
-
-# Linting
-yarn lint           # Check JS/TS files (Next.js built-in)
-yarn lint:fix       # Auto-fix JS/TS issues
-yarn lint:css       # Check CSS files
-yarn lint:css:fix   # Auto-fix CSS issues
-
-# Formatting
-yarn format:check   # Check Prettier formatting
-yarn format:fix     # Auto-fix formatting
+# Code Quality
+yarn type:check             # TypeScript type checking
+yarn lint                   # Lint JS/TS (Next.js ESLint)
+yarn lint:fix               # Auto-fix lint issues
+yarn lint:css               # Lint CSS (Stylelint)
+yarn lint:css:fix           # Auto-fix CSS issues
+yarn format:check           # Check Prettier formatting
+yarn format:fix             # Auto-fix formatting
 ```
 
-## Project Structure (Next.js)
+**Development Workflow**: Run `yarn dev` for the web app and `yarn worker:dev` for background jobs in separate terminals.
+
+## Project Structure
 
 ```
-.
-├── app/                          # Next.js App Router
-│   ├── api/                     # API Routes
-│   │   ├── health/             # Health check
-│   │   └── recordings/         # Recording endpoints
-│   ├── layout.tsx              # Root layout (Clerk provider)
-│   ├── page.tsx                # Landing page
-│   └── globals.css             # Global styles
-├── lib/                         # Shared libraries
-│   ├── openai/                 # OpenAI client & config
-│   ├── supabase/               # Supabase clients (client, server, admin)
-│   ├── workers/                # Background job processors
-│   │   ├── job-processor.ts   # Main job processing loop
-│   │   └── handlers/          # Job type handlers (transcribe, docify, embeddings)
-│   ├── services/               # Business logic services
-│   │   └── chunking.ts        # Text chunking utilities
-│   ├── types/                  # TypeScript type definitions
-│   ├── utils/                  # Helper utilities
-│   └── validations/            # Zod validation schemas
-├── scripts/                     # CLI scripts
-│   └── worker.ts               # Background job worker executable
-├── src/                         # ⚠️ Legacy Vite components (integrated in Phase 2)
-│   ├── components/             # React components (Material-UI)
-│   ├── contexts/               # React Context providers
-│   ├── hooks/                  # Custom React hooks
-│   └── services/               # Business logic & utilities
-├── supabase/                    # Database & storage
-│   ├── migrations/             # SQL schema migrations
-│   └── storage/                # Storage bucket configuration
-├── middleware.ts                # Clerk authentication middleware
-├── next.config.js              # Next.js configuration
-└── tsconfig.json               # TypeScript configuration
+app/
+├── (dashboard)/           # Protected routes (requires auth)
+│   ├── assistant/        # RAG-powered AI chat
+│   ├── dashboard/        # Main dashboard
+│   ├── record/           # Recording interface + video composition
+│   ├── recordings/       # Recordings list
+│   ├── search/           # Semantic search
+│   └── settings/         # User/org settings
+├── (marketing)/          # Public routes
+│   ├── features/
+│   ├── pricing/
+│   └── about/
+├── api/                  # API Routes
+│   ├── billing/         # Stripe integration
+│   ├── chat/            # AI assistant
+│   ├── recordings/      # CRUD + finalize
+│   ├── search/          # Vector search
+│   └── share/           # Public sharing
+├── components/          # Shared React components
+│   ├── layout/         # Navbar, footer, sidebar
+│   ├── recorder/       # Recording UI (PiP, controls)
+│   └── ui/             # shadcn/ui components
+└── s/[shareId]/        # Public shared content viewer
+
+lib/
+├── openai/             # OpenAI client
+├── supabase/           # Supabase clients (client, server, admin)
+├── workers/            # Background job system
+│   ├── job-processor.ts  # Main loop
+│   └── handlers/         # Job handlers
+├── services/           # Business logic
+├── types/              # TypeScript types
+├── utils/              # Helpers (including api.ts)
+└── validations/        # Zod schemas
+
+supabase/
+├── migrations/         # SQL migrations
+└── storage/            # Storage config
 ```
 
-### Database Schema
+## Key Architecture Patterns
 
-See [supabase/migrations/001_initial_schema.sql](supabase/migrations/001_initial_schema.sql) for complete schema.
+### 1. Video Composition System
 
-Key tables:
-- `organizations` - Multi-tenant organizations
-- `users` - User accounts (synced from Clerk)
-- `user_organizations` - Membership with roles (owner, admin, contributor, reader)
-- `recordings` - Recording metadata with status tracking
-- `transcripts` - Speech-to-text with word-level timestamps
-- `documents` - AI-generated documentation (Docify)
-- `transcript_chunks` - Text chunks with vector embeddings (pgvector)
-- `jobs` - Background job queue with retry logic
-- `events` - Event outbox pattern
-- `notifications` - User notifications
-- `shares` - Public/password-protected sharing
-- `usage_counters` - Per-org usage tracking
+Located in `app/(dashboard)/record/services/composer.ts`
 
-### API Routes
+Uses browser APIs to composite multiple video streams:
+- `MediaStreamTrackProcessor` reads video frames from camera/screen tracks
+- `MediaStreamTrackGenerator` creates output track
+- `OffscreenCanvas` composites screenshare (background) + camera overlay (bottom-right)
+- Applies circular or square mask to camera using `ctx.clip()` and `ctx.roundRect()`
+- Streams audio from microphone alongside composed video
 
-**Implemented**:
-- `GET /api/health` - Health check
-- `GET /api/recordings` - List recordings (paginated, org-scoped)
-- `POST /api/recordings` - Create recording + get signed upload URL
-- `GET /api/recordings/[id]` - Get specific recording with signed video URL
-- `PUT /api/recordings/[id]` - Update recording metadata
-- `DELETE /api/recordings/[id]` - Delete recording + storage cleanup
-- `POST /api/recordings/[id]/finalize` - Finalize upload, enqueue transcription
-- `POST /api/webhooks` - External webhook handler with HMAC verification
+**Critical**: Requires Chrome/Chromium. Firefox/Safari lack support for these APIs.
 
-**Planned** (see [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)):
-- Search endpoints (semantic search with pgvector)
-- Chat/Assistant endpoints (RAG-powered Q&A)
-- Document viewing/editing endpoints
-- Organization management endpoints
-- Sharing endpoints (public/password-protected)
-- Stripe webhook handler
+### 2. Background Job Processing
 
-### Import Path Aliases
+Located in `lib/workers/job-processor.ts`
 
-Configured in [tsconfig.json](tsconfig.json:25-32):
+Async job queue with retry logic for AI processing pipeline:
 
-```typescript
-import { Component } from '@/components/Component';      // Absolute from root
-import { useHook } from 'hooks/useHook';                 // src/hooks/useHook
-import { Context } from 'contexts/context';              // src/contexts/context
-import service from 'services/service';                  // src/services/service
-```
+**Job Flow**:
+1. Recording finalized → `transcribe` job (OpenAI Whisper)
+2. Transcription complete → `doc_generate` job (GPT-5 Nano)
+3. Document generated → `generate_embeddings` job (text-embedding-3-small)
+4. Embeddings complete → Recording status: `completed`
 
-### Legacy Components (To Be Migrated)
+**Implementation Details**:
+- Polls `jobs` table for `status='pending'` with `run_after <= now()`
+- Processes jobs in parallel batches (default 10)
+- Exponential backoff for retries (max 3 attempts)
+- Each job type has handler in `lib/workers/handlers/`
+- Workers can run as separate process (`yarn worker`) or serverless cron
 
-Located in `/src` directory - original Vite app components:
-- **App.tsx** - Main app shell with keyboard shortcuts
-- **VideoStreams** - Camera/screen preview
-- **PiPWindow** - Picture-in-Picture controls
-- **RecordingModal** - Post-recording export (WEBM/MP4)
-- **Teleprompter** - Scrolling teleprompter
-- **LayoutSwitcher** - Recording mode selection
-- **ShapeSelect** - Camera shape toggle
+### 3. API Route Patterns
 
-### Video Composition System (Legacy)
-
-Core recording logic in [src/services/composer.ts](src/services/composer.ts):
-1. Captures camera + microphone + screenshare MediaStreams
-2. Uses `MediaStreamTrackProcessor` to read video frames
-3. Uses `MediaStreamTrackGenerator` to create composited track
-4. Draws screenshare to OffscreenCanvas, overlays camera
-5. Returns combined MediaStream with synced audio
-
-**Status**: ✅ Migrated and integrated in Phase 2.
-
-### CORS Headers (Required for FFMPEG.wasm)
-
-Configured in [next.config.js](next.config.js) for SharedArrayBuffer support:
-
-```javascript
-headers: [
-  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
-  { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' }
-]
-```
-
-## Authentication & Authorization
-
-- **Authentication**: Clerk handles sign-up, sign-in, session management
-- **Organizations**: Clerk Organizations feature for multi-tenancy
-- **Roles**: owner, admin, contributor, reader (stored in `user_organizations`)
-- **Middleware**: [middleware.ts](middleware.ts) protects routes
-- **API Auth**: Use `requireAuth()` and `requireOrg()` from [lib/utils/api.ts](lib/utils/api.ts)
-
-## Code Style
-
-### Import Order
-
-ESLint enforces import grouping:
-1. React & Next.js imports
-2. External dependencies
-3. Internal aliases (@/, components/, hooks/, etc.)
-4. Relative imports
-5. CSS imports (always last)
-
-### API Route Patterns
+All API routes follow consistent structure using `lib/utils/api.ts` helpers:
 
 ```typescript
 import { NextRequest } from 'next/server';
-import { apiHandler, requireOrg, successResponse, errors } from '@/lib/utils/api';
+import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
+import { parseBody } from '@/lib/utils/api';
+import { mySchema } from '@/lib/validations/api';
 
-export const GET = apiHandler(async (request: NextRequest) => {
-  const { orgId, userId } = await requireOrg();
+export const POST = apiHandler(async (request: NextRequest) => {
+  // Automatically handles errors and generates request IDs
+  const { orgId, userId, role } = await requireOrg(); // or requireAuth()
+  const body = await parseBody(request, mySchema); // Zod validation
+
   // ... implementation
+
   return successResponse(data);
 });
 ```
 
-### Validation with Zod
+**Key Functions**:
+- `apiHandler()`: Wraps route with error handling and request ID generation
+- `requireAuth()`: Returns `{ userId, orgId? }` from Clerk, throws if not authenticated
+- `requireOrg()`: Requires org context, looks up Supabase `users` table for internal org UUID and role
+- `parseBody()`: Validates request body against Zod schema
+- `successResponse()` / `errors.*`: Standardized response helpers
 
-All API inputs validated with Zod schemas from [lib/validations/api.ts](lib/validations/api.ts):
+### 4. Authentication & Multi-Tenancy
+
+**Clerk Integration**:
+- Handles sign-up, sign-in, session management
+- Organizations feature for multi-tenancy
+- User metadata synced to Supabase `users` table
+
+**Dual Organization IDs**:
+- `clerkOrgId` (string): Clerk's organization ID
+- `orgId` (UUID): Internal Supabase organization ID from `users.org_id`
+- `requireOrg()` returns both for reference
+
+**Roles**: `owner`, `admin`, `contributor`, `reader` (stored in `users.role`)
+
+**Route Protection** (`middleware.ts`):
+- Public routes: `/`, `/features`, `/pricing`, `/about`, `/contact`, `/terms`, `/privacy`, `/sign-in`, `/sign-up`, `/api/webhooks`, `/api/health`, `/s/*`
+- All other routes require authentication via Clerk
+
+### 5. Database Schema (Supabase)
+
+Key tables:
+- `organizations`: Multi-tenant orgs (synced from Clerk)
+- `users`: User accounts with `org_id` (UUID) and `role`
+- `recordings`: Recording metadata with status (`uploading`, `transcribing`, `processing`, `completed`, `failed`)
+- `transcripts`: Speech-to-text with word-level timestamps
+- `documents`: AI-generated markdown docs
+- `transcript_chunks`: Text chunks with pgvector embeddings for semantic search
+- `jobs`: Background job queue with `status`, `type`, `attempt_count`, `run_after`
+- `conversations` & `messages`: AI chat history
+- `shares`: Public/password-protected sharing
+- `usage_counters`: Per-org usage tracking
+
+## Critical Configuration
+
+### CORS Headers (next.config.js)
+
+Required for FFMPEG.wasm (SharedArrayBuffer support):
+
+```javascript
+{
+  key: 'Cross-Origin-Opener-Policy',
+  value: 'same-origin',
+},
+{
+  key: 'Cross-Origin-Embedder-Policy',
+  value: 'require-corp',
+}
+```
+
+**DO NOT REMOVE**: These headers are essential for video conversion (WEBM → MP4) to work.
+
+### Import Path Aliases (tsconfig.json)
+
+Only `@/*` is configured (maps to project root):
 
 ```typescript
-const body = await parseBody(request, createRecordingSchema);
+import { Component } from '@/components/Component';
+import { createClient } from '@/lib/supabase/client';
 ```
 
-## Background Job Processing
+All other imports use relative or absolute paths.
 
-The application uses a background job system for async processing:
+## Code Style
 
-**Running the worker**:
+**Import Order** (enforced by ESLint):
+1. React & Next.js
+2. External dependencies
+3. Internal (`@/...`)
+4. Relative imports
+5. CSS (always last)
+
+**Validation**: All API inputs validated with Zod schemas from `lib/validations/api.ts`
+
+**Error Handling**: Use `apiHandler` wrapper for consistent error responses
+
+## Testing
+
+**Framework**: Jest with React Testing Library
+
+**Coverage**: API routes, utilities, validation schemas, business logic services
+
+**Run**:
 ```bash
-yarn worker          # Continuous mode
-yarn worker:once     # Process one batch and exit
-yarn worker:dev      # Watch mode for development
+yarn test              # Run all tests
+yarn test:watch        # Watch mode
+yarn test:coverage     # Coverage report
 ```
-
-**Job types**:
-- `transcribe` - OpenAI Whisper transcription
-- `doc_generate` - GPT-5 Nano document generation
-- `generate_embeddings` - OpenAI text-embedding-3-small embeddings
-
-**Job flow**:
-1. Upload finalized → Creates `transcribe` job
-2. Transcription completed → Creates `doc_generate` job
-3. Document generated → Creates `generate_embeddings` job
-4. Embeddings completed → Recording status: `completed`
-
-See [PHASE3_SUMMARY.md](PHASE3_SUMMARY.md) for detailed async processing documentation.
 
 ## Deployment
 
-**Web Application**: Vercel (Next.js optimized)
-- Push to `main` branch triggers automatic deployment
-- Preview deployments for PRs
-- Environment variables configured in Vercel dashboard
+**Web App**: Vercel
+- Auto-deploy from `main` branch
+- Environment variables: `CLERK_*`, `NEXT_PUBLIC_SUPABASE_*`, `OPENAI_API_KEY`, `STRIPE_*`, `UPSTASH_REDIS_*`
 
 **Background Worker**: Requires long-running process
-- VPS/EC2 with PM2 or systemd
-- Vercel Cron (serverless, runs every N minutes)
-- Dedicated worker service (Railway, Fly.io)
+- Options: VPS/EC2 + PM2, Railway, Fly.io, or Vercel Cron
+- Run `yarn worker` in production
+- Needs same environment variables as web app
 
-See [RUNNING_THE_SYSTEM.md](RUNNING_THE_SYSTEM.md) for production deployment guide.
+## Common Tasks
 
-## Getting Started
+**Add API Endpoint**:
+1. Create route file in `app/api/`
+2. Use `apiHandler` wrapper
+3. Add Zod schema to `lib/validations/api.ts`
+4. Use `requireOrg()` for protected routes
+5. Return with `successResponse()`
 
-- [RUNNING_THE_SYSTEM.md](RUNNING_THE_SYSTEM.md) - Complete guide to running the app
-- [QUICK_START.md](QUICK_START.md) - Quick setup instructions
-- [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) - Progress and roadmap
-- [PHASE3_SUMMARY.md](PHASE3_SUMMARY.md) - Phase 3 (async processing) details
+**Add Background Job**:
+1. Define job type in `lib/types/jobs.ts`
+2. Create handler in `lib/workers/handlers/`
+3. Register handler in `lib/workers/job-processor.ts`
+4. Enqueue via `supabase.from('jobs').insert({ type, payload, org_id })`
 
-## Important Notes
-
-- ✅ Phases 1-3 complete - MVP is fully functional
-- ✅ Recording, upload, transcription, doc generation, and embeddings all working
-- ✅ Legacy Vite components successfully integrated in Phase 2
-- 🚧 Phase 4 (vector search) ready to begin
-- 📚 Comprehensive documentation in root and `/documentation` directory
+**Add UI Component**:
+1. Use shadcn CLI: `npx shadcn@latest add <component>`
+2. Or create in `app/components/`
+3. Follow Tailwind + TypeScript patterns

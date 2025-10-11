@@ -37,7 +37,7 @@ export async function generateDocument(job: Job): Promise<void> {
     // Fetch transcript
     const { data: transcript, error: transcriptError } = await supabase
       .from('transcripts')
-      .select('text, language, duration_seconds, segments')
+      .select('text, language, words_json')
       .eq('id', transcriptId)
       .single();
 
@@ -57,10 +57,14 @@ export async function generateDocument(job: Job): Promise<void> {
     const title = recording?.title || 'Untitled Recording';
     const metadata = (recording?.metadata || {}) as Record<string, any>;
 
+    // Extract duration from words_json
+    const wordsData = (transcript.words_json || {}) as Record<string, any>;
+    const durationSeconds = wordsData.duration || 0;
+
     // Build context for GPT-5 Nano
     const contextInfo = [
       `Title: ${title}`,
-      `Duration: ${Math.round(transcript.duration_seconds / 60)} minutes`,
+      `Duration: ${Math.round(durationSeconds / 60)} minutes`,
       metadata.description ? `Description: ${metadata.description}` : null,
     ]
       .filter(Boolean)
@@ -103,12 +107,11 @@ export async function generateDocument(job: Job): Promise<void> {
       .from('documents')
       .insert({
         recording_id: recordingId,
-        transcript_id: transcriptId,
         org_id: orgId,
-        title,
-        content: generatedContent,
-        format: 'markdown',
-        metadata: documentMetadata,
+        markdown: generatedContent,
+        version: 'v1',
+        model: completion.model,
+        status: 'generated',
       })
       .select()
       .single();
@@ -128,6 +131,7 @@ export async function generateDocument(job: Job): Promise<void> {
     // Enqueue embedding generation job
     await supabase.from('jobs').insert({
       type: 'generate_embeddings',
+      status: 'pending',
       payload: {
         recordingId,
         transcriptId,

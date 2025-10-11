@@ -5,6 +5,5 @@ export { CameraSelect } from './CameraSelect';
 export { MicrophoneSelect } from './MicrophoneSelect';
 export { TeleprompterSelect } from './TeleprompterSelect';
 export { MainRecordButton } from './MainRecordButton';
-export { RecordingModal } from './RecordingModal';
 export { Teleprompter } from './Teleprompter';
 export { PiPWindow } from './PiPWindow';

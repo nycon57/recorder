@@ -12,7 +12,7 @@ import {
   saveChatMessage,
   createConversation,
   getConversationHistory,
-} from '@/lib/services/rag';
+} from '@/lib/services/rag-google';
 import { z } from 'zod';
 
 const chatSchema = z.object({

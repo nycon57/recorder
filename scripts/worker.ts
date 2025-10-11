@@ -10,6 +10,13 @@
  *   yarn worker:once     # Process one batch and exit
  */
 
+// Load environment variables from .env.local
+import { config } from 'dotenv';
+import { resolve } from 'path';
+
+// Load .env.local file
+config({ path: resolve(process.cwd(), '.env.local') });
+
 import { processJobs, processJobById } from '@/lib/workers/job-processor';
 
 const args = process.argv.slice(2);
@@ -24,7 +31,7 @@ async function main() {
   const requiredEnvVars = [
     'NEXT_PUBLIC_SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE_KEY',
-    'OPENAI_API_KEY',
+    'GOOGLE_AI_API_KEY',
   ];
 
   for (const envVar of requiredEnvVars) {
@@ -34,7 +41,21 @@ async function main() {
     }
   }
 
-  console.log('✅ Environment variables validated\n');
+  // Check for Google Cloud credentials (either file path or base64)
+  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS && !process.env.GOOGLE_CREDENTIALS_BASE64) {
+    console.error('❌ Missing Google Cloud credentials');
+    console.error('   Set either GOOGLE_APPLICATION_CREDENTIALS (file path)');
+    console.error('   or GOOGLE_CREDENTIALS_BASE64 (base64 encoded JSON)');
+    process.exit(1);
+  }
+
+  console.log('✅ Environment variables validated');
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    console.log('✅ Using Google Cloud credentials from file:', process.env.GOOGLE_APPLICATION_CREDENTIALS);
+  } else {
+    console.log('✅ Using Google Cloud credentials from base64 environment variable');
+  }
+  console.log();
 
   if (command === 'once') {
     console.log('📋 Running in one-shot mode (process one batch and exit)\n');

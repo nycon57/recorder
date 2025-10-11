@@ -1,6 +1,7 @@
 'use client';
 
 import { Circle, Square } from 'lucide-react';
+import { toast } from 'sonner';
 import { useRecording } from '@/app/(dashboard)/record/contexts/RecordingContext';
 import { Button } from '@/app/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -11,42 +12,64 @@ export function MainRecordButton() {
     pipWindow,
     isRecording,
     countdown,
+    screenshareStream,
+    recordingBlob,
     startRecording,
     stopRecording,
   } = useRecording();
 
+  // Check if screen sharing is required but not set
+  const requiresScreen = layout === 'screenOnly' || layout === 'screenAndCamera';
+  const screenMissing = requiresScreen && !screenshareStream;
+  const isReviewing = !!recordingBlob;
+
   const handleClick = async () => {
     if (isRecording) {
       stopRecording();
+    } else if (isReviewing) {
+      toast.error('Review in progress', {
+        description: 'Please finish reviewing your current recording first.',
+        duration: 4000,
+      });
+      return;
     } else {
+      // Check if screen is required but missing
+      if (screenMissing) {
+        toast.error('Screen sharing required', {
+          description: 'Please click "Share screen" to select a screen or window before recording.',
+          duration: 5000,
+        });
+        return;
+      }
+
       // Opens PiP window for screen-based layouts, or starts recording for camera-only
       await startRecording();
     }
   };
 
-  // For screen-based layouts with PiP open but not recording, show different state
-  const isPipOpenButNotRecording = pipWindow && !isRecording && layout !== 'cameraOnly';
-
   return (
     <Button
       size="lg"
       onClick={handleClick}
-      disabled={countdown !== null}
+      disabled={countdown !== null || isReviewing}
       className={cn(
         'relative h-20 w-20 rounded-full p-0 transition-all duration-200',
         isRecording
           ? 'bg-destructive hover:bg-destructive/90 text-white'
-          : isPipOpenButNotRecording
-          ? 'bg-blue-600 hover:bg-blue-700 text-white'
           : 'bg-primary hover:bg-primary/90 text-primary-foreground',
-        countdown !== null && 'opacity-50 cursor-not-allowed'
+        (countdown !== null || isReviewing) && 'opacity-50 cursor-not-allowed',
+        screenMissing && !isReviewing && 'opacity-60'
       )}
       aria-label={
-        isRecording
+        isReviewing
+          ? 'Reviewing recording - Finish review first'
+          : screenMissing
+          ? 'Screen sharing required - Click "Share screen" first'
+          : isRecording
           ? 'Stop recording'
-          : isPipOpenButNotRecording
+          : pipWindow && !isRecording
           ? 'Recorder open'
-          : 'Open recorder'
+          : 'Start recording'
       }
     >
       {/* Countdown display */}

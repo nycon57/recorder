@@ -14,9 +14,9 @@ import { createClient } from '@/lib/supabase/server';
  * Get conversation with message history
  */
 export const GET = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId } = await requireOrg();
-    const conversationId = params.id;
+    const { id: conversationId } = await params;
 
     const supabase = await createClient();
 
@@ -52,9 +52,9 @@ export const GET = apiHandler(
  * Delete a conversation and all its messages
  */
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId } = await requireOrg();
-    const conversationId = params.id;
+    const { id: conversationId } = await params;
 
     const supabase = await createClient();
 
@@ -78,9 +78,9 @@ export const DELETE = apiHandler(
  * Update conversation title
  */
 export const PATCH = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId } = await requireOrg();
-    const conversationId = params.id;
+    const { id: conversationId } = await params;
     const body = await request.json();
     const { title } = body;
 

@@ -103,7 +103,8 @@ export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModa
         throw new Error('Failed to create recording');
       }
 
-      const { recording, uploadUrl } = await createResponse.json();
+      const { data } = await createResponse.json();
+      const { recording, uploadUrl } = data;
 
       // 2. Upload blob to Supabase Storage
       const uploadResponse = await fetch(uploadUrl, {
@@ -123,8 +124,8 @@ export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModa
         method: 'POST',
       });
 
-      // Success - redirect to recordings
-      router.push('/recordings');
+      // Success - redirect to dashboard
+      router.push('/dashboard');
       onClose();
     } catch (error) {
       console.error('Upload error:', error);

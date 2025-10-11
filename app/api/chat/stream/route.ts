@@ -12,7 +12,7 @@ import {
   saveChatMessage,
   createConversation,
   getConversationHistory,
-} from '@/lib/services/rag';
+} from '@/lib/services/rag-google';
 import { rateLimiters } from '@/lib/rate-limit/limiter';
 
 export const runtime = 'nodejs';
