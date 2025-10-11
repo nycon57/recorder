@@ -23,13 +23,37 @@ export type RecordingStatus =
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
-export type JobType = 'transcribe' | 'doc_generate' | 'generate_embeddings';
+export type JobType =
+  | 'transcribe'
+  | 'doc_generate'
+  | 'generate_embeddings'
+  | 'generate_summary'
+  | 'extract_frames'
+  | 'sync_connector';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 
 export type ShareTargetType = 'recording' | 'document';
 
 export type ChatRole = 'user' | 'assistant' | 'system';
+
+export type ConnectorType =
+  | 'google_drive'
+  | 'notion'
+  | 'confluence'
+  | 'file_upload'
+  | 'url_import'
+  | 'slack';
+
+export type SyncStatus = 'idle' | 'syncing' | 'error';
+
+export type ImportedDocumentStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'error';
+
+export type SearchMode = 'standard' | 'agentic' | 'hybrid' | 'hierarchical';
 
 export interface Tag {
   id: string;
@@ -160,6 +184,37 @@ export interface Database {
           metadata?: Json;
           updated_at?: string;
           completed_at?: string | null;
+        };
+      };
+      recording_summaries: {
+        Row: {
+          id: string;
+          recording_id: string;
+          org_id: string;
+          summary_text: string;
+          summary_embedding: number[] | null;
+          model: string | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          recording_id: string;
+          org_id: string;
+          summary_text: string;
+          summary_embedding?: number[] | null;
+          model?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          summary_text?: string;
+          summary_embedding?: number[] | null;
+          model?: string | null;
+          metadata?: Json;
+          updated_at?: string;
         };
       };
       transcripts: {
@@ -324,6 +379,54 @@ export interface Database {
           processed?: boolean;
         };
       };
+      imported_documents: {
+        Row: {
+          id: string;
+          connector_id: string;
+          org_id: string;
+          external_id: string;
+          title: string | null;
+          content: string | null;
+          file_type: string | null;
+          source_url: string | null;
+          file_size_bytes: number | null;
+          metadata: Json;
+          sync_status: ImportedDocumentStatus;
+          sync_error: string | null;
+          last_synced_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          connector_id: string;
+          org_id: string;
+          external_id: string;
+          title?: string | null;
+          content?: string | null;
+          file_type?: string | null;
+          source_url?: string | null;
+          file_size_bytes?: number | null;
+          metadata?: Json;
+          sync_status?: ImportedDocumentStatus;
+          sync_error?: string | null;
+          last_synced_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          title?: string | null;
+          content?: string | null;
+          file_type?: string | null;
+          source_url?: string | null;
+          file_size_bytes?: number | null;
+          metadata?: Json;
+          sync_status?: ImportedDocumentStatus;
+          sync_error?: string | null;
+          last_synced_at?: string | null;
+          updated_at?: string;
+        };
+      };
       notifications: {
         Row: {
           id: string;
@@ -347,6 +450,40 @@ export interface Database {
         };
         Update: {
           read_at?: string | null;
+        };
+      };
+      query_cache: {
+        Row: {
+          id: string;
+          query_hash: string;
+          query_text: string;
+          query_embedding: number[] | null;
+          results: Json;
+          filters: Json;
+          ttl: string;
+          hit_count: number;
+          created_at: string;
+          last_accessed_at: string;
+        };
+        Insert: {
+          id?: string;
+          query_hash: string;
+          query_text: string;
+          query_embedding?: number[] | null;
+          results: Json;
+          filters?: Json;
+          ttl: string;
+          hit_count?: number;
+          created_at?: string;
+          last_accessed_at?: string;
+        };
+        Update: {
+          query_embedding?: number[] | null;
+          results?: Json;
+          filters?: Json;
+          ttl?: string;
+          hit_count?: number;
+          last_accessed_at?: string;
         };
       };
       shares: {
@@ -441,6 +578,49 @@ export interface Database {
           updated_at?: string;
         };
       };
+      connector_configs: {
+        Row: {
+          id: string;
+          org_id: string;
+          connector_type: ConnectorType;
+          name: string | null;
+          credentials: Json;
+          settings: Json;
+          last_sync_at: string | null;
+          sync_status: SyncStatus;
+          sync_error: string | null;
+          is_active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          connector_type: ConnectorType;
+          name?: string | null;
+          credentials: Json;
+          settings?: Json;
+          last_sync_at?: string | null;
+          sync_status?: SyncStatus;
+          sync_error?: string | null;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          connector_type?: ConnectorType;
+          name?: string | null;
+          credentials?: Json;
+          settings?: Json;
+          last_sync_at?: string | null;
+          sync_status?: SyncStatus;
+          sync_error?: string | null;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+      };
       chat_messages: {
         Row: {
           id: string;
@@ -501,6 +681,80 @@ export interface Database {
           created_at?: string;
         };
         Update: Record<string, never>;
+      };
+      search_analytics: {
+        Row: {
+          id: string;
+          org_id: string | null;
+          user_id: string | null;
+          query: string;
+          query_hash: string | null;
+          results_count: number | null;
+          latency_ms: number | null;
+          mode: SearchMode | null;
+          filters: Json;
+          top_result_similarity: number | null;
+          user_feedback: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id?: string | null;
+          user_id?: string | null;
+          query: string;
+          query_hash?: string | null;
+          results_count?: number | null;
+          latency_ms?: number | null;
+          mode?: SearchMode | null;
+          filters?: Json;
+          top_result_similarity?: number | null;
+          user_feedback?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          query?: string;
+          query_hash?: string | null;
+          results_count?: number | null;
+          latency_ms?: number | null;
+          mode?: SearchMode | null;
+          filters?: Json;
+          top_result_similarity?: number | null;
+          user_feedback?: number | null;
+        };
+      };
+      video_frames: {
+        Row: {
+          id: string;
+          recording_id: string;
+          org_id: string;
+          frame_time_sec: number;
+          frame_url: string | null;
+          visual_description: string | null;
+          visual_embedding: number[] | null;
+          ocr_text: string | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          recording_id: string;
+          org_id: string;
+          frame_time_sec: number;
+          frame_url?: string | null;
+          visual_description?: string | null;
+          visual_embedding?: number[] | null;
+          ocr_text?: string | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: {
+          frame_time_sec?: number;
+          frame_url?: string | null;
+          visual_description?: string | null;
+          visual_embedding?: number[] | null;
+          ocr_text?: string | null;
+          metadata?: Json;
+        };
       };
     };
   };

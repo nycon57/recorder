@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
       recordingIds,
       maxChunks = 5,
       threshold = 0.7,
+      rerank = false,
     } = body;
 
     if (!message || typeof message !== 'string') {
@@ -94,6 +95,7 @@ export async function POST(request: NextRequest) {
             maxChunks,
             threshold,
             recordingIds,
+            rerank,
           });
 
           for await (const chunk of generator) {

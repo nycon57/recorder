@@ -21,6 +21,7 @@ const chatSchema = z.object({
   recordingIds: z.array(z.string().uuid()).optional(),
   maxChunks: z.number().int().min(1).max(10).optional().default(5),
   threshold: z.number().min(0).max(1).optional().default(0.7),
+  rerank: z.boolean().optional().default(false),
 });
 
 type ChatBody = z.infer<typeof chatSchema>;
@@ -33,7 +34,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const { orgId, userId } = await requireOrg();
   const body = await parseBody(request, chatSchema);
 
-  const { message, conversationId, recordingIds, maxChunks, threshold } =
+  const { message, conversationId, recordingIds, maxChunks, threshold, rerank } =
     body as ChatBody;
 
   // Get or create conversation
@@ -52,7 +53,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   });
 
   // Generate AI response with RAG
-  const { response, sources, tokensUsed } = await generateRAGResponse(
+  const { response, sources, tokensUsed, rerankMetadata } = await generateRAGResponse(
     message,
     orgId,
     {
@@ -60,6 +61,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       maxChunks,
       threshold,
       recordingIds,
+      rerank,
     }
   );
 
@@ -70,6 +72,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     metadata: {
       sources,
       tokensUsed,
+      ...(rerankMetadata && { rerankMetadata }),
     },
   });
 
@@ -80,6 +83,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       content: response,
       sources,
       tokensUsed,
+      ...(rerankMetadata && { rerankMetadata }),
     },
   });
 });

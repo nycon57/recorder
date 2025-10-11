@@ -7,6 +7,7 @@
 
 import { googleAI, PROMPTS, GOOGLE_CONFIG } from '@/lib/google/client';
 import { vectorSearch, type SearchResult } from '@/lib/services/vector-search-google';
+import { rerankResults, isCohereConfigured } from '@/lib/services/reranking';
 import { createClient } from '@/lib/supabase/server';
 
 export interface ChatMessage {
@@ -51,17 +52,30 @@ export async function retrieveContext(
     maxChunks?: number;
     threshold?: number;
     recordingIds?: string[];
+    rerank?: boolean;
   }
 ): Promise<RAGContext> {
-  const { maxChunks = 5, threshold = 0.7, recordingIds } = options || {};
+  const { maxChunks = 5, threshold = 0.7, recordingIds, rerank = false } = options || {};
+
+  // Fetch more results if reranking is enabled
+  const initialLimit = rerank ? maxChunks * 3 : maxChunks;
 
   // Perform vector search to find relevant chunks
-  const searchResults = await vectorSearch(query, {
+  let searchResults = await vectorSearch(query, {
     orgId,
-    limit: maxChunks,
+    limit: initialLimit,
     threshold,
     recordingIds,
   });
+
+  // Apply reranking if requested and configured
+  if (rerank && isCohereConfigured() && searchResults.length > 0) {
+    const rerankResult = await rerankResults(query, searchResults, {
+      topN: maxChunks,
+      timeoutMs: 500,
+    });
+    searchResults = rerankResult.results;
+  }
 
   // Format results as cited sources with visual context
   const sources: CitedSource[] = searchResults.map((result) => ({
@@ -123,24 +137,33 @@ export async function generateRAGResponse(
     threshold?: number;
     recordingIds?: string[];
     stream?: boolean;
+    rerank?: boolean;
   }
 ): Promise<{
   response: string;
   sources: CitedSource[];
   tokensUsed: number;
+  rerankMetadata?: {
+    originalCount: number;
+    rerankedCount: number;
+    tokensUsed?: number;
+    costEstimate?: number;
+  };
 }> {
   const {
     conversationHistory = [],
     maxChunks = 5,
     threshold = 0.7,
     recordingIds,
+    rerank = false,
   } = options || {};
 
-  // Retrieve relevant context
+  // Retrieve relevant context with optional reranking
   const ragContext = await retrieveContext(query, orgId, {
     maxChunks,
     threshold,
     recordingIds,
+    rerank,
   });
 
   // Build prompt with context
@@ -194,6 +217,7 @@ export async function* generateStreamingRAGResponse(
     maxChunks?: number;
     threshold?: number;
     recordingIds?: string[];
+    rerank?: boolean;
   }
 ): AsyncGenerator<{
   type: 'context' | 'token' | 'done';
@@ -204,13 +228,15 @@ export async function* generateStreamingRAGResponse(
     maxChunks = 5,
     threshold = 0.7,
     recordingIds,
+    rerank = false,
   } = options || {};
 
-  // Retrieve context first
+  // Retrieve context first with optional reranking
   const ragContext = await retrieveContext(query, orgId, {
     maxChunks,
     threshold,
     recordingIds,
+    rerank,
   });
 
   // Yield context/sources

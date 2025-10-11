@@ -12,6 +12,7 @@ import type { Database } from '@/lib/types/database';
 import { transcribeRecording } from './handlers/transcribe-gemini-video';
 import { generateDocument } from './handlers/docify-google';
 import { generateEmbeddings } from './handlers/embeddings-google';
+import { generateSummary } from './handlers/generate-summary';
 
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
@@ -37,10 +38,18 @@ interface JobHandler {
   (job: Job): Promise<void>;
 }
 
+// Stub handlers for future job types
+const stubHandler: JobHandler = async (job: Job) => {
+  console.log(`[Job Processor] Job type '${job.type}' not yet implemented, marking as completed`);
+};
+
 const JOB_HANDLERS: Record<JobType, JobHandler> = {
   transcribe: transcribeRecording,
   doc_generate: generateDocument,
   generate_embeddings: generateEmbeddings,
+  generate_summary: generateSummary,
+  extract_frames: stubHandler, // Phase 2
+  sync_connector: stubHandler, // Phase 3
 };
 
 /**

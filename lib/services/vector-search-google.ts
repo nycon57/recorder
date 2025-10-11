@@ -45,10 +45,28 @@ export interface SearchOptions {
   /** Filter by date range */
   dateFrom?: Date;
   dateTo?: Date;
+  /** Search mode: standard (flat), hierarchical (summary→chunks) */
+  searchMode?: 'standard' | 'hierarchical';
+  /** Recency weight 0-1 (0 = no bias, 1 = max bias, default: 0) */
+  recencyWeight?: number;
+  /** Days until recency score decays to 0 (default: 30) */
+  recencyDecayDays?: number;
+  /** For hierarchical mode: number of documents to retrieve */
+  topDocuments?: number;
+  /** For hierarchical mode: chunks per document */
+  chunksPerDocument?: number;
+  /** Enable Cohere reranking for improved relevance (default: false) */
+  rerank?: boolean;
 }
 
 /**
  * Perform semantic search using vector similarity
+ *
+ * Supports multiple search modes:
+ * - standard: Flat vector search across all chunks
+ * - hierarchical: Two-tier search (summaries → chunks) for better document diversity
+ *
+ * Also supports recency bias to prioritize recent recordings.
  */
 export async function vectorSearch(
   query: string,
@@ -62,13 +80,123 @@ export async function vectorSearch(
     source,
     dateFrom,
     dateTo,
+    searchMode = 'standard',
+    recencyWeight = 0,
+    recencyDecayDays = 30,
+    topDocuments,
+    chunksPerDocument,
   } = options;
 
-  // Generate embedding for search query using Google
-  const embedding = await generateQueryEmbedding(query);
+  // Route to hierarchical search if requested
+  if (searchMode === 'hierarchical') {
+    const { hierarchicalSearch } = await import('./hierarchical-search');
+    const hierarchicalResults = await hierarchicalSearch(query, {
+      orgId,
+      topDocuments: topDocuments || 5,
+      chunksPerDocument: chunksPerDocument || 3,
+      threshold,
+    });
 
-  // Build SQL query with pgvector similarity search
+    // Convert hierarchical results to standard format
+    const results: SearchResult[] = hierarchicalResults.map((r) => ({
+      id: r.id,
+      recordingId: r.recordingId,
+      recordingTitle: r.recordingTitle,
+      chunkText: r.chunkText,
+      similarity: r.similarity,
+      metadata: r.metadata,
+      createdAt: r.createdAt,
+    }));
+
+    // Apply additional filters if specified
+    let filteredResults = results;
+
+    if (recordingIds && recordingIds.length > 0) {
+      filteredResults = filteredResults.filter((r) =>
+        recordingIds.includes(r.recordingId)
+      );
+    }
+
+    if (source) {
+      filteredResults = filteredResults.filter(
+        (r) => r.metadata.source === source
+      );
+    }
+
+    if (dateFrom) {
+      filteredResults = filteredResults.filter(
+        (r) => new Date(r.createdAt) >= dateFrom
+      );
+    }
+
+    if (dateTo) {
+      filteredResults = filteredResults.filter(
+        (r) => new Date(r.createdAt) <= dateTo
+      );
+    }
+
+    return filteredResults.slice(0, limit);
+  }
+
+  // Standard search mode with optional recency bias
   const supabase = await createClient();
+
+  // Use recency-biased search if recencyWeight > 0
+  if (recencyWeight > 0) {
+    const embedding = await generateQueryEmbedding(query);
+    const embeddingString = `[${embedding.join(',')}]`;
+
+    const { data, error } = await supabase.rpc('search_chunks_with_recency', {
+      query_embedding: embeddingString,
+      match_org_id: orgId,
+      match_count: limit * 2, // Get more for filtering
+      match_threshold: threshold,
+      recency_weight: recencyWeight,
+      recency_decay_days: recencyDecayDays,
+    });
+
+    if (error) {
+      console.error('[Vector Search] Recency search error:', error);
+      throw new Error(`Vector search with recency failed: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    // Convert to SearchResult format
+    let results: SearchResult[] = data.map((row: any) => ({
+      id: row.id,
+      recordingId: row.recording_id,
+      recordingTitle: row.recording_title,
+      chunkText: row.chunk_text,
+      similarity: row.final_score, // Use final_score which includes recency
+      metadata: row.metadata || {},
+      createdAt: row.created_at,
+    }));
+
+    // Apply additional filters
+    if (recordingIds && recordingIds.length > 0) {
+      results = results.filter((r) => recordingIds.includes(r.recordingId));
+    }
+
+    if (source) {
+      results = results.filter((r) => r.metadata.source === source);
+    }
+
+    if (dateFrom) {
+      results = results.filter((r) => new Date(r.createdAt) >= dateFrom);
+    }
+
+    if (dateTo) {
+      results = results.filter((r) => new Date(r.createdAt) <= dateTo);
+    }
+
+    return results.slice(0, limit);
+  }
+
+  // Standard flat search (original implementation)
+  const embedding = await generateQueryEmbedding(query);
 
   let dbQuery = supabase
     .from('transcript_chunks')
