@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import type { ApiError, ApiSuccess } from '@/lib/validations/api';
+import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // Generate request ID for tracing
 export function generateRequestId(): string {
@@ -128,9 +130,30 @@ export async function requireOrg() {
     throw new Error('Organization context required');
   }
 
+  // Use admin client to bypass RLS for user lookup
+  const supabase = supabaseAdmin;
+
+  // Look up the user by clerk_id (users.clerk_id = Clerk user ID)
+  let { data: userData, error } = await supabase
+    .from('users')
+    .select('id, org_id, role, email, name')
+    .eq('clerk_id', user.userId)
+    .single();
+
+  // If user doesn't exist, throw a clear error
+  if (error?.code === 'PGRST116') {
+    throw new Error(`User ${user.userId} not found in database. Please ensure user is synced from Clerk.`);
+  } else if (error) {
+    console.error('[requireOrg] Error fetching user org:', error);
+    throw new Error('User organization not found');
+  }
+
   return {
-    userId: user.userId,
-    orgId: user.orgId,
+    userId: userData!.id, // Internal UUID
+    clerkUserId: user.userId, // Clerk user ID
+    orgId: userData!.org_id, // Internal org UUID
+    role: userData!.role,
+    clerkOrgId: user.orgId, // Clerk org ID for reference
   };
 }
 
@@ -166,7 +189,11 @@ export function apiHandler<T = any>(
         return errors.unauthorized(requestId);
       }
 
-      if (error.message === 'Organization context required') {
+      if (
+        error.message === 'Organization context required' ||
+        error.message === 'User organization not found' ||
+        error.message.includes('not found in database')
+      ) {
         return errors.forbidden(requestId);
       }
 

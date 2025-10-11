@@ -21,15 +21,30 @@ export type RecordingStatus =
   | 'completed'
   | 'error';
 
-export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'dead';
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
-export type JobType = 'transcribe' | 'docify' | 'embed' | 'send_notification';
+export type JobType = 'transcribe' | 'doc_generate' | 'generate_embeddings';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 
 export type ShareTargetType = 'recording' | 'document';
 
 export type ChatRole = 'user' | 'assistant' | 'system';
+
+export interface Tag {
+  id: string;
+  org_id: string;
+  name: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecordingTag {
+  recording_id: string;
+  tag_id: string;
+  created_at: string;
+}
 
 export interface Database {
   public: {
@@ -39,6 +54,7 @@ export interface Database {
           id: string;
           name: string;
           slug: string | null;
+          clerk_org_id: string | null;
           plan: OrganizationPlan;
           settings: Json;
           created_at: string;
@@ -48,6 +64,7 @@ export interface Database {
           id?: string;
           name: string;
           slug?: string | null;
+          clerk_org_id?: string | null;
           plan?: OrganizationPlan;
           settings?: Json;
           created_at?: string;
@@ -57,6 +74,7 @@ export interface Database {
           id?: string;
           name?: string;
           slug?: string | null;
+          clerk_org_id?: string | null;
           plan?: OrganizationPlan;
           settings?: Json;
           updated_at?: string;
@@ -64,43 +82,35 @@ export interface Database {
       };
       users: {
         Row: {
-          id: string;
+          id: string; // UUID
+          clerk_id: string; // Clerk user ID
           email: string;
           name: string | null;
           avatar_url: string | null;
+          org_id: string;
+          role: UserRole;
           created_at: string;
           updated_at: string;
         };
         Insert: {
-          id: string;
+          id?: string; // UUID, auto-generated
+          clerk_id: string; // Clerk user ID
           email: string;
           name?: string | null;
           avatar_url?: string | null;
+          org_id: string;
+          role: UserRole;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
+          clerk_id?: string;
           email?: string;
           name?: string | null;
           avatar_url?: string | null;
+          org_id?: string;
+          role?: UserRole;
           updated_at?: string;
-        };
-      };
-      user_organizations: {
-        Row: {
-          user_id: string;
-          org_id: string;
-          role: UserRole;
-          created_at: string;
-        };
-        Insert: {
-          user_id: string;
-          org_id: string;
-          role?: UserRole;
-          created_at?: string;
-        };
-        Update: {
-          role?: UserRole;
         };
       };
       recordings: {
@@ -455,6 +465,42 @@ export interface Database {
           sources?: Json | null;
           tokens?: number | null;
         };
+      };
+      tags: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          color: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          color?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          color?: string;
+          updated_at?: string;
+        };
+      };
+      recording_tags: {
+        Row: {
+          recording_id: string;
+          tag_id: string;
+          created_at: string;
+        };
+        Insert: {
+          recording_id: string;
+          tag_id: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
       };
     };
   };

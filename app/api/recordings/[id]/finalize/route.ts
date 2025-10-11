@@ -5,17 +5,27 @@ import {
   successResponse,
   errors,
 } from '@/lib/utils/api';
-import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // POST /api/recordings/[id]/finalize - Finalize upload and start processing
 export const POST = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId } = await requireOrg();
-    const supabase = await createClient();
-    const { id } = params;
+    // Use admin client to bypass RLS - auth already validated via requireOrg()
+    const supabase = supabaseAdmin;
+    const { id } = await params;
 
-    const body = await request.json();
-    const { storagePath, sizeBytes, sha256, durationSec } = body;
+    // Parse optional body parameters
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      // Body is optional
+    }
+    const { startProcessing = true } = body;
+
+    // Construct expected storage path
+    const storagePath = `org_${orgId}/recordings/${id}/raw.webm`;
 
     // Verify the file exists in storage
     const { data: fileData, error: fileError } = await supabase.storage
@@ -26,16 +36,21 @@ export const POST = apiHandler(
       return errors.badRequest('File not found in storage');
     }
 
+    // Get file info
+    const file = fileData.find(f => f.name === 'raw.webm');
+    if (!file) {
+      return errors.badRequest('raw.webm file not found');
+    }
+
     // Update recording status and metadata
     const { data: recording, error: updateError } = await supabase
       .from('recordings')
       .update({
         storage_path_raw: storagePath,
-        status: 'uploaded',
-        duration_sec: durationSec || null,
+        status: startProcessing ? 'uploaded' : 'uploaded',
         metadata: {
-          sizeBytes,
-          sha256,
+          sizeBytes: file.metadata?.size || 0,
+          uploadedAt: new Date().toISOString(),
         },
         updated_at: new Date().toISOString(),
       })
@@ -49,26 +64,30 @@ export const POST = apiHandler(
       return errors.internalError();
     }
 
-    // Enqueue transcription job
-    const { error: jobError } = await supabase.from('jobs').insert({
-      type: 'transcribe',
-      status: 'queued',
-      payload: {
-        recordingId: id,
-        orgId,
-        storagePath,
-      },
-      dedupe_key: `transcribe:${id}`,
-    });
+    // Optionally enqueue transcription job
+    if (startProcessing) {
+      const { error: jobError } = await supabase.from('jobs').insert({
+        type: 'transcribe',
+        status: 'pending',
+        payload: {
+          recordingId: id,
+          orgId,
+          storagePath,
+        },
+        dedupe_key: `transcribe:${id}`,
+      });
 
-    if (jobError) {
-      console.error('Error enqueueing transcription job:', jobError);
-      // Don't fail the request, job can be retried
+      if (jobError) {
+        console.error('Error enqueueing transcription job:', jobError);
+        // Don't fail the request, job can be retried
+      }
     }
 
     return successResponse({
       recording,
-      message: 'Upload finalized. Transcription will begin shortly.',
+      message: startProcessing
+        ? 'Upload finalized. Transcription will begin shortly.'
+        : 'Upload finalized.',
     });
   }
 );

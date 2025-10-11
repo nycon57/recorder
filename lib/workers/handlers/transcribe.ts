@@ -106,12 +106,14 @@ export async function transcribeRecording(job: Job): Promise<void> {
       .from('transcripts')
       .insert({
         recording_id: recordingId,
-        org_id: orgId,
         text: whisperResponse.text,
         language: whisperResponse.language,
-        duration_seconds: whisperResponse.duration,
-        words: whisperResponse.words || [],
-        segments: whisperResponse.segments || [],
+        words_json: {
+          words: whisperResponse.words || [],
+          segments: whisperResponse.segments || [],
+          duration: whisperResponse.duration,
+        },
+        provider: 'openai',
       })
       .select()
       .single();
@@ -131,6 +133,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
     // Enqueue document generation job
     await supabase.from('jobs').insert({
       type: 'doc_generate',
+      status: 'pending',
       payload: {
         recordingId,
         transcriptId: transcript.id,

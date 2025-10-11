@@ -12,13 +12,13 @@ import SharedRecording from './SharedRecording';
 import SharedConversation from './SharedConversation';
 
 interface SharePageProps {
-  params: { shareId: string };
-  searchParams: { password?: string };
+  params: Promise<{ shareId: string }>;
+  searchParams: Promise<{ password?: string }>;
 }
 
 export default async function SharePage({ params, searchParams }: SharePageProps) {
-  const { shareId } = params;
-  const { password } = searchParams;
+  const { shareId } = await params;
+  const { password } = await searchParams;
 
   // Validate share access
   const validation = await validateShareAccess(shareId, password);

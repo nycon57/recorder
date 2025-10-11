@@ -7,7 +7,7 @@
 
 import { NextRequest } from 'next/server';
 import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
-import { vectorSearch, hybridSearch } from '@/lib/services/vector-search';
+import { vectorSearch, hybridSearch } from '@/lib/services/vector-search-google';
 import { withRateLimit } from '@/lib/rate-limit/middleware';
 import { z } from 'zod';
 

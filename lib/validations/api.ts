@@ -107,6 +107,21 @@ export const paginationSchema = z.object({
   offset: z.coerce.number().min(0).default(0),
 });
 
+// Transcript update schema
+export const updateTranscriptSchema = z.object({
+  text: z.string().min(1),
+});
+
+// Document update schema (already exists above but adding for consistency)
+export const updateDocumentMarkdownSchema = z.object({
+  markdown: z.string().min(1),
+});
+
+// Reprocess recording schema
+export const reprocessRecordingSchema = z.object({
+  step: z.enum(['transcribe', 'document', 'embeddings', 'all']),
+});
+
 // Common response types
 export type ApiError = {
   code: string;

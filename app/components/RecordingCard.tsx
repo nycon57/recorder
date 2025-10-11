@@ -3,6 +3,20 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/app/components/ui/alert-dialog';
+import { buttonVariants } from '@/app/components/ui/button';
+import { cn } from '@/lib/utils';
+import TagBadge from './TagBadge';
+import type { Tag } from '@/lib/types/database';
 
 interface Recording {
   id: string;
@@ -13,6 +27,7 @@ interface Recording {
   thumbnail_url: string | null;
   created_at: string;
   updated_at: string;
+  tags?: Tag[];
 }
 
 interface RecordingCardProps {
@@ -21,6 +36,7 @@ interface RecordingCardProps {
 
 export default function RecordingCard({ recording }: RecordingCardProps) {
   const router = useRouter();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const formatDuration = (seconds: number | null) => {
@@ -64,7 +80,7 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
       case 'uploading':
         return 'Uploading';
       case 'uploaded':
-        return 'Processing';
+        return 'Uploaded';
       case 'transcribing':
         return 'Transcribing';
       case 'transcribed':
@@ -81,11 +97,8 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this recording?')) {
-      return;
-    }
-
     setIsDeleting(true);
+    setIsDeleteDialogOpen(false);
 
     try {
       const response = await fetch(`/api/recordings/${recording.id}`, {
@@ -100,7 +113,6 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
       router.refresh();
     } catch (error) {
       console.error('Error deleting recording:', error);
-      alert('Failed to delete recording. Please try again.');
       setIsDeleting(false);
     }
   };
@@ -160,6 +172,15 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
           </p>
         )}
 
+        {/* Tags */}
+        {recording.tags && recording.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {recording.tags.map((tag) => (
+              <TagBadge key={tag.id} name={tag.name} color={tag.color} size="sm" />
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
           <span
             className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(recording.status)}`}
@@ -180,7 +201,7 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
             View
           </Link>
           <button
-            onClick={handleDelete}
+            onClick={() => setIsDeleteDialogOpen(true)}
             disabled={isDeleting}
             className="px-3 py-2 bg-destructive text-destructive-foreground rounded hover:bg-destructive/90 transition text-sm disabled:opacity-50"
           >
@@ -188,6 +209,28 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
           </button>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Recording?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{recording.title || 'this recording'}"?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className={cn(buttonVariants({ variant: 'destructive' }))}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

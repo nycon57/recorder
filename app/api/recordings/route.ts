@@ -6,6 +6,7 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { withRateLimit } from '@/lib/rate-limit/middleware';
 
 // GET /api/recordings - List all recordings for the current org
@@ -46,7 +47,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = withRateLimit(
   apiHandler(async (request: NextRequest) => {
     const { orgId, userId } = await requireOrg();
-    const supabase = await createClient();
+    // Use admin client to bypass RLS - auth already validated via requireOrg()
+    const supabase = supabaseAdmin;
 
   const body = await request.json();
   const { title, description, metadata } = body;

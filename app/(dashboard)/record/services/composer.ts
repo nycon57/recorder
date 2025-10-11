@@ -15,7 +15,7 @@ const getCameraShapeRadius = (shape: CameraShape) => {
  *
  * Uses MediaStreamTrackProcessor and MediaStreamTrackGenerator to:
  * 1. Capture screenshare as background
- * 2. Overlay camera feed in bottom-right corner
+ * 2. Overlay camera feed in bottom-right corner (unless skipCameraOverlay is true)
  * 3. Apply circular or square mask to camera
  * 4. Mix audio from microphone
  */
@@ -23,7 +23,8 @@ export const composeStreams = (
   cameraStream: MediaStream | null,
   microphoneStream: MediaStream | null,
   screenshareStream: MediaStream | null,
-  cameraShape: CameraShape = 'circle'
+  cameraShape: CameraShape = 'circle',
+  skipCameraOverlay: boolean = false
 ): MediaStream => {
   const cameraTrack = cameraStream?.getVideoTracks()[0];
   const microphoneTrack = microphoneStream?.getAudioTracks()[0];
@@ -44,8 +45,9 @@ export const composeStreams = (
 
   const recordingGenerator = new MediaStreamTrackGenerator({ kind: 'video' });
 
-  // Compose screen + camera
-  if (screenshareProcessor && cameraProcessor) {
+  // Compose screen + camera (unless camera overlay should be skipped for entire screen sharing)
+  if (screenshareProcessor && cameraProcessor && !skipCameraOverlay) {
+    // Screen + Camera with overlay compositing
     const screenshareReader = screenshareProcessor.readable.getReader();
 
     const canvas = new OffscreenCanvas(0, 0);
@@ -135,12 +137,12 @@ export const composeStreams = (
     cameraProcessor.readable
       .pipeThrough(transformer)
       .pipeTo(recordingGenerator.writable);
+  } else if (screenshareProcessor) {
+    // Screen only (including when skipCameraOverlay is true with entire screen)
+    screenshareProcessor.readable.pipeTo(recordingGenerator.writable);
   } else if (cameraProcessor) {
     // Camera only
     cameraProcessor.readable.pipeTo(recordingGenerator.writable);
-  } else if (screenshareProcessor) {
-    // Screen only
-    screenshareProcessor.readable.pipeTo(recordingGenerator.writable);
   }
 
   // Create recording stream with video + audio

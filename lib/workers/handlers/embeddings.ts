@@ -37,7 +37,7 @@ export async function generateEmbeddings(job: Job): Promise<void> {
     // Fetch transcript
     const { data: transcript, error: transcriptError } = await supabase
       .from('transcripts')
-      .select('text, segments')
+      .select('text, words_json')
       .eq('id', transcriptId)
       .single();
 
@@ -48,7 +48,7 @@ export async function generateEmbeddings(job: Job): Promise<void> {
     // Fetch document
     const { data: document, error: documentError } = await supabase
       .from('documents')
-      .select('content, format')
+      .select('markdown')
       .eq('id', documentId)
       .single();
 
@@ -58,20 +58,21 @@ export async function generateEmbeddings(job: Job): Promise<void> {
 
     console.log(`[Embeddings] Loaded transcript and document`);
 
+    // Extract segments from words_json
+    const wordsData = (transcript.words_json || {}) as Record<string, any>;
+    const segments = (wordsData.segments || []) as Array<{ start: number; end: number; text: string }>;
+
     // Chunk transcript with timing information
     const transcriptChunks = chunkTranscriptWithSegments(
       transcript.text,
-      (transcript.segments || []) as Array<{ start: number; end: number; text: string }>,
+      segments,
       { maxTokens: 500, overlapTokens: 50 }
     );
 
     console.log(`[Embeddings] Created ${transcriptChunks.length} transcript chunks`);
 
-    // Chunk document
-    const documentChunks =
-      document.format === 'markdown'
-        ? chunkMarkdown(document.content, { maxTokens: 500, overlapTokens: 50 })
-        : chunkTranscriptWithSegments(document.content, [], { maxTokens: 500, overlapTokens: 50 });
+    // Chunk document (always markdown format)
+    const documentChunks = chunkMarkdown(document.markdown, { maxTokens: 500, overlapTokens: 50 });
 
     console.log(`[Embeddings] Created ${documentChunks.length} document chunks`);
 

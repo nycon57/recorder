@@ -209,3 +209,262 @@ export function chunkMarkdown(
 
   return chunks;
 }
+
+/**
+ * Video transcript chunk with visual context
+ */
+export interface VideoTranscriptChunk extends TextChunk {
+  startTime?: number;
+  endTime?: number;
+  contentType: 'audio' | 'visual' | 'combined';
+  hasVisualContext: boolean;
+  visualDescription?: string;
+  timestampRange?: string;
+}
+
+interface VisualEvent {
+  timestamp: string; // "MM:SS"
+  type: 'click' | 'type' | 'navigate' | 'scroll' | 'other';
+  target?: string;
+  location?: string;
+  description: string;
+}
+
+interface AudioSegment {
+  timestamp: string;
+  startTime: number;
+  endTime: number;
+  text: string;
+}
+
+/**
+ * Convert MM:SS timestamp to seconds
+ */
+function timestampToSeconds(timestamp: string): number {
+  const parts = timestamp.split(':');
+  if (parts.length === 2) {
+    const mins = parseInt(parts[0], 10);
+    const secs = parseInt(parts[1], 10);
+    return mins * 60 + secs;
+  }
+  return 0;
+}
+
+/**
+ * Convert seconds to MM:SS format
+ */
+function secondsToTimestamp(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Chunk video transcript by merging audio segments with visual events
+ * Creates rich chunks that include both what was said and what happened on screen
+ */
+export function chunkVideoTranscript(
+  audioTranscript: string,
+  audioSegments: AudioSegment[],
+  visualEvents: VisualEvent[],
+  options: ChunkOptions = {}
+): VideoTranscriptChunk[] {
+  const { maxTokens = 500, overlapTokens = 50, minTokens = 100 } = options;
+
+  const chunks: VideoTranscriptChunk[] = [];
+
+  // Sort audio segments and visual events by timestamp
+  const sortedAudio = [...audioSegments].sort((a, b) => a.startTime - b.startTime);
+  const sortedVisual = [...visualEvents].sort(
+    (a, b) => timestampToSeconds(a.timestamp) - timestampToSeconds(b.timestamp)
+  );
+
+  // Group audio segments into chunks
+  let currentAudioChunk: AudioSegment[] = [];
+  let currentTokens = 0;
+
+  for (let i = 0; i < sortedAudio.length; i++) {
+    const segment = sortedAudio[i];
+    const segmentTokens = estimateTokens(segment.text);
+
+    // Check if adding this segment exceeds maxTokens
+    if (currentTokens + segmentTokens > maxTokens && currentAudioChunk.length > 0) {
+      // Finalize current chunk
+      const chunk = createCombinedChunk(
+        currentAudioChunk,
+        sortedVisual,
+        chunks.length
+      );
+      chunks.push(chunk);
+
+      // Start new chunk with overlap (keep last segment)
+      currentAudioChunk = currentAudioChunk.length > 0 ? [currentAudioChunk[currentAudioChunk.length - 1]] : [];
+      currentTokens = currentAudioChunk.length > 0 ? estimateTokens(currentAudioChunk[0].text) : 0;
+    }
+
+    currentAudioChunk.push(segment);
+    currentTokens += segmentTokens;
+  }
+
+  // Add final chunk
+  if (currentAudioChunk.length > 0 && currentTokens >= minTokens) {
+    const chunk = createCombinedChunk(
+      currentAudioChunk,
+      sortedVisual,
+      chunks.length
+    );
+    chunks.push(chunk);
+  }
+
+  // Add any remaining visual-only events (periods with no audio)
+  const visualOnlyChunks = createVisualOnlyChunks(
+    sortedVisual,
+    sortedAudio,
+    chunks.length,
+    maxTokens
+  );
+  chunks.push(...visualOnlyChunks);
+
+  return chunks.sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+}
+
+/**
+ * Create a combined chunk from audio segments and overlapping visual events
+ */
+function createCombinedChunk(
+  audioSegments: AudioSegment[],
+  allVisualEvents: VisualEvent[],
+  index: number
+): VideoTranscriptChunk {
+  const startTime = audioSegments[0].startTime;
+  const endTime = audioSegments[audioSegments.length - 1].endTime;
+
+  // Find visual events that overlap with this time range
+  const overlappingVisual = allVisualEvents.filter(event => {
+    const eventTime = timestampToSeconds(event.timestamp);
+    return eventTime >= startTime && eventTime <= endTime;
+  });
+
+  // Merge audio and visual into combined text
+  const audioText = audioSegments.map(seg => seg.text).join(' ');
+
+  let combinedText = audioText;
+  let visualDescription = '';
+
+  if (overlappingVisual.length > 0) {
+    visualDescription = overlappingVisual
+      .map(event => {
+        const parts = [
+          event.target || event.type,
+          event.location ? `at ${event.location}` : '',
+          ':',
+          event.description,
+        ].filter(Boolean);
+        return parts.join(' ');
+      })
+      .join('; ');
+
+    combinedText = `${audioText}\n\nVisual: ${visualDescription}`;
+  }
+
+  const timestampRange = `${secondsToTimestamp(startTime)} - ${secondsToTimestamp(endTime)}`;
+
+  return {
+    text: combinedText,
+    index,
+    startChar: 0, // Relative to full transcript
+    endChar: combinedText.length,
+    estimatedTokens: estimateTokens(combinedText),
+    startTime,
+    endTime,
+    contentType: overlappingVisual.length > 0 ? 'combined' : 'audio',
+    hasVisualContext: overlappingVisual.length > 0,
+    visualDescription: visualDescription || undefined,
+    timestampRange,
+  };
+}
+
+/**
+ * Create visual-only chunks for periods with screen activity but no audio
+ */
+function createVisualOnlyChunks(
+  allVisualEvents: VisualEvent[],
+  audioSegments: AudioSegment[],
+  startIndex: number,
+  maxTokens: number
+): VideoTranscriptChunk[] {
+  const chunks: VideoTranscriptChunk[] = [];
+
+  // Find visual events that don't overlap with any audio
+  const visualOnlyEvents = allVisualEvents.filter(event => {
+    const eventTime = timestampToSeconds(event.timestamp);
+    return !audioSegments.some(
+      seg => eventTime >= seg.startTime && eventTime <= seg.endTime
+    );
+  });
+
+  if (visualOnlyEvents.length === 0) return chunks;
+
+  // Group visual-only events into chunks
+  let currentGroup: VisualEvent[] = [];
+  let currentTokens = 0;
+
+  for (const event of visualOnlyEvents) {
+    const eventTokens = estimateTokens(event.description);
+
+    if (currentTokens + eventTokens > maxTokens && currentGroup.length > 0) {
+      chunks.push(createVisualOnlyChunk(currentGroup, chunks.length + startIndex));
+      currentGroup = [];
+      currentTokens = 0;
+    }
+
+    currentGroup.push(event);
+    currentTokens += eventTokens;
+  }
+
+  if (currentGroup.length > 0) {
+    chunks.push(createVisualOnlyChunk(currentGroup, chunks.length + startIndex));
+  }
+
+  return chunks;
+}
+
+/**
+ * Create a visual-only chunk from a group of visual events
+ */
+function createVisualOnlyChunk(
+  events: VisualEvent[],
+  index: number
+): VideoTranscriptChunk {
+  const startTime = timestampToSeconds(events[0].timestamp);
+  const endTime = timestampToSeconds(events[events.length - 1].timestamp);
+
+  const visualText = events
+    .map(event => {
+      const parts = [
+        `[${event.timestamp}]`,
+        event.target || event.type,
+        event.location ? `at ${event.location}` : '',
+        '-',
+        event.description,
+      ].filter(Boolean);
+      return parts.join(' ');
+    })
+    .join('\n');
+
+  const timestampRange = `${secondsToTimestamp(startTime)} - ${secondsToTimestamp(endTime)}`;
+
+  return {
+    text: `Visual actions: ${visualText}`,
+    index,
+    startChar: 0,
+    endChar: visualText.length,
+    estimatedTokens: estimateTokens(visualText),
+    startTime,
+    endTime,
+    contentType: 'visual',
+    hasVisualContext: true,
+    visualDescription: visualText,
+    timestampRange,
+  };
+}

@@ -7,9 +7,27 @@
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
-import { transcribeRecording } from './handlers/transcribe';
-import { generateDocument } from './handlers/docify';
-import { generateEmbeddings } from './handlers/embeddings';
+
+// GEMINI VIDEO MODE: Using Gemini for video understanding, doc generation, and embeddings
+import { transcribeRecording } from './handlers/transcribe-gemini-video';
+import { generateDocument } from './handlers/docify-google';
+import { generateEmbeddings } from './handlers/embeddings-google';
+
+// ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
+// import { transcribeRecording } from './handlers/transcribe-google';
+// import { generateDocument } from './handlers/docify-google';
+// import { generateEmbeddings } from './handlers/embeddings-google';
+
+// HYBRID MODE: OpenAI transcription + Google doc generation + Google embeddings
+// Uncomment this if you want to use OpenAI Whisper for transcription instead
+// import { transcribeRecording } from './handlers/transcribe-simplified';
+// import { generateDocument } from './handlers/docify-google';
+// import { generateEmbeddings } from './handlers/embeddings-google';
+
+// FULL OPENAI MODE (not supported - no API access)
+// import { transcribeRecording } from './handlers/transcribe';
+// import { generateDocument } from './handlers/docify';
+// import { generateEmbeddings } from './handlers/embeddings';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 type JobType = Job['type'];
@@ -122,7 +140,7 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
   } catch (error) {
     console.error(`[Job ${job.id}] Error:`, error);
 
-    const attemptCount = job.attempt_count + 1;
+    const attemptCount = job.attempts + 1;
     const shouldRetry = attemptCount < maxRetries;
 
     if (shouldRetry) {
@@ -134,8 +152,8 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
         .from('jobs')
         .update({
           status: 'pending' as JobStatus,
-          attempt_count: attemptCount,
-          run_after: runAfter,
+          attempts: attemptCount,
+          run_at: runAfter,
           error: error instanceof Error ? error.message : 'Unknown error',
         })
         .eq('id', job.id);
@@ -147,7 +165,7 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
         .from('jobs')
         .update({
           status: 'failed' as JobStatus,
-          attempt_count: attemptCount,
+          attempts: attemptCount,
           error: error instanceof Error ? error.message : 'Unknown error',
         })
         .eq('id', job.id);

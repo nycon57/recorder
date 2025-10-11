@@ -13,9 +13,9 @@ import { deleteShare, updateShare } from '@/lib/services/sharing';
  * Delete a share link
  */
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId } = await requireOrg();
-    const shareId = params.id;
+    const { id: shareId } = await params;
 
     await deleteShare(shareId, orgId);
 
@@ -28,9 +28,9 @@ export const DELETE = apiHandler(
  * Update share settings (expiration, max views)
  */
 export const PATCH = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId } = await requireOrg();
-    const shareId = params.id;
+    const { id: shareId } = await params;
     const body = await request.json();
 
     const { expiresAt, maxViews } = body;

@@ -6,7 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { apiHandler, requireOrg, successResponse, parseBody, errors } from '@/lib/utils/api';
-import { searchRecording } from '@/lib/services/vector-search';
+import { searchRecording } from '@/lib/services/vector-search-google';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 
@@ -24,9 +24,9 @@ type SearchBody = z.infer<typeof searchSchema>;
  * Search within a specific recording
  */
 export const POST = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId } = await requireOrg();
-    const recordingId = params.id;
+    const { id: recordingId } = await params;
 
     // Verify recording exists and belongs to org
     const supabase = await createClient();

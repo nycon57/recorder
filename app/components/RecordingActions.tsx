@@ -2,6 +2,18 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/app/components/ui/alert-dialog';
+import { buttonVariants } from '@/app/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface RecordingActionsProps {
   recordingId: string;
@@ -11,15 +23,14 @@ export default function RecordingActions({
   recordingId,
 }: RecordingActionsProps) {
   const router = useRouter();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this recording?')) {
-      return;
-    }
-
     setIsDeleting(true);
+    setIsDeleteDialogOpen(false);
+    setShowMenu(false);
 
     try {
       const response = await fetch(`/api/recordings/${recordingId}`, {
@@ -33,7 +44,6 @@ export default function RecordingActions({
       router.push('/dashboard');
     } catch (error) {
       console.error('Error deleting recording:', error);
-      alert('Failed to delete recording. Please try again.');
       setIsDeleting(false);
     }
   };
@@ -62,7 +72,10 @@ export default function RecordingActions({
           <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-lg border border-border z-20">
             <div className="py-1">
               <button
-                onClick={handleDelete}
+                onClick={() => {
+                  setShowMenu(false);
+                  setIsDeleteDialogOpen(true);
+                }}
                 disabled={isDeleting}
                 className="w-full text-left px-4 py-2 text-sm text-destructive hover:bg-accent disabled:opacity-50"
               >
@@ -72,6 +85,27 @@ export default function RecordingActions({
           </div>
         </>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Recording?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this recording? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className={cn(buttonVariants({ variant: 'destructive' }))}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

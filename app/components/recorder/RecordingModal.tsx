@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { Download, Upload, Loader2 } from 'lucide-react';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { useRecording } from '@/app/(dashboard)/record/contexts/RecordingContext';
 import {
   Dialog,
@@ -19,12 +21,32 @@ interface RecordingModalProps {
 }
 
 export function RecordingModal({ onUploadComplete }: RecordingModalProps) {
-  const { recordingBlob } = useRecording();
+  const { recordingBlob, clearRecording } = useRecording();
   const [isOpen, setIsOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string>('');
   const [videoUrl, setVideoUrl] = useState<string>('');
+  const [ffmpeg] = useState(() => new FFmpeg());
+
+  // Load FFmpeg on component mount
+  useEffect(() => {
+    const loadFFmpeg = async () => {
+      try {
+        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+        console.log('[FFmpeg] Loaded successfully');
+      } catch (err) {
+        console.error('[FFmpeg] Failed to load:', err);
+      }
+    };
+
+    loadFFmpeg();
+  }, [ffmpeg]);
 
   // Show modal when recording blob is available
   useEffect(() => {
@@ -42,20 +64,57 @@ export function RecordingModal({ onUploadComplete }: RecordingModalProps) {
   const handleClose = () => {
     setIsOpen(false);
     setIsUploading(false);
+    setIsConverting(false);
     setUploadProgress(0);
     setError('');
+    // Clear the recording blob so PiP doesn't show completed state
+    clearRecording();
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!recordingBlob) return;
 
-    const url = URL.createObjectURL(recordingBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `recording-${Date.now()}.webm`;
-    link.click();
-    URL.revokeObjectURL(url);
-    handleClose();
+    setIsConverting(true);
+    setError('');
+
+    try {
+      // Convert WebM to MP4 using FFmpeg
+      console.log('[Download] Converting WebM to MP4...');
+
+      // Write input file to FFmpeg's virtual file system
+      await ffmpeg.writeFile('input.webm', await fetchFile(recordingBlob));
+
+      // Run FFmpeg conversion
+      await ffmpeg.exec([
+        '-i', 'input.webm',
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '22',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        'output.mp4'
+      ]);
+
+      // Read the output file
+      const data = await ffmpeg.readFile('output.mp4');
+      const mp4Blob = new Blob([data], { type: 'video/mp4' });
+
+      // Download the MP4 file
+      const url = URL.createObjectURL(mp4Blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `recording-${Date.now()}.mp4`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      console.log('[Download] MP4 conversion successful');
+      handleClose();
+    } catch (err) {
+      console.error('[Download] Conversion failed:', err);
+      setError('Failed to convert video. Please try again.');
+    } finally {
+      setIsConverting(false);
+    }
   };
 
   const handleUpload = async () => {
@@ -81,7 +140,9 @@ export function RecordingModal({ onUploadComplete }: RecordingModalProps) {
         throw new Error('Failed to create recording');
       }
 
-      const { recordingId, uploadUrl } = await createResponse.json();
+      const { data } = await createResponse.json();
+      const { recording, uploadUrl } = data;
+      const recordingId = recording.id;
       setUploadProgress(20);
 
       // Step 2: Upload blob to storage
@@ -143,6 +204,16 @@ export function RecordingModal({ onUploadComplete }: RecordingModalProps) {
             </div>
           )}
 
+          {/* Converting progress */}
+          {isConverting && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <Loader2 className="size-4 animate-spin" />
+                <span className="text-muted-foreground">Converting to MP4...</span>
+              </div>
+            </div>
+          )}
+
           {/* Upload progress */}
           {isUploading && (
             <div className="space-y-2">
@@ -166,14 +237,23 @@ export function RecordingModal({ onUploadComplete }: RecordingModalProps) {
           <Button
             variant="outline"
             onClick={handleDownload}
-            disabled={isUploading}
+            disabled={isUploading || isConverting}
           >
-            <Download className="size-4" />
-            Download
+            {isConverting ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Converting...
+              </>
+            ) : (
+              <>
+                <Download className="size-4" />
+                Download MP4
+              </>
+            )}
           </Button>
           <Button
             onClick={handleUpload}
-            disabled={isUploading}
+            disabled={isUploading || isConverting}
           >
             {isUploading ? (
               <>
