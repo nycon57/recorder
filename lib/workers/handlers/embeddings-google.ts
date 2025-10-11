@@ -229,6 +229,21 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       },
     });
 
+    // Enqueue summary generation job
+    await supabase.from('jobs').insert({
+      type: 'generate_summary',
+      status: 'pending',
+      payload: {
+        recordingId,
+        transcriptId,
+        documentId,
+        orgId,
+      },
+      dedupe_key: `generate_summary:${recordingId}`,
+    });
+
+    console.log(`[Embeddings] Enqueued summary generation for recording ${recordingId}`);
+
   } catch (error) {
     console.error(`[Embeddings] Error:`, error);
 
