@@ -40,7 +40,6 @@ export interface RerankResult {
   rerankingTime: number;
   originalCount: number;
   rerankedCount: number;
-  tokensUsed?: number;
   costEstimate?: number;
 }
 
@@ -88,6 +87,23 @@ export async function rerankResults(
     timeoutMs = 500,
   } = options || {};
 
+  // Validate input parameters
+  if (!query || query.trim().length === 0) {
+    throw new Error('Query cannot be empty');
+  }
+
+  if (topN !== undefined && topN < 1) {
+    throw new Error('topN must be at least 1');
+  }
+
+  if (timeoutMs < 100) {
+    throw new Error('timeoutMs must be at least 100ms');
+  }
+
+  if (timeoutMs > 5000) {
+    throw new Error('timeoutMs must be at most 5000ms');
+  }
+
   // If no results or only one result, return immediately
   if (results.length <= 1) {
     return {
@@ -107,24 +123,29 @@ export async function rerankResults(
     const documents = results.map((result) => result.chunkText);
 
     // Create timeout promise
+    // Note: The Cohere SDK doesn't support AbortSignal yet, so we use Promise.race
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => reject(new Error('Reranking timeout')), timeoutMs);
     });
 
-    // Call Cohere rerank API with timeout
+    // Call Cohere rerank API
     const rerankPromise = cohere.rerank({
       query,
       documents,
       topN: Math.min(topN, results.length),
       model,
-      returnDocuments: false, // We already have the documents
     });
 
+    // Race between rerank and timeout
     const response = await Promise.race([rerankPromise, timeoutPromise]);
 
-    // Map reranked results back to original SearchResult objects
-    const rerankedResults = response.results.map((result) => {
+    // Map Cohere results back to original SearchResult format
+    const rerankedResults = response.results.map((result: { index: number; relevanceScore: number }) => {
       const originalResult = results[result.index];
+
+      if (!originalResult) {
+        throw new Error(`Invalid result index: ${result.index}`);
+      }
 
       // Update similarity score with Cohere's relevance score
       // Cohere scores are typically 0-1, similar to cosine similarity
@@ -158,13 +179,12 @@ export async function rerankResults(
       rerankingTime,
       originalCount: results.length,
       rerankedCount: rerankedResults.length,
-      tokensUsed: searchUnits,
       costEstimate,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Log error but don't throw - fallback to original results
     console.error('[Reranking] Error:', {
-      message: error.message,
+      message: error instanceof Error ? error.message : String(error),
       query: query.substring(0, 50),
       resultCount: results.length,
     });
@@ -186,21 +206,4 @@ export async function rerankResults(
  */
 export function isCohereConfigured(): boolean {
   return !!process.env.COHERE_API_KEY;
-}
-
-/**
- * Validate rerank options
- */
-export function validateRerankOptions(options: RerankOptions): void {
-  if (options.topN !== undefined && options.topN < 1) {
-    throw new Error('topN must be at least 1');
-  }
-
-  if (options.timeoutMs !== undefined && options.timeoutMs < 100) {
-    throw new Error('timeoutMs must be at least 100ms');
-  }
-
-  if (options.timeoutMs !== undefined && options.timeoutMs > 5000) {
-    throw new Error('timeoutMs must be at most 5000ms');
-  }
 }

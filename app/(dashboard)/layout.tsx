@@ -1,8 +1,23 @@
-import { UserButton, OrganizationSwitcher } from '@clerk/nextjs';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 
+import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/app/components/ui/sidebar';
+import { Separator } from '@/app/components/ui/separator';
+import { AppSidebar } from '@/app/components/layout/app-sidebar';
+import { Breadcrumbs } from '@/app/components/layout/breadcrumbs';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+
+/**
+ * Dashboard Layout
+ * Protected layout with sidebar navigation
+ * Requires authentication and organization context
+ *
+ * Features:
+ * - Collapsible sidebar (Cmd/Ctrl + B)
+ * - Role-based navigation
+ * - Breadcrumb navigation
+ * - Responsive design
+ */
 export default async function DashboardLayout({
   children,
 }: {
@@ -14,115 +29,41 @@ export default async function DashboardLayout({
     redirect('/');
   }
 
+  // Fetch user role for conditional admin navigation
+  // Using admin client to bypass RLS (safe in server component)
+  let userRole: 'owner' | 'admin' | 'contributor' | 'reader' = 'reader';
+
+  try {
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('role')
+      .eq('clerk_id', userId)
+      .single();
+
+    if (userData?.role) {
+      userRole = userData.role as typeof userRole;
+    }
+  } catch (error) {
+    console.error('[DashboardLayout] Error fetching user role:', error);
+    // Continue with default 'reader' role if fetch fails
+  }
+
   return (
-    <div className="min-h-screen">
-      {/* Navigation Header */}
-      <header className="bg-card border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Logo & Nav */}
-            <div className="flex items-center space-x-8">
-              <Link href="/dashboard" className="flex items-center space-x-2">
-                <span className="text-2xl">🎥</span>
-                <span className="text-xl font-bold text-foreground">
-                  Record
-                </span>
-              </Link>
+    <SidebarProvider defaultOpen={true}>
+      <AppSidebar role={userRole} />
+      <SidebarInset>
+        {/* Header with sidebar trigger and breadcrumbs */}
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <Breadcrumbs />
+        </header>
 
-              <nav className="hidden md:flex space-x-6">
-                <Link
-                  href="/dashboard"
-                  className="text-muted-foreground hover:text-foreground transition"
-                >
-                  Recordings
-                </Link>
-                <Link
-                  href="/record"
-                  className="text-muted-foreground hover:text-foreground transition"
-                >
-                  New Recording
-                </Link>
-                <Link
-                  href="/search"
-                  className="text-muted-foreground hover:text-foreground transition"
-                >
-                  Search
-                </Link>
-                <Link
-                  href="/assistant"
-                  className="text-muted-foreground hover:text-foreground transition"
-                >
-                  AI Assistant
-                </Link>
-                <Link
-                  href="/settings"
-                  className="text-muted-foreground hover:text-foreground transition"
-                >
-                  Settings
-                </Link>
-              </nav>
-            </div>
-
-            {/* User Menu & Org Switcher */}
-            <div className="flex items-center space-x-4">
-              {/*
-                OrganizationSwitcher requires Organizations feature enabled in Clerk.
-                To enable: dashboard.clerk.com → Organizations → Enable
-                Uncomment below when Organizations are enabled:
-              */}
-              {process.env.NEXT_PUBLIC_CLERK_ORGANIZATIONS_ENABLED === 'true' && (
-                <OrganizationSwitcher
-                  appearance={{
-                    elements: {
-                      rootBox: 'flex items-center',
-                    },
-                  }}
-                />
-              )}
-              <UserButton
-                afterSignOutUrl="/"
-                appearance={{
-                  elements: {
-                    avatarBox: 'w-10 h-10',
-                  },
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {children}
-      </main>
-
-      {/* Footer */}
-      <footer className="bg-card border-t border-border mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex justify-between items-center">
-            <p className="text-sm text-muted-foreground">
-              © 2025 Record. AI-Powered Knowledge Management.
-            </p>
-            <div className="flex space-x-6 text-sm">
-              <a
-                href="https://github.com/addyosmani/recorder"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                GitHub
-              </a>
-              <Link
-                href="/docs"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                Documentation
-              </Link>
-            </div>
-          </div>
-        </div>
-      </footer>
-    </div>
+        {/* Main content area */}
+        <main className="flex flex-1 flex-col gap-4 p-4 md:p-6 lg:p-8">
+          {children}
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

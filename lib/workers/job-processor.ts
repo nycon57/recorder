@@ -13,6 +13,10 @@ import { transcribeRecording } from './handlers/transcribe-gemini-video';
 import { generateDocument } from './handlers/docify-google';
 import { generateEmbeddings } from './handlers/embeddings-google';
 import { generateSummary } from './handlers/generate-summary';
+import { handleExtractFrames } from './handlers/extract-frames';
+import { syncConnector } from './handlers/sync-connector';
+import { processImportedDocument } from './handlers/process-imported-doc';
+import { processWebhook } from './handlers/process-webhook';
 
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
@@ -48,8 +52,10 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   doc_generate: generateDocument,
   generate_embeddings: generateEmbeddings,
   generate_summary: generateSummary,
-  extract_frames: stubHandler, // Phase 2
-  sync_connector: stubHandler, // Phase 3
+  extract_frames: handleExtractFrames, // Phase 4 - Video frame extraction and indexing
+  sync_connector: syncConnector, // Phase 5 - Connector sync
+  process_imported_doc: processImportedDocument, // Phase 5 - Process imported documents
+  process_webhook: processWebhook, // Phase 5 - Process webhook events
 };
 
 /**

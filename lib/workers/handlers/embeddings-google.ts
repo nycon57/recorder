@@ -6,10 +6,15 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+
 import { GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
-import { chunkTranscriptWithSegments, chunkMarkdown, chunkVideoTranscript, type VideoTranscriptChunk } from '@/lib/services/chunking';
+import { chunkTranscriptWithSegments, chunkVideoTranscript, type VideoTranscriptChunk } from '@/lib/services/chunking';
+import { createSemanticChunker } from '@/lib/services/semantic-chunker';
+import { classifyContent } from '@/lib/services/content-classifier';
+import { getAdaptiveChunkConfig } from '@/lib/services/adaptive-sizing';
+import { sanitizeMetadata } from '@/lib/utils/config-validation';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -21,6 +26,7 @@ interface EmbeddingsPayload {
 }
 
 const BATCH_SIZE = 20; // Process embeddings in batches
+const DB_INSERT_BATCH_SIZE = 100; // Insert to database in batches
 
 /**
  * Generate embeddings for transcript and document using Google
@@ -32,6 +38,45 @@ export async function generateEmbeddings(job: Job): Promise<void> {
   console.log(`[Embeddings] Starting embedding generation for recording ${recordingId}`);
 
   const supabase = createAdminClient();
+
+  // Check if embeddings already exist (idempotency check)
+  const { data: existingChunks, count } = await supabase
+    .from('transcript_chunks')
+    .select('id', { count: 'exact', head: true })
+    .eq('recording_id', recordingId);
+
+  if (count && count > 0) {
+    console.log(
+      `[Embeddings] Embeddings already exist (${count} chunks), skipping generation`
+    );
+
+    // Enqueue summary generation job (in case pipeline was interrupted)
+    const { data: existingSummaryJob } = await supabase
+      .from('jobs')
+      .select('id')
+      .eq('type', 'generate_summary')
+      .eq('dedupe_key', `generate_summary:${recordingId}`)
+      .maybeSingle();
+
+    if (!existingSummaryJob) {
+      await supabase.from('jobs').insert({
+        type: 'generate_summary',
+        status: 'pending',
+        payload: {
+          recordingId,
+          transcriptId,
+          documentId,
+          orgId,
+        },
+        dedupe_key: `generate_summary:${recordingId}`,
+      });
+      console.log(
+        `[Embeddings] Enqueued summary generation job for existing embeddings`
+      );
+    }
+
+    return;
+  }
 
   try {
     // Fetch transcript with visual events
@@ -91,10 +136,24 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       console.log(`[Embeddings] Created ${transcriptChunks.length} audio transcript chunks`);
     }
 
-    // Chunk document (always markdown format)
-    const documentChunks = chunkMarkdown(document.markdown, { maxTokens: 500, overlapTokens: 50 });
+    // Chunk document using semantic chunking (always markdown format)
+    // Classify content type first
+    const documentClassification = classifyContent(document.markdown);
+    console.log(`[Embeddings] Document content type: ${documentClassification.type} (confidence: ${documentClassification.confidence.toFixed(2)})`);
 
-    console.log(`[Embeddings] Created ${documentChunks.length} document chunks`);
+    // Get adaptive config for content type
+    const documentChunkConfig = getAdaptiveChunkConfig(documentClassification.type);
+
+    // Create semantic chunker
+    const documentChunker = createSemanticChunker(documentChunkConfig);
+
+    // Generate semantic chunks
+    const semanticDocumentChunks = await documentChunker.chunk(document.markdown, {
+      recordingId,
+      contentType: documentClassification.type,
+    });
+
+    console.log(`[Embeddings] Created ${semanticDocumentChunks.length} semantic document chunks`);
 
     // Combine all chunks with enhanced metadata
     const allChunks = [
@@ -136,21 +195,30 @@ export async function generateEmbeddings(job: Job): Promise<void> {
           },
         };
       }),
-      ...documentChunks.map(chunk => ({
+      ...semanticDocumentChunks.map((chunk, index) => ({
         text: chunk.text,
         source: 'document' as const,
         contentType: 'document' as const,
         metadata: {
-          chunkIndex: chunk.index,
-          startChar: chunk.startChar,
-          endChar: chunk.endChar,
+          chunkIndex: index,
+          startChar: chunk.startPosition,
+          endChar: chunk.endPosition,
           hasVisualContext: false,
           contentType: 'document' as const,
+          // Semantic chunking metadata
+          semanticScore: chunk.semanticScore,
+          structureType: chunk.structureType,
+          boundaryType: chunk.boundaryType,
+          tokenCount: chunk.tokenCount,
+          sentenceCount: chunk.sentences.length,
         },
       })),
     ];
 
     console.log(`[Embeddings] Total chunks to embed: ${allChunks.length}`);
+
+    // PERFORMANCE FIX: Create Google GenAI client once (not for every chunk)
+    const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
     // Generate embeddings in batches
     const embeddingRecords = [];
@@ -162,41 +230,55 @@ export async function generateEmbeddings(job: Job): Promise<void> {
         `[Embeddings] Generating embeddings for batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(allChunks.length / BATCH_SIZE)}`
       );
 
-      // Process each chunk in the batch
-      for (const chunk of batch) {
-        // Initialize new Google GenAI client (supports outputDimensionality)
-        const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
+      // PERFORMANCE FIX: Process chunks in parallel using Promise.all
+      const batchResults = await Promise.all(
+        batch.map(async (chunk) => {
+          // Call embedContent with proper dimension specification
+          const result = await genai.models.embedContent({
+            model: GOOGLE_CONFIG.EMBEDDING_MODEL,
+            contents: chunk.text,
+            config: {
+              taskType: GOOGLE_CONFIG.EMBEDDING_TASK_TYPE,
+              outputDimensionality: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS, // Match database vector dimension (1536)
+            },
+          });
 
-        // Call embedContent with proper dimension specification
-        const result = await genai.models.embedContent({
-          model: GOOGLE_CONFIG.EMBEDDING_MODEL,
-          contents: chunk.text,
-          config: {
-            taskType: GOOGLE_CONFIG.EMBEDDING_TASK_TYPE,
-            outputDimensionality: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS, // Match database vector dimension (1536)
-          },
-        });
+          const embedding = result.embeddings?.[0]?.values;
 
-        const embedding = result.embeddings[0].values;
+          if (!embedding) {
+            throw new Error('No embedding returned from Google API');
+          }
 
-        embeddingRecords.push({
-          recording_id: recordingId,
-          org_id: orgId,
-          chunk_text: chunk.text,
-          chunk_index: chunk.metadata.chunkIndex,
-          start_time_sec: chunk.metadata.startTime || null,
-          end_time_sec: chunk.metadata.endTime || null,
-          embedding: JSON.stringify(embedding), // Supabase expects string for vector type
-          content_type: chunk.contentType || 'audio',
-          metadata: {
-            source: chunk.source,
-            source_type: chunk.source, // For compatibility
-            transcriptId: chunk.source === 'transcript' ? transcriptId : undefined,
-            documentId: chunk.source === 'document' ? documentId : undefined,
-            ...chunk.metadata,
-          },
-        });
-      }
+          // Sanitize metadata to prevent injection and data leakage
+          const sanitizedMetadata = sanitizeMetadata(chunk.metadata);
+
+          return {
+            recording_id: recordingId,
+            org_id: orgId,
+            chunk_text: chunk.text,
+            chunk_index: sanitizedMetadata.chunkIndex as number,
+            start_time_sec: ('startTime' in sanitizedMetadata ? sanitizedMetadata.startTime : null) || null,
+            end_time_sec: ('endTime' in sanitizedMetadata ? sanitizedMetadata.endTime : null) || null,
+            embedding: JSON.stringify(embedding), // Supabase expects string for vector type
+            content_type: chunk.contentType || 'audio',
+            // Semantic chunking metadata (only for document chunks)
+            chunking_strategy: ('semanticScore' in sanitizedMetadata) ? 'semantic' : 'fixed',
+            semantic_score: ('semanticScore' in sanitizedMetadata ? sanitizedMetadata.semanticScore : null) || null,
+            structure_type: ('structureType' in sanitizedMetadata ? sanitizedMetadata.structureType : null) || null,
+            boundary_type: ('boundaryType' in sanitizedMetadata ? sanitizedMetadata.boundaryType : null) || null,
+            metadata: {
+              source: chunk.source,
+              source_type: chunk.source, // For compatibility
+              transcriptId: chunk.source === 'transcript' ? transcriptId : undefined,
+              documentId: chunk.source === 'document' ? documentId : undefined,
+              ...sanitizedMetadata,
+            },
+          };
+        })
+      );
+
+      // Add batch results to records
+      embeddingRecords.push(...batchResults);
 
       // Small delay to avoid rate limits
       if (i + BATCH_SIZE < allChunks.length) {
@@ -204,18 +286,53 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       }
     }
 
-    console.log(`[Embeddings] Generated ${embeddingRecords.length} embeddings, saving to database`);
+    console.log(`[Embeddings] Generated ${embeddingRecords.length} embeddings, saving to database in batches`);
 
-    // Save all embeddings to database
-    const { error: insertError } = await supabase
-      .from('transcript_chunks')
-      .insert(embeddingRecords);
+    // Save embeddings to database in batches to prevent memory issues and timeout
+    for (let i = 0; i < embeddingRecords.length; i += DB_INSERT_BATCH_SIZE) {
+      const batch = embeddingRecords.slice(i, Math.min(i + DB_INSERT_BATCH_SIZE, embeddingRecords.length));
 
-    if (insertError) {
-      throw new Error(`Failed to save embeddings: ${insertError.message}`);
+      console.log(
+        `[Embeddings] Saving batch ${Math.floor(i / DB_INSERT_BATCH_SIZE) + 1}/${Math.ceil(embeddingRecords.length / DB_INSERT_BATCH_SIZE)} (${batch.length} records)`
+      );
+
+      const { error: insertError } = await supabase
+        .from('transcript_chunks')
+        .insert(batch);
+
+      if (insertError) {
+        throw new Error(
+          `Failed to save embeddings batch ${Math.floor(i / DB_INSERT_BATCH_SIZE) + 1}: ${insertError.message}`
+        );
+      }
+
+      // Small delay between batches
+      if (i + DB_INSERT_BATCH_SIZE < embeddingRecords.length) {
+        await sleep(50);
+      }
     }
 
     console.log(`[Embeddings] Successfully saved ${embeddingRecords.length} embeddings for recording ${recordingId}`);
+
+    // Update recording with embeddings timestamp and clear refresh flag
+    await supabase
+      .from('recordings')
+      .update({
+        embeddings_updated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', recordingId);
+
+    // Clear needs_embeddings_refresh flag on document
+    await supabase
+      .from('documents')
+      .update({
+        needs_embeddings_refresh: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('recording_id', recordingId);
+
+    console.log(`[Embeddings] Updated embeddings timestamp for recording ${recordingId}`);
 
     // Create event for notifications
     await supabase.from('events').insert({

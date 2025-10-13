@@ -6,7 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
+import { apiHandler, requireOrg, successResponse, parseBody, errors } from '@/lib/utils/api';
 import {
   generateRAGResponse,
   saveChatMessage,
@@ -14,6 +14,8 @@ import {
   getConversationHistory,
 } from '@/lib/services/rag-google';
 import { z } from 'zod';
+import { QuotaManager } from '@/lib/services/quotas/quota-manager';
+import { RateLimiter } from '@/lib/services/quotas/rate-limiter';
 
 const chatSchema = z.object({
   message: z.string().min(1, 'Message is required'),
@@ -22,6 +24,10 @@ const chatSchema = z.object({
   maxChunks: z.number().int().min(1).max(10).optional().default(5),
   threshold: z.number().min(0).max(1).optional().default(0.7),
   rerank: z.boolean().optional().default(false),
+  // Agentic mode options
+  useAgentic: z.boolean().optional().default(false),
+  maxIterations: z.number().int().min(1).max(5).optional().default(3),
+  enableSelfReflection: z.boolean().optional().default(true),
 });
 
 type ChatBody = z.infer<typeof chatSchema>;
@@ -33,9 +39,43 @@ type ChatBody = z.infer<typeof chatSchema>;
 export const POST = apiHandler(async (request: NextRequest) => {
   const { orgId, userId } = await requireOrg();
   const body = await parseBody(request, chatSchema);
+  const startTime = Date.now();
 
-  const { message, conversationId, recordingIds, maxChunks, threshold, rerank } =
-    body as ChatBody;
+  // Phase 6: Rate limiting
+  const rateLimit = await RateLimiter.checkLimit('ai', orgId);
+  if (!rateLimit.success) {
+    return errors.rateLimitExceeded({
+      limit: rateLimit.limit,
+      remaining: rateLimit.remaining,
+      resetAt: new Date(rateLimit.reset * 1000).toISOString(),
+    });
+  }
+
+  // Phase 6: Quota check
+  const quotaCheck = await QuotaManager.checkQuota(orgId, 'ai');
+  if (!quotaCheck.allowed) {
+    return errors.quotaExceeded({
+      remaining: quotaCheck.remaining,
+      limit: quotaCheck.limit,
+      resetAt: quotaCheck.resetAt.toISOString(),
+      message: quotaCheck.message,
+    });
+  }
+
+  // Phase 6: Consume quota
+  await QuotaManager.consumeQuota(orgId, 'ai');
+
+  const {
+    message,
+    conversationId,
+    recordingIds,
+    maxChunks,
+    threshold,
+    rerank,
+    useAgentic,
+    maxIterations,
+    enableSelfReflection,
+  } = body as ChatBody;
 
   // Get or create conversation
   let convId = conversationId;
@@ -53,7 +93,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   });
 
   // Generate AI response with RAG
-  const { response, sources, tokensUsed, rerankMetadata } = await generateRAGResponse(
+  const { response, sources, tokensUsed, rerankMetadata, agenticMetadata } = await generateRAGResponse(
     message,
     orgId,
     {
@@ -62,6 +102,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
       threshold,
       recordingIds,
       rerank,
+      useAgentic,
+      maxIterations,
+      enableSelfReflection,
     }
   );
 
@@ -73,8 +116,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
       sources,
       tokensUsed,
       ...(rerankMetadata && { rerankMetadata }),
+      ...(agenticMetadata && { agenticMetadata }),
     },
   });
+
+  const latencyMs = Date.now() - startTime;
 
   return successResponse({
     conversationId: convId,
@@ -83,7 +129,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
       content: response,
       sources,
       tokensUsed,
+      latencyMs,
       ...(rerankMetadata && { rerankMetadata }),
+      ...(agenticMetadata && { agenticMetadata }),
     },
   });
 });

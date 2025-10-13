@@ -7,6 +7,7 @@
 
 import { getGoogleAI, GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import { withTimeout } from '@/lib/utils/timeout';
 
 export interface SummarizationInput {
   recordingId: string;
@@ -144,46 +145,82 @@ ${visualContext}
 
 Generate the summary now:`;
 
-  console.log(`[Summarization] Calling Gemini 2.5 Flash for summary generation (target: ${targetWords} words)`);
+  // Calculate output tokens with a more generous buffer
+  const maxOutputTokens = Math.max(2048, Math.ceil(targetWords * 2)); // At least 2048 tokens
+
+  console.log(`[Summarization] Calling Gemini 2.5 Flash for summary generation (target: ${targetWords} words, maxTokens: ${maxOutputTokens})`);
 
   // Call Gemini to generate summary
   const googleAI = getGoogleAI();
   const model = googleAI.getGenerativeModel({
     model: GOOGLE_CONFIG.DOCIFY_MODEL, // Use same model as document generation
-  });
-
-  const result = await model.generateContent({
-    contents: [
+    safetySettings: [
       {
-        role: 'user',
-        parts: [
-          {
-            text: prompt,
-          },
-        ],
+        category: 'HARM_CATEGORY_HARASSMENT',
+        threshold: 'BLOCK_NONE',
+      },
+      {
+        category: 'HARM_CATEGORY_HATE_SPEECH',
+        threshold: 'BLOCK_NONE',
+      },
+      {
+        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+        threshold: 'BLOCK_NONE',
+      },
+      {
+        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+        threshold: 'BLOCK_NONE',
       },
     ],
-    generationConfig: {
-      temperature: 0.5, // Lower temperature for more focused summaries
-      maxOutputTokens: Math.ceil(targetWords * 1.5), // Estimate 1.5 tokens per word
-    },
   });
 
-  const response = await result.response;
-  const summaryText = response.text();
+  try {
+    // Wrap the API call with a 60-second timeout
+    const result = await withTimeout(
+      model.generateContent({
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.5, // Lower temperature for more focused summaries
+          maxOutputTokens,
+        },
+      }),
+      60000, // 60 second timeout
+      'Summary generation timed out after 60 seconds'
+    );
 
-  if (!summaryText || summaryText.length < 50) {
-    throw new Error('Gemini returned empty or too short summary');
+    const response = await result.response;
+    const summaryText = response.text();
+
+    if (!summaryText || summaryText.length < 50) {
+      console.error(`[Summarization] Gemini returned insufficient content. Response length: ${summaryText?.length || 0}`);
+      console.error(`[Summarization] Full response:`, JSON.stringify(response, null, 2));
+      throw new Error('Gemini returned empty or too short summary');
+    }
+
+    // Calculate word count
+    const wordCount = summaryText.split(/\s+/).length;
+
+    console.log(`[Summarization] Generated summary (${summaryText.length} chars, ~${wordCount} words)`);
+
+    return {
+      summaryText,
+      wordCount,
+      model: GOOGLE_CONFIG.DOCIFY_MODEL,
+    };
+  } catch (error: any) {
+    console.error(`[Summarization] Error during generation:`, error);
+    if (error.message?.includes('empty or too short')) {
+      throw error;
+    }
+    throw new Error(`Gemini API error: ${error.message || 'Unknown error'}`);
   }
-
-  // Calculate word count
-  const wordCount = summaryText.split(/\s+/).length;
-
-  console.log(`[Summarization] Generated summary (${summaryText.length} chars, ~${wordCount} words)`);
-
-  return {
-    summaryText,
-    wordCount,
-    model: GOOGLE_CONFIG.DOCIFY_MODEL,
-  };
 }

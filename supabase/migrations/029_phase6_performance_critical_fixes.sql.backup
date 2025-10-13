@@ -1,0 +1,224 @@
+-- ============================================
+-- PHASE 6: CRITICAL PERFORMANCE FIXES
+-- Critical optimizations for production performance
+-- ============================================
+
+-- ============================================
+-- FIX: Update check_quota to use optimized version
+-- ============================================
+
+-- Ensure we're using the optimized version with SKIP LOCKED
+DROP FUNCTION IF EXISTS check_quota CASCADE;
+
+-- Rename optimized function to be the default
+ALTER FUNCTION check_quota_optimized RENAME TO check_quota;
+
+-- ============================================
+-- ADDITIONAL PERFORMANCE INDEXES
+-- ============================================
+
+-- Index for frequent quota lookups (covering index)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_org_quotas_lookup
+  ON org_quotas(org_id, plan_tier, quota_reset_at)
+  INCLUDE (
+    searches_per_month, searches_used,
+    recordings_per_month, recordings_used,
+    ai_requests_per_month, ai_requests_used,
+    storage_gb, storage_used_gb
+  ) WHERE deleted_at IS NULL;
+
+-- Index for rate limit tracking (if using database)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_rate_limits_lookup
+  ON rate_limits(identifier, type, window_start)
+  WHERE window_start > now() - INTERVAL '5 minutes';
+
+-- ============================================
+-- OPTIMIZE SEARCH QUERY PATTERNS
+-- ============================================
+
+-- Create a function for efficient chunk search with parallel scan
+CREATE OR REPLACE FUNCTION search_chunks_optimized(
+  p_org_id UUID,
+  p_embedding vector(3072),
+  p_limit INTEGER DEFAULT 10,
+  p_threshold FLOAT DEFAULT 0.7
+) RETURNS TABLE (
+  chunk_id UUID,
+  recording_id UUID,
+  content TEXT,
+  similarity FLOAT
+) AS $$
+BEGIN
+  -- Use parallel scan for large tables
+  SET LOCAL max_parallel_workers_per_gather = 4;
+  SET LOCAL parallel_tuple_cost = 0.01;
+  SET LOCAL parallel_setup_cost = 100;
+
+  RETURN QUERY
+  WITH ranked_chunks AS (
+    SELECT
+      tc.id AS chunk_id,
+      tc.recording_id,
+      tc.content,
+      1 - (tc.embedding <=> p_embedding) AS similarity
+    FROM transcript_chunks tc
+    JOIN recordings r ON tc.recording_id = r.id
+    WHERE r.org_id = p_org_id
+      AND r.deleted_at IS NULL
+      AND tc.deleted_at IS NULL
+      AND 1 - (tc.embedding <=> p_embedding) > p_threshold
+    ORDER BY tc.embedding <=> p_embedding
+    LIMIT p_limit
+  )
+  SELECT * FROM ranked_chunks;
+END;
+$$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
+
+-- ============================================
+-- CONNECTION POOLING OPTIMIZATIONS
+-- ============================================
+
+-- Optimize for Supabase/PgBouncer connection pooling
+ALTER SYSTEM SET idle_in_transaction_session_timeout = '60s';
+ALTER SYSTEM SET statement_timeout = '30s';
+ALTER SYSTEM SET lock_timeout = '10s';
+
+-- Specific timeout for quota operations (fast fail)
+CREATE OR REPLACE FUNCTION set_quota_operation_timeout()
+RETURNS void AS $$
+BEGIN
+  SET LOCAL statement_timeout = '100ms';
+  SET LOCAL lock_timeout = '50ms';
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- VACUUM AND ANALYZE SCHEDULING
+-- ============================================
+
+-- Create function to auto-analyze high-traffic tables
+CREATE OR REPLACE FUNCTION auto_analyze_hot_tables()
+RETURNS void AS $$
+BEGIN
+  -- Analyze frequently updated tables
+  ANALYZE org_quotas;
+  ANALYZE quota_usage_events;
+  ANALYZE search_analytics;
+  ANALYZE transcript_chunks;
+  ANALYZE recordings;
+
+  -- Vacuum tables with frequent updates/deletes
+  VACUUM (ANALYZE, SKIP_LOCKED) org_quotas;
+  VACUUM (ANALYZE, SKIP_LOCKED) quota_usage_events;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- MONITORING AND ALERTING
+-- ============================================
+
+-- View for monitoring slow quota checks
+CREATE OR REPLACE VIEW slow_quota_checks AS
+SELECT
+  query,
+  calls,
+  mean_exec_time,
+  max_exec_time,
+  total_exec_time
+FROM pg_stat_statements
+WHERE query LIKE '%check_quota%'
+  AND mean_exec_time > 10
+ORDER BY mean_exec_time DESC;
+
+-- View for monitoring cache effectiveness
+CREATE OR REPLACE VIEW cache_effectiveness AS
+SELECT
+  DATE(created_at) as date,
+  COUNT(*) as total_searches,
+  SUM(CASE WHEN cache_hit THEN 1 ELSE 0 END) as cache_hits,
+  ROUND(100.0 * SUM(CASE WHEN cache_hit THEN 1 ELSE 0 END) / COUNT(*), 2) as cache_hit_rate,
+  AVG(latency_ms) as avg_latency_ms,
+  PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY latency_ms) as p50_latency_ms,
+  PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms) as p95_latency_ms,
+  PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY latency_ms) as p99_latency_ms
+FROM search_analytics
+WHERE created_at > now() - INTERVAL '7 days'
+GROUP BY DATE(created_at)
+ORDER BY date DESC;
+
+-- ============================================
+-- PERFORMANCE BASELINE QUERIES
+-- ============================================
+
+-- Query to establish performance baseline
+CREATE OR REPLACE FUNCTION get_performance_baseline()
+RETURNS TABLE (
+  metric TEXT,
+  value NUMERIC
+) AS $$
+BEGIN
+  RETURN QUERY
+  -- Average quota check time
+  SELECT 'avg_quota_check_ms'::TEXT,
+         ROUND(AVG(mean_exec_time)::NUMERIC, 2)
+  FROM pg_stat_statements
+  WHERE query LIKE '%check_quota%'
+  UNION ALL
+  -- Search query P95 latency
+  SELECT 'search_p95_latency_ms'::TEXT,
+         PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms)::NUMERIC
+  FROM search_analytics
+  WHERE created_at > now() - INTERVAL '1 hour'
+  UNION ALL
+  -- Cache hit rate
+  SELECT 'cache_hit_rate_pct'::TEXT,
+         ROUND(100.0 * SUM(CASE WHEN cache_hit THEN 1 ELSE 0 END) / COUNT(*), 2)::NUMERIC
+  FROM search_analytics
+  WHERE created_at > now() - INTERVAL '1 hour'
+  UNION ALL
+  -- Active connections
+  SELECT 'active_connections'::TEXT,
+         COUNT(*)::NUMERIC
+  FROM pg_stat_activity
+  WHERE state != 'idle'
+  UNION ALL
+  -- Database size
+  SELECT 'database_size_gb'::TEXT,
+         ROUND(pg_database_size(current_database()) / 1073741824.0, 2)::NUMERIC;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- GRANTS
+-- ============================================
+
+GRANT EXECUTE ON FUNCTION check_quota TO service_role;
+GRANT EXECUTE ON FUNCTION search_chunks_optimized TO service_role;
+GRANT EXECUTE ON FUNCTION set_quota_operation_timeout TO service_role;
+GRANT EXECUTE ON FUNCTION auto_analyze_hot_tables TO service_role;
+GRANT EXECUTE ON FUNCTION get_performance_baseline TO service_role;
+
+GRANT SELECT ON slow_quota_checks TO service_role;
+GRANT SELECT ON cache_effectiveness TO service_role;
+
+-- ============================================
+-- COMMENTS
+-- ============================================
+
+COMMENT ON FUNCTION check_quota IS 'Optimized quota check with SKIP LOCKED to prevent contention';
+COMMENT ON FUNCTION search_chunks_optimized IS 'Parallel-enabled vector search for improved performance';
+COMMENT ON VIEW cache_effectiveness IS 'Monitor search cache hit rates and latency percentiles';
+COMMENT ON VIEW slow_quota_checks IS 'Identify slow quota check queries for optimization';
+
+-- ============================================
+-- SCHEDULED MAINTENANCE (if pg_cron is available)
+-- ============================================
+
+-- Schedule auto-analyze every hour
+-- SELECT cron.schedule('auto-analyze-hot-tables', '0 * * * *', 'SELECT auto_analyze_hot_tables()');
+
+-- Schedule performance baseline capture every 15 minutes
+-- SELECT cron.schedule('capture-performance-baseline', '*/15 * * * *',
+--   'INSERT INTO performance_metrics (metrics, captured_at)
+--    SELECT json_object_agg(metric, value), now()
+--    FROM get_performance_baseline()');

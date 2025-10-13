@@ -6,6 +6,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+
 import { GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { generateRecordingSummary } from '@/lib/services/summarization';
@@ -68,11 +69,15 @@ export async function generateSummary(job: Job): Promise<void> {
       },
     });
 
+    if (!result.embeddings?.[0]?.values) {
+      throw new Error('Failed to generate summary embedding: No embedding values returned');
+    }
+
     const embedding = result.embeddings[0].values;
 
-    if (!embedding || embedding.length !== 3072) {
+    if (embedding.length !== 3072) {
       throw new Error(
-        `Invalid embedding dimensions: expected 3072, got ${embedding?.length || 0}`
+        `Invalid embedding dimensions: expected 3072, got ${embedding.length}`
       );
     }
 
@@ -125,11 +130,4 @@ export async function generateSummary(job: Job): Promise<void> {
 
     throw error;
   }
-}
-
-/**
- * Utility: Sleep helper
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }

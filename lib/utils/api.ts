@@ -87,12 +87,21 @@ export const errors = {
       requestId
     ),
 
-  rateLimitExceeded: (requestId?: string) =>
+  rateLimitExceeded: (details?: any, requestId?: string) =>
     errorResponse(
       'Rate limit exceeded. Please try again later.',
       'RATE_LIMIT_EXCEEDED',
       429,
-      undefined,
+      details,
+      requestId
+    ),
+
+  quotaExceeded: (details?: any, requestId?: string) =>
+    errorResponse(
+      'Quota exceeded. Please upgrade your plan or wait for quota reset.',
+      'QUOTA_EXCEEDED',
+      402,
+      details,
       requestId
     ),
 };
@@ -157,6 +166,57 @@ export async function requireOrg() {
   };
 }
 
+// Require admin role (owner or admin) - For organization-level admin functions
+export async function requireAdmin() {
+  const orgContext = await requireOrg();
+
+  if (orgContext.role !== 'owner' && orgContext.role !== 'admin') {
+    throw new Error('Admin privileges required');
+  }
+
+  return orgContext;
+}
+
+// SECURITY: Require system admin role - For system-wide admin endpoints
+// Only specific users with is_system_admin flag can access these endpoints
+export async function requireSystemAdmin() {
+  const user = await requireAuth();
+
+  if (!user.userId) {
+    throw new Error('Unauthorized');
+  }
+
+  // Use admin client to bypass RLS for user lookup
+  const supabase = supabaseAdmin;
+
+  // Check for system admin flag
+  const { data: userData, error } = await supabase
+    .from('users')
+    .select('id, clerk_id, is_system_admin, email, role')
+    .eq('clerk_id', user.userId)
+    .single();
+
+  if (error || !userData) {
+    console.error('[requireSystemAdmin] Error fetching user:', error);
+    throw new Error('System admin privileges required');
+  }
+
+  // SECURITY: Strict check for system admin flag
+  if (userData.is_system_admin !== true) {
+    // Log potential unauthorized access attempt
+    console.warn(`[SECURITY] Non-system-admin user ${userData.email} (role: ${userData.role}) attempted to access system admin endpoint`);
+    throw new Error('System admin privileges required');
+  }
+
+  return {
+    userId: userData.id,
+    clerkUserId: user.userId,
+    email: userData.email,
+    role: userData.role,
+    isSystemAdmin: true,
+  };
+}
+
 // Parse and validate request body with Zod
 export async function parseBody<T>(
   request: NextRequest,
@@ -192,6 +252,7 @@ export function apiHandler<T = any>(
       if (
         error.message === 'Organization context required' ||
         error.message === 'User organization not found' ||
+        error.message === 'Admin privileges required' ||
         error.message.includes('not found in database')
       ) {
         return errors.forbidden(requestId);

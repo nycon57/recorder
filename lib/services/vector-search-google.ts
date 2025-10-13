@@ -97,6 +97,17 @@ export async function vectorSearch(
       threshold,
     });
 
+    // Fallback to standard search if no hierarchical results found
+    // This handles cases where summaries haven't been generated yet
+    if (hierarchicalResults.length === 0) {
+      console.log('[Vector Search] No hierarchical results found, falling back to standard search');
+      // Recursively call with standard mode
+      return vectorSearch(query, {
+        ...options,
+        searchMode: 'standard',
+      });
+    }
+
     // Convert hierarchical results to standard format
     const results: SearchResult[] = hierarchicalResults.map((r) => ({
       id: r.id,
@@ -269,6 +280,10 @@ async function generateQueryEmbedding(query: string): Promise<number[]> {
       outputDimensionality: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS,
     },
   });
+
+  if (!result.embeddings?.[0]?.values) {
+    throw new Error('Failed to generate query embedding: No embedding values returned');
+  }
 
   return result.embeddings[0].values;
 }

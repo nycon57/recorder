@@ -56,26 +56,32 @@ export async function generateDualEmbeddings(
 ): Promise<DualEmbeddings> {
   const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
-  try {
-    // Generate 1536-dim embedding (for chunks)
-    const result1536 = await genai.models.embedContent({
-      model: GOOGLE_CONFIG.EMBEDDING_MODEL,
-      contents: text,
-      config: {
-        taskType: GOOGLE_CONFIG.EMBEDDING_QUERY_TASK_TYPE, // RETRIEVAL_QUERY for search
-        outputDimensionality: 1536,
-      },
-    });
+  try{
+    // Generate both embeddings in parallel for better performance
+    const [result1536, result3072] = await Promise.all([
+      // Generate 1536-dim embedding (for chunks)
+      genai.models.embedContent({
+        model: GOOGLE_CONFIG.EMBEDDING_MODEL,
+        contents: text,
+        config: {
+          taskType: GOOGLE_CONFIG.EMBEDDING_QUERY_TASK_TYPE, // RETRIEVAL_QUERY for search
+          outputDimensionality: 1536,
+        },
+      }),
+      // Generate 3072-dim embedding (for summaries)
+      genai.models.embedContent({
+        model: GOOGLE_CONFIG.EMBEDDING_MODEL,
+        contents: text,
+        config: {
+          taskType: GOOGLE_CONFIG.EMBEDDING_QUERY_TASK_TYPE,
+          outputDimensionality: 3072, // Higher dimension for better summary representation
+        },
+      }),
+    ]);
 
-    // Generate 3072-dim embedding (for summaries)
-    const result3072 = await genai.models.embedContent({
-      model: GOOGLE_CONFIG.EMBEDDING_MODEL,
-      contents: text,
-      config: {
-        taskType: GOOGLE_CONFIG.EMBEDDING_QUERY_TASK_TYPE,
-        outputDimensionality: 3072, // Higher dimension for better summary representation
-      },
-    });
+    if (!result1536.embeddings?.[0]?.values || !result3072.embeddings?.[0]?.values) {
+      throw new Error('Failed to generate dual embeddings: No embedding values returned');
+    }
 
     return {
       embedding1536: result1536.embeddings[0].values,

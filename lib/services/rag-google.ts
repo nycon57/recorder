@@ -8,6 +8,7 @@
 import { googleAI, PROMPTS, GOOGLE_CONFIG } from '@/lib/google/client';
 import { vectorSearch, type SearchResult } from '@/lib/services/vector-search-google';
 import { rerankResults, isCohereConfigured } from '@/lib/services/reranking';
+import { agenticSearch } from '@/lib/services/agentic-retrieval';
 import { createClient } from '@/lib/supabase/server';
 
 export interface ChatMessage {
@@ -40,10 +41,16 @@ export interface RAGContext {
   context: string;
   sources: CitedSource[];
   totalChunks: number;
+  agenticMetadata?: {
+    intent: string;
+    complexity: number;
+    iterations: number;
+    confidence: number;
+  };
 }
 
 /**
- * Retrieve relevant context for a query using vector search
+ * Retrieve relevant context for a query using vector search or agentic search
  */
 export async function retrieveContext(
   query: string,
@@ -53,28 +60,63 @@ export async function retrieveContext(
     threshold?: number;
     recordingIds?: string[];
     rerank?: boolean;
+    useAgentic?: boolean;
+    maxIterations?: number;
+    enableSelfReflection?: boolean;
   }
 ): Promise<RAGContext> {
-  const { maxChunks = 5, threshold = 0.7, recordingIds, rerank = false } = options || {};
-
-  // Fetch more results if reranking is enabled
-  const initialLimit = rerank ? maxChunks * 3 : maxChunks;
-
-  // Perform vector search to find relevant chunks
-  let searchResults = await vectorSearch(query, {
-    orgId,
-    limit: initialLimit,
-    threshold,
+  const {
+    maxChunks = 5,
+    threshold = 0.7,
     recordingIds,
-  });
+    rerank = false,
+    useAgentic = false,
+    maxIterations = 3,
+    enableSelfReflection = true,
+  } = options || {};
 
-  // Apply reranking if requested and configured
-  if (rerank && isCohereConfigured() && searchResults.length > 0) {
-    const rerankResult = await rerankResults(query, searchResults, {
-      topN: maxChunks,
-      timeoutMs: 500,
+  let searchResults: SearchResult[];
+  let agenticMetadata: RAGContext['agenticMetadata'];
+
+  // Use agentic search if enabled
+  if (useAgentic) {
+    const agenticResult = await agenticSearch(query, {
+      orgId,
+      maxIterations,
+      enableSelfReflection,
+      enableReranking: rerank,
+      chunksPerQuery: Math.ceil(maxChunks * 1.5),
+      recordingIds,
+      logResults: false, // Don't log for chat context retrieval
     });
-    searchResults = rerankResult.results;
+    searchResults = agenticResult.finalResults.slice(0, maxChunks);
+    agenticMetadata = {
+      intent: agenticResult.intent,
+      complexity: agenticResult.decomposition.complexity,
+      iterations: agenticResult.iterations.length,
+      confidence: agenticResult.confidence,
+    };
+  } else {
+    // Standard vector search
+    // Fetch more results if reranking is enabled
+    const initialLimit = rerank ? maxChunks * 3 : maxChunks;
+
+    // Perform vector search to find relevant chunks
+    searchResults = await vectorSearch(query, {
+      orgId,
+      limit: initialLimit,
+      threshold,
+      recordingIds,
+    });
+
+    // Apply reranking if requested and configured
+    if (rerank && isCohereConfigured() && searchResults.length > 0) {
+      const rerankResult = await rerankResults(query, searchResults, {
+        topN: maxChunks,
+        timeoutMs: 500,
+      });
+      searchResults = rerankResult.results;
+    }
   }
 
   // Format results as cited sources with visual context
@@ -122,6 +164,7 @@ export async function retrieveContext(
     context,
     sources,
     totalChunks: sources.length,
+    ...(agenticMetadata && { agenticMetadata }),
   };
 }
 
@@ -138,6 +181,9 @@ export async function generateRAGResponse(
     recordingIds?: string[];
     stream?: boolean;
     rerank?: boolean;
+    useAgentic?: boolean;
+    maxIterations?: number;
+    enableSelfReflection?: boolean;
   }
 ): Promise<{
   response: string;
@@ -149,6 +195,12 @@ export async function generateRAGResponse(
     tokensUsed?: number;
     costEstimate?: number;
   };
+  agenticMetadata?: {
+    intent: string;
+    complexity: number;
+    iterations: number;
+    confidence: number;
+  };
 }> {
   const {
     conversationHistory = [],
@@ -156,14 +208,20 @@ export async function generateRAGResponse(
     threshold = 0.7,
     recordingIds,
     rerank = false,
+    useAgentic = false,
+    maxIterations = 3,
+    enableSelfReflection = true,
   } = options || {};
 
-  // Retrieve relevant context with optional reranking
+  // Retrieve relevant context with optional agentic search
   const ragContext = await retrieveContext(query, orgId, {
     maxChunks,
     threshold,
     recordingIds,
     rerank,
+    useAgentic,
+    maxIterations,
+    enableSelfReflection,
   });
 
   // Build prompt with context
@@ -203,6 +261,7 @@ export async function generateRAGResponse(
     response: responseText,
     sources: ragContext.sources,
     tokensUsed,
+    ...(ragContext.agenticMetadata && { agenticMetadata: ragContext.agenticMetadata }),
   };
 }
 

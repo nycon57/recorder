@@ -247,9 +247,28 @@ export default function DocumentViewer({ document, recordingId }: DocumentViewer
       {isEditing ? (
         <div className="space-y-4">
           {showPreview ? (
-            <ScrollArea className="h-[600px] rounded-md border p-6">
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown>{editedMarkdown}</ReactMarkdown>
+            <ScrollArea className="h-[600px] rounded-md border p-8">
+              <div className="max-w-none space-y-4 document-viewer">
+                <ReactMarkdown
+                  components={{
+                    h1: ({ children }) => <h1 className="text-3xl font-bold mt-8 mb-4 first:mt-0">{children}</h1>,
+                    h2: ({ children }) => <h2 className="text-2xl font-bold mt-6 mb-3">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-xl font-semibold mt-5 mb-2">{children}</h3>,
+                    p: ({ children }) => <p className="leading-relaxed mb-4 text-base">{children}</p>,
+                    code: ({ inline, children }) =>
+                      inline ? (
+                        <code className="bg-muted px-2 py-0.5 rounded text-sm font-mono">{children}</code>
+                      ) : (
+                        <code className="block bg-muted p-3 rounded text-sm font-mono overflow-x-auto">{children}</code>
+                      ),
+                    strong: ({ children }) => <strong className="font-bold text-foreground">{children}</strong>,
+                    ul: ({ children }) => <ul className="my-4 ml-6 list-disc space-y-2">{children}</ul>,
+                    ol: ({ children }) => <ol className="my-4 ml-6 list-decimal space-y-2">{children}</ol>,
+                    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                  }}
+                >
+                  {editedMarkdown}
+                </ReactMarkdown>
               </div>
             </ScrollArea>
           ) : (
@@ -262,9 +281,28 @@ export default function DocumentViewer({ document, recordingId }: DocumentViewer
           )}
         </div>
       ) : (
-        <ScrollArea className="h-[600px] rounded-md border p-6">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown>{document.markdown}</ReactMarkdown>
+        <ScrollArea className="h-[600px] rounded-md border p-8">
+          <div className="max-w-none space-y-4 document-viewer">
+            <ReactMarkdown
+              components={{
+                h1: ({ children }) => <h1 className="text-3xl font-bold mt-8 mb-4 first:mt-0">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-2xl font-bold mt-6 mb-3">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-xl font-semibold mt-5 mb-2">{children}</h3>,
+                p: ({ children }) => <p className="leading-relaxed mb-4 text-base">{children}</p>,
+                code: ({ inline, children }) =>
+                  inline ? (
+                    <code className="bg-muted px-2 py-0.5 rounded text-sm font-mono">{children}</code>
+                  ) : (
+                    <code className="block bg-muted p-3 rounded text-sm font-mono overflow-x-auto">{children}</code>
+                  ),
+                strong: ({ children }) => <strong className="font-bold text-foreground">{children}</strong>,
+                ul: ({ children }) => <ul className="my-4 ml-6 list-disc space-y-2">{children}</ul>,
+                ol: ({ children }) => <ol className="my-4 ml-6 list-decimal space-y-2">{children}</ol>,
+                li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+              }}
+            >
+              {document.markdown}
+            </ReactMarkdown>
           </div>
         </ScrollArea>
       )}
