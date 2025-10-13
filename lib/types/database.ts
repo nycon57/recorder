@@ -29,7 +29,9 @@ export type JobType =
   | 'generate_embeddings'
   | 'generate_summary'
   | 'extract_frames'
-  | 'sync_connector';
+  | 'sync_connector'
+  | 'process_imported_doc'
+  | 'process_webhook';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 
@@ -300,6 +302,10 @@ export interface Database {
           end_time_sec: number | null;
           metadata: Json;
           model: string;
+          chunking_strategy: 'fixed' | 'semantic' | 'adaptive' | 'hybrid' | null;
+          semantic_score: number | null;
+          structure_type: 'code' | 'list' | 'table' | 'paragraph' | 'heading' | 'mixed' | null;
+          boundary_type: 'semantic_break' | 'size_limit' | 'structure_boundary' | 'topic_shift' | null;
           created_at: string;
         };
         Insert: {
@@ -313,11 +319,19 @@ export interface Database {
           end_time_sec?: number | null;
           metadata?: Json;
           model?: string;
+          chunking_strategy?: 'fixed' | 'semantic' | 'adaptive' | 'hybrid' | null;
+          semantic_score?: number | null;
+          structure_type?: 'code' | 'list' | 'table' | 'paragraph' | 'heading' | 'mixed' | null;
+          boundary_type?: 'semantic_break' | 'size_limit' | 'structure_boundary' | 'topic_shift' | null;
           created_at?: string;
         };
         Update: {
           embedding?: number[] | null;
           metadata?: Json;
+          chunking_strategy?: 'fixed' | 'semantic' | 'adaptive' | 'hybrid' | null;
+          semantic_score?: number | null;
+          structure_type?: 'code' | 'list' | 'table' | 'paragraph' | 'heading' | 'mixed' | null;
+          boundary_type?: 'semantic_break' | 'size_limit' | 'structure_boundary' | 'topic_shift' | null;
         };
       };
       jobs: {

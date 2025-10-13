@@ -27,6 +27,53 @@ export async function generateDocument(job: Job): Promise<void> {
 
   const supabase = createAdminClient();
 
+  // Check if document already exists (idempotency check)
+  const { data: existingDocument } = await supabase
+    .from('documents')
+    .select('id, recording_id')
+    .eq('recording_id', recordingId)
+    .eq('org_id', orgId)
+    .single();
+
+  if (existingDocument) {
+    console.log(
+      `[Docify] Document already exists (${existingDocument.id}), skipping generation`
+    );
+
+    // Ensure recording status is correct
+    await supabase
+      .from('recordings')
+      .update({ status: 'completed' })
+      .eq('id', recordingId);
+
+    // Enqueue embedding generation job (in case pipeline was interrupted)
+    const { data: existingEmbJob } = await supabase
+      .from('jobs')
+      .select('id')
+      .eq('type', 'generate_embeddings')
+      .eq('dedupe_key', `generate_embeddings:${recordingId}`)
+      .maybeSingle();
+
+    if (!existingEmbJob) {
+      await supabase.from('jobs').insert({
+        type: 'generate_embeddings',
+        status: 'pending',
+        payload: {
+          recordingId,
+          transcriptId,
+          documentId: existingDocument.id,
+          orgId,
+        },
+        dedupe_key: `generate_embeddings:${recordingId}`,
+      });
+      console.log(
+        `[Docify] Enqueued embedding generation job for existing document`
+      );
+    }
+
+    return;
+  }
+
   // Update recording status
   await supabase
     .from('recordings')

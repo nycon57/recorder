@@ -8,6 +8,8 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { withRateLimit } from '@/lib/rate-limit/middleware';
+import { QuotaManager } from '@/lib/services/quotas/quota-manager';
+import { RateLimiter } from '@/lib/services/quotas/rate-limiter';
 
 // GET /api/recordings - List all recordings for the current org
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -49,6 +51,21 @@ export const POST = withRateLimit(
     const { orgId, userId } = await requireOrg();
     // Use admin client to bypass RLS - auth already validated via requireOrg()
     const supabase = supabaseAdmin;
+
+    // Phase 6: Rate limiting (upload limiter is already applied by withRateLimit wrapper)
+    // Additional check for recording quota
+    const quotaCheck = await QuotaManager.checkQuota(orgId, 'recording');
+    if (!quotaCheck.allowed) {
+      return errors.quotaExceeded({
+        remaining: quotaCheck.remaining,
+        limit: quotaCheck.limit,
+        resetAt: quotaCheck.resetAt.toISOString(),
+        message: quotaCheck.message,
+      });
+    }
+
+    // Phase 6: Consume quota
+    await QuotaManager.consumeQuota(orgId, 'recording');
 
   const body = await request.json();
   const { title, description, metadata } = body;

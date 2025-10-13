@@ -63,6 +63,51 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
   const supabase = createAdminClient();
 
+  // Check if transcript already exists (idempotency check)
+  const { data: existingTranscript } = await supabase
+    .from('transcripts')
+    .select('id, recording_id')
+    .eq('recording_id', recordingId)
+    .single();
+
+  if (existingTranscript) {
+    console.log(
+      `[Transcribe-Video] Transcript already exists (${existingTranscript.id}), skipping transcription`
+    );
+
+    // Ensure recording status is correct
+    await supabase
+      .from('recordings')
+      .update({ status: 'transcribed' })
+      .eq('id', recordingId);
+
+    // Enqueue document generation job (in case pipeline was interrupted)
+    const { data: existingDocJob } = await supabase
+      .from('jobs')
+      .select('id')
+      .eq('type', 'doc_generate')
+      .eq('dedupe_key', `doc_generate:${recordingId}`)
+      .maybeSingle();
+
+    if (!existingDocJob) {
+      await supabase.from('jobs').insert({
+        type: 'doc_generate',
+        status: 'pending',
+        payload: {
+          recordingId,
+          transcriptId: existingTranscript.id,
+          orgId,
+        },
+        dedupe_key: `doc_generate:${recordingId}`,
+      });
+      console.log(
+        `[Transcribe-Video] Enqueued document generation job for existing transcript`
+      );
+    }
+
+    return;
+  }
+
   // Update recording status
   await supabase
     .from('recordings')

@@ -2,6 +2,7 @@ import { ClerkProvider } from '@clerk/nextjs';
 import type { Metadata } from 'next';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/app/components/ui/sonner';
+import { clerkAppearance } from '@/lib/clerk/appearance';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -47,16 +48,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider appearance={clerkAppearance}>
       <html lang="en" suppressHydrationWarning>
-        <head>
-          {/* CORS headers for FFMPEG.wasm (fallback for static pages) */}
-          <meta httpEquiv="Cross-Origin-Opener-Policy" content="same-origin" />
-          <meta
-            httpEquiv="Cross-Origin-Embedder-Policy"
-            content="require-corp"
-          />
-        </head>
         <body suppressHydrationWarning>
           <ThemeProvider
             attribute="class"

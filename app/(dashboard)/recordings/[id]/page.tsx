@@ -84,12 +84,13 @@ export default async function RecordingDetailPage({
     notFound();
   }
 
+  // Handle both object (unique FK) and array responses from Supabase
   const transcript = Array.isArray(recording.transcripts)
     ? recording.transcripts[0]
-    : null;
+    : recording.transcripts || null;
   const document = Array.isArray(recording.documents)
     ? recording.documents[0]
-    : null;
+    : recording.documents || null;
 
   // Fetch tags for this recording
   const { data: recordingTags } = await supabaseAdmin

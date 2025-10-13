@@ -15,10 +15,16 @@ const customJestConfig = {
     '^hooks/(.*)$': '<rootDir>/src/hooks/$1',
     '^contexts/(.*)$': '<rootDir>/src/contexts/$1',
     '^services/(.*)$': '<rootDir>/src/services/$1',
+    '^@google/genai$': '<rootDir>/__mocks__/@google/genai.ts',
+    '^cohere-ai$': '<rootDir>/__mocks__/cohere-ai.ts',
+    '^@xenova/transformers$': '<rootDir>/__mocks__/@xenova/transformers.ts',
   },
   testMatch: [
     '**/__tests__/**/*.[jt]s?(x)',
     '**/?(*.)+(spec|test).[jt]s?(x)',
+  ],
+  transformIgnorePatterns: [
+    'node_modules/(?!(@google/genai)/)',
   ],
   collectCoverageFrom: [
     'app/**/*.{js,jsx,ts,tsx}',
@@ -30,7 +36,7 @@ const customJestConfig = {
     '!**/coverage/**',
     '!**/dist/**',
   ],
-  coverageThresholds: {
+  coverageThreshold: {
     global: {
       branches: 70,
       functions: 70,

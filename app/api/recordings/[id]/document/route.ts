@@ -75,6 +75,8 @@ export const GET = apiHandler(
  * PUT /api/recordings/[id]/document
  * Updates the document markdown for a recording
  * Used for manual edits to the AI-generated document
+ *
+ * Optional: Set refreshEmbeddings=true to automatically update vectors after edit
  */
 export const PUT = apiHandler(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
@@ -84,6 +86,7 @@ export const PUT = apiHandler(
 
     // Validate request body
     const body = await parseBody(request, updateDocumentMarkdownSchema);
+    const refreshEmbeddings = body.refreshEmbeddings ?? false;
 
     // Verify recording belongs to org
     const { data: recording, error: recordingError } = await supabase
@@ -124,6 +127,7 @@ export const PUT = apiHandler(
         html: null, // Clear HTML cache - can be regenerated if needed
         version: newVersion,
         status: 'edited',
+        needs_embeddings_refresh: !refreshEmbeddings, // Mark stale if not auto-refreshing
         updated_at: new Date().toISOString(),
       })
       .eq('recording_id', id)
@@ -138,6 +142,46 @@ export const PUT = apiHandler(
 
     console.log(`[PUT /document] Document updated for recording ${id} by user ${userId} (${newVersion})`);
 
+    // If refreshEmbeddings=true, automatically enqueue embeddings refresh
+    let jobId = null;
+    if (refreshEmbeddings) {
+      // Get transcript ID
+      const { data: transcript } = await supabase
+        .from('transcripts')
+        .select('id')
+        .eq('recording_id', id)
+        .eq('superseded', false)
+        .single();
+
+      if (transcript) {
+        // Delete existing chunks (they're now stale)
+        await supabase
+          .from('transcript_chunks')
+          .delete()
+          .eq('recording_id', id);
+
+        // Enqueue embeddings job
+        const { data: job } = await supabase
+          .from('jobs')
+          .insert({
+            type: 'generate_embeddings',
+            status: 'pending',
+            payload: {
+              recordingId: id,
+              transcriptId: transcript.id,
+              documentId: existingDocument.id,
+              orgId,
+            },
+            dedupe_key: `generate_embeddings:${id}:${Date.now()}`,
+          })
+          .select('id')
+          .single();
+
+        jobId = job?.id;
+        console.log(`[PUT /document] Auto-enqueued embeddings refresh job ${jobId} for recording ${id}`);
+      }
+    }
+
     return successResponse({
       document: {
         id: document.id,
@@ -150,10 +194,14 @@ export const PUT = apiHandler(
         model: document.model,
         isPublished: document.is_published,
         status: document.status,
+        needsEmbeddingsRefresh: document.needs_embeddings_refresh,
         createdAt: document.created_at,
         updatedAt: document.updated_at,
       },
-      message: 'Document updated successfully',
+      message: refreshEmbeddings
+        ? 'Document updated and embeddings refresh queued'
+        : 'Document updated successfully',
+      embeddingsJobId: jobId,
     });
   }
 );

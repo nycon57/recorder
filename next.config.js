@@ -3,10 +3,10 @@ const nextConfig = {
   // Required headers for SharedArrayBuffer (FFMPEG.wasm support) + Security
   async headers() {
     return [
+      // FFMPEG.wasm headers - ONLY for /record route
       {
-        source: '/(.*)',
+        source: '/record/:path*',
         headers: [
-          // FFMPEG.wasm requirements
           {
             key: 'Cross-Origin-Opener-Policy',
             value: 'same-origin',
@@ -15,7 +15,7 @@ const nextConfig = {
             key: 'Cross-Origin-Embedder-Policy',
             value: 'require-corp',
           },
-          // Security headers
+          // Security headers - Enhanced for production
           {
             key: 'X-DNS-Prefetch-Control',
             value: 'on',
@@ -43,6 +43,79 @@ const nextConfig = {
           {
             key: 'Permissions-Policy',
             value: 'camera=*, microphone=*, display-capture=*',
+          },
+          // Content Security Policy - Strict but allows required resources including Clerk
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net https://challenges.cloudflare.com https://*.clerk.accounts.dev https://*.clerk.com",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com",
+              "img-src 'self' data: blob: https://*.supabase.co https://*.clerk.com https://img.clerk.com",
+              "media-src 'self' blob: data:",
+              "connect-src 'self' https://*.supabase.co https://*.clerk.com https://*.clerk.accounts.dev https://*.upstash.io wss://*.supabase.co",
+              "frame-src 'self' https://challenges.cloudflare.com https://*.clerk.accounts.dev https://*.clerk.com",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'none'",
+              "upgrade-insecure-requests",
+            ].join('; '),
+          },
+        ],
+      },
+      // Security headers for all other routes (without strict CORS for Clerk)
+      {
+        source: '/((?!record).*)',
+        headers: [
+          // Security headers - Enhanced for production
+          {
+            key: 'X-DNS-Prefetch-Control',
+            value: 'on',
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload',
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=*, microphone=*, display-capture=*',
+          },
+          // Content Security Policy - Allows Clerk and other external resources
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net https://challenges.cloudflare.com https://*.clerk.accounts.dev https://*.clerk.com",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com",
+              "img-src 'self' data: blob: https://*.supabase.co https://*.clerk.com https://img.clerk.com",
+              "media-src 'self' blob: data:",
+              "connect-src 'self' https://*.supabase.co https://*.clerk.com https://*.clerk.accounts.dev https://*.upstash.io wss://*.supabase.co",
+              "frame-src 'self' https://challenges.cloudflare.com https://*.clerk.accounts.dev https://*.clerk.com",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'none'",
+              "upgrade-insecure-requests",
+            ].join('; '),
           },
         ],
       },

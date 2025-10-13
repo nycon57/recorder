@@ -6,6 +6,8 @@ process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
 process.env.OPENAI_API_KEY = 'test-openai-key';
+process.env.GOOGLE_AI_API_KEY = 'test-google-ai-key';
+process.env.COHERE_API_KEY = 'test-cohere-key';
 process.env.UPSTASH_REDIS_REST_URL = 'https://test.upstash.io';
 process.env.UPSTASH_REDIS_REST_TOKEN = 'test-token';
 
@@ -33,5 +35,5 @@ jest.mock('@clerk/nextjs', () => ({
     isLoaded: true,
     isSignedIn: true,
   }),
-  ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
+  ClerkProvider: ({ children }) => children,
 }));
