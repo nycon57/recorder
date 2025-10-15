@@ -4,9 +4,10 @@
  * Helper functions for checking embeddings staleness and managing vector database accuracy
  */
 
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Initialize Google AI
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '');

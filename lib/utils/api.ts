@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+
 import type { ApiError, ApiSuccess } from '@/lib/validations/api';
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -143,7 +144,7 @@ export async function requireOrg() {
   const supabase = supabaseAdmin;
 
   // Look up the user by clerk_id (users.clerk_id = Clerk user ID)
-  let { data: userData, error } = await supabase
+  const { data: userData, error } = await supabase
     .from('users')
     .select('id, org_id, role, email, name')
     .eq('clerk_id', user.userId)
@@ -227,6 +228,20 @@ export async function parseBody<T>(
     return schema.parse(body);
   } catch (error: any) {
     throw new Error(`Invalid request body: ${error.message}`);
+  }
+}
+
+// Parse and validate URL search params with Zod
+export function parseSearchParams<T>(
+  request: NextRequest,
+  schema: any
+): T {
+  try {
+    const { searchParams } = new URL(request.url);
+    const params = Object.fromEntries(searchParams.entries());
+    return schema.parse(params);
+  } catch (error: any) {
+    throw new Error(`Invalid search params: ${error.message}`);
   }
 }
 

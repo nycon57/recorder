@@ -4,11 +4,12 @@
  * Uses Gemini Vision to generate descriptions of video frames.
  */
 
-import { getGoogleAI } from '@/lib/google/client';
-import { createClient } from '@/lib/supabase/admin';
 import { promises as fs } from 'fs';
+
 import { GoogleGenAI } from '@google/genai';
-import { GOOGLE_CONFIG } from '@/lib/google/client';
+
+import { getGoogleAI , GOOGLE_CONFIG } from '@/lib/google/client';
+import { createClient } from '@/lib/supabase/admin';
 import { sanitizeVisualDescription, detectPII, logPIIDetection } from '@/lib/utils/security';
 
 export interface VisualDescription {

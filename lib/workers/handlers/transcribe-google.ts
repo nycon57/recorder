@@ -5,14 +5,14 @@
  * saves transcript with word-level timestamps.
  */
 
-import { getSpeechClient, GOOGLE_CONFIG } from '@/lib/google/client';
-import { createClient as createAdminClient } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/types/database';
-import { readFile, unlink } from 'fs/promises';
-import { writeFile } from 'fs/promises';
+import { readFile, unlink , writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
+
+import type { Database } from '@/lib/types/database';
+import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import { getSpeechClient, GOOGLE_CONFIG } from '@/lib/google/client';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -109,8 +109,8 @@ export async function transcribeRecording(job: Job): Promise<void> {
     const words: WordInfo[] = [];
     const segments: Array<{ start: number; end: number; text: string }> = [];
 
-    let currentSegmentStart = 0;
-    let currentSegmentText = '';
+    const currentSegmentStart = 0;
+    const currentSegmentText = '';
 
     response.results.forEach((result, segmentIndex) => {
       const alternative = result.alternatives?.[0];

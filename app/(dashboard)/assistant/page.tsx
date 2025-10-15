@@ -15,12 +15,13 @@ import ReactMarkdown from 'react-markdown';
 
 export default function AssistantPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [input, setInput] = useState('');
 
   const {
     messages,
-    sendMessage,
-    status,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
     error,
   } = useChat({
     api: '/api/chat',
@@ -152,7 +153,7 @@ export default function AssistantPage() {
         })}
 
         {/* Loading Indicator */}
-        {(status === 'streaming' || status === 'submitted') && (
+        {isLoading && (
           <div className="flex gap-3 justify-start">
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
               <Bot className="w-5 h-5 text-primary" />
@@ -171,32 +172,25 @@ export default function AssistantPage() {
 
       {/* Input */}
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!input.trim() || status === 'streaming' || status === 'submitted') {
-            return;
-          }
-          sendMessage({ text: input });
-          setInput('');
-        }}
+        onSubmit={handleSubmit}
         className="border-t border-border pt-4"
       >
         <div className="flex gap-2">
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             placeholder="Ask a question about your recordings..."
-            disabled={status === 'streaming' || status === 'submitted'}
+            disabled={isLoading}
             className="flex-1 px-4 py-3 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-transparent disabled:opacity-50"
             autoFocus
           />
           <button
             type="submit"
-            disabled={status === 'streaming' || status === 'submitted' || !input.trim()}
+            disabled={isLoading || !input.trim()}
             className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
           >
-            {status === 'streaming' || status === 'submitted' ? (
+            {isLoading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <Send className="w-5 h-5" />

@@ -3,6 +3,19 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
+  Send,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Loader2,
+  Copy,
+  FileJson
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -23,18 +36,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Send,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Loader2,
-  Copy,
-  FileJson
-} from 'lucide-react';
-import toast from 'react-hot-toast';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface Webhook {
   id: string;

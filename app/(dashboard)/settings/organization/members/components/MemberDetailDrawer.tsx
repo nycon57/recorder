@@ -33,7 +33,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu';
-
 import { UserAvatar } from '@/app/components/shared/UserAvatar';
 import { RoleBadge } from '@/app/components/shared/RoleBadge';
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+
 import { useRecording } from '../contexts/RecordingContext';
 
 export function DeviceSelector() {

@@ -3,14 +3,30 @@
 /**
  * Search Page
  *
- * Semantic search across all recordings with filtering options.
+ * Semantic search across all recordings with advanced filtering options.
  */
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Clock, FileText, Video } from 'lucide-react';
+import { Search, Filter, Clock, FileText, Video, Loader2, SlidersHorizontal, Bookmark } from 'lucide-react';
 import Link from 'next/link';
+
 import { staggerContainer, staggerItem, fadeIn } from '@/lib/utils/animations';
+import { SearchNoResultsState, SearchInitialState } from '@/app/components/empty-states/SearchEmptyState';
+import { SearchFilters, SearchFiltersState } from '@/app/components/search/SearchFilters';
+import { SearchSuggestions } from '@/app/components/search/SearchSuggestions';
+import { SavedSearches } from '@/app/components/search/SavedSearches';
+import { Button } from '@/app/components/ui/button';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/app/components/ui/sheet';
+import { Badge } from '@/app/components/ui/badge';
+import { ContentType } from '@/lib/types/database';
+import { CONTENT_TYPE_EMOJI } from '@/lib/types/content';
 
 interface SearchResult {
   id: string;
@@ -36,12 +52,24 @@ export default function SearchPage() {
   const [searchMode, setSearchMode] = useState<'vector' | 'hybrid'>('vector');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'transcript' | 'document'>('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [filters, setFilters] = useState<SearchFiltersState>({
+    contentTypes: [],
+    dateRange: { from: undefined, to: undefined },
+    tags: [],
+    status: [],
+  });
+  const [sortBy, setSortBy] = useState<'relevance' | 'date' | 'name'>('relevance');
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSearch = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!query.trim()) return;
 
     setLoading(true);
+    setShowSuggestions(false);
+
     try {
       const response = await fetch('/api/search', {
         method: 'POST',
@@ -50,6 +78,11 @@ export default function SearchPage() {
           query,
           mode: searchMode,
           source: sourceFilter === 'all' ? undefined : sourceFilter,
+          contentTypes: filters.contentTypes.length > 0 ? filters.contentTypes : undefined,
+          dateFrom: filters.dateRange.from?.toISOString(),
+          dateTo: filters.dateRange.to?.toISOString(),
+          tags: filters.tags.length > 0 ? filters.tags : undefined,
+          status: filters.status.length > 0 ? filters.status : undefined,
           limit: 20,
           threshold: 0.7,
         }),
@@ -60,7 +93,12 @@ export default function SearchPage() {
       }
 
       const data = await response.json();
-      setResults(data.data.results);
+      let results = data.data.results;
+
+      // Apply client-side sorting
+      results = sortResults(results, sortBy);
+
+      setResults(results);
     } catch (error) {
       console.error('Search error:', error);
       alert('Search failed. Please try again.');
@@ -68,6 +106,61 @@ export default function SearchPage() {
       setLoading(false);
     }
   };
+
+  const sortResults = (results: SearchResult[], sortBy: 'relevance' | 'date' | 'name') => {
+    const sorted = [...results];
+    switch (sortBy) {
+      case 'relevance':
+        return sorted.sort((a, b) => b.similarity - a.similarity);
+      case 'date':
+        return sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      case 'name':
+        return sorted.sort((a, b) => a.recordingTitle.localeCompare(b.recordingTitle));
+      default:
+        return sorted;
+    }
+  };
+
+  const handleSelectSavedSearch = (savedSearch: any) => {
+    setQuery(savedSearch.query);
+    setFilters(savedSearch.filters);
+    // Trigger search automatically
+    setTimeout(() => handleSearch(), 100);
+  };
+
+  const handleSuggestionSelect = (suggestion: string) => {
+    setQuery(suggestion);
+    setShowSuggestions(false);
+    searchInputRef.current?.focus();
+  };
+
+  const getActiveFiltersCount = () => {
+    let count = 0;
+    if (filters.contentTypes.length > 0) count++;
+    if (filters.tags.length > 0) count++;
+    if (filters.status.length > 0) count++;
+    if (filters.dateRange.from || filters.dateRange.to) count++;
+    return count;
+  };
+
+  // Hide suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchInputRef.current && !searchInputRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Re-sort results when sortBy changes
+  useEffect(() => {
+    if (results.length > 0) {
+      setResults(sortResults(results, sortBy));
+    }
+  }, [sortBy]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -175,7 +268,19 @@ export default function SearchPage() {
 
       {/* Results */}
       <AnimatePresence mode="wait">
-        {results.length > 0 && (
+        {loading ? (
+          // Loading state
+          <motion.div
+            key="loading"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-col items-center justify-center py-12"
+          >
+            <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
+            <p className="text-muted-foreground">Searching your knowledge base...</p>
+          </motion.div>
+        ) : results.length > 0 ? (
           <motion.div
             key="search-results"
             variants={staggerContainer}
@@ -207,7 +312,7 @@ export default function SearchPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
                     <Link
-                      href={`/recordings/${result.recordingId}${
+                      href={`/library/${result.recordingId}${
                         result.metadata.startTime
                           ? `?t=${Math.floor(result.metadata.startTime)}`
                           : ''
@@ -244,28 +349,17 @@ export default function SearchPage() {
               </motion.div>
             ))}
           </motion.div>
+        ) : query ? (
+          // No results found
+          <SearchNoResultsState
+            query={query}
+            onClearSearch={() => setQuery('')}
+          />
+        ) : (
+          // Initial state - no search performed yet
+          <SearchInitialState />
         )}
       </AnimatePresence>
-
-      {/* No Results */}
-      {results.length === 0 && query && !loading && (
-        <div className="text-center py-12 text-muted-foreground">
-          <Search className="w-16 h-16 mx-auto mb-4 text-muted" />
-          <p className="text-lg font-medium">No results found</p>
-          <p className="text-sm mt-2">Try different keywords or check your filters</p>
-        </div>
-      )}
-
-      {/* Empty State */}
-      {results.length === 0 && !query && !loading && (
-        <div className="text-center py-12 text-muted-foreground">
-          <Search className="w-16 h-16 mx-auto mb-4 text-muted" />
-          <p className="text-lg font-medium">Start searching</p>
-          <p className="text-sm mt-2">
-            Enter a query to search across all your recordings
-          </p>
-        </div>
-      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,9 +17,10 @@ import {
 } from '@/app/components/ui/alert-dialog';
 import { buttonVariants } from '@/app/components/ui/button';
 import { cn } from '@/lib/utils';
-import TagBadge from './TagBadge';
 import type { Tag } from '@/lib/types/database';
 import { staggerItem } from '@/lib/utils/animations';
+
+import TagBadge from './TagBadge';
 
 interface Recording {
   id: string;
@@ -132,7 +134,7 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
       transition={{ duration: 0.2 }}
     >
       {/* Thumbnail */}
-      <Link href={`/recordings/${recording.id}`}>
+      <Link href={`/library/${recording.id}`}>
         <motion.div className="aspect-video bg-muted relative group cursor-pointer overflow-hidden">
           {recording.thumbnail_url ? (
             <motion.img
@@ -182,7 +184,7 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
       {/* Content */}
       <div className="p-4">
         <div className="flex items-start justify-between mb-2">
-          <Link href={`/recordings/${recording.id}`}>
+          <Link href={`/library/${recording.id}`}>
             <h3 className="font-semibold text-foreground hover:text-primary cursor-pointer line-clamp-2">
               {recording.title || `Recording ${recording.id.slice(0, 8)}`}
             </h3>
@@ -218,7 +220,7 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
         {/* Actions */}
         <div className="mt-4 flex space-x-2">
           <Link
-            href={`/recordings/${recording.id}`}
+            href={`/library/${recording.id}`}
             className="flex-1 text-center px-3 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition text-sm"
           >
             View

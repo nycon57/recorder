@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+
 import {
   Dialog,
   DialogContent,
@@ -15,8 +16,9 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Label } from '@/app/components/ui/label';
-import TagInput from './TagInput';
 import type { Tag } from '@/lib/types/database';
+
+import TagInput from './TagInput';
 
 interface Recording {
   id: string;

@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+
 import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
 import { createSupabaseClient } from '@/lib/supabase/server';
 import { updateWebhookSchema } from '@/lib/validations/api';

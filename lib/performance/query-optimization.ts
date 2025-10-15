@@ -3,6 +3,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+
 import { logger } from '@/lib/monitoring/logger';
 import { trackMetrics } from '@/lib/monitoring/metrics';
 

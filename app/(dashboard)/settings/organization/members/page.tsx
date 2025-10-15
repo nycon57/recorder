@@ -14,9 +14,9 @@ import {
   Users2
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { useDebounce } from '@/lib/hooks/use-debounce';
 import { toast } from 'sonner';
 
+import { useDebounce } from '@/lib/hooks/use-debounce';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Badge } from '@/app/components/ui/badge';
@@ -61,11 +61,11 @@ export default function MembersPage() {
     queryFn: async () => {
       const params = new URLSearchParams({
         page: page.toString(),
-        pageSize: pageSize.toString(),
+        limit: pageSize.toString(),
         ...(debouncedSearch && { search: debouncedSearch }),
-        ...(filters.roles.length > 0 && { roles: filters.roles.join(',') }),
-        ...(filters.departments.length > 0 && { departments: filters.departments.join(',') }),
-        ...(filters.statuses.length > 0 && { statuses: filters.statuses.join(',') }),
+        ...(filters.roles.length > 0 && { role: filters.roles[0] }), // API expects single role
+        ...(filters.departments.length > 0 && { department_id: filters.departments[0] }), // API expects single department_id
+        ...(filters.statuses.length > 0 && { status: filters.statuses[0] }), // API expects single status
       });
 
       const response = await fetch(`/api/organizations/members?${params}`);
@@ -75,8 +75,9 @@ export default function MembersPage() {
   });
 
   const members: OrganizationMember[] = membersData?.data?.members || [];
-  const totalCount = membersData?.data?.totalCount || 0;
-  const totalPages = Math.ceil(totalCount / pageSize);
+  const pagination = membersData?.data?.pagination;
+  const totalCount = pagination?.total || 0;
+  const totalPages = pagination?.total_pages || 1;
 
   // Delete members mutation
   const deleteMembersMutation = useMutation({

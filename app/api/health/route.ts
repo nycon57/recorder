@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+
 import { successResponse } from '@/lib/utils/api';
 
 export async function GET(request: NextRequest) {

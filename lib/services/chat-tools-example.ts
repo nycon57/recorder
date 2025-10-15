@@ -13,9 +13,12 @@
 import { NextRequest } from 'next/server';
 import { streamText, generateText } from 'ai';
 import { google } from '@ai-sdk/google';
-import { apiHandler, requireOrg, parseBody, successResponse, errors } from '@/lib/utils/api';
-import { chatTools } from './chat-tools';
 import { z } from 'zod';
+
+import { apiHandler, requireOrg, parseBody, successResponse, errors } from '@/lib/utils/api';
+import { createClient } from '@/lib/supabase/server';
+
+import { chatTools } from './chat-tools';
 import { QuotaManager } from './quotas/quota-manager';
 import { RateLimiter } from './quotas/rate-limiter';
 
@@ -276,7 +279,6 @@ Use the context above for general questions, but use tools when you need:
  * Best for: Multi-turn conversations that preserve tool context
  * Uses: Proper message history with tool results
  */
-import { createClient } from '@/lib/supabase/server';
 
 export const conversationWithToolHistory = apiHandler(async (request: NextRequest) => {
   const { orgId, userId } = await requireOrg();

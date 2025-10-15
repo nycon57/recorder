@@ -14,6 +14,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
 import { Button, buttonVariants } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -37,6 +38,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
+import AudioPlayer from '@/app/(dashboard)/library/[id]/components/AudioPlayer';
+import PDFDocumentViewer from '@/app/(dashboard)/library/[id]/components/PDFDocumentViewer';
+import TextNoteViewer from '@/app/(dashboard)/library/[id]/components/TextNoteViewer';
+import type { Tag, ContentType, FileType } from '@/lib/types/database';
+
 import RecordingPlayer from './RecordingPlayer';
 import ProcessingPipeline from './ProcessingPipeline';
 import TranscriptViewer from './TranscriptViewer';
@@ -44,7 +50,6 @@ import DocumentViewer from './DocumentViewer';
 import EditRecordingModal from './EditRecordingModal';
 import ReprocessStreamModal from './ReprocessStreamModal';
 import TagBadge from './TagBadge';
-import type { Tag } from '@/lib/types/database';
 
 interface Recording {
   id: string;
@@ -61,6 +66,10 @@ interface Recording {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  content_type: ContentType | null;
+  file_type: FileType | null;
+  original_filename: string | null;
+  file_size: number | null;
 }
 
 interface Transcript {
@@ -315,8 +324,37 @@ export default function RecordingDetailClient({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Video Player */}
-            {recording.videoUrl && (
+            {/* Content Player/Viewer - Type-specific rendering */}
+            {recording.content_type === 'audio' && recording.videoUrl && (
+              <AudioPlayer
+                audioUrl={recording.videoUrl}
+                downloadUrl={recording.downloadUrl}
+                transcript={transcript}
+                title={recording.title}
+                duration={recording.duration_sec}
+              />
+            )}
+
+            {recording.content_type === 'document' && recording.file_type === 'pdf' && recording.downloadUrl && (
+              <PDFDocumentViewer
+                documentUrl={recording.downloadUrl}
+                title={recording.title}
+                fileSize={recording.file_size}
+                originalFilename={recording.original_filename}
+              />
+            )}
+
+            {recording.content_type === 'text' && transcript?.text && (
+              <TextNoteViewer
+                recordingId={recording.id}
+                content={transcript.text}
+                title={recording.title}
+                fileType={recording.file_type as 'txt' | 'md' | null}
+              />
+            )}
+
+            {/* Video Player - for recording and video types */}
+            {(recording.content_type === 'recording' || recording.content_type === 'video' || !recording.content_type) && recording.videoUrl && (
               <RecordingPlayer
                 videoUrl={recording.videoUrl}
                 onDurationChange={handleVideoDurationChange}

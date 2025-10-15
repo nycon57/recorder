@@ -3,13 +3,14 @@
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
+import { LayoutGrid, Table as TableIcon, Search, X, Filter } from 'lucide-react';
+
 import RecordingCard from '@/app/components/RecordingCard';
 import RecordingTableRow from '@/app/components/RecordingTableRow';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
-import { LayoutGrid, Table as TableIcon, Search, X, Filter } from 'lucide-react';
 import { Badge } from '@/app/components/ui/badge';
 import { staggerContainer, staggerContainerFast, fadeInUp } from '@/lib/utils/animations';
 

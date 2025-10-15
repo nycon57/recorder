@@ -4,7 +4,6 @@ import * as React from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
-import { cn } from "@/lib/utils/cn";
 import {
   Building2,
   Users,
@@ -15,6 +14,8 @@ import {
   BarChart3,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+
+import { cn } from "@/lib/utils/cn";
 
 interface NavItem {
   title: string;

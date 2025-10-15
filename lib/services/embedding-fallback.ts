@@ -6,8 +6,9 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { GOOGLE_CONFIG } from '@/lib/google/client';
 import OpenAI from 'openai';
+
+import { GOOGLE_CONFIG } from '@/lib/google/client';
 
 // Lazy initialization
 let openaiClient: OpenAI | null = null;

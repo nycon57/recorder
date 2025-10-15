@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
-import { apiHandler, requireOrg, successResponse, parseSearchParams } from '@/lib/utils/api';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
+
+import { apiHandler, requireOrg, successResponse, parseSearchParams } from '@/lib/utils/api';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 const auditLogFiltersSchema = z.object({
   from: z.string().optional(),
@@ -40,7 +41,7 @@ export type AuditLog = {
 export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
   const filters = parseSearchParams(request, auditLogFiltersSchema);
-  const supabase = createAdminClient();
+  const supabase = supabaseAdmin;
 
   // Build base query
   let query = supabase
@@ -149,7 +150,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   const body = await request.json();
   const filters = auditLogFiltersSchema.parse(body);
-  const supabase = createAdminClient();
+  const supabase = supabaseAdmin;
 
   // Build query for export (no pagination)
   let query = supabase

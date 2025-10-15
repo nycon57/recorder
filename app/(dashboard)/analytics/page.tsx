@@ -15,6 +15,7 @@ import {
   Sparkles,
   Activity
 } from 'lucide-react';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Badge } from '@/app/components/ui/badge';
@@ -519,7 +520,7 @@ export default function AnalyticsPage() {
                             size="sm"
                             asChild
                           >
-                            <a href={`/recordings/${recording.id}`}>View</a>
+                            <a href={`/library/${recording.id}`}>View</a>
                           </Button>
                         </TableCell>
                       </TableRow>

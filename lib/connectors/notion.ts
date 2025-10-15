@@ -17,6 +17,9 @@
 import { Client } from '@notionhq/client';
 import TurndownService from 'turndown';
 import axios from 'axios';
+
+import { createClient } from '@/lib/supabase/admin';
+
 import {
   Connector,
   ConnectorType,
@@ -30,7 +33,6 @@ import {
   FileContent,
   SyncError,
 } from './base';
-import { createClient } from '@/lib/supabase/admin';
 
 /**
  * Notion block types that contain content

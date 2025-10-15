@@ -5,11 +5,12 @@
  */
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
+
 import { apiHandler, requireOrg, successResponse, parseBody, errors } from '@/lib/utils/api';
 import { visualSearchSchema } from '@/lib/validations/api';
 import { visualSearch, isVisualSearchEnabled } from '@/lib/services/multimodal-search';
 import { withRateLimit } from '@/lib/rate-limit/middleware';
-import { z } from 'zod';
 
 type VisualSearchBody = z.infer<typeof visualSearchSchema>;
 

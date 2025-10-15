@@ -18,6 +18,39 @@ export type Visibility = 'private' | 'department' | 'org' | 'public';
 
 export type WebhookStatus = 'healthy' | 'degraded' | 'failing' | 'disabled';
 
+/**
+ * Content type classification for knowledge items in the platform.
+ * - 'recording': Screen recordings created in-app
+ * - 'video': Uploaded video files (MP4, MOV, WEBM, AVI)
+ * - 'audio': Uploaded audio files (MP3, WAV, M4A, OGG)
+ * - 'document': Uploaded documents (PDF, DOCX, DOC)
+ * - 'text': Direct text notes created by users
+ */
+export type ContentType = 'recording' | 'video' | 'audio' | 'document' | 'text';
+
+/**
+ * Supported file extensions for uploaded content.
+ * Maps to specific processing pipelines and renderers.
+ */
+export type FileType =
+  // Video formats
+  | 'mp4'
+  | 'mov'
+  | 'webm'
+  | 'avi'
+  // Audio formats
+  | 'mp3'
+  | 'wav'
+  | 'm4a'
+  | 'ogg'
+  // Document formats
+  | 'pdf'
+  | 'docx'
+  | 'doc'
+  // Text formats
+  | 'txt'
+  | 'md';
+
 export type RecordingStatus =
   | 'uploading'
   | 'uploaded'
@@ -29,12 +62,31 @@ export type RecordingStatus =
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
+/**
+ * Background job types for async processing pipeline.
+ * - 'transcribe': Audio-to-text transcription via OpenAI Whisper
+ * - 'doc_generate': Generate markdown documentation via GPT
+ * - 'generate_embeddings': Create vector embeddings for semantic search
+ * - 'generate_summary': Generate summary for recording
+ * - 'extract_frames': Extract key frames from videos
+ * - 'extract_audio': Extract audio track from video files
+ * - 'extract_text_pdf': Extract text content from PDF documents
+ * - 'extract_text_docx': Extract text content from DOCX documents
+ * - 'process_text_note': Process user-created text notes
+ * - 'sync_connector': Sync external connectors (Google Drive, Notion, etc.)
+ * - 'process_imported_doc': Process documents imported from connectors
+ * - 'process_webhook': Handle webhook events
+ */
 export type JobType =
   | 'transcribe'
   | 'doc_generate'
   | 'generate_embeddings'
   | 'generate_summary'
   | 'extract_frames'
+  | 'extract_audio'
+  | 'extract_text_pdf'
+  | 'extract_text_docx'
+  | 'process_text_note'
   | 'sync_connector'
   | 'process_imported_doc'
   | 'process_webhook';
@@ -246,9 +298,20 @@ export interface Database {
           thumbnail_url: string | null;
           error_message: string | null;
           metadata: Json;
+          deleted_at: string | null;
           created_at: string;
           updated_at: string;
           completed_at: string | null;
+          /** Content type classification (recording, video, audio, document, text) */
+          content_type: ContentType | null;
+          /** File extension (mp4, webm, mp3, pdf, etc.) */
+          file_type: FileType | null;
+          /** Original filename from upload */
+          original_filename: string | null;
+          /** MIME type for proper content handling */
+          mime_type: string | null;
+          /** File size in bytes */
+          file_size: number | null;
         };
         Insert: {
           id?: string;
@@ -263,9 +326,15 @@ export interface Database {
           thumbnail_url?: string | null;
           error_message?: string | null;
           metadata?: Json;
+          deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
           completed_at?: string | null;
+          content_type?: ContentType | null;
+          file_type?: FileType | null;
+          original_filename?: string | null;
+          mime_type?: string | null;
+          file_size?: number | null;
         };
         Update: {
           title?: string | null;
@@ -277,8 +346,14 @@ export interface Database {
           thumbnail_url?: string | null;
           error_message?: string | null;
           metadata?: Json;
+          deleted_at?: string | null;
           updated_at?: string;
           completed_at?: string | null;
+          content_type?: ContentType | null;
+          file_type?: FileType | null;
+          original_filename?: string | null;
+          mime_type?: string | null;
+          file_size?: number | null;
         };
       };
       recording_summaries: {

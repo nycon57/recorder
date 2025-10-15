@@ -8,6 +8,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 import { GOOGLE_CONFIG } from '@/lib/google/client';

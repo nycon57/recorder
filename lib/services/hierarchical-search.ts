@@ -6,6 +6,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+
 import { GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/types/database';

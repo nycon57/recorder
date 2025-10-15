@@ -4,10 +4,12 @@
  * POST /api/connectors/webhooks/teams - Receive Teams webhook events
  */
 
+import crypto from 'crypto';
+
 import { NextRequest } from 'next/server';
+
 import { apiHandler, successResponse, errors } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import crypto from 'crypto';
 
 /**
  * Verify Microsoft Graph webhook signature

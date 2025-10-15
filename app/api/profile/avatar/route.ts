@@ -1,4 +1,6 @@
 import { NextRequest } from 'next/server';
+import sharp from 'sharp';
+
 import {
   apiHandler,
   requireAuth,
@@ -6,7 +8,6 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import sharp from 'sharp';
 
 /**
  * POST /api/profile/avatar

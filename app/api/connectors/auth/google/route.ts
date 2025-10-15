@@ -5,6 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
+
 import { apiHandler, requireAuth, successResponse, errors } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { ConnectorRegistry } from '@/lib/connectors/registry';

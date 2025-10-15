@@ -12,6 +12,7 @@
  */
 
 import { pipeline, Pipeline } from '@xenova/transformers';
+
 import type {
   ChunkBoundary,
   SemanticChunk,
@@ -39,7 +40,7 @@ const SECURITY_LIMITS = {
 } as const;
 
 // Global model cache with lifecycle management
-let globalModelCache: {
+const globalModelCache: {
   embedder: any | null;
   modelName: string;
   lastUsed: number;

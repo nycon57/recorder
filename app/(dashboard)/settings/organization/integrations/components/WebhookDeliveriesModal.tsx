@@ -3,6 +3,18 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
+  CheckCircle,
+  XCircle,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  RefreshCw,
+  Clock,
+  Code
+} from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
+
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -27,17 +39,6 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { useToast } from '@/app/components/ui/use-toast';
-import {
-  CheckCircle,
-  XCircle,
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  RefreshCw,
-  Clock,
-  Code
-} from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
 
 interface WebhookDeliveriesModalProps {
   open: boolean;

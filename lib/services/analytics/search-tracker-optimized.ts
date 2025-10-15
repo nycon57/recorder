@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+
 import { getCache } from '../cache/multi-layer-cache';
 
 export interface SearchTrackingData {

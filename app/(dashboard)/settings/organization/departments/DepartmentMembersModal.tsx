@@ -3,6 +3,19 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
 import {
+  Users,
+  UserPlus,
+  UserMinus,
+  MoreVertical,
+  Search,
+  AlertCircle,
+  Mail,
+  Shield,
+  Check,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -34,19 +47,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/app/components/ui/popover";
-import {
-  Users,
-  UserPlus,
-  UserMinus,
-  MoreVertical,
-  Search,
-  AlertCircle,
-  Mail,
-  Shield,
-  Check,
-} from "lucide-react";
 import { Department, DepartmentMember } from "@/lib/validations/departments";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 
 interface DepartmentMembersModalProps {

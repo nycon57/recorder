@@ -2,6 +2,7 @@
 
 import { Circle, Square } from 'lucide-react';
 import { toast } from 'sonner';
+
 import { useRecording } from '@/app/(dashboard)/record/contexts/RecordingContext';
 import { Button } from '@/app/components/ui/button';
 import { cn } from '@/lib/utils';

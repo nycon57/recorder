@@ -12,6 +12,7 @@ import {
   MediaVolumeRange,
 } from "media-chrome/react";
 import type { ComponentProps, CSSProperties } from "react";
+
 import { cn } from "@/lib/utils";
 
 export type VideoPlayerProps = ComponentProps<typeof MediaController>;

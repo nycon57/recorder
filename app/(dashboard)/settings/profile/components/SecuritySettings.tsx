@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Shield, Key, Smartphone, ExternalLink, CheckCircle, XCircle } from 'lucide-react';
 import { useAuth, useUser } from '@clerk/nextjs';
+
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Separator } from '@/app/components/ui/separator';

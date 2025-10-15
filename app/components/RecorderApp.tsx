@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
 import BrowserNotSupported from './recorder/BrowserNotSupported';
 import RecorderProviders from './recorder/RecorderProviders';
 import RecorderInterface from './recorder/RecorderInterface';

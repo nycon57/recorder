@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Upload, User, X, Loader2 } from 'lucide-react';
+
 import { useToast } from '@/app/components/ui/use-toast';
 import { Button } from '@/app/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';

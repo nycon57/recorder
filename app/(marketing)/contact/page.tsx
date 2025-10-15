@@ -1,9 +1,10 @@
 import { Mail, MessageSquare, Github } from 'lucide-react';
+import Link from 'next/link';
+
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Label } from '@/app/components/ui/label';
-import Link from 'next/link';
 
 export default function ContactPage() {
   return (

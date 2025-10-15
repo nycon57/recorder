@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+
 import {
   apiHandler,
   requireOrg,
@@ -90,7 +91,7 @@ export const POST = apiHandler(
     }
 
     // Check if tag already exists for this org
-    let { data: existingTag } = await supabase
+    const { data: existingTag } = await supabase
       .from('tags')
       .select('*')
       .eq('org_id', orgId)

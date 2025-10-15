@@ -34,8 +34,8 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-
 import { updateMemberSchema } from '@/lib/validations/organizations';
+
 import type { OrganizationMember } from '../types';
 
 interface EditMemberModalProps {

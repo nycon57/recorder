@@ -5,12 +5,14 @@
  * Handles format conversion, thumbnail generation, audio extraction, and media validation.
  */
 
-import ffmpeg from 'fluent-ffmpeg';
 import { Readable } from 'stream';
-import { supabaseAdmin } from '@/lib/supabase/admin';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
+
+import ffmpeg from 'fluent-ffmpeg';
+
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export interface MediaInfo {
   format: string;

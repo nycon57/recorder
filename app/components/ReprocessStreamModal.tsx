@@ -27,6 +27,7 @@ import {
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/app/components/ui/collapsible';
+
 import ProcessingStageIndicator, { ProcessingStage } from './ProcessingStageIndicator';
 import StreamingTextDisplay from './StreamingTextDisplay';
 import ErrorRecoveryPanel, { ProcessingError } from './ErrorRecoveryPanel';
@@ -300,7 +301,7 @@ export default function ReprocessStreamModal({
   };
 
   const handleViewRecording = () => {
-    router.push(`/recordings/${recordingId}`);
+    router.push(`/library/${recordingId}`);
     onOpenChange(false);
   };
 

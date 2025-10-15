@@ -6,6 +6,7 @@
  */
 
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+
 import { streamingManager } from '@/lib/services/streaming-processor';
 import { createLogger } from '@/lib/utils/logger';
 

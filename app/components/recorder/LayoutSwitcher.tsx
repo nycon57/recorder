@@ -1,6 +1,7 @@
 'use client';
 
 import { Monitor, MonitorPlay, Camera } from 'lucide-react';
+
 import { useRecording, type RecordingLayout } from '@/app/(dashboard)/record/contexts/RecordingContext';
 import { ToggleGroup, ToggleGroupItem } from '@/app/components/ui/toggle-group';
 

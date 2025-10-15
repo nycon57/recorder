@@ -1,9 +1,11 @@
-import { NextRequest } from 'next/server';
-import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
-import { createSupabaseClient } from '@/lib/supabase/server';
-import { createApiKeySchema } from '@/lib/validations/api';
 import { randomBytes } from 'crypto';
+
+import { NextRequest } from 'next/server';
 import bcrypt from 'bcryptjs';
+
+import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
+import { createClient } from '@/lib/supabase/server';
+import { createApiKeySchema } from '@/lib/validations/api';
 import { rateLimit, RateLimitTier, extractUserIdFromAuth } from '@/lib/middleware/rate-limit';
 
 /**
@@ -20,7 +22,7 @@ export const GET = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
     throw new Error('Unauthorized: Admin access required');
   }
 
-  const supabase = await createSupabaseClient();
+  const supabase = await createClient();
 
   const { data: apiKeys, error } = await supabase
     .from('api_keys')
@@ -65,7 +67,7 @@ export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
   }
 
   const body = await parseBody(request, createApiKeySchema);
-  const supabase = await createSupabaseClient();
+  const supabase = await createClient();
 
   // Generate a secure API key
   const keyBytes = randomBytes(32);

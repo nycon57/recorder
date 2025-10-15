@@ -51,7 +51,6 @@ import {
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { useToast } from '@/app/components/ui/use-toast';
-
 import { DataTable, Column } from '@/app/components/shared/DataTable';
 import { AuditLogEntry } from '@/app/components/shared/AuditLogEntry';
 import { DateRangePicker } from '@/app/components/shared/DateRangePicker';
@@ -458,12 +457,12 @@ export default function SecurityPage() {
                   }}
                 />
 
-                <Select value={auditActionFilter} onValueChange={setAuditActionFilter}>
+                <Select value={auditActionFilter || 'all'} onValueChange={(value) => setAuditActionFilter(value === 'all' ? '' : value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="All actions" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All actions</SelectItem>
+                    <SelectItem value="all">All actions</SelectItem>
                     {auditData?.filters?.actions?.map((action: string) => (
                       <SelectItem key={action} value={action}>
                         {action.replace(/_/g, ' ')}
@@ -472,12 +471,12 @@ export default function SecurityPage() {
                   </SelectContent>
                 </Select>
 
-                <Select value={auditResourceFilter} onValueChange={setAuditResourceFilter}>
+                <Select value={auditResourceFilter || 'all'} onValueChange={(value) => setAuditResourceFilter(value === 'all' ? '' : value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="All resources" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All resources</SelectItem>
+                    <SelectItem value="all">All resources</SelectItem>
                     {auditData?.filters?.resourceTypes?.map((type: string) => (
                       <SelectItem key={type} value={type}>
                         {type.replace(/_/g, ' ')}
@@ -589,12 +588,12 @@ export default function SecurityPage() {
                 </Select>
 
                 {sessionData?.filters?.deviceTypes?.length > 0 && (
-                  <Select value={sessionDeviceFilter} onValueChange={setSessionDeviceFilter}>
+                  <Select value={sessionDeviceFilter || 'all'} onValueChange={(value) => setSessionDeviceFilter(value === 'all' ? '' : value)}>
                     <SelectTrigger className="w-[180px]">
                       <SelectValue placeholder="All devices" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All devices</SelectItem>
+                      <SelectItem value="all">All devices</SelectItem>
                       {sessionData.filters.deviceTypes.map((type: string) => (
                         <SelectItem key={type} value={type}>
                           {type}

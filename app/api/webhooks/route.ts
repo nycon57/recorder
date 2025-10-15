@@ -5,9 +5,11 @@
  * Currently supports custom transcription webhooks (for future external transcription services).
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { createHmac } from 'crypto';
+
+import { NextRequest, NextResponse } from 'next/server';
+
+import { createClient as createAdminClient } from '@/lib/supabase/admin';
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
 

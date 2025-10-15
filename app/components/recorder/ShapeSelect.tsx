@@ -1,6 +1,7 @@
 'use client';
 
 import { Circle, Square } from 'lucide-react';
+
 import { useRecording } from '@/app/(dashboard)/record/contexts/RecordingContext';
 import { Button } from '@/app/components/ui/button';
 

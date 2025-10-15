@@ -3,6 +3,17 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
+  Key,
+  Copy,
+  AlertTriangle,
+  Loader2,
+  Calendar,
+  Shield,
+  Zap
+} from 'lucide-react';
+import { format, addDays, addMonths } from 'date-fns';
+
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -24,16 +35,6 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import {
-  Key,
-  Copy,
-  AlertTriangle,
-  Loader2,
-  Calendar,
-  Shield,
-  Zap
-} from 'lucide-react';
-import { format, addDays, addMonths } from 'date-fns';
 
 interface GenerateApiKeyModalProps {
   open: boolean;

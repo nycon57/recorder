@@ -19,7 +19,7 @@
 
 import { tool } from 'ai';
 import { z } from 'zod';
-import { injectRAGContext, type SourceCitation } from './chat-rag-integration';
+
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 import {
@@ -29,6 +29,8 @@ import {
   getRecordingMetadataInputSchema,
   listRecordingsInputSchema,
 } from '@/lib/validations/chat';
+
+import { injectRAGContext, type SourceCitation } from './chat-rag-integration';
 
 /**
  * Tool execution context

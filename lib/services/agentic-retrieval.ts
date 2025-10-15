@@ -5,11 +5,6 @@
  * iterative refinement, and self-reflection.
  */
 
-import { decomposeQuery, planExecutionOrder } from './query-decomposition';
-import { evaluateResults } from './result-evaluator';
-import { vectorSearch } from './vector-search-google';
-import { rerankResults, isCohereConfigured } from './reranking';
-import { CitationTracker } from './citation-tracker';
 import { createClient } from '@/lib/supabase/server';
 import type {
   AgenticSearchResult,
@@ -17,6 +12,12 @@ import type {
   SubQuery,
   QueryDecomposition,
 } from '@/lib/types/agentic-rag';
+
+import { decomposeQuery, planExecutionOrder } from './query-decomposition';
+import { evaluateResults } from './result-evaluator';
+import { vectorSearch } from './vector-search-google';
+import { rerankResults, isCohereConfigured } from './reranking';
+import { CitationTracker } from './citation-tracker';
 import type { SearchResult } from './vector-search-google';
 
 export interface AgenticSearchOptions {

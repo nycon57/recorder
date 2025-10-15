@@ -1,8 +1,10 @@
+import { randomBytes } from 'crypto';
+
 import { NextRequest } from 'next/server';
+
 import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
 import { createSupabaseClient } from '@/lib/supabase/server';
 import { createWebhookSchema } from '@/lib/validations/api';
-import { randomBytes } from 'crypto';
 
 // GET /api/organizations/webhooks - List webhooks
 export const GET = apiHandler(async (request: NextRequest) => {

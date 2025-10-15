@@ -137,6 +137,16 @@ export default function GeneralSettingsPage() {
   // Initialize form with organization data
   const form = useForm<GeneralSettingsFormData>({
     resolver: zodResolver(generalSettingsSchema),
+    defaultValues: {
+      name: "",
+      logo_url: null,
+      primary_color: "#3b82f6",
+      billing_email: null,
+      domain: "",
+      settings: {
+        description: "",
+      },
+    },
     values: organization
       ? {
           name: organization.name,

@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
-import { apiHandler, requireOrg, successResponse, parseSearchParams, errors } from '@/lib/utils/api';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
+
+import { apiHandler, requireOrg, successResponse, parseSearchParams, errors } from '@/lib/utils/api';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 const sessionFiltersSchema = z.object({
   userId: z.string().optional(),
@@ -40,7 +41,7 @@ export type UserSession = {
 export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
   const filters = parseSearchParams(request, sessionFiltersSchema);
-  const supabase = createAdminClient();
+  const supabase = supabaseAdmin;
 
   // Build base query
   let query = supabase
@@ -140,7 +141,7 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     throw errors.badRequest('Session ID is required');
   }
 
-  const supabase = createAdminClient();
+  const supabase = supabaseAdmin;
 
   // Get the session
   const { data: session, error: sessionError } = await supabase
@@ -207,7 +208,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     all: z.boolean().optional(),
   }).parse(body);
 
-  const supabase = createAdminClient();
+  const supabase = supabaseAdmin;
 
   let query = supabase
     .from('user_sessions')

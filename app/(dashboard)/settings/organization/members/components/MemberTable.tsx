@@ -35,6 +35,7 @@ import {
 import { Skeleton } from '@/app/components/ui/skeleton';
 
 import type { OrganizationMember } from '../types';
+
 import { MemberRowActions } from './MemberRowActions';
 
 interface MemberTableProps {

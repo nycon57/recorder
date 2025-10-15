@@ -13,9 +13,12 @@
  * - Webhook support for real-time updates
  */
 
-import axios, { AxiosError } from 'axios';
-import { createClient } from '@/lib/supabase/admin';
 import { createHash } from 'crypto';
+
+import axios, { AxiosError } from 'axios';
+
+import { createClient } from '@/lib/supabase/admin';
+
 import {
   Connector,
   ConnectorType,
