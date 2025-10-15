@@ -76,3 +76,10 @@ yarn-error.log*
 
 # Documentation
 *.md
+
+# Directories
+
+/__tests__
+/__mocks__
+/supabase/migrations
+*.md

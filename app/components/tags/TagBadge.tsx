@@ -6,10 +6,16 @@ import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TagBadgeProps {
-  name: string;
+  tag?: {
+    id?: string;
+    name: string;
+    color: string;
+  };
+  name?: string;
   color?: string;
   size?: 'sm' | 'md' | 'lg';
   removable?: boolean;
+  showRemoveButton?: boolean;
   onRemove?: () => void;
   className?: string;
   onClick?: () => void;
@@ -18,22 +24,29 @@ interface TagBadgeProps {
 /**
  * TagBadge - Display a tag with color and optional remove button
  *
- * @param name - Tag name to display
- * @param color - Hex color code for the tag
+ * @param tag - Tag object with name and color
+ * @param name - Tag name to display (alternative to tag object)
+ * @param color - Hex color code for the tag (alternative to tag object)
  * @param size - Size variant (sm, md, lg)
- * @param removable - Show remove button
+ * @param removable - Show remove button (deprecated, use showRemoveButton)
+ * @param showRemoveButton - Show remove button
  * @param onRemove - Callback when remove is clicked
  * @param onClick - Callback when tag is clicked
  */
 export function TagBadge({
-  name,
-  color = '#3b82f6',
+  tag,
+  name: propName,
+  color: propColor = '#3b82f6',
   size = 'md',
   removable = false,
+  showRemoveButton = false,
   onRemove,
   className,
   onClick,
 }: TagBadgeProps) {
+  // Support both tag object and individual props
+  const name = tag?.name || propName || '';
+  const color = tag?.color || propColor;
   // Size classes
   const sizeClasses = {
     sm: 'text-xs px-2 py-0.5',
@@ -73,7 +86,7 @@ export function TagBadge({
       onClick={onClick && !removable ? onClick : undefined}
     >
       <span className="truncate max-w-[150px]">{name}</span>
-      {removable && onRemove && (
+      {(removable || showRemoveButton) && onRemove && (
         <button
           type="button"
           onClick={(e) => {

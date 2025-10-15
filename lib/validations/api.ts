@@ -997,6 +997,293 @@ export const exportAuditLogsSchema = z.object({
 
 export type ExportAuditLogsInput = z.infer<typeof exportAuditLogsSchema>;
 
+// ============================================================================
+// Phase 8: Library Organization & Content Management Validation Schemas
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// Collections Management Schemas
+// ----------------------------------------------------------------------------
+
+/**
+ * Create a collection
+ */
+export const createCollectionSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(255),
+  description: z.string().max(1000).optional(),
+  parent_id: z.string().uuid().optional().nullable(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color').optional().default('#3b82f6'),
+  icon: z.string().max(50).optional(),
+  visibility: z.enum(['private', 'department', 'org', 'public']).optional().default('org'),
+});
+
+export type CreateCollectionInput = z.infer<typeof createCollectionSchema>;
+
+/**
+ * Update a collection
+ */
+export const updateCollectionSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  description: z.string().max(1000).optional().nullable(),
+  parent_id: z.string().uuid().optional().nullable(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  icon: z.string().max(50).optional().nullable(),
+  visibility: z.enum(['private', 'department', 'org', 'public']).optional(),
+});
+
+export type UpdateCollectionInput = z.infer<typeof updateCollectionSchema>;
+
+/**
+ * List collections query schema
+ */
+export const listCollectionsQuerySchema = z.object({
+  parent_id: z.string().uuid().optional().nullable(),
+  search: z.string().max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+  includeItemCount: z.coerce.boolean().optional().default(false),
+});
+
+export type ListCollectionsQueryInput = z.infer<typeof listCollectionsQuerySchema>;
+
+/**
+ * Add items to collection schema
+ */
+export const addCollectionItemsSchema = z.object({
+  item_ids: z.array(z.string().uuid()).min(1, 'At least one item required').max(100, 'Maximum 100 items at once'),
+});
+
+export type AddCollectionItemsInput = z.infer<typeof addCollectionItemsSchema>;
+
+/**
+ * Remove items from collection schema
+ */
+export const removeCollectionItemsSchema = z.object({
+  item_ids: z.array(z.string().uuid()).min(1, 'At least one item required').max(100, 'Maximum 100 items at once'),
+});
+
+export type RemoveCollectionItemsInput = z.infer<typeof removeCollectionItemsSchema>;
+
+/**
+ * List collection items query schema
+ */
+export const listCollectionItemsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+  content_type: z.enum(['recording', 'video', 'audio', 'document', 'text']).optional(),
+  sort: z.enum(['created_asc', 'created_desc', 'title_asc', 'title_desc']).optional().default('created_desc'),
+});
+
+export type ListCollectionItemsQueryInput = z.infer<typeof listCollectionItemsQuerySchema>;
+
+// ----------------------------------------------------------------------------
+// Favorites Management Schemas
+// ----------------------------------------------------------------------------
+
+/**
+ * Add to favorites schema
+ */
+export const addToFavoritesSchema = z.object({
+  recording_id: z.string().uuid(),
+});
+
+export type AddToFavoritesInput = z.infer<typeof addToFavoritesSchema>;
+
+/**
+ * List favorites query schema
+ */
+export const listFavoritesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+  content_type: z.enum(['recording', 'video', 'audio', 'document', 'text']).optional(),
+  sort: z.enum(['created_asc', 'created_desc', 'favorited_asc', 'favorited_desc']).optional().default('favorited_desc'),
+});
+
+export type ListFavoritesQueryInput = z.infer<typeof listFavoritesQuerySchema>;
+
+// ----------------------------------------------------------------------------
+// Activity Feed Schemas
+// ----------------------------------------------------------------------------
+
+/**
+ * Log activity schema (internal use)
+ */
+export const logActivitySchema = z.object({
+  action: z.enum([
+    'recording.created',
+    'recording.updated',
+    'recording.deleted',
+    'recording.shared',
+    'recording.favorited',
+    'recording.unfavorited',
+    'collection.created',
+    'collection.updated',
+    'collection.deleted',
+    'collection.item_added',
+    'collection.item_removed',
+    'tag.created',
+    'tag.updated',
+    'tag.deleted',
+    'tag.applied',
+    'tag.removed',
+    'document.generated',
+    'document.updated',
+    'search.executed',
+    'user.login',
+  ]),
+  resource_type: z.enum(['recording', 'collection', 'tag', 'document', 'user']),
+  resource_id: z.string().uuid().optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
+export type LogActivityInput = z.infer<typeof logActivitySchema>;
+
+/**
+ * List activity query schema
+ */
+export const listActivityQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+  user_id: z.string().uuid().optional(),
+  action: z.string().optional(),
+  resource_type: z.enum(['recording', 'collection', 'tag', 'document', 'user']).optional(),
+  date_from: z.string().datetime().optional(),
+  date_to: z.string().datetime().optional(),
+});
+
+export type ListActivityQueryInput = z.infer<typeof listActivityQuerySchema>;
+
+// ----------------------------------------------------------------------------
+// Analytics Schemas
+// ----------------------------------------------------------------------------
+
+/**
+ * Storage analytics query schema
+ */
+export const storageAnalyticsQuerySchema = z.object({
+  groupBy: z.enum(['content_type', 'user', 'date']).optional().default('content_type'),
+  date_from: z.string().datetime().optional(),
+  date_to: z.string().datetime().optional(),
+});
+
+export type StorageAnalyticsQueryInput = z.infer<typeof storageAnalyticsQuerySchema>;
+
+/**
+ * Popular items query schema
+ */
+export const popularItemsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional().default(10),
+  timeframe: z.enum(['7d', '30d', '90d', 'all']).optional().default('30d'),
+  metric: z.enum(['views', 'shares', 'favorites', 'searches']).optional().default('views'),
+  content_type: z.enum(['recording', 'video', 'audio', 'document', 'text']).optional(),
+});
+
+export type PopularItemsQueryInput = z.infer<typeof popularItemsQuerySchema>;
+
+/**
+ * Usage trends query schema
+ */
+export const usageTrendsQuerySchema = z.object({
+  metric: z.enum(['uploads', 'searches', 'shares', 'storage', 'users']).optional().default('uploads'),
+  granularity: z.enum(['hour', 'day', 'week', 'month']).optional().default('day'),
+  date_from: z.string().datetime().optional(),
+  date_to: z.string().datetime().optional(),
+});
+
+export type UsageTrendsQueryInput = z.infer<typeof usageTrendsQuerySchema>;
+
+/**
+ * Processing stats query schema
+ */
+export const processingStatsQuerySchema = z.object({
+  date_from: z.string().datetime().optional(),
+  date_to: z.string().datetime().optional(),
+  job_type: z.enum(['transcribe', 'doc_generate', 'generate_embeddings', 'extract_frames']).optional(),
+  includeFailures: z.coerce.boolean().optional().default(true),
+});
+
+export type ProcessingStatsQueryInput = z.infer<typeof processingStatsQuerySchema>;
+
+// ----------------------------------------------------------------------------
+// Library Enhancements Schemas
+// ----------------------------------------------------------------------------
+
+/**
+ * Bulk upload schema
+ */
+export const bulkUploadSchema = z.object({
+  items: z.array(
+    z.object({
+      content_type: z.enum(['video', 'audio', 'document', 'text']),
+      title: z.string().min(1).max(255),
+      description: z.string().max(2000).optional(),
+      file_name: z.string().min(1).max(255),
+      file_size: z.number().positive(),
+      mime_type: z.string(),
+      metadata: z.record(z.any()).optional(),
+    })
+  ).min(1, 'At least one item required').max(50, 'Maximum 50 items at once'),
+  collection_id: z.string().uuid().optional(),
+  tags: z.array(z.string().uuid()).max(20).optional(),
+});
+
+export type BulkUploadInput = z.infer<typeof bulkUploadSchema>;
+
+/**
+ * Export items schema
+ */
+export const exportItemsSchema = z.object({
+  item_ids: z.array(z.string().uuid()).min(1).max(100),
+  format: z.enum(['json', 'csv', 'markdown', 'zip']).optional().default('json'),
+  include_transcripts: z.boolean().optional().default(true),
+  include_documents: z.boolean().optional().default(true),
+  include_metadata: z.boolean().optional().default(true),
+});
+
+export type ExportItemsInput = z.infer<typeof exportItemsSchema>;
+
+/**
+ * Enhanced library query schema
+ */
+export const enhancedLibraryQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+  content_type: z.enum(['recording', 'video', 'audio', 'document', 'text']).optional(),
+  status: z.string().optional(),
+  search: z.string().max(500).optional(),
+  tag_ids: z.array(z.string().uuid()).max(20).optional(),
+  collection_id: z.string().uuid().optional(),
+  favorites_only: z.coerce.boolean().optional().default(false),
+  date_from: z.string().datetime().optional(),
+  date_to: z.string().datetime().optional(),
+  created_by: z.string().uuid().optional(),
+  sort: z.enum(['created_asc', 'created_desc', 'title_asc', 'title_desc', 'duration_asc', 'duration_desc', 'size_asc', 'size_desc']).optional().default('created_desc'),
+});
+
+export type EnhancedLibraryQueryInput = z.infer<typeof enhancedLibraryQuerySchema>;
+
+// ----------------------------------------------------------------------------
+// Enhanced Search Schemas
+// ----------------------------------------------------------------------------
+
+/**
+ * Enhanced semantic search schema
+ */
+export const enhancedSearchSchema = z.object({
+  query: z.string().min(1).max(2000),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(10),
+  threshold: z.coerce.number().min(0).max(1).optional().default(0.7),
+  content_type: z.enum(['recording', 'video', 'audio', 'document', 'text']).optional(),
+  tag_ids: z.array(z.string().uuid()).max(20).optional(),
+  collection_id: z.string().uuid().optional(),
+  date_from: z.string().datetime().optional(),
+  date_to: z.string().datetime().optional(),
+  created_by: z.string().uuid().optional(),
+  mode: z.enum(['vector', 'hybrid', 'agentic', 'multimodal']).optional().default('vector'),
+});
+
+export type EnhancedSearchInput = z.infer<typeof enhancedSearchSchema>;
+
 // ----------------------------------------------------------------------------
 // Session Management Schemas
 // ----------------------------------------------------------------------------

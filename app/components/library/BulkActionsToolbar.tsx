@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from 'react';
-import { Trash2, Tag, Download, Share2, X } from 'lucide-react';
+import { Trash2, Tag, Download, Share2, X, FolderPlus } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
@@ -22,6 +22,7 @@ interface BulkActionsToolbarProps {
   onAddTags?: () => void;
   onDownload?: () => Promise<void>;
   onShare?: () => void;
+  onAddToCollection?: () => void;
   className?: string;
 }
 
@@ -50,6 +51,7 @@ export function BulkActionsToolbar({
   onAddTags,
   onDownload,
   onShare,
+  onAddToCollection,
   className,
 }: BulkActionsToolbarProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -136,6 +138,19 @@ export function BulkActionsToolbar({
             >
               <Tag className="h-4 w-4" />
               Add Tags
+            </Button>
+          )}
+
+          {/* Add to Collection */}
+          {onAddToCollection && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onAddToCollection}
+              className="h-8 gap-2"
+            >
+              <FolderPlus className="h-4 w-4" />
+              Add to Collection
             </Button>
           )}
 

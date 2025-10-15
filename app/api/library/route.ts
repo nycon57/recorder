@@ -6,7 +6,7 @@ import {
   successResponse,
   errors,
 } from '@/lib/utils/api';
-import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { ContentType } from '@/lib/types/database';
 
 /**
@@ -22,7 +22,7 @@ import { ContentType } from '@/lib/types/database';
  */
 export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId, userId } = await requireOrg();
-  const supabase = await createClient();
+  const supabase = supabaseAdmin;
 
   console.log('[API /api/library] Request from orgId:', orgId, 'userId:', userId);
 

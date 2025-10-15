@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Loader2, Grid3x3, List, Search, SlidersHorizontal, FileX2, Settings } from 'lucide-react';
+import { Loader2, Grid3x3, List, Search, SlidersHorizontal, FileX2, Settings, Upload, Download, FolderOpen, Plus } from 'lucide-react';
 
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
@@ -15,13 +15,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/app/components/ui/sheet';
 import { ContentGridSkeleton, ContentListSkeleton } from '@/app/components/skeletons/ContentCardSkeleton';
 import { LibraryEmptyState } from '@/app/components/empty-states/LibraryEmptyState';
 import { BulkActionsToolbar } from '@/app/components/library/BulkActionsToolbar';
 import { BulkTagModal } from '@/app/components/library/BulkTagModal';
 import { TagFilter } from '@/app/components/tags/TagFilter';
 import { TagManager } from '@/app/components/tags/TagManager';
+import { AdvancedFilters, FilterState } from '@/app/components/filters/AdvancedFilters';
+import { FilterChips } from '@/app/components/filters/FilterChips';
+import { CollectionTree, Collection } from '@/app/components/collections/CollectionTree';
+import { CollectionBreadcrumb } from '@/app/components/collections/CollectionBreadcrumb';
+import { CollectionManager } from '@/app/components/collections/CollectionManager';
+import { CollectionPicker } from '@/app/components/collections/CollectionPicker';
+import { FavoriteButton } from '@/app/components/favorites/FavoriteButton';
+import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/KeyboardShortcutsProvider';
 import { useToast } from '@/app/components/ui/use-toast';
+import UploadModal from '@/app/components/upload/UploadModal';
+import ExportModal from '@/app/components/library/ExportModal';
+import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/app/hooks/useKeyboardShortcuts';
 
 import { SelectableContentCard } from './components/SelectableContentCard';
 import { ContentItem } from './components/ContentCard';
@@ -32,20 +44,19 @@ type ViewMode = 'grid' | 'list';
 type QuickFilter = 'all' | 'today' | 'week' | 'month';
 
 /**
- * Library Page Component
- * Unified content library for recordings, videos, audio, documents, and text notes
+ * Enhanced Library Page Component
+ * Unified content library with Phase 8 features
  *
- * Features:
- * - Content type filtering (All, Videos, Audio, Documents, Text)
- * - Sort options (Recent, Oldest, Name A-Z, Name Z-A)
- * - View toggle (Grid / List)
- * - Search functionality
- * - Responsive grid layout
- * - Loading skeletons
- * - Empty states
- * - Infinite scroll ready
+ * New Features:
+ * - Advanced filters (AdvancedFilters component)
+ * - Collections tree sidebar
+ * - Favorites integration
+ * - Enhanced bulk actions with collections
+ * - Keyboard shortcuts
+ * - Filter persistence in URL
+ * - Collection filtering
  */
-export default function LibraryPage() {
+function LibraryPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -64,82 +75,165 @@ export default function LibraryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
 
+  // Advanced filters state
+  const [advancedFilters, setAdvancedFilters] = useState<FilterState>({
+    contentTypes: [],
+    statuses: [],
+    dateRange: { from: null, to: null },
+    favoritesOnly: false,
+    hasTranscript: null,
+    hasDocument: null,
+  });
+
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showTagModal, setShowTagModal] = useState(false);
   const [showTagManager, setShowTagManager] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showCollectionManager, setShowCollectionManager] = useState(false);
+  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
 
   // Tag filter state
   const [availableTags, setAvailableTags] = useState<any[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [tagFilterMode, setTagFilterMode] = useState<'and' | 'or'>('or');
 
+  // Collections state
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [showCollectionSidebar, setShowCollectionSidebar] = useState(true);
+
+  // Search input ref for keyboard shortcuts
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+
   // Load preferences from localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedViewMode = localStorage.getItem('library-view-mode') as ViewMode;
       const savedSortBy = localStorage.getItem('library-sort-by') as SortOption;
+      const savedShowSidebar = localStorage.getItem('library-show-sidebar');
       if (savedViewMode) setViewMode(savedViewMode);
       if (savedSortBy) setSortBy(savedSortBy);
+      if (savedShowSidebar !== null) setShowCollectionSidebar(savedShowSidebar === 'true');
     }
-  }, []);
+
+    // Load filters from URL params
+    const typeParam = searchParams.get('type') as ContentTypeFilter;
+    const collectionParam = searchParams.get('collection');
+    const favoritesParam = searchParams.get('favorites');
+    const searchParam = searchParams.get('q');
+
+    if (typeParam) setContentType(typeParam);
+    if (collectionParam) setSelectedCollectionId(collectionParam);
+    if (favoritesParam === 'true') setAdvancedFilters(prev => ({ ...prev, favoritesOnly: true }));
+    if (searchParam) setSearchQuery(searchParam);
+  }, [searchParams]);
 
   // Save preferences to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('library-view-mode', viewMode);
       localStorage.setItem('library-sort-by', sortBy);
+      localStorage.setItem('library-show-sidebar', String(showCollectionSidebar));
     }
-  }, [viewMode, sortBy]);
+  }, [viewMode, sortBy, showCollectionSidebar]);
 
-  // Fetch content items and tags
+  // Update URL params when filters change
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (contentType !== 'all') params.set('type', contentType);
+    if (selectedCollectionId) params.set('collection', selectedCollectionId);
+    if (advancedFilters.favoritesOnly) params.set('favorites', 'true');
+    if (searchQuery) params.set('q', searchQuery);
+
+    const newUrl = params.toString() ? `?${params.toString()}` : '/library';
+    router.replace(newUrl, { scroll: false });
+  }, [contentType, selectedCollectionId, advancedFilters.favoritesOnly, searchQuery]);
+
+  // Fetch content items, tags, and collections
   useEffect(() => {
     fetchItems();
     fetchTags();
+    fetchCollections();
   }, []);
 
   // Filter and sort items when filters change
   useEffect(() => {
     let filtered = [...items];
 
-    // Filter by content type
+    // Filter by content type (from tabs)
     if (contentType !== 'all') {
       filtered = filtered.filter(item => item.content_type === contentType);
     }
 
-    // Filter by quick filter (date range)
-    if (quickFilter !== 'all') {
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // Filter by advanced filters content types
+    if (advancedFilters.contentTypes.length > 0) {
+      filtered = filtered.filter(item =>
+        advancedFilters.contentTypes.includes(item.content_type as any)
+      );
+    }
+
+    // Filter by status
+    if (advancedFilters.statuses.length > 0) {
+      filtered = filtered.filter(item =>
+        advancedFilters.statuses.includes(item.status as any)
+      );
+    }
+
+    // Filter by date range
+    if (advancedFilters.dateRange.from || advancedFilters.dateRange.to) {
+      filtered = filtered.filter(item => {
+        const createdAt = new Date(item.created_at);
+        if (advancedFilters.dateRange.from && createdAt < advancedFilters.dateRange.from) {
+          return false;
+        }
+        if (advancedFilters.dateRange.to && createdAt > advancedFilters.dateRange.to) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // Filter by favorites
+    if (advancedFilters.favoritesOnly) {
+      filtered = filtered.filter(item => (item as any).is_favorite === true);
+    }
 
       filtered = filtered.filter(item => {
         const createdAt = new Date(item.created_at);
         switch (quickFilter) {
           case 'today':
             return createdAt >= today;
-          case 'week':
+          case 'week': {
             const weekAgo = new Date(today);
             weekAgo.setDate(weekAgo.getDate() - 7);
             return createdAt >= weekAgo;
-          case 'month':
+          }
+          case 'month': {
             const monthAgo = new Date(today);
             monthAgo.setMonth(monthAgo.getMonth() - 1);
             return createdAt >= monthAgo;
+          }
           default:
             return true;
         }
       });
+
+    // Filter by selected collection
+    if (selectedCollectionId) {
+      filtered = filtered.filter(item =>
+        (item as any).collection_id === selectedCollectionId
+      );
     }
 
     // Filter by selected tags
     if (selectedTagIds.length > 0) {
       filtered = filtered.filter(item => {
-        const itemTagIds = item.tags?.map((t: any) => t.id) || [];
+        const itemTagIds = (item as any).tags?.map((t: any) => t.id) || [];
         if (tagFilterMode === 'and') {
-          // All selected tags must be present
           return selectedTagIds.every(tagId => itemTagIds.includes(tagId));
         } else {
-          // At least one selected tag must be present
           return selectedTagIds.some(tagId => itemTagIds.includes(tagId));
         }
       });
@@ -192,7 +286,7 @@ export default function LibraryPage() {
     }
 
     setFilteredItems(filtered);
-  }, [items, contentType, sortBy, searchQuery, quickFilter, selectedTagIds, tagFilterMode]);
+  }, [items, contentType, sortBy, searchQuery, quickFilter, selectedTagIds, tagFilterMode, advancedFilters, selectedCollectionId]);
 
   async function fetchTags() {
     try {
@@ -206,27 +300,30 @@ export default function LibraryPage() {
     }
   }
 
+  async function fetchCollections() {
+    try {
+      const response = await fetch('/api/collections');
+      if (!response.ok) throw new Error('Failed to fetch collections');
+
+      const data = await response.json();
+      setCollections(data.data || []);
+    } catch (error) {
+      console.error('Error fetching collections:', error);
+    }
+  }
+
   async function fetchItems() {
     try {
       setLoading(true);
       setError(null);
 
-      console.log('[Library] Fetching items from /api/library...');
       const response = await fetch('/api/library?limit=100');
 
-      console.log('[Library] Response status:', response.status);
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[Library] Response error:', errorText);
         throw new Error('Failed to fetch library items');
       }
 
       const result = await response.json();
-      console.log('[Library] Full response:', result);
-      console.log('[Library] Items data:', result.data?.data);
-      console.log('[Library] Items count:', result.data?.data?.length);
-
-      // API returns { data: { data: [...], pagination: {...}, filters: {...} } }
       setItems(result.data?.data || []);
     } catch (err) {
       console.error('Error fetching library:', err);
@@ -247,11 +344,17 @@ export default function LibraryPage() {
 
       if (!response.ok) throw new Error('Failed to delete');
 
-      // Remove from local state
       setItems(prev => prev.filter(item => item.id !== id));
+      toast({
+        description: 'Item deleted successfully',
+      });
     } catch (err) {
       console.error('Delete failed:', err);
-      alert('Failed to delete item');
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to delete item',
+      });
     }
   };
 
@@ -280,6 +383,8 @@ export default function LibraryPage() {
 
   // Bulk action handlers
   const handleBulkDelete = async () => {
+    if (!confirm(`Are you sure you want to delete ${selectedIds.length} items?`)) return;
+
     try {
       const promises = selectedIds.map(id =>
         fetch(`/api/recordings/${id}`, { method: 'DELETE' })
@@ -289,11 +394,9 @@ export default function LibraryPage() {
       const successCount = results.filter(r => r.status === 'fulfilled').length;
       const failCount = results.filter(r => r.status === 'rejected').length;
 
-      // Update local state
       setItems(prev => prev.filter(item => !selectedIds.includes(item.id)));
       setSelectedIds([]);
 
-      // Show toast notification
       if (successCount > 0) {
         toast({
           title: 'Items deleted',
@@ -319,302 +422,431 @@ export default function LibraryPage() {
   };
 
   const handleBulkDownload = async () => {
+    setShowExportModal(true);
+  };
+
+  const handleBulkAddToCollection = async () => {
+    setShowCollectionPicker(true);
+  };
+
+  const handleAddToCollection = async (collectionId: string) => {
     try {
-      // Note: This would require an API endpoint for creating ZIP archives
-      // For now, we'll just show a message
-      toast({
-        title: 'Download started',
-        description: `Preparing ${selectedIds.length} items for download...`,
+      const response = await fetch(`/api/collections/${collectionId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recording_ids: selectedIds }),
       });
 
-      // Simulate download delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (!response.ok) throw new Error('Failed to add to collection');
 
       toast({
-        title: 'Download ready',
-        description: 'Your download will begin shortly',
+        description: `Added ${selectedIds.length} items to collection`,
       });
+      setShowCollectionPicker(false);
+      setSelectedIds([]);
+      fetchItems(); // Refresh to update collection associations
     } catch (error) {
-      console.error('Bulk download failed:', error);
+      console.error('Failed to add to collection:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to download items',
         variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to add items to collection',
       });
-      throw error;
     }
   };
 
+  // Filter handlers
+  const handleRemoveFilter = (key: keyof FilterState, value?: string) => {
+    const newFilters = { ...advancedFilters };
+
+    if (key === 'contentTypes' && value) {
+      newFilters.contentTypes = newFilters.contentTypes.filter(t => t !== value);
+    } else if (key === 'statuses' && value) {
+      newFilters.statuses = newFilters.statuses.filter(s => s !== value);
+    } else if (key === 'dateRange') {
+      newFilters.dateRange = { from: null, to: null };
+    } else if (key === 'favoritesOnly') {
+      newFilters.favoritesOnly = false;
+    } else if (key === 'hasTranscript') {
+      newFilters.hasTranscript = null;
+    } else if (key === 'hasDocument') {
+      newFilters.hasDocument = null;
+    }
+
+    setAdvancedFilters(newFilters);
+  };
+
+  const handleClearAllFilters = () => {
+    setAdvancedFilters({
+      contentTypes: [],
+      statuses: [],
+      dateRange: { from: null, to: null },
+      favoritesOnly: false,
+      hasTranscript: null,
+      hasDocument: null,
+    });
+    setSelectedTagIds([]);
+    setSelectedCollectionId(null);
+    setSearchQuery('');
+    setQuickFilter('all');
+  };
+
+  // Collection handlers
+  const handleCollectionSelect = (collection: Collection) => {
+    setSelectedCollectionId(collection.id);
+  };
+
+  const handleCollectionNavigate = (collectionId: string | null) => {
+    setSelectedCollectionId(collectionId);
+  };
+
   // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Select all: Ctrl/Cmd + A
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && filteredItems.length > 0) {
-        e.preventDefault();
-        handleSelectAll(selectedIds.length !== filteredItems.length);
-      }
-
-      // Delete: Delete key (when items selected)
-      if (e.key === 'Delete' && selectedIds.length > 0) {
-        e.preventDefault();
-        handleBulkDelete();
-      }
-
-      // Escape: Clear selection
-      if (e.key === 'Escape' && selectedIds.length > 0) {
-        handleClearSelection();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIds, filteredItems, handleSelectAll, handleClearSelection]);
+  useKeyboardShortcuts([
+    {
+      ...COMMON_SHORTCUTS.UPLOAD,
+      handler: () => setShowUploadModal(true),
+    },
+    {
+      ...COMMON_SHORTCUTS.SEARCH,
+      handler: () => searchInputRef.current?.focus(),
+    },
+    {
+      key: 'f',
+      handler: () => setAdvancedFilters(prev => ({ ...prev, favoritesOnly: !prev.favoritesOnly })),
+      description: 'Toggle favorites filter',
+    },
+    {
+      key: 'n',
+      ctrl: true,
+      handler: () => setShowCollectionManager(true),
+      description: 'New collection',
+    },
+    {
+      key: 'Escape',
+      handler: () => {
+        if (selectedIds.length > 0) {
+          handleClearSelection();
+        }
+      },
+      description: 'Clear selection',
+      preventDefault: false,
+    },
+  ]);
 
   // Get counts for each content type
-  const counts = {
+  const counts = useMemo(() => ({
     all: items.length,
     recording: items.filter(i => i.content_type === 'recording').length,
     video: items.filter(i => i.content_type === 'video').length,
     audio: items.filter(i => i.content_type === 'audio').length,
     document: items.filter(i => i.content_type === 'document').length,
     text: items.filter(i => i.content_type === 'text').length,
-  };
+  }), [items]);
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Library</h1>
-            <p className="text-muted-foreground mt-1">
-              All your recordings, videos, audio, documents, and notes in one place
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => setShowTagManager(true)}
-          >
-            <Settings className="mr-2 h-4 w-4" />
-            Manage Tags
-          </Button>
-        </div>
-
-        {/* Filters and controls */}
-        <div className="flex flex-col gap-4">
-          {/* Content type tabs */}
-          <Tabs value={contentType} onValueChange={(v) => setContentType(v as ContentTypeFilter)}>
-            <TabsList>
-              <TabsTrigger value="all">
-                All {counts.all > 0 && `(${counts.all})`}
-              </TabsTrigger>
-              <TabsTrigger value="recording">
-                Recordings {counts.recording > 0 && `(${counts.recording})`}
-              </TabsTrigger>
-              <TabsTrigger value="video">
-                Videos {counts.video > 0 && `(${counts.video})`}
-              </TabsTrigger>
-              <TabsTrigger value="audio">
-                Audio {counts.audio > 0 && `(${counts.audio})`}
-              </TabsTrigger>
-              <TabsTrigger value="document">
-                Documents {counts.document > 0 && `(${counts.document})`}
-              </TabsTrigger>
-              <TabsTrigger value="text">
-                Notes {counts.text > 0 && `(${counts.text})`}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {/* Quick filters */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground mr-2">Quick filter:</span>
-            <Button
-              variant={quickFilter === 'all' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setQuickFilter('all')}
-            >
-              All Time
-            </Button>
-            <Button
-              variant={quickFilter === 'today' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setQuickFilter('today')}
-            >
-              Today
-            </Button>
-            <Button
-              variant={quickFilter === 'week' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setQuickFilter('week')}
-            >
-              This Week
-            </Button>
-            <Button
-              variant={quickFilter === 'month' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setQuickFilter('month')}
-            >
-              This Month
-            </Button>
-          </div>
-
-          {/* Search and controls row */}
-          <div className="flex items-center gap-2 justify-between">
-            {/* Left side: Select all checkbox (when items exist) */}
-            <div className="flex items-center gap-3">
-              {filteredItems.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectedIds.length === filteredItems.length && filteredItems.length > 0}
-                    onCheckedChange={handleSelectAll}
-                    aria-label="Select all items"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    Select all
-                  </span>
-                </div>
-              )}
+    <div className="flex h-screen overflow-hidden">
+      {/* Collections Sidebar */}
+      {showCollectionSidebar && (
+        <aside className="w-64 border-r bg-muted/10 p-4 overflow-y-auto">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <FolderOpen className="h-4 w-4" />
+                Collections
+              </h3>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setShowCollectionManager(true)}
+                title="New collection"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
             </div>
 
-            {/* Right side: Search, filters, sort, and view controls */}
-            <div className="flex items-center gap-2">
-              {/* Search */}
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search library..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
+            <CollectionTree
+              collections={collections}
+              selectedId={selectedCollectionId}
+              onSelect={handleCollectionSelect}
+              onCreateChild={(parentId) => {
+                setShowCollectionManager(true);
+              }}
+            />
+          </div>
+        </aside>
+      )}
 
-              {/* Tag Filter */}
-              <TagFilter
-                tags={availableTags}
-                selectedTags={selectedTagIds}
-                onSelectionChange={setSelectedTagIds}
-                filterMode={tagFilterMode}
-                onFilterModeChange={setTagFilterMode}
-                showCounts={true}
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="container mx-auto p-6 space-y-6">
+          {/* Header */}
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight">Library</h1>
+                <p className="text-muted-foreground mt-1">
+                  All your recordings, videos, audio, documents, and notes in one place
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCollectionSidebar(!showCollectionSidebar)}
+                >
+                  <FolderOpen className="mr-2 h-4 w-4" />
+                  {showCollectionSidebar ? 'Hide' : 'Show'} Collections
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowTagManager(true)}
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Manage Tags
+                </Button>
+                <Button onClick={() => setShowUploadModal(true)}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload
+                </Button>
+              </div>
+            </div>
+
+            {/* Collection breadcrumb */}
+            {selectedCollectionId && (
+              <CollectionBreadcrumb
+                collections={collections}
+                currentId={selectedCollectionId}
+                onNavigate={handleCollectionNavigate}
               />
+            )}
 
-              {/* Sort */}
-              <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-                <SelectTrigger className="w-[180px]">
-                  <SlidersHorizontal className="mr-2 h-4 w-4" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="recent">Most Recent</SelectItem>
-                  <SelectItem value="oldest">Oldest First</SelectItem>
-                  <SelectItem value="name-asc">Name A-Z</SelectItem>
-                  <SelectItem value="name-desc">Name Z-A</SelectItem>
-                  <SelectItem value="size-asc">Size (Smallest)</SelectItem>
-                  <SelectItem value="size-desc">Size (Largest)</SelectItem>
-                  <SelectItem value="duration-asc">Duration (Shortest)</SelectItem>
-                  <SelectItem value="duration-desc">Duration (Longest)</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Filters and controls */}
+            <div className="flex flex-col gap-4">
+              {/* Content type tabs */}
+              <Tabs value={contentType} onValueChange={(v) => setContentType(v as ContentTypeFilter)}>
+                <TabsList>
+                  <TabsTrigger value="all">
+                    All {counts.all > 0 && `(${counts.all})`}
+                  </TabsTrigger>
+                  <TabsTrigger value="recording">
+                    Recordings {counts.recording > 0 && `(${counts.recording})`}
+                  </TabsTrigger>
+                  <TabsTrigger value="video">
+                    Videos {counts.video > 0 && `(${counts.video})`}
+                  </TabsTrigger>
+                  <TabsTrigger value="audio">
+                    Audio {counts.audio > 0 && `(${counts.audio})`}
+                  </TabsTrigger>
+                  <TabsTrigger value="document">
+                    Documents {counts.document > 0 && `(${counts.document})`}
+                  </TabsTrigger>
+                  <TabsTrigger value="text">
+                    Notes {counts.text > 0 && `(${counts.text})`}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
 
-              {/* View toggle */}
-              <div className="flex items-center border rounded-md">
+              {/* Quick filters */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground mr-2">Quick filter:</span>
                 <Button
-                  variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                  variant={quickFilter === 'all' ? 'secondary' : 'ghost'}
                   size="sm"
-                  onClick={() => setViewMode('grid')}
-                  className="rounded-r-none"
+                  onClick={() => setQuickFilter('all')}
                 >
-                  <Grid3x3 className="h-4 w-4" />
-                  <span className="sr-only">Grid view</span>
+                  All Time
                 </Button>
                 <Button
-                  variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                  variant={quickFilter === 'today' ? 'secondary' : 'ghost'}
                   size="sm"
-                  onClick={() => setViewMode('list')}
-                  className="rounded-l-none"
+                  onClick={() => setQuickFilter('today')}
                 >
-                  <List className="h-4 w-4" />
-                  <span className="sr-only">List view</span>
+                  Today
+                </Button>
+                <Button
+                  variant={quickFilter === 'week' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setQuickFilter('week')}
+                >
+                  This Week
+                </Button>
+                <Button
+                  variant={quickFilter === 'month' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setQuickFilter('month')}
+                >
+                  This Month
                 </Button>
               </div>
+
+              {/* Search and controls row */}
+              <div className="flex items-center gap-2 justify-between">
+                {/* Left side: Select all checkbox */}
+                <div className="flex items-center gap-3">
+                  {filteredItems.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={selectedIds.length === filteredItems.length && filteredItems.length > 0}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all items"
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        Select all
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right side: Search, filters, sort, and view controls */}
+                <div className="flex items-center gap-2">
+                  {/* Search */}
+                  <div className="relative w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      ref={searchInputRef}
+                      placeholder="Search library..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+
+                  {/* Advanced Filters */}
+                  <AdvancedFilters
+                    filters={advancedFilters}
+                    onFiltersChange={setAdvancedFilters}
+                  />
+
+                  {/* Tag Filter */}
+                  <TagFilter
+                    tags={availableTags}
+                    selectedTags={selectedTagIds}
+                    onSelectionChange={setSelectedTagIds}
+                    filterMode={tagFilterMode}
+                    onFilterModeChange={setTagFilterMode}
+                    showCounts={true}
+                  />
+
+                  {/* Sort */}
+                  <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                    <SelectTrigger className="w-[180px]">
+                      <SlidersHorizontal className="mr-2 h-4 w-4" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="recent">Most Recent</SelectItem>
+                      <SelectItem value="oldest">Oldest First</SelectItem>
+                      <SelectItem value="name-asc">Name A-Z</SelectItem>
+                      <SelectItem value="name-desc">Name Z-A</SelectItem>
+                      <SelectItem value="size-asc">Size (Smallest)</SelectItem>
+                      <SelectItem value="size-desc">Size (Largest)</SelectItem>
+                      <SelectItem value="duration-asc">Duration (Shortest)</SelectItem>
+                      <SelectItem value="duration-desc">Duration (Longest)</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* View toggle */}
+                  <div className="flex items-center border rounded-md">
+                    <Button
+                      variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('grid')}
+                      className="rounded-r-none"
+                    >
+                      <Grid3x3 className="h-4 w-4" />
+                      <span className="sr-only">Grid view</span>
+                    </Button>
+                    <Button
+                      variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('list')}
+                      className="rounded-l-none"
+                    >
+                      <List className="h-4 w-4" />
+                      <span className="sr-only">List view</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter chips */}
+              <FilterChips
+                filters={advancedFilters}
+                onRemoveFilter={handleRemoveFilter}
+                onClearAll={handleClearAllFilters}
+              />
             </div>
           </div>
+
+          {/* Content */}
+          {loading ? (
+            viewMode === 'grid' ? (
+              <ContentGridSkeleton count={8} />
+            ) : (
+              <ContentListSkeleton count={8} />
+            )
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <FileX2 className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Error Loading Library</h3>
+              <p className="text-sm text-muted-foreground mb-4">{error}</p>
+              <Button onClick={() => fetchItems()} variant="outline">
+                Try Again
+              </Button>
+            </div>
+          ) : filteredItems.length === 0 ? (
+            items.length === 0 && !searchQuery && contentType === 'all' ? (
+              <LibraryEmptyState onUploadComplete={() => fetchItems()} />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <FileX2 className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">
+                  {searchQuery ? 'No items found' : `No ${contentType} items yet`}
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {searchQuery
+                    ? 'Try adjusting your search or filters'
+                    : `Upload or create ${contentType} content to see it here`}
+                </p>
+                <div className="flex gap-3">
+                  {searchQuery && (
+                    <Button onClick={() => setSearchQuery('')} variant="outline">
+                      Clear Search
+                    </Button>
+                  )}
+                  {contentType !== 'all' && (
+                    <Button onClick={() => setContentType('all')} variant="outline">
+                      View All Content
+                    </Button>
+                  )}
+                  <Button onClick={handleClearAllFilters} variant="outline">
+                    Clear All Filters
+                  </Button>
+                </div>
+              </div>
+            )
+          ) : (
+            <div
+              className={
+                viewMode === 'grid'
+                  ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
+                  : 'space-y-4'
+              }
+            >
+              {filteredItems.map((item) => (
+                <SelectableContentCard
+                  key={item.id}
+                  item={item}
+                  selected={selectedIds.includes(item.id)}
+                  onSelect={handleSelect}
+                  onDelete={handleDelete}
+                  onShare={handleShare}
+                  onDownload={handleDownload}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Content */}
-      {loading ? (
-        // Loading skeletons with shimmer animation
-        viewMode === 'grid' ? (
-          <ContentGridSkeleton count={8} />
-        ) : (
-          <ContentListSkeleton count={8} />
-        )
-      ) : error ? (
-        // Error state
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <FileX2 className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold mb-2">Error Loading Library</h3>
-          <p className="text-sm text-muted-foreground mb-4">{error}</p>
-          <Button onClick={() => fetchItems()} variant="outline">
-            Try Again
-          </Button>
-        </div>
-      ) : filteredItems.length === 0 ? (
-        // Enhanced empty state
-        items.length === 0 && !searchQuery && contentType === 'all' ? (
-          // True empty library - show comprehensive onboarding
-          <LibraryEmptyState onUploadComplete={() => fetchItems()} />
-        ) : (
-          // Filtered view with no results
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <FileX2 className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">
-              {searchQuery ? 'No items found' : `No ${contentType} items yet`}
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              {searchQuery
-                ? 'Try adjusting your search or filters'
-                : `Upload or create ${contentType} content to see it here`}
-            </p>
-            <div className="flex gap-3">
-              {searchQuery && (
-                <Button onClick={() => setSearchQuery('')} variant="outline">
-                  Clear Search
-                </Button>
-              )}
-              {contentType !== 'all' && (
-                <Button onClick={() => setContentType('all')} variant="outline">
-                  View All Content
-                </Button>
-              )}
-            </div>
-          </div>
-        )
-      ) : (
-        // Content grid/list
-        <div
-          className={
-            viewMode === 'grid'
-              ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
-              : 'space-y-4'
-          }
-        >
-          {filteredItems.map((item) => (
-            <SelectableContentCard
-              key={item.id}
-              item={item}
-              selected={selectedIds.includes(item.id)}
-              onSelect={handleSelect}
-              onDelete={handleDelete}
-              onShare={handleShare}
-              onDownload={handleDownload}
-            />
-          ))}
-        </div>
-      )}
 
       {/* Bulk Actions Toolbar */}
       <BulkActionsToolbar
@@ -623,9 +855,10 @@ export default function LibraryPage() {
         onDelete={handleBulkDelete}
         onAddTags={() => setShowTagModal(true)}
         onDownload={handleBulkDownload}
+        onAddToCollection={handleBulkAddToCollection}
       />
 
-      {/* Bulk Tag Modal */}
+      {/* Modals */}
       <BulkTagModal
         open={showTagModal}
         onOpenChange={setShowTagModal}
@@ -633,11 +866,78 @@ export default function LibraryPage() {
         selectedIds={selectedIds}
       />
 
-      {/* Tag Manager Modal */}
       <TagManager
         open={showTagManager}
         onOpenChange={setShowTagManager}
       />
+
+      <CollectionManager
+        open={showCollectionManager}
+        onOpenChange={setShowCollectionManager}
+        collections={collections}
+        onSave={async (data) => {
+          try {
+            const response = await fetch('/api/collections', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data),
+            });
+            if (!response.ok) throw new Error('Failed to create collection');
+            await fetchCollections();
+            toast({ description: 'Collection created successfully' });
+          } catch (error) {
+            console.error('Failed to create collection:', error);
+            toast({
+              variant: 'destructive',
+              title: 'Error',
+              description: 'Failed to create collection',
+            });
+            throw error;
+          }
+        }}
+      />
+
+      {showCollectionPicker && (
+        <Sheet open={showCollectionPicker} onOpenChange={setShowCollectionPicker}>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>Add to Collection</SheetTitle>
+            </SheetHeader>
+            <div className="mt-4">
+              <CollectionPicker
+                collections={collections}
+                selectedId={null}
+                onSelect={(id) => id && handleAddToCollection(id)}
+                placeholder="Select a collection..."
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
+
+      <UploadModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onUploadComplete={() => {
+          fetchItems();
+          setShowUploadModal(false);
+        }}
+      />
+
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        selectedItems={selectedIds}
+        totalItems={items.length}
+      />
     </div>
+  );
+}
+
+export default function LibraryPage() {
+  return (
+    <KeyboardShortcutsProvider>
+      <LibraryPageContent />
+    </KeyboardShortcutsProvider>
   );
 }
