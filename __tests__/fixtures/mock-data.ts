@@ -391,6 +391,9 @@ export function createMockAudioFile(
   return createMockFile(name, content, 'audio/mpeg');
 }
 
+// Note: For more advanced audio file mocking with metadata, see __tests__/fixtures/audio-helpers.ts
+// which provides format-specific helpers (MP3, WAV, M4A, OGG) with duration, bitrate, etc.
+
 export function createMockPdfFile(name = 'test-doc.pdf', sizeMB = 2): File {
   const content = 'x'.repeat(sizeMB * 1024 * 1024);
   return createMockFile(name, content, 'application/pdf');
@@ -502,4 +505,263 @@ export function createMockRecordingsWithTypes(): MockRecording[] {
     createMockDocumentRecording({ id: 'rec-pdf' }),
     createMockTextRecording({ id: 'rec-text' }),
   ];
+}
+
+// ==================== Tags (Phase 8) ====================
+
+export interface MockTag {
+  id: string;
+  org_id: string;
+  name: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export const mockTag: MockTag = {
+  id: 'tag-123',
+  org_id: 'org-123',
+  name: 'Important',
+  color: '#ef4444',
+  created_at: '2025-01-15T10:00:00Z',
+  updated_at: '2025-01-15T10:00:00Z',
+  deleted_at: null,
+};
+
+export function createMockTag(overrides?: Partial<MockTag>): MockTag {
+  return { ...mockTag, ...overrides };
+}
+
+export function createMockTags(count: number): MockTag[] {
+  const colors = ['#ef4444', '#f97316', '#22c55e', '#3b82f6', '#8b5cf6'];
+  return Array.from({ length: count }, (_, i) =>
+    createMockTag({
+      id: `tag-${i}`,
+      name: `Tag ${i}`,
+      color: colors[i % colors.length],
+    })
+  );
+}
+
+export interface MockRecordingTag {
+  id: string;
+  recording_id: string;
+  tag_id: string;
+  created_at: string;
+}
+
+export const mockRecordingTag: MockRecordingTag = {
+  id: 'rec-tag-123',
+  recording_id: 'recording-123',
+  tag_id: 'tag-123',
+  created_at: '2025-01-15T10:00:00Z',
+};
+
+export function createMockRecordingTag(
+  overrides?: Partial<MockRecordingTag>
+): MockRecordingTag {
+  return { ...mockRecordingTag, ...overrides };
+}
+
+// ==================== Analytics (Phase 8) ====================
+
+export interface MockSearchAnalytics {
+  id: string;
+  org_id: string;
+  user_id: string;
+  search_query: string;
+  search_type: 'semantic' | 'keyword' | 'visual';
+  result_count: number;
+  latency_ms: number;
+  filters_used: Record<string, any> | null;
+  created_at: string;
+}
+
+export const mockSearchAnalytics: MockSearchAnalytics = {
+  id: 'search-analytics-123',
+  org_id: 'org-123',
+  user_id: 'user-123',
+  search_query: 'test query',
+  search_type: 'semantic',
+  result_count: 5,
+  latency_ms: 250,
+  filters_used: null,
+  created_at: '2025-01-15T10:00:00Z',
+};
+
+export function createMockSearchAnalytics(
+  overrides?: Partial<MockSearchAnalytics>
+): MockSearchAnalytics {
+  return { ...mockSearchAnalytics, ...overrides };
+}
+
+export function createMockSearchAnalyticsSet(): MockSearchAnalytics[] {
+  return [
+    createMockSearchAnalytics({
+      id: 'sa-1',
+      search_type: 'semantic',
+      latency_ms: 200,
+      created_at: hoursAgo(1),
+    }),
+    createMockSearchAnalytics({
+      id: 'sa-2',
+      search_type: 'keyword',
+      latency_ms: 100,
+      created_at: hoursAgo(2),
+    }),
+    createMockSearchAnalytics({
+      id: 'sa-3',
+      search_type: 'visual',
+      latency_ms: 500,
+      created_at: hoursAgo(3),
+    }),
+  ];
+}
+
+export interface MockActivityLog {
+  id: string;
+  org_id: string;
+  user_id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  metadata: Record<string, any> | null;
+  created_at: string;
+}
+
+export const mockActivityLog: MockActivityLog = {
+  id: 'activity-123',
+  org_id: 'org-123',
+  user_id: 'user-123',
+  action: 'recording.created',
+  entity_type: 'recording',
+  entity_id: 'recording-123',
+  metadata: null,
+  created_at: '2025-01-15T10:00:00Z',
+};
+
+export function createMockActivityLog(
+  overrides?: Partial<MockActivityLog>
+): MockActivityLog {
+  return { ...mockActivityLog, ...overrides };
+}
+
+export function createMockActivityLogs(count: number): MockActivityLog[] {
+  const actions = [
+    'recording.created',
+    'recording.updated',
+    'recording.deleted',
+    'search.performed',
+    'tag.created',
+  ];
+  return Array.from({ length: count }, (_, i) =>
+    createMockActivityLog({
+      id: `activity-${i}`,
+      action: actions[i % actions.length],
+      created_at: hoursAgo(count - i),
+    })
+  );
+}
+
+// ==================== Collections (Phase 8) ====================
+
+export interface MockCollection {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  parent_id: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export const mockCollection: MockCollection = {
+  id: 'collection-123',
+  org_id: 'org-123',
+  name: 'My Collection',
+  description: 'A test collection',
+  parent_id: null,
+  created_by: 'user-123',
+  created_at: '2025-01-15T10:00:00Z',
+  updated_at: '2025-01-15T10:00:00Z',
+  deleted_at: null,
+};
+
+export function createMockCollection(
+  overrides?: Partial<MockCollection>
+): MockCollection {
+  return { ...mockCollection, ...overrides };
+}
+
+export function createMockNestedCollections(): MockCollection[] {
+  return [
+    createMockCollection({ id: 'col-1', name: 'Parent Collection' }),
+    createMockCollection({
+      id: 'col-2',
+      name: 'Child Collection',
+      parent_id: 'col-1',
+    }),
+    createMockCollection({
+      id: 'col-3',
+      name: 'Grandchild Collection',
+      parent_id: 'col-2',
+    }),
+  ];
+}
+
+export interface MockCollectionItem {
+  id: string;
+  collection_id: string;
+  recording_id: string;
+  added_by: string;
+  created_at: string;
+}
+
+export const mockCollectionItem: MockCollectionItem = {
+  id: 'col-item-123',
+  collection_id: 'collection-123',
+  recording_id: 'recording-123',
+  added_by: 'user-123',
+  created_at: '2025-01-15T10:00:00Z',
+};
+
+export function createMockCollectionItem(
+  overrides?: Partial<MockCollectionItem>
+): MockCollectionItem {
+  return { ...mockCollectionItem, ...overrides };
+}
+
+// ==================== Favorites (Phase 8) ====================
+
+export interface MockFavorite {
+  id: string;
+  user_id: string;
+  recording_id: string;
+  created_at: string;
+}
+
+export const mockFavorite: MockFavorite = {
+  id: 'favorite-123',
+  user_id: 'user-123',
+  recording_id: 'recording-123',
+  created_at: '2025-01-15T10:00:00Z',
+};
+
+export function createMockFavorite(
+  overrides?: Partial<MockFavorite>
+): MockFavorite {
+  return { ...mockFavorite, ...overrides };
+}
+
+export function createMockFavorites(count: number): MockFavorite[] {
+  return Array.from({ length: count }, (_, i) =>
+    createMockFavorite({
+      id: `favorite-${i}`,
+      recording_id: `recording-${i}`,
+      created_at: hoursAgo(count - i),
+    })
+  );
 }

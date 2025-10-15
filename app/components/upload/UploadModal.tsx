@@ -63,6 +63,8 @@ interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUploadComplete?: (recordingIds: string[]) => void;
+  defaultTags?: string[];
+  defaultCollectionId?: string;
 }
 
 /**
@@ -201,93 +203,140 @@ export default function UploadModal({
   }, [files]);
 
   /**
+   * Upload files in batch with progress tracking
+   */
+  const uploadBatch = async (batchFiles: UploadFile[]): Promise<string[]> => {
+    const formData = new FormData();
+
+    // Add all files to FormData
+    batchFiles.forEach(uploadFile => {
+      formData.append('files', uploadFile.file);
+    });
+
+    try {
+      // Update all files to uploading
+      setFiles((prev) =>
+        prev.map((f) => {
+          const isInBatch = batchFiles.some(bf => bf.id === f.id);
+          return isInBatch ? { ...f, status: 'uploading', progress: 0 } : f;
+        })
+      );
+
+      // Track upload progress
+      const xhr = new XMLHttpRequest();
+
+      // Progress tracking
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = (event.loaded / event.total) * 100;
+          setFiles((prev) =>
+            prev.map((f) => {
+              const isInBatch = batchFiles.some(bf => bf.id === f.id);
+              return isInBatch ? { ...f, progress: percentComplete } : f;
+            })
+          );
+        }
+      });
+
+      // Create promise for the XHR request
+      const uploadPromise = new Promise<any>((resolve, reject) => {
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const response = JSON.parse(xhr.responseText);
+              resolve(response);
+            } catch (e) {
+              reject(new Error('Invalid response format'));
+            }
+          } else {
+            reject(new Error(`Upload failed with status: ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener('error', () => reject(new Error('Network error')));
+        xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+      });
+
+      // Send request
+      xhr.open('POST', '/api/library/upload');
+      xhr.send(formData);
+
+      const result = await uploadPromise;
+      const recordingIds: string[] = [];
+
+      // Process results
+      if (result.data?.uploads) {
+        result.data.uploads.forEach((uploadResult: any, index: number) => {
+          const uploadFile = batchFiles[index];
+          if (!uploadFile) return;
+
+          if (uploadResult.status === 'success') {
+            recordingIds.push(uploadResult.id);
+            setFiles((prev) =>
+              prev.map((f) =>
+                f.id === uploadFile.id
+                  ? {
+                      ...f,
+                      status: 'success',
+                      progress: 100,
+                      recordingId: uploadResult.id,
+                    }
+                  : f
+              )
+            );
+          } else {
+            setFiles((prev) =>
+              prev.map((f) =>
+                f.id === uploadFile.id
+                  ? {
+                      ...f,
+                      status: 'error',
+                      error: uploadResult.error || 'Upload failed',
+                      retryCount: (f.retryCount || 0) + 1,
+                    }
+                  : f
+              )
+            );
+          }
+        });
+      }
+
+      return recordingIds;
+    } catch (error: any) {
+      // Mark all batch files as failed
+      batchFiles.forEach(uploadFile => {
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === uploadFile.id
+              ? {
+                  ...f,
+                  status: 'error',
+                  error: error.message || 'Upload failed',
+                  retryCount: (f.retryCount || 0) + 1,
+                }
+              : f
+          )
+        );
+      });
+
+      logError(error, {
+        batchSize: batchFiles.length,
+        totalSize: batchFiles.reduce((sum, f) => sum + f.file.size, 0)
+      });
+
+      return [];
+    }
+  };
+
+  /**
    * Upload a single file with retry logic
    */
   const uploadFile = async (uploadFile: UploadFile): Promise<string | null> => {
     try {
-      // Update status to uploading
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === uploadFile.id
-            ? { ...f, status: 'uploading', progress: 0 }
-            : f
-        )
-      );
-
-      const formData = new FormData();
-      formData.append('file', uploadFile.file);
-      formData.append('contentType', uploadFile.contentType);
-      formData.append('fileType', uploadFile.fileType);
-
-      // Use fetchWithRetry for automatic retry on network errors
-      const result = await fetchWithRetry(
-        '/api/library/upload',
-        {
-          method: 'POST',
-          body: formData,
-        },
-        {
-          maxAttempts: 3,
-          shouldRetry: (error) => {
-            // Retry on network errors and 5xx errors, but not on validation errors
-            return error.code === 'NETWORK_ERROR' ||
-                   (error.statusCode !== undefined && error.statusCode >= 500);
-          },
-        }
-      );
-
-      const recordingId = result.data?.recording?.id || result.data?.recordingId;
-
-      // Update to success
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === uploadFile.id
-            ? {
-                ...f,
-                status: 'success',
-                progress: 100,
-                recordingId,
-              }
-            : f
-        )
-      );
-
-      return recordingId;
+      // For single file, use batch upload with one file for consistency
+      const recordingIds = await uploadBatch([uploadFile]);
+      return recordingIds[0] || null;
     } catch (error: any) {
-      let errorMessage = 'Upload failed';
-
-      // Provide more specific error messages
-      if (error.code === 'NETWORK_ERROR') {
-        errorMessage = 'Network error. Please check your connection and try again.';
-      } else if (error.code === 'FILE_TOO_LARGE') {
-        errorMessage = `File exceeds maximum size limit.`;
-      } else if (error.code === 'INVALID_FILE_TYPE') {
-        errorMessage = 'File type not supported.';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
-      // Log error for debugging
-      logError(error, {
-        fileName: uploadFile.file.name,
-        fileSize: uploadFile.file.size,
-        contentType: uploadFile.contentType
-      });
-
-      // Update to error
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === uploadFile.id
-            ? {
-                ...f,
-                status: 'error',
-                error: errorMessage,
-                retryCount: (f.retryCount || 0) + 1,
-              }
-            : f
-        )
-      );
-
       return null;
     }
   };
@@ -303,14 +352,14 @@ export default function UploadModal({
     setIsUploading(true);
 
     try {
-      // Upload files sequentially to avoid overwhelming the server
       const recordingIds: string[] = [];
+      const BATCH_SIZE = 5; // Upload 5 files at a time
 
-      for (const file of validFiles) {
-        const recordingId = await uploadFile(file);
-        if (recordingId) {
-          recordingIds.push(recordingId);
-        }
+      // Split files into batches
+      for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
+        const batch = validFiles.slice(i, i + BATCH_SIZE);
+        const batchIds = await uploadBatch(batch);
+        recordingIds.push(...batchIds);
       }
 
       // Call completion handler
@@ -318,10 +367,13 @@ export default function UploadModal({
         onUploadComplete(recordingIds);
       }
 
-      // Auto-close after successful uploads
-      setTimeout(() => {
-        handleClose();
-      }, 1500);
+      // Auto-close after successful uploads if all succeeded
+      const hasErrors = files.some((f) => f.status === 'error');
+      if (!hasErrors) {
+        setTimeout(() => {
+          handleClose();
+        }, 1500);
+      }
     } finally {
       setIsUploading(false);
     }

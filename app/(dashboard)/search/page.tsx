@@ -1,14 +1,21 @@
 'use client';
 
 /**
- * Search Page
+ * Enhanced Search Page
+ * Semantic search with Phase 8 advanced filtering
  *
- * Semantic search across all recordings with advanced filtering options.
+ * New Features:
+ * - Advanced filters (content type, tags, collections, date range)
+ * - Filter chips showing active filters
+ * - Favorites integration
+ * - Tags display on results
+ * - Collection breadcrumb
+ * - Keyboard shortcuts
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Clock, FileText, Video, Loader2, SlidersHorizontal, Bookmark } from 'lucide-react';
+import { Search, Filter, Clock, FileText, Video, Loader2, SlidersHorizontal, Bookmark, X } from 'lucide-react';
 import Link from 'next/link';
 
 import { staggerContainer, staggerItem, fadeIn } from '@/lib/utils/animations';
@@ -17,6 +24,15 @@ import { SearchFilters, SearchFiltersState } from '@/app/components/search/Searc
 import { SearchSuggestions } from '@/app/components/search/SearchSuggestions';
 import { SavedSearches } from '@/app/components/search/SavedSearches';
 import { Button } from '@/app/components/ui/button';
+import { Badge } from '@/app/components/ui/badge';
+import { Input } from '@/app/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/select';
 import {
   Sheet,
   SheetContent,
@@ -24,7 +40,15 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/app/components/ui/sheet';
-import { Badge } from '@/app/components/ui/badge';
+import { TagFilter } from '@/app/components/tags/TagFilter';
+import { TagBadge } from '@/app/components/tags/TagBadge';
+import { FavoriteButton } from '@/app/components/favorites/FavoriteButton';
+import { CollectionPicker } from '@/app/components/collections/CollectionPicker';
+import { CollectionBreadcrumb } from '@/app/components/collections/CollectionBreadcrumb';
+import { Collection } from '@/app/components/collections/CollectionTree';
+import { DateRangePicker } from '@/app/components/filters/DateRangePicker';
+import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/KeyboardShortcutsProvider';
+import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/app/hooks/useKeyboardShortcuts';
 import { ContentType } from '@/lib/types/database';
 import { CONTENT_TYPE_EMOJI } from '@/lib/types/content';
 
@@ -41,11 +65,23 @@ interface SearchResult {
     chunkIndex?: number;
     startTime?: number;
     endTime?: number;
+    tags?: Array<{ id: string; name: string; color: string }>;
+    collectionId?: string;
+    isFavorite?: boolean;
   };
   createdAt: string;
 }
 
-export default function SearchPage() {
+interface FilterState {
+  contentTypes: ContentType[];
+  tagIds: string[];
+  collectionId: string | null;
+  dateFrom: Date | null;
+  dateTo: Date | null;
+  favoritesOnly: boolean;
+}
+
+function SearchPageContent() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,19 +89,63 @@ export default function SearchPage() {
   const [sourceFilter, setSourceFilter] = useState<'all' | 'transcript' | 'document'>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [filters, setFilters] = useState<SearchFiltersState>({
-    contentTypes: [],
-    dateRange: { from: undefined, to: undefined },
-    tags: [],
-    status: [],
-  });
   const [sortBy, setSortBy] = useState<'relevance' | 'date' | 'name'>('relevance');
+
+  // Advanced filters state
+  const [filters, setFilters] = useState<FilterState>({
+    contentTypes: [],
+    tagIds: [],
+    collectionId: null,
+    dateFrom: null,
+    dateTo: null,
+    favoritesOnly: false,
+  });
+
+  // Tags and collections
+  const [availableTags, setAvailableTags] = useState<any[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [tagFilterMode, setTagFilterMode] = useState<'and' | 'or'>('or');
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSearch = async (e?: React.FormEvent) => {
+  // Fetch tags and collections
+  useEffect(() => {
+    fetchTags();
+    fetchCollections();
+  }, []);
+
+  async function fetchTags() {
+    try {
+      const response = await fetch('/api/tags?includeUsageCount=true&limit=100');
+      if (!response.ok) throw new Error('Failed to fetch tags');
+
+      const data = await response.json();
+      setAvailableTags(data.data.tags || []);
+    } catch (error) {
+      console.error('Error fetching tags:', error);
+    }
+  }
+
+  async function fetchCollections() {
+    try {
+      const response = await fetch('/api/collections');
+      if (!response.ok) throw new Error('Failed to fetch collections');
+
+      const data = await response.json();
+      setCollections(data.data || []);
+    } catch (error) {
+      console.error('Error fetching collections:', error);
+    }
+  }
+
+  const handleSearch = async (e?: React.FormEvent, overrideQuery?: string, overrideFilters?: FilterState) => {
     e?.preventDefault();
-    if (!query.trim()) return;
+
+    // Use override values if provided, otherwise use state
+    const searchQuery = overrideQuery ?? query;
+    const searchFilters = overrideFilters ?? filters;
+
+    if (!searchQuery.trim()) return;
 
     setLoading(true);
     setShowSuggestions(false);
@@ -75,14 +155,15 @@ export default function SearchPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query,
+          query: searchQuery,
           mode: searchMode,
           source: sourceFilter === 'all' ? undefined : sourceFilter,
-          contentTypes: filters.contentTypes.length > 0 ? filters.contentTypes : undefined,
-          dateFrom: filters.dateRange.from?.toISOString(),
-          dateTo: filters.dateRange.to?.toISOString(),
-          tags: filters.tags.length > 0 ? filters.tags : undefined,
-          status: filters.status.length > 0 ? filters.status : undefined,
+          contentTypes: searchFilters.contentTypes.length > 0 ? searchFilters.contentTypes : undefined,
+          dateFrom: searchFilters.dateFrom?.toISOString(),
+          dateTo: searchFilters.dateTo?.toISOString(),
+          tags: searchFilters.tagIds.length > 0 ? searchFilters.tagIds : undefined,
+          collectionId: searchFilters.collectionId || undefined,
+          favoritesOnly: searchFilters.favoritesOnly || undefined,
           limit: 20,
           threshold: 0.7,
         }),
@@ -124,8 +205,7 @@ export default function SearchPage() {
   const handleSelectSavedSearch = (savedSearch: any) => {
     setQuery(savedSearch.query);
     setFilters(savedSearch.filters);
-    // Trigger search automatically
-    setTimeout(() => handleSearch(), 100);
+    handleSearch(undefined, savedSearch.query, savedSearch.filters);
   };
 
   const handleSuggestionSelect = (suggestion: string) => {
@@ -137,10 +217,36 @@ export default function SearchPage() {
   const getActiveFiltersCount = () => {
     let count = 0;
     if (filters.contentTypes.length > 0) count++;
-    if (filters.tags.length > 0) count++;
-    if (filters.status.length > 0) count++;
-    if (filters.dateRange.from || filters.dateRange.to) count++;
+    if (filters.tagIds.length > 0) count++;
+    if (filters.collectionId) count++;
+    if (filters.dateFrom || filters.dateTo) count++;
+    if (filters.favoritesOnly) count++;
     return count;
+  };
+
+  const clearAllFilters = () => {
+    setFilters({
+      contentTypes: [],
+      tagIds: [],
+      collectionId: null,
+      dateFrom: null,
+      dateTo: null,
+      favoritesOnly: false,
+    });
+  };
+
+  const removeContentTypeFilter = (type: ContentType) => {
+    setFilters(prev => ({
+      ...prev,
+      contentTypes: prev.contentTypes.filter(t => t !== type),
+    }));
+  };
+
+  const removeTagFilter = (tagId: string) => {
+    setFilters(prev => ({
+      ...prev,
+      tagIds: prev.tagIds.filter(id => id !== tagId),
+    }));
   };
 
   // Hide suggestions when clicking outside
@@ -161,6 +267,33 @@ export default function SearchPage() {
       setResults(sortResults(results, sortBy));
     }
   }, [sortBy]);
+
+  // Keyboard shortcuts
+  const keyboardShortcuts = useMemo(() => [
+    {
+      ...COMMON_SHORTCUTS.SEARCH,
+      handler: () => searchInputRef.current?.focus(),
+    },
+    {
+      key: 'f',
+      handler: () => setFilters(prev => ({ ...prev, favoritesOnly: !prev.favoritesOnly })),
+      description: 'Toggle favorites filter',
+    },
+    {
+      key: 'Escape',
+      handler: () => {
+        if (showFilters) {
+          setShowFilters(false);
+        } else if (showSuggestions) {
+          setShowSuggestions(false);
+        }
+      },
+      description: 'Close filters/suggestions',
+      preventDefault: false,
+    },
+  ], [showFilters, showSuggestions, setFilters, setShowFilters, setShowSuggestions]);
+
+  useKeyboardShortcuts(keyboardShortcuts);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -187,6 +320,8 @@ export default function SearchPage() {
     );
   };
 
+  const activeFiltersCount = getActiveFiltersCount();
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Header */}
@@ -202,74 +337,285 @@ export default function SearchPage() {
         <div className="flex gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5" />
-            <input
+            <Input
+              ref={searchInputRef}
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search for anything..."
-              className="w-full pl-10 pr-4 py-3 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-transparent"
+              className="pl-10 pr-4 py-6 text-base"
             />
           </div>
-          <button
+          <Button
             type="submit"
             disabled={loading || !query.trim()}
-            className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            size="lg"
           >
             {loading ? 'Searching...' : 'Search'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowFilters(!showFilters)}
-            className="px-4 py-3 border border-input rounded-lg hover:bg-accent flex items-center gap-2"
-          >
-            <Filter className="w-5 h-5" />
-            Filters
-          </button>
+          </Button>
+          <Sheet open={showFilters} onOpenChange={setShowFilters}>
+            <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                size="lg"
+                className="gap-2"
+              >
+                <Filter className="w-5 h-5" />
+                Filters
+                {activeFiltersCount > 0 && (
+                  <Badge variant="secondary">{activeFiltersCount}</Badge>
+                )}
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle>Advanced Filters</SheetTitle>
+              </SheetHeader>
+
+              <div className="space-y-6 mt-6">
+                {/* Search Mode */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Search Mode
+                  </label>
+                  <Select value={searchMode} onValueChange={(v) => setSearchMode(v as any)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vector">Semantic (AI)</SelectItem>
+                      <SelectItem value="hybrid">Hybrid (AI + Keywords)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Source Filter */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Source
+                  </label>
+                  <Select value={sourceFilter} onValueChange={(v) => setSourceFilter(v as any)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Sources</SelectItem>
+                      <SelectItem value="transcript">Transcripts Only</SelectItem>
+                      <SelectItem value="document">Documents Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Content Types */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Content Types
+                  </label>
+                  <div className="space-y-2">
+                    {(['recording', 'video', 'audio', 'document', 'text'] as ContentType[]).map((type) => (
+                      <label key={type} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={filters.contentTypes.includes(type)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFilters(prev => ({
+                                ...prev,
+                                contentTypes: [...prev.contentTypes, type],
+                              }));
+                            } else {
+                              removeContentTypeFilter(type);
+                            }
+                          }}
+                          className="rounded"
+                        />
+                        <span className="text-sm capitalize">{type}s</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tags Filter */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Tags
+                  </label>
+                  <TagFilter
+                    tags={availableTags}
+                    selectedTags={filters.tagIds}
+                    onSelectionChange={(ids) => setFilters(prev => ({ ...prev, tagIds: ids }))}
+                    filterMode={tagFilterMode}
+                    onFilterModeChange={setTagFilterMode}
+                    showCounts={true}
+                  />
+                </div>
+
+                {/* Collection Filter */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Collection
+                  </label>
+                  <CollectionPicker
+                    collections={collections}
+                    selectedId={filters.collectionId}
+                    onSelect={(id) => setFilters(prev => ({ ...prev, collectionId: id }))}
+                    placeholder="All collections"
+                  />
+                </div>
+
+                {/* Date Range */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Date Range
+                  </label>
+                  <DateRangePicker
+                    from={filters.dateFrom}
+                    to={filters.dateTo}
+                    onSelect={(range) => setFilters(prev => ({
+                      ...prev,
+                      dateFrom: range?.from || null,
+                      dateTo: range?.to || null,
+                    }))}
+                  />
+                </div>
+
+                {/* Favorites Only */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filters.favoritesOnly}
+                    onChange={(e) => setFilters(prev => ({ ...prev, favoritesOnly: e.target.checked }))}
+                    className="rounded"
+                  />
+                  <Bookmark className="w-4 h-4" />
+                  <span className="text-sm">Favorites only</span>
+                </label>
+
+                {/* Clear Filters */}
+                {activeFiltersCount > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={clearAllFilters}
+                    className="w-full"
+                  >
+                    Clear all filters
+                  </Button>
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
 
-        {/* Filters */}
-        {showFilters && (
-          <div className="mt-4 p-4 border border-border rounded-lg bg-muted/50">
-            <div className="grid grid-cols-2 gap-4">
-              {/* Search Mode */}
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Search Mode
-                </label>
-                <select
-                  value={searchMode}
-                  onChange={(e) => setSearchMode(e.target.value as 'vector' | 'hybrid')}
-                  className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-ring"
-                >
-                  <option value="vector">Semantic (AI)</option>
-                  <option value="hybrid">Hybrid (AI + Keywords)</option>
-                </select>
-              </div>
+        {/* Active Filters Chips */}
+        {activeFiltersCount > 0 && (
+          <div className="mt-4 flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-muted-foreground">Active filters:</span>
 
-              {/* Source Filter */}
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Source
-                </label>
-                <select
-                  value={sourceFilter}
-                  onChange={(e) => setSourceFilter(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-ring"
+            {/* Content Type Filters */}
+            {filters.contentTypes.map((type) => (
+              <Badge key={type} variant="secondary" className="gap-1">
+                <span>Type: {type}</span>
+                <button
+                  type="button"
+                  onClick={() => removeContentTypeFilter(type)}
+                  className="hover:bg-black/10 rounded-full p-0.5"
                 >
-                  <option value="all">All Sources</option>
-                  <option value="transcript">Transcripts Only</option>
-                  <option value="document">Documents Only</option>
-                </select>
-              </div>
-            </div>
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+
+            {/* Tag Filters */}
+            {filters.tagIds.map((tagId) => {
+              const tag = availableTags.find(t => t.id === tagId);
+              return tag ? (
+                <TagBadge
+                  key={tagId}
+                  tag={tag}
+                  onRemove={() => removeTagFilter(tagId)}
+                  showRemoveButton
+                />
+              ) : null;
+            })}
+
+            {/* Collection Filter */}
+            {filters.collectionId && (
+              <Badge variant="secondary" className="gap-1">
+                <span>Collection</span>
+                <button
+                  type="button"
+                  onClick={() => setFilters(prev => ({ ...prev, collectionId: null }))}
+                  className="hover:bg-black/10 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+
+            {/* Favorites Filter */}
+            {filters.favoritesOnly && (
+              <Badge variant="secondary" className="gap-1">
+                <Bookmark className="w-3 h-3" />
+                <span>Favorites</span>
+                <button
+                  type="button"
+                  onClick={() => setFilters(prev => ({ ...prev, favoritesOnly: false }))}
+                  className="hover:bg-black/10 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+
+            {/* Date Range Filter */}
+            {(filters.dateFrom || filters.dateTo) && (
+              <Badge variant="secondary" className="gap-1">
+                <span>Date range</span>
+                <button
+                  type="button"
+                  onClick={() => setFilters(prev => ({ ...prev, dateFrom: null, dateTo: null }))}
+                  className="hover:bg-black/10 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              className="h-6 px-2 text-xs"
+            >
+              Clear all
+            </Button>
           </div>
         )}
       </form>
 
+      {/* Sort Options */}
+      {results.length > 0 && (
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-muted-foreground">
+            Found {results.length} result{results.length !== 1 ? 's' : ''} for "{query}"
+          </p>
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+            <SelectTrigger className="w-[180px]">
+              <SlidersHorizontal className="mr-2 h-4 w-4" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="relevance">Most Relevant</SelectItem>
+              <SelectItem value="date">Most Recent</SelectItem>
+              <SelectItem value="name">Name A-Z</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Results */}
       <AnimatePresence mode="wait">
         {loading ? (
-          // Loading state
           <motion.div
             key="loading"
             initial={{ opacity: 0 }}
@@ -289,24 +635,11 @@ export default function SearchPage() {
             exit="exit"
             className="space-y-4"
           >
-            <motion.div
-              className="text-sm text-muted-foreground mb-4"
-              variants={fadeIn}
-            >
-              Found {results.length} result{results.length !== 1 ? 's' : ''} for "{query}"
-            </motion.div>
-
             {results.map((result) => (
               <motion.div
                 key={result.id}
                 variants={staggerItem}
-                className="border border-border rounded-lg p-5 transition-all"
-                whileHover={{
-                  borderColor: 'rgba(var(--primary), 0.5)',
-                  boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
-                  y: -2,
-                  transition: { duration: 0.2 },
-                }}
+                className="border border-border rounded-lg p-5 transition-all hover:shadow-md"
               >
                 {/* Result Header */}
                 <div className="flex items-start justify-between mb-3">
@@ -340,26 +673,48 @@ export default function SearchPage() {
                       </span>
                     </div>
                   </div>
+
+                  {/* Favorite Button */}
+                  <FavoriteButton
+                    recordingId={result.recordingId}
+                    isFavorite={result.metadata.isFavorite || false}
+                    size="sm"
+                  />
                 </div>
 
                 {/* Result Text */}
-                <p className="text-foreground leading-relaxed">
+                <p className="text-foreground leading-relaxed mb-3">
                   {highlightText(result.chunkText, query)}
                 </p>
+
+                {/* Tags */}
+                {result.metadata.tags && result.metadata.tags.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {result.metadata.tags.map((tag) => (
+                      <TagBadge key={tag.id} tag={tag} />
+                    ))}
+                  </div>
+                )}
               </motion.div>
             ))}
           </motion.div>
         ) : query ? (
-          // No results found
           <SearchNoResultsState
             query={query}
             onClearSearch={() => setQuery('')}
           />
         ) : (
-          // Initial state - no search performed yet
           <SearchInitialState />
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <KeyboardShortcutsProvider>
+      <SearchPageContent />
+    </KeyboardShortcutsProvider>
   );
 }
