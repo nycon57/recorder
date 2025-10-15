@@ -46,7 +46,7 @@ COHERE_RERANK_MODEL=rerank-english-v3.0
 
 # Optional: Configure summary generation
 SUMMARY_MAX_TOKENS=500
-SUMMARY_MODEL=gemini-2.0-flash-exp
+SUMMARY_MODEL=gemini-2.5-flash
 ```
 
 ---
@@ -70,7 +70,7 @@ CREATE TABLE recording_summaries (
 
   -- Metadata
   token_count INTEGER,
-  model TEXT DEFAULT 'gemini-2.0-flash-exp',
+  model TEXT DEFAULT 'gemini-2.5-flash',
   generated_at TIMESTAMPTZ DEFAULT now(),
 
   -- Additional context
@@ -180,7 +180,7 @@ type Document = Database['public']['Tables']['documents']['Row'];
 export interface SummaryOptions {
   /** Maximum tokens in summary (default: 500) */
   maxTokens?: number;
-  /** Model to use (default: gemini-2.0-flash-exp) */
+  /** Model to use (default: gemini-2.5-flash) */
   model?: string;
   /** Focus areas for summary */
   focus?: 'technical' | 'general' | 'actions';
@@ -213,7 +213,7 @@ export async function generateRecordingSummary(
 ): Promise<SummaryResult> {
   const {
     maxTokens = parseInt(process.env.SUMMARY_MAX_TOKENS || '500'),
-    model = process.env.SUMMARY_MODEL || 'gemini-2.0-flash-exp',
+    model = process.env.SUMMARY_MODEL || 'gemini-2.5-flash',
     focus = 'general',
   } = options;
 

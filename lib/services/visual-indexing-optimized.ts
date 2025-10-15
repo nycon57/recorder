@@ -54,7 +54,7 @@ export async function describeFrameOptimized(
   // Use provided model or create new one
   if (!model) {
     const genAI = getGoogleAI();
-    model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   }
 
   const imageBase64 = imageBuffer.toString('base64');
@@ -225,7 +225,7 @@ export async function indexRecordingFramesOptimized(
   // OPTIMIZATION 2: Process in larger parallel batches
   const BATCH_SIZE = parseInt(process.env.VISUAL_INDEXING_BATCH_SIZE || '20');
   const genAI = getGoogleAI();
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const allResults: Array<{
     frameId: string;
@@ -353,7 +353,7 @@ export async function* streamProcessFrames(
   frames: AsyncIterable<{ id: string; buffer: Buffer; frameNumber: number }>
 ): AsyncGenerator<VisualDescription> {
   const genAI = getGoogleAI();
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   for await (const frame of frames) {
     try {

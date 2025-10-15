@@ -40,7 +40,7 @@ export async function evaluateResults(
   }
 
   const model = googleAI.getGenerativeModel({
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-2.5-flash',
   });
 
   // Prepare chunks for evaluation

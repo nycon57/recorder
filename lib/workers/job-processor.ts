@@ -7,6 +7,10 @@
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
+import { createLogger } from '@/lib/utils/logger';
+import { streamingManager } from '@/lib/services/streaming-processor';
+
+const processorLogger = createLogger({ service: 'job-processor' });
 
 // GEMINI VIDEO MODE: Using Gemini for video understanding, doc generation, and embeddings
 import { transcribeRecording } from './handlers/transcribe-gemini-video';
@@ -39,7 +43,41 @@ type JobType = Job['type'];
 type JobStatus = Job['status'];
 
 interface JobHandler {
-  (job: Job): Promise<void>;
+  (job: Job, progressCallback?: ProgressCallback): Promise<void>;
+}
+
+export interface ProgressCallback {
+  (percent: number, message: string, data?: any): void;
+}
+
+/**
+ * Update job progress in database and stream to connected clients
+ */
+export async function updateJobProgress(
+  jobId: string,
+  recordingId: string,
+  percent: number,
+  message: string,
+  data?: any
+): Promise<void> {
+  const supabase = createAdminClient();
+
+  // Update database
+  await supabase
+    .from('jobs')
+    .update({
+      progress_percent: Math.min(100, Math.max(0, percent)),
+      progress_message: message,
+    })
+    .eq('id', jobId);
+
+  // Stream to connected clients
+  streamingManager.sendProgress(recordingId, 'all', percent, message, data);
+
+  processorLogger.debug('Job progress updated', {
+    context: { jobId, recordingId },
+    data: { percent, message },
+  });
 }
 
 // Stub handlers for future job types
@@ -119,9 +157,12 @@ export async function processJobs(options?: {
  */
 async function processJob(job: Job, maxRetries: number): Promise<void> {
   const supabase = createAdminClient();
+  const recordingId = (job.payload as any)?.recordingId;
 
   try {
-    console.log(`[Job ${job.id}] Processing job type: ${job.type}`);
+    processorLogger.info('Processing job', {
+      context: { jobId: job.id, recordingId, jobType: job.type },
+    });
 
     // Mark job as processing
     await supabase
@@ -129,8 +170,18 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
       .update({
         status: 'processing' as JobStatus,
         started_at: new Date().toISOString(),
+        progress_percent: 0,
+        progress_message: 'Starting job...',
       })
       .eq('id', job.id);
+
+    // Stream initial progress
+    if (recordingId) {
+      streamingManager.sendProgress(recordingId, 'all', 0, 'Starting job...', {
+        jobId: job.id,
+        jobType: job.type,
+      });
+    }
 
     // Get handler for job type
     const handler = JOB_HANDLERS[job.type];
@@ -138,8 +189,15 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
       throw new Error(`Unknown job type: ${job.type}`);
     }
 
-    // Execute handler
-    await handler(job);
+    // Create progress callback
+    const progressCallback: ProgressCallback = (percent, message, data) => {
+      if (recordingId) {
+        updateJobProgress(job.id, recordingId, percent, message, data);
+      }
+    };
+
+    // Execute handler with progress callback
+    await handler(job, progressCallback);
 
     // Mark job as completed
     await supabase
@@ -147,16 +205,32 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
       .update({
         status: 'completed' as JobStatus,
         completed_at: new Date().toISOString(),
+        progress_percent: 100,
+        progress_message: 'Completed',
       })
       .eq('id', job.id);
 
-    console.log(`[Job ${job.id}] Completed successfully`);
+    // Stream completion
+    if (recordingId) {
+      streamingManager.sendProgress(recordingId, 'all', 100, 'Job completed successfully', {
+        jobId: job.id,
+        jobType: job.type,
+      });
+    }
+
+    processorLogger.info('Job completed successfully', {
+      context: { jobId: job.id, recordingId },
+    });
 
   } catch (error) {
-    console.error(`[Job ${job.id}] Error:`, error);
+    processorLogger.error('Job processing failed', {
+      context: { jobId: job.id, recordingId },
+      error: error as Error,
+    });
 
     const attemptCount = job.attempts + 1;
     const shouldRetry = attemptCount < maxRetries;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     if (shouldRetry) {
       // Schedule retry with exponential backoff
@@ -169,11 +243,24 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
           status: 'pending' as JobStatus,
           attempts: attemptCount,
           run_at: runAfter,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errorMessage,
+          progress_percent: null,
+          progress_message: `Retry scheduled (${attemptCount}/${maxRetries})`,
         })
         .eq('id', job.id);
 
-      console.log(`[Job ${job.id}] Scheduled retry ${attemptCount}/${maxRetries} in ${retryDelay}ms`);
+      // Stream retry notification
+      if (recordingId) {
+        streamingManager.sendLog(
+          recordingId,
+          `Job failed, scheduling retry ${attemptCount}/${maxRetries} in ${retryDelay}ms`,
+          { error: errorMessage }
+        );
+      }
+
+      processorLogger.info('Job retry scheduled', {
+        context: { jobId: job.id, recordingId, attemptCount, maxRetries, retryDelay },
+      });
     } else {
       // Mark as failed
       await supabase
@@ -181,11 +268,24 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
         .update({
           status: 'failed' as JobStatus,
           attempts: attemptCount,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errorMessage,
+          progress_percent: null,
+          progress_message: 'Failed',
         })
         .eq('id', job.id);
 
-      console.log(`[Job ${job.id}] Failed after ${maxRetries} attempts`);
+      // Stream error
+      if (recordingId) {
+        streamingManager.sendError(
+          recordingId,
+          `Job failed after ${maxRetries} attempts: ${errorMessage}`
+        );
+      }
+
+      processorLogger.error('Job failed permanently', {
+        context: { jobId: job.id, recordingId, attemptCount, maxRetries },
+        error: error as Error,
+      });
     }
   }
 }

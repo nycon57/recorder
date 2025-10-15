@@ -12,9 +12,11 @@ import {
   DropdownMenuSeparator,
 } from '@/app/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils/cn';
+import ReprocessStreamModal from './ReprocessStreamModal';
 
 interface Recording {
   id: string;
+  title?: string | null;
   status: 'uploading' | 'uploaded' | 'transcribing' | 'transcribed' | 'doc_generating' | 'completed' | 'error';
   created_at: string;
   updated_at: string;
@@ -43,6 +45,9 @@ export default function ProcessingPipeline({
   hasDocument,
   onReprocess,
 }: ProcessingPipelineProps) {
+  const [reprocessModalOpen, setReprocessModalOpen] = React.useState(false);
+  const [reprocessStep, setReprocessStep] = React.useState<'transcribe' | 'document' | 'embeddings' | 'all'>('all');
+
   const getStepStatus = (): PipelineStep[] => {
     const steps: PipelineStep[] = [
       {
@@ -152,11 +157,21 @@ export default function ProcessingPipeline({
   };
 
   const handleRetry = async (step: string) => {
+    // Map step to reprocess modal format
+    const stepMap: Record<string, 'transcribe' | 'document' | 'embeddings' | 'all'> = {
+      transcribe: 'transcribe',
+      document: 'document',
+      embeddings: 'embeddings',
+      all: 'all',
+    };
+
+    const mappedStep = stepMap[step] || 'all';
+    setReprocessStep(mappedStep);
+    setReprocessModalOpen(true);
+
+    // Also call onReprocess if provided
     if (onReprocess) {
       onReprocess(step);
-    } else {
-      // Default retry behavior - reload page
-      window.location.reload();
     }
   };
 
@@ -261,8 +276,8 @@ export default function ProcessingPipeline({
             </div>
           )}
 
-          {/* Reprocess Button (for testing) */}
-          {(hasTranscript || hasDocument || recording.status === 'completed') && onReprocess && (
+          {/* Reprocess Button */}
+          {(hasTranscript || hasDocument || recording.status === 'completed') && (
             <div className="pt-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -295,6 +310,15 @@ export default function ProcessingPipeline({
           )}
         </div>
       </CardContent>
+
+      {/* Reprocess Stream Modal */}
+      <ReprocessStreamModal
+        open={reprocessModalOpen}
+        onOpenChange={setReprocessModalOpen}
+        recordingId={recording.id}
+        step={reprocessStep}
+        recordingTitle={recording.title || undefined}
+      />
     </Card>
   );
 }

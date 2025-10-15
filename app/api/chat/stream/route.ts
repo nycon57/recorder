@@ -6,7 +6,6 @@
  */
 
 import { NextRequest } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import {
   generateStreamingRAGResponse,
   saveChatMessage,
@@ -14,6 +13,7 @@ import {
   getConversationHistory,
 } from '@/lib/services/rag-google';
 import { rateLimiters } from '@/lib/rate-limit/limiter';
+import { requireOrg } from '@/lib/utils/api';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,32 +24,39 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    const { userId, orgId } = await auth();
+    // Get internal org/user UUIDs (not Clerk IDs)
+    const { userId, orgId, clerkUserId } = await requireOrg();
 
     if (!userId || !orgId) {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    // Rate limit check
-    const rateLimitResult = await rateLimiters.chat(userId);
-    if (!rateLimitResult.success) {
-      const retryAfter = rateLimitResult.reset - Math.floor(Date.now() / 1000);
-      return new Response(
-        JSON.stringify({
-          error: 'Too many requests. Please try again later.',
-          retryAfter,
-        }),
-        {
-          status: 429,
-          headers: {
-            'Content-Type': 'application/json',
-            'Retry-After': retryAfter.toString(),
-            'X-RateLimit-Limit': rateLimitResult.limit.toString(),
-            'X-RateLimit-Remaining': '0',
-            'X-RateLimit-Reset': rateLimitResult.reset.toString(),
-          },
-        }
-      );
+    // Rate limit check (use Clerk user ID for rate limiting)
+    // Skip rate limiting if Redis is not configured
+    const isRedisConfigured = process.env.UPSTASH_REDIS_REST_URL &&
+      !process.env.UPSTASH_REDIS_REST_URL.includes('your-redis');
+
+    if (isRedisConfigured) {
+      const rateLimitResult = await rateLimiters.chat(clerkUserId);
+      if (!rateLimitResult.success) {
+        const retryAfter = rateLimitResult.reset - Math.floor(Date.now() / 1000);
+        return new Response(
+          JSON.stringify({
+            error: 'Too many requests. Please try again later.',
+            retryAfter,
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': retryAfter.toString(),
+              'X-RateLimit-Limit': rateLimitResult.limit.toString(),
+              'X-RateLimit-Remaining': '0',
+              'X-RateLimit-Reset': rateLimitResult.reset.toString(),
+            },
+          }
+        );
+      }
     }
 
     const body = await request.json();

@@ -12,6 +12,12 @@ export type OrganizationPlan = 'free' | 'pro' | 'enterprise';
 
 export type UserRole = 'owner' | 'admin' | 'contributor' | 'reader';
 
+export type UserStatus = 'active' | 'inactive' | 'pending' | 'suspended';
+
+export type Visibility = 'private' | 'department' | 'org' | 'public';
+
+export type WebhookStatus = 'healthy' | 'degraded' | 'failing' | 'disabled';
+
 export type RecordingStatus =
   | 'uploading'
   | 'uploaded'
@@ -37,7 +43,7 @@ export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 
 export type ShareTargetType = 'recording' | 'document';
 
-export type ChatRole = 'user' | 'assistant' | 'system';
+export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
 
 export type ConnectorType =
   | 'google_drive'
@@ -83,6 +89,19 @@ export interface Database {
           clerk_org_id: string | null;
           plan: OrganizationPlan;
           settings: Json;
+          billing_email: string | null;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          subscription_status: string | null;
+          trial_ends_at: string | null;
+          logo_url: string | null;
+          primary_color: string | null;
+          domain: string | null;
+          features: Json;
+          max_users: number | null;
+          max_storage_gb: number | null;
+          onboarded_at: string | null;
+          deleted_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -93,6 +112,19 @@ export interface Database {
           clerk_org_id?: string | null;
           plan?: OrganizationPlan;
           settings?: Json;
+          billing_email?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          subscription_status?: string | null;
+          trial_ends_at?: string | null;
+          logo_url?: string | null;
+          primary_color?: string | null;
+          domain?: string | null;
+          features?: Json;
+          max_users?: number | null;
+          max_storage_gb?: number | null;
+          onboarded_at?: string | null;
+          deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -103,6 +135,19 @@ export interface Database {
           clerk_org_id?: string | null;
           plan?: OrganizationPlan;
           settings?: Json;
+          billing_email?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          subscription_status?: string | null;
+          trial_ends_at?: string | null;
+          logo_url?: string | null;
+          primary_color?: string | null;
+          domain?: string | null;
+          features?: Json;
+          max_users?: number | null;
+          max_storage_gb?: number | null;
+          onboarded_at?: string | null;
+          deleted_at?: string | null;
           updated_at?: string;
         };
       };
@@ -115,6 +160,22 @@ export interface Database {
           avatar_url: string | null;
           org_id: string;
           role: UserRole;
+          title: string | null;
+          department_id: string | null;
+          bio: string | null;
+          phone: string | null;
+          timezone: string | null;
+          invitation_token: string | null;
+          invitation_expires_at: string | null;
+          invited_by: string | null;
+          onboarded_at: string | null;
+          status: UserStatus | null;
+          last_login_at: string | null;
+          last_active_at: string | null;
+          login_count: number | null;
+          notification_preferences: Json;
+          ui_preferences: Json;
+          deleted_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -126,6 +187,22 @@ export interface Database {
           avatar_url?: string | null;
           org_id: string;
           role: UserRole;
+          title?: string | null;
+          department_id?: string | null;
+          bio?: string | null;
+          phone?: string | null;
+          timezone?: string | null;
+          invitation_token?: string | null;
+          invitation_expires_at?: string | null;
+          invited_by?: string | null;
+          onboarded_at?: string | null;
+          status?: UserStatus | null;
+          last_login_at?: string | null;
+          last_active_at?: string | null;
+          login_count?: number | null;
+          notification_preferences?: Json;
+          ui_preferences?: Json;
+          deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -136,6 +213,22 @@ export interface Database {
           avatar_url?: string | null;
           org_id?: string;
           role?: UserRole;
+          title?: string | null;
+          department_id?: string | null;
+          bio?: string | null;
+          phone?: string | null;
+          timezone?: string | null;
+          invitation_token?: string | null;
+          invitation_expires_at?: string | null;
+          invited_by?: string | null;
+          onboarded_at?: string | null;
+          status?: UserStatus | null;
+          last_login_at?: string | null;
+          last_active_at?: string | null;
+          login_count?: number | null;
+          notification_preferences?: Json;
+          ui_preferences?: Json;
+          deleted_at?: string | null;
           updated_at?: string;
         };
       };
@@ -348,6 +441,8 @@ export interface Database {
           started_at: string | null;
           completed_at: string | null;
           dedupe_key: string | null;
+          progress_percent: number | null;
+          progress_message: string | null;
           created_at: string;
         };
         Insert: {
@@ -363,6 +458,8 @@ export interface Database {
           started_at?: string | null;
           completed_at?: string | null;
           dedupe_key?: string | null;
+          progress_percent?: number | null;
+          progress_message?: string | null;
           created_at?: string;
         };
         Update: {
@@ -372,6 +469,8 @@ export interface Database {
           attempts?: number;
           started_at?: string | null;
           completed_at?: string | null;
+          progress_percent?: number | null;
+          progress_message?: string | null;
         };
       };
       events: {
@@ -570,12 +669,13 @@ export interface Database {
           updated_at?: string;
         };
       };
-      chat_conversations: {
+      conversations: {
         Row: {
           id: string;
           org_id: string;
           user_id: string;
           title: string | null;
+          metadata: Json;
           created_at: string;
           updated_at: string;
         };
@@ -584,11 +684,13 @@ export interface Database {
           org_id: string;
           user_id: string;
           title?: string | null;
+          metadata?: Json;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           title?: string | null;
+          metadata?: Json;
           updated_at?: string;
         };
       };
@@ -640,24 +742,27 @@ export interface Database {
           id: string;
           conversation_id: string;
           role: ChatRole;
-          content: string;
+          content: Json;
+          tool_invocations: Json | null;
           sources: Json | null;
-          tokens: number | null;
+          metadata: Json;
           created_at: string;
         };
         Insert: {
           id?: string;
           conversation_id: string;
           role: ChatRole;
-          content: string;
+          content: Json;
+          tool_invocations?: Json | null;
           sources?: Json | null;
-          tokens?: number | null;
+          metadata?: Json;
           created_at?: string;
         };
         Update: {
-          content?: string;
+          content?: Json;
+          tool_invocations?: Json | null;
           sources?: Json | null;
-          tokens?: number | null;
+          metadata?: Json;
         };
       };
       tags: {
@@ -767,6 +872,403 @@ export interface Database {
           visual_description?: string | null;
           visual_embedding?: number[] | null;
           ocr_text?: string | null;
+          metadata?: Json;
+        };
+      };
+      departments: {
+        Row: {
+          id: string;
+          org_id: string;
+          parent_id: string | null;
+          name: string;
+          description: string | null;
+          slug: string;
+          default_visibility: Visibility | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          parent_id?: string | null;
+          name: string;
+          description?: string | null;
+          slug: string;
+          default_visibility?: Visibility | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          parent_id?: string | null;
+          name?: string;
+          description?: string | null;
+          slug?: string;
+          default_visibility?: Visibility | null;
+          updated_at?: string;
+          created_by?: string | null;
+        };
+      };
+      user_departments: {
+        Row: {
+          user_id: string;
+          department_id: string;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          department_id: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+      };
+      audit_logs: {
+        Row: {
+          id: string;
+          org_id: string;
+          user_id: string | null;
+          action: string;
+          resource_type: string;
+          resource_id: string | null;
+          old_values: Json | null;
+          new_values: Json | null;
+          ip_address: string | null;
+          user_agent: string | null;
+          request_id: string | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          user_id?: string | null;
+          action: string;
+          resource_type: string;
+          resource_id?: string | null;
+          old_values?: Json | null;
+          new_values?: Json | null;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          request_id?: string | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+      };
+      user_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          org_id: string;
+          session_token: string;
+          clerk_session_id: string | null;
+          ip_address: string | null;
+          user_agent: string | null;
+          device_type: string | null;
+          browser: string | null;
+          os: string | null;
+          location: Json | null;
+          created_at: string;
+          last_active_at: string;
+          expires_at: string;
+          revoked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          org_id: string;
+          session_token: string;
+          clerk_session_id?: string | null;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          device_type?: string | null;
+          browser?: string | null;
+          os?: string | null;
+          location?: Json | null;
+          created_at?: string;
+          last_active_at?: string;
+          expires_at: string;
+          revoked_at?: string | null;
+        };
+        Update: {
+          last_active_at?: string;
+          revoked_at?: string | null;
+        };
+      };
+      user_invitations: {
+        Row: {
+          id: string;
+          org_id: string;
+          email: string;
+          role: UserRole;
+          token: string;
+          department_ids: string[];
+          invited_by: string;
+          custom_message: string | null;
+          status: string;
+          sent_at: string;
+          expires_at: string;
+          accepted_at: string | null;
+          revoked_at: string | null;
+          reminder_sent_at: string | null;
+          reminder_count: number | null;
+          metadata: Json;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          email: string;
+          role: UserRole;
+          token?: string;
+          department_ids?: string[];
+          invited_by: string;
+          custom_message?: string | null;
+          status?: string;
+          sent_at?: string;
+          expires_at?: string;
+          accepted_at?: string | null;
+          revoked_at?: string | null;
+          reminder_sent_at?: string | null;
+          reminder_count?: number | null;
+          metadata?: Json;
+        };
+        Update: {
+          status?: string;
+          accepted_at?: string | null;
+          revoked_at?: string | null;
+          reminder_sent_at?: string | null;
+          reminder_count?: number | null;
+        };
+      };
+      content_permissions: {
+        Row: {
+          id: string;
+          org_id: string;
+          resource_type: string;
+          resource_id: string;
+          visibility: Visibility;
+          department_ids: string[] | null;
+          allowed_user_ids: string[] | null;
+          can_view: boolean | null;
+          can_edit: boolean | null;
+          can_delete: boolean | null;
+          can_share: boolean | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          resource_type: string;
+          resource_id: string;
+          visibility?: Visibility;
+          department_ids?: string[] | null;
+          allowed_user_ids?: string[] | null;
+          can_view?: boolean | null;
+          can_edit?: boolean | null;
+          can_delete?: boolean | null;
+          can_share?: boolean | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          visibility?: Visibility;
+          department_ids?: string[] | null;
+          allowed_user_ids?: string[] | null;
+          can_view?: boolean | null;
+          can_edit?: boolean | null;
+          can_delete?: boolean | null;
+          can_share?: boolean | null;
+          updated_at?: string;
+        };
+      };
+      api_keys: {
+        Row: {
+          id: string;
+          org_id: string;
+          created_by: string;
+          name: string;
+          key_prefix: string;
+          key_hash: string;
+          scopes: string[];
+          rate_limit: number | null;
+          status: string;
+          expires_at: string | null;
+          last_used_at: string | null;
+          usage_count: number | null;
+          description: string | null;
+          ip_whitelist: string[] | null;
+          metadata: Json;
+          created_at: string;
+          revoked_at: string | null;
+          revoked_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          created_by: string;
+          name: string;
+          key_prefix: string;
+          key_hash: string;
+          scopes?: string[];
+          rate_limit?: number | null;
+          status?: string;
+          expires_at?: string | null;
+          last_used_at?: string | null;
+          usage_count?: number | null;
+          description?: string | null;
+          ip_whitelist?: string[] | null;
+          metadata?: Json;
+          created_at?: string;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+        };
+        Update: {
+          name?: string;
+          scopes?: string[];
+          rate_limit?: number | null;
+          status?: string;
+          expires_at?: string | null;
+          last_used_at?: string | null;
+          usage_count?: number | null;
+          description?: string | null;
+          ip_whitelist?: string[] | null;
+          metadata?: Json;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+        };
+      };
+      org_webhooks: {
+        Row: {
+          id: string;
+          org_id: string;
+          created_by: string;
+          name: string;
+          url: string;
+          secret: string;
+          events: string[];
+          enabled: boolean | null;
+          retry_enabled: boolean | null;
+          max_retries: number | null;
+          timeout_ms: number | null;
+          headers: Json;
+          last_triggered_at: string | null;
+          last_success_at: string | null;
+          last_failure_at: string | null;
+          consecutive_failures: number | null;
+          total_deliveries: number | null;
+          successful_deliveries: number | null;
+          failed_deliveries: number | null;
+          status: WebhookStatus;
+          description: string | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          created_by: string;
+          name: string;
+          url: string;
+          secret: string;
+          events?: string[];
+          enabled?: boolean | null;
+          retry_enabled?: boolean | null;
+          max_retries?: number | null;
+          timeout_ms?: number | null;
+          headers?: Json;
+          last_triggered_at?: string | null;
+          last_success_at?: string | null;
+          last_failure_at?: string | null;
+          consecutive_failures?: number | null;
+          total_deliveries?: number | null;
+          successful_deliveries?: number | null;
+          failed_deliveries?: number | null;
+          status?: WebhookStatus;
+          description?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          url?: string;
+          secret?: string;
+          events?: string[];
+          enabled?: boolean | null;
+          retry_enabled?: boolean | null;
+          max_retries?: number | null;
+          timeout_ms?: number | null;
+          headers?: Json;
+          last_triggered_at?: string | null;
+          last_success_at?: string | null;
+          last_failure_at?: string | null;
+          consecutive_failures?: number | null;
+          total_deliveries?: number | null;
+          successful_deliveries?: number | null;
+          failed_deliveries?: number | null;
+          status?: WebhookStatus;
+          description?: string | null;
+          metadata?: Json;
+          updated_at?: string;
+        };
+      };
+      webhook_deliveries: {
+        Row: {
+          id: string;
+          webhook_id: string;
+          org_id: string;
+          event_type: string;
+          event_id: string | null;
+          payload: Json;
+          attempt_number: number | null;
+          status: string;
+          response_status_code: number | null;
+          response_body: string | null;
+          response_headers: Json | null;
+          error_message: string | null;
+          sent_at: string | null;
+          completed_at: string | null;
+          duration_ms: number | null;
+          next_retry_at: string | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          webhook_id: string;
+          org_id: string;
+          event_type: string;
+          event_id?: string | null;
+          payload: Json;
+          attempt_number?: number | null;
+          status: string;
+          response_status_code?: number | null;
+          response_body?: string | null;
+          response_headers?: Json | null;
+          error_message?: string | null;
+          sent_at?: string | null;
+          completed_at?: string | null;
+          duration_ms?: number | null;
+          next_retry_at?: string | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: {
+          attempt_number?: number | null;
+          status?: string;
+          response_status_code?: number | null;
+          response_body?: string | null;
+          response_headers?: Json | null;
+          error_message?: string | null;
+          sent_at?: string | null;
+          completed_at?: string | null;
+          duration_ms?: number | null;
+          next_retry_at?: string | null;
           metadata?: Json;
         };
       };

@@ -248,7 +248,7 @@ export async function classifyQueryIntent(
 ): Promise<IntentClassification> {
   const genAI = createGoogleGenerativeAI();
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-2.5-flash',
   });
 
   const prompt = `You are a query analysis assistant. Classify the following user query.
@@ -433,7 +433,7 @@ export async function decomposeQuery(
   // Use LLM to decompose complex queries
   const genAI = createGoogleGenerativeAI();
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-2.5-flash',
   });
 
   const prompt = `You are a query decomposition assistant. Break down the following complex query into 2-5 simpler sub-queries.
@@ -601,7 +601,7 @@ export async function evaluateResults(
 
   const genAI = createGoogleGenerativeAI();
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-2.5-flash',
   });
 
   // Prepare chunks for evaluation

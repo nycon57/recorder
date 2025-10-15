@@ -56,7 +56,7 @@ export async function decomposeQuery(
 
   // Use LLM to decompose complex queries
   const model = googleAI.getGenerativeModel({
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-2.5-flash',
   });
 
   const prompt = `You are a query decomposition assistant. Break down the following complex query into 2-5 simpler sub-queries.

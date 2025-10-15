@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { Search, Copy, Download, Edit3, X, Check } from 'lucide-react';
+import { Search, Copy, Download, Edit3, X, Check, ChevronUp, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
+
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
@@ -30,31 +31,100 @@ export default function TranscriptViewer({ transcript, recordingId }: Transcript
   const [isEditing, setIsEditing] = React.useState(false);
   const [editedText, setEditedText] = React.useState(transcript.text);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [currentMatchIndex, setCurrentMatchIndex] = React.useState(0);
+  const [totalMatches, setTotalMatches] = React.useState(0);
+  const scrollAreaRef = React.useRef<HTMLDivElement>(null);
+  const matchRefs = React.useRef<(HTMLElement | null)[]>([]);
 
   const wordCount = transcript.text.split(/\s+/).filter(Boolean).length;
+
+  // Count matches when search query changes
+  React.useEffect(() => {
+    if (!searchQuery.trim()) {
+      setTotalMatches(0);
+      setCurrentMatchIndex(0);
+      matchRefs.current = [];
+      return;
+    }
+
+    const regex = new RegExp(searchQuery, 'gi');
+    const matches = transcript.text.match(regex);
+    setTotalMatches(matches ? matches.length : 0);
+    setCurrentMatchIndex(matches && matches.length > 0 ? 0 : -1);
+    matchRefs.current = [];
+  }, [searchQuery, transcript.text]);
+
+  // Scroll to current match
+  React.useEffect(() => {
+    if (currentMatchIndex >= 0 && matchRefs.current[currentMatchIndex]) {
+      matchRefs.current[currentMatchIndex]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  }, [currentMatchIndex]);
+
+  const handleNextMatch = () => {
+    if (totalMatches > 0) {
+      setCurrentMatchIndex((prev) => (prev + 1) % totalMatches);
+    }
+  };
+
+  const handlePreviousMatch = () => {
+    if (totalMatches > 0) {
+      setCurrentMatchIndex((prev) => (prev - 1 + totalMatches) % totalMatches);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        handlePreviousMatch();
+      } else {
+        handleNextMatch();
+      }
+    }
+  };
 
   const highlightText = (text: string, query: string) => {
     if (!query.trim()) return text;
 
     const regex = new RegExp(`(${query})`, 'gi');
     const parts = text.split(regex);
+    let matchIndex = 0;
 
-    return parts.map((part, index) =>
-      regex.test(part) ? (
-        <mark key={index} className="bg-yellow-200 dark:bg-yellow-900/50">
-          {part}
-        </mark>
-      ) : (
-        part
-      )
-    );
+    return parts.map((part, index) => {
+      const isMatch = regex.test(part);
+      if (isMatch) {
+        const currentIndex = matchIndex;
+        const isActive = currentIndex === currentMatchIndex;
+        matchIndex++;
+        return (
+          <mark
+            key={index}
+            ref={(el) => {
+              matchRefs.current[currentIndex] = el;
+            }}
+            className={
+              isActive
+                ? 'bg-orange-400 dark:bg-orange-600 font-semibold'
+                : 'bg-yellow-200 dark:bg-yellow-900/50'
+            }
+          >
+            {part}
+          </mark>
+        );
+      }
+      return part;
+    });
   };
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(transcript.text);
       toast.success('Transcript copied to clipboard');
-    } catch (error) {
+    } catch {
       toast.error('Failed to copy transcript');
     }
   };
@@ -133,7 +203,7 @@ export default function TranscriptViewer({ transcript, recordingId }: Transcript
       setIsEditing(false);
       // Refresh the page to show updated data
       window.location.reload();
-    } catch (error) {
+    } catch {
       toast.error('Failed to save transcript');
     } finally {
       setIsSaving(false);
@@ -216,15 +286,45 @@ export default function TranscriptViewer({ transcript, recordingId }: Transcript
 
       {/* Search Bar */}
       {!isEditing && (
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search transcript..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search transcript... (Enter: next, Shift+Enter: previous)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="pl-9"
+            />
+          </div>
+          {totalMatches > 0 && (
+            <>
+              <Badge variant="secondary" className="whitespace-nowrap">
+                {currentMatchIndex + 1} / {totalMatches}
+              </Badge>
+              <div className="flex gap-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={handlePreviousMatch}
+                  disabled={totalMatches === 0}
+                  className="h-9 w-9"
+                >
+                  <ChevronUp className="size-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={handleNextMatch}
+                  disabled={totalMatches === 0}
+                  className="h-9 w-9"
+                >
+                  <ChevronDown className="size-4" />
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -237,7 +337,7 @@ export default function TranscriptViewer({ transcript, recordingId }: Transcript
           placeholder="Edit transcript..."
         />
       ) : (
-        <ScrollArea className="h-[500px] rounded-md border p-4">
+        <ScrollArea className="h-[500px] rounded-md border p-4" ref={scrollAreaRef}>
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <p className="whitespace-pre-wrap leading-relaxed">
               {highlightText(transcript.text, searchQuery)}

@@ -16,6 +16,7 @@ import { Progress } from '@/app/components/ui/progress';
 import { Label } from '@/app/components/ui/label';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
+import ReprocessStreamModal from '@/app/components/ReprocessStreamModal';
 
 interface SaveRecordingModalProps {
   isOpen: boolean;
@@ -55,6 +56,11 @@ export function SaveRecordingModal({
   const [error, setError] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Streaming modal state
+  const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false);
+  const [processingRecordingId, setProcessingRecordingId] = useState<string>('');
+  const [processingTitle, setProcessingTitle] = useState<string>('');
 
   // Create video URL for preview
   useEffect(() => {
@@ -218,14 +224,18 @@ export function SaveRecordingModal({
 
       setUploadProgress(100);
 
-      toast.success(
-        startProcessing
-          ? 'Recording saved and processing started'
-          : 'Recording saved successfully'
-      );
-
-      onSaveComplete?.();
-      handleClose();
+      if (startProcessing) {
+        // Open streaming modal instead of closing immediately
+        setProcessingRecordingId(recordingId);
+        setProcessingTitle(title || `Recording ${new Date().toLocaleString()}`);
+        setIsProcessingModalOpen(true);
+        // Don't call handleClose() yet - let streaming modal handle it
+      } else {
+        // Save only - close immediately
+        toast.success('Recording saved successfully');
+        onSaveComplete?.();
+        handleClose();
+      }
     } catch (err) {
       console.error('Upload error:', err);
       setError(err instanceof Error ? err.message : 'Upload failed');
@@ -244,11 +254,15 @@ export function SaveRecordingModal({
     setThumbnailPreview('');
     setUploadProgress(0);
     setError('');
+    setIsProcessingModalOpen(false);
+    setProcessingRecordingId('');
+    setProcessingTitle('');
     onClose();
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <>
+      <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Save Recording</DialogTitle>
@@ -423,5 +437,23 @@ export function SaveRecordingModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Streaming Processing Modal */}
+    <ReprocessStreamModal
+      open={isProcessingModalOpen}
+      onOpenChange={(open) => {
+        setIsProcessingModalOpen(open);
+        if (!open) {
+          // Modal closed - finalize and notify completion
+          onSaveComplete?.();
+          handleClose();
+        }
+      }}
+      recordingId={processingRecordingId}
+      step="all"
+      recordingTitle={processingTitle}
+      mode="finalize"
+    />
+    </>
   );
 }

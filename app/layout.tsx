@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/app/components/ui/sonner';
 import { clerkAppearance } from '@/lib/clerk/appearance';
+import { QueryProvider } from '@/lib/providers/query-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -51,15 +52,17 @@ export default function RootLayout({
     <ClerkProvider appearance={clerkAppearance}>
       <html lang="en" suppressHydrationWarning>
         <body suppressHydrationWarning>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            {children}
-            <Toaster />
-          </ThemeProvider>
+          <QueryProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              {children}
+              <Toaster />
+            </ThemeProvider>
+          </QueryProvider>
         </body>
       </html>
     </ClerkProvider>
