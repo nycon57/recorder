@@ -13,6 +13,7 @@
 
 import Tesseract from 'tesseract.js';
 import type { RecognizeResult, Worker } from 'tesseract.js';
+
 import { frameCache } from './cache-layer';
 
 export interface OCRResult {

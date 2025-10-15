@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
+
 import RecorderApp from '@/app/components/RecorderApp';
 
 export const metadata = {

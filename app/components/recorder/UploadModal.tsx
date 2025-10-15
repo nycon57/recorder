@@ -88,7 +88,7 @@ export default function UploadModal({ blob, onClose }: UploadModalProps) {
 
       // Redirect to recording page after a short delay
       setTimeout(() => {
-        router.push(`/recordings/${recording.id}`);
+        router.push(`/library/${recording.id}`);
       }, 1500);
     } catch (err: any) {
       console.error('Upload error:', err);
@@ -302,7 +302,7 @@ export default function UploadModal({ blob, onClose }: UploadModalProps) {
 
             {uploadStatus === 'complete' && recordingId && (
               <button
-                onClick={() => router.push(`/recordings/${recordingId}`)}
+                onClick={() => router.push(`/library/${recordingId}`)}
                 className="flex-1 px-4 py-2 bg-success text-white rounded-lg hover:bg-success/90 transition font-medium"
               >
                 View Recording

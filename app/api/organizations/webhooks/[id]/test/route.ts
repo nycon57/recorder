@@ -1,8 +1,10 @@
+import { createHmac } from 'crypto';
+
 import { NextRequest } from 'next/server';
+
 import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
 import { createSupabaseClient } from '@/lib/supabase/server';
 import { testWebhookSchema } from '@/lib/validations/api';
-import { createHmac } from 'crypto';
 
 // POST /api/organizations/webhooks/[id]/test - Test webhook
 export const POST = apiHandler(async (
@@ -60,7 +62,7 @@ export const POST = apiHandler(async (
   // Send the test webhook
   const startTime = Date.now();
   let responseStatus = 0;
-  let responseHeaders: Record<string, string> = {};
+  const responseHeaders: Record<string, string> = {};
   let responseBody: any = null;
   let errorMessage: string | undefined;
 

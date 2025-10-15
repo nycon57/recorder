@@ -5,12 +5,14 @@
  * Implements smart frame selection based on scene changes.
  */
 
-import ffmpeg from 'fluent-ffmpeg';
-import { createClient } from '@/lib/supabase/admin';
-import sharp from 'sharp';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+
+import sharp from 'sharp';
+import ffmpeg from 'fluent-ffmpeg';
+
+import { createClient } from '@/lib/supabase/admin';
 import {
   validateFilePath,
   validateStoragePath,

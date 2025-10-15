@@ -3,6 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
+  Loader2,
+  RefreshCw,
+  Plus,
+  X,
+  Globe,
+  Shield,
+  TestTube,
+  AlertTriangle
+} from 'lucide-react';
+
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -17,16 +28,6 @@ import { Checkbox } from '@/app/components/ui/checkbox';
 import { Switch } from '@/app/components/ui/switch';
 import { useToast } from '@/app/components/ui/use-toast';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import {
-  Loader2,
-  RefreshCw,
-  Plus,
-  X,
-  Globe,
-  Shield,
-  TestTube,
-  AlertTriangle
-} from 'lucide-react';
 
 interface WebhookModalProps {
   open: boolean;

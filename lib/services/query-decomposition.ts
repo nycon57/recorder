@@ -6,6 +6,7 @@
 
 import { googleAI } from '@/lib/google/client';
 import type { QueryDecomposition, SubQuery, QueryIntent } from '@/lib/types/agentic-rag';
+
 import { classifyQueryIntent } from './query-intent';
 
 interface SubQueryResponse {

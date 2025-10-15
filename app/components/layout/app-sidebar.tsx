@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { OrganizationSwitcher } from "@clerk/nextjs"
 
 import {
   Sidebar,
@@ -93,23 +92,8 @@ export function AppSidebar({ role, ...props }: AppSidebarProps) {
         )}
       </SidebarContent>
 
-      {/* Footer: User menu and org switcher */}
+      {/* Footer: User menu */}
       <SidebarFooter>
-        {/* Organization switcher (if enabled) */}
-        {process.env.NEXT_PUBLIC_CLERK_ORGANIZATIONS_ENABLED === "true" && (
-          <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
-            <OrganizationSwitcher
-              appearance={{
-                elements: {
-                  rootBox: "w-full",
-                  organizationSwitcherTrigger:
-                    "w-full justify-start px-2 py-1.5 rounded-md hover:bg-sidebar-accent",
-                },
-              }}
-            />
-          </div>
-        )}
-
         {/* User menu */}
         <NavUser />
       </SidebarFooter>

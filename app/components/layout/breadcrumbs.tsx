@@ -21,7 +21,8 @@ import {
 const routeLabels: Record<string, string> = {
   dashboard: "Dashboard",
   record: "Record",
-  recordings: "Recordings",
+  library: "Library",
+  recordings: "Library", // Legacy redirect support
   search: "Search",
   assistant: "Assistant",
   connectors: "Connectors",

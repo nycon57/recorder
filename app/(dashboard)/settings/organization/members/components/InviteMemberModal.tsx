@@ -26,7 +26,6 @@ import {
 } from '@/app/components/ui/select';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Badge } from '@/app/components/ui/badge';
-
 import { DepartmentSelector } from '@/app/components/shared/DepartmentSelector';
 import type { UserRole } from '@/lib/types/database';
 

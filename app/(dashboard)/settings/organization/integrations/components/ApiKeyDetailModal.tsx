@@ -1,6 +1,9 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Loader2, Shield, Zap, Calendar, Activity, Clock } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
+
 import {
   Dialog,
   DialogContent,
@@ -9,8 +12,6 @@ import {
   DialogTitle,
 } from '@/app/components/ui/dialog';
 import { Badge } from '@/app/components/ui/badge';
-import { Loader2, Shield, Zap, Calendar, Activity, Clock } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
 
 interface ApiKeyDetailModalProps {
   open: boolean;

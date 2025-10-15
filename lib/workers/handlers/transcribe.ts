@@ -5,14 +5,15 @@
  * saves transcript with word-level timestamps.
  */
 
-import { openai } from '@/lib/openai/client';
-import { createClient as createAdminClient } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/types/database';
 import { createReadStream } from 'fs';
 import { writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
+
+import type { Database } from '@/lib/types/database';
+import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import { openai } from '@/lib/openai/client';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 

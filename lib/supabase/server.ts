@@ -34,3 +34,6 @@ export async function createClient() {
     }
   );
 }
+
+// Alias for compatibility with existing imports
+export const createSupabaseClient = createClient;

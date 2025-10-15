@@ -13,6 +13,7 @@ import {
   Activity,
   Clock,
 } from 'lucide-react';
+
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -20,6 +21,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/app/components/ui/collapsible';
+
 import { UserAvatar } from './UserAvatar';
 
 interface AuditLog {

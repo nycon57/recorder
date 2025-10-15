@@ -48,13 +48,13 @@ import {
   BreadcrumbSeparator,
 } from "@/app/components/ui/breadcrumb";
 import { Alert, AlertDescription } from "@/app/components/ui/alert";
+import { Department } from "@/lib/validations/departments";
+import { cn } from "@/lib/utils/cn";
 
 import { CreateDepartmentModal } from "./CreateDepartmentModal";
 import { EditDepartmentModal } from "./EditDepartmentModal";
 import { DeleteDepartmentModal } from "./DeleteDepartmentModal";
 import { DepartmentMembersModal } from "./DepartmentMembersModal";
-import { Department } from "@/lib/validations/departments";
-import { cn } from "@/lib/utils/cn";
 
 // Visibility configuration
 const visibilityIcons = {
@@ -91,7 +91,7 @@ export default function DepartmentsPage() {
   const fetchDepartments = async () => {
     try {
       const token = await getToken();
-      const response = await fetch("/api/organizations/departments?tree=true&include_counts=true", {
+      const response = await fetch("/api/organizations/departments?includeTree=true&includeMembers=true", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -102,10 +102,11 @@ export default function DepartmentsPage() {
       }
 
       const data = await response.json();
-      setDepartments(data.data || []);
+      setDepartments(data.data?.departments || []);
 
       // Auto-expand first level
-      const firstLevelIds = (data.data || []).map((d: Department) => d.id);
+      const departments = data.data?.departments || [];
+      const firstLevelIds = departments.map((d: Department) => d.id);
       setExpandedIds(new Set(firstLevelIds));
     } catch (error) {
       console.error("Error fetching departments:", error);
@@ -384,16 +385,50 @@ export default function DepartmentsPage() {
                 ))}
               </div>
             ) : displayDepartments.length === 0 ? (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  {searchQuery
-                    ? "No departments found matching your search."
-                    : selectedPath.length > 0
-                    ? "This department has no sub-departments."
-                    : "No departments created yet. Create your first department to get started."}
-                </AlertDescription>
-              </Alert>
+              <div className="flex flex-col items-center justify-center py-12 px-4">
+                {searchQuery ? (
+                  <>
+                    <div className="rounded-full bg-muted p-3 mb-4">
+                      <Search className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">No departments found</h3>
+                    <p className="text-muted-foreground text-center max-w-sm mb-6">
+                      No departments match your search &quot;{searchQuery}&quot;. Try adjusting your search terms.
+                    </p>
+                    <Button variant="outline" onClick={() => setSearchQuery("")}>
+                      Clear Search
+                    </Button>
+                  </>
+                ) : selectedPath.length > 0 ? (
+                  <>
+                    <div className="rounded-full bg-muted p-3 mb-4">
+                      <Building2 className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">No sub-departments</h3>
+                    <p className="text-muted-foreground text-center max-w-sm mb-6">
+                      This department doesn&apos;t have any sub-departments yet. Create one to organize your team further.
+                    </p>
+                    <Button onClick={() => handleCreateDepartment(selectedPath[selectedPath.length - 1])}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Sub-Department
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-full bg-primary/10 p-3 mb-4">
+                      <Building2 className="w-8 h-8 text-primary" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">No departments yet</h3>
+                    <p className="text-muted-foreground text-center max-w-sm mb-6">
+                      Get started by creating your first department. Organize your team and manage access permissions effectively.
+                    </p>
+                    <Button onClick={() => handleCreateDepartment()} size="lg">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Your First Department
+                    </Button>
+                  </>
+                )}
+              </div>
             ) : (
               <ScrollArea className="h-[500px]">
                 {renderDepartmentTree(displayDepartments, selectedPath)}

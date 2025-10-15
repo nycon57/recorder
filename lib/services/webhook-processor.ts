@@ -5,10 +5,11 @@
  * Handles webhook verification, event routing, and processing.
  */
 
+import { createHmac, randomBytes } from 'crypto';
+
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { ConnectorRegistry } from '@/lib/connectors/registry';
 import { ConnectorType, WebhookEvent } from '@/lib/connectors/base';
-import { createHmac, randomBytes } from 'crypto';
 
 export interface WebhookPayload {
   connectorId: string;

@@ -12,8 +12,8 @@
  */
 
 import { NextRequest } from 'next/server';
-import { apiHandler, requireOrg, requireAdmin, successResponse, errors } from '@/lib/utils/api';
-import { parseBody } from '@/lib/utils/api';
+
+import { apiHandler, requireOrg, requireAdmin, successResponse, errors , parseBody } from '@/lib/utils/api';
 import {
   createDepartmentSchema,
   listDepartmentsQuerySchema,
@@ -43,7 +43,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const supabase = supabaseAdmin;
 
   // Build base query
-  let selectQuery = `
+  const selectQuery = `
     id,
     org_id,
     parent_id,

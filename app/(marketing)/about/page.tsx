@@ -1,5 +1,6 @@
-import { RecordCTA } from '@/app/components/sections';
 import Link from 'next/link';
+
+import { RecordCTA } from '@/app/components/sections';
 
 export default function AboutPage() {
   return (

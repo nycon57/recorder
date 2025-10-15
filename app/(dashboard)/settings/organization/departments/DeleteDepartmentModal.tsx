@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { AlertCircle, AlertTriangle, Users, Building2 } from "lucide-react";
+import { toast } from "sonner";
+
 import {
   Dialog,
   DialogContent,
@@ -19,9 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/app/components/ui/select";
-import { AlertCircle, AlertTriangle, Users, Building2 } from "lucide-react";
 import { Department } from "@/lib/validations/departments";
-import { toast } from "sonner";
+
 
 interface DeleteDepartmentModalProps {
   open: boolean;

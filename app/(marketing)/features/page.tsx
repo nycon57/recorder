@@ -1,5 +1,6 @@
-import { RecordFeatures, RecordCTA } from '@/app/components/sections';
 import { Video, FileText, Search, MessageSquare, Users, Zap } from 'lucide-react';
+
+import { RecordFeatures, RecordCTA } from '@/app/components/sections';
 
 export default function FeaturesPage() {
   const detailedFeatures = [

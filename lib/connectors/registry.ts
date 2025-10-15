@@ -5,6 +5,8 @@
  * creating connector instances.
  */
 
+import type { ConnectorInfo } from '@/lib/types/connectors';
+
 import { Connector, ConnectorType, ConnectorCredentials } from './base';
 import { GoogleDriveConnector } from './google-drive';
 import { NotionConnector } from './notion';
@@ -12,7 +14,6 @@ import { ZoomConnector } from './zoom';
 import { MicrosoftTeamsConnector } from './microsoft-teams';
 import { FileUploadConnector } from './file-upload';
 import { URLImportConnector } from './url-import';
-import type { ConnectorInfo } from '@/lib/types/connectors';
 
 export class ConnectorRegistry {
   private static connectors = new Map<ConnectorType, new (...args: any[]) => Connector>([

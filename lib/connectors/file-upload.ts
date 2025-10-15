@@ -5,8 +5,10 @@
  * Supports multiple file types: PDF, DOCX, TXT, MD, images
  */
 
-import { supabaseAdmin } from '@/lib/supabase/admin';
 import mime from 'mime-types';
+
+import { supabaseAdmin } from '@/lib/supabase/admin';
+
 import {
   Connector,
   ConnectorType,

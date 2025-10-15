@@ -13,8 +13,9 @@
  * - Batch operations support
  */
 
-import Redis from 'ioredis';
 import crypto from 'crypto';
+
+import Redis from 'ioredis';
 
 // Redis client configuration
 const redisConfig = {

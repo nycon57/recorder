@@ -1,9 +1,11 @@
 import { ClerkProvider } from '@clerk/nextjs';
 import type { Metadata } from 'next';
 import { ThemeProvider } from 'next-themes';
+
 import { Toaster } from '@/app/components/ui/sonner';
 import { clerkAppearance } from '@/lib/clerk/appearance';
 import { QueryProvider } from '@/lib/providers/query-provider';
+
 import './globals.css';
 
 export const metadata: Metadata = {

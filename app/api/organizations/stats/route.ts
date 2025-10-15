@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+
 import {
   apiHandler,
   requireAdmin,
@@ -91,8 +92,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     const { count: departmentCount, error: departmentsError } = await supabaseAdmin
       .from('departments')
       .select('id', { count: 'exact', head: true })
-      .eq('org_id', orgId)
-      .is('deleted_at', null);
+      .eq('org_id', orgId);
 
     if (departmentsError) {
       console.error('[GET /api/organizations/stats] Error counting departments:', departmentsError);
@@ -129,7 +129,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
     // Include usage data if requested
     if (includeUsage) {
       // Get current period usage counters
-      const currentPeriod = new Date().toISOString().slice(0, 7); // YYYY-MM format
+      // Format as YYYY-MM-01 for proper date type compatibility
+      const now = new Date();
+      const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
       const { data: usageData, error: usageError } = await supabaseAdmin
         .from('usage_counters')

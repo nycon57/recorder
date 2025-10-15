@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { rateLimiters, RateLimitResult, getClientIp } from './limiter';
+
 import { errorResponse } from '@/lib/utils/api';
+
+import { rateLimiters, RateLimitResult, getClientIp } from './limiter';
 
 /**
  * Rate limiting middleware for API routes

@@ -11,6 +11,8 @@
  */
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
+
 import { apiHandler, requireOrg, successResponse, parseBody, errors } from '@/lib/utils/api';
 import { vectorSearch, hybridSearch } from '@/lib/services/vector-search-google';
 import { rerankResults, isCohereConfigured } from '@/lib/services/reranking';
@@ -21,7 +23,6 @@ import {
 } from '@/lib/services/multimodal-search';
 import { withRateLimit } from '@/lib/rate-limit/middleware';
 import { multimodalSearchSchema } from '@/lib/validations/api';
-import { z } from 'zod';
 import { getCache } from '@/lib/services/cache/multi-layer-cache';
 import { SearchTracker } from '@/lib/services/analytics/search-tracker';
 import { QuotaManager } from '@/lib/services/quotas/quota-manager';

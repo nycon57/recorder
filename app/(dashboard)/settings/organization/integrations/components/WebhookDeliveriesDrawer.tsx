@@ -3,6 +3,19 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
+  CheckCircle,
+  XCircle,
+  ChevronDown,
+  RefreshCcw,
+  Clock,
+  FileJson,
+  ArrowUpDown,
+} from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -34,18 +47,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  CheckCircle,
-  XCircle,
-  ChevronDown,
-  RefreshCcw,
-  Clock,
-  FileJson,
-  ArrowUpDown,
-} from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface Webhook {
   id: string;

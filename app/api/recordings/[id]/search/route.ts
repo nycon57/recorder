@@ -5,10 +5,11 @@
  */
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
+
 import { apiHandler, requireOrg, successResponse, parseBody, errors } from '@/lib/utils/api';
 import { searchRecording } from '@/lib/services/vector-search-google';
 import { createClient } from '@/lib/supabase/server';
-import { z } from 'zod';
 
 const searchSchema = z.object({
   query: z.string().min(1, 'Query is required'),

@@ -4,10 +4,12 @@
  * POST /api/connectors/webhooks/zoom - Receive Zoom webhook events
  */
 
+import crypto from 'crypto';
+
 import { NextRequest } from 'next/server';
+
 import { apiHandler, successResponse, errors } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import crypto from 'crypto';
 
 /**
  * Verify Zoom webhook signature

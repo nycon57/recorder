@@ -8,6 +8,7 @@
  */
 
 import { NextRequest } from 'next/server';
+
 import { apiHandler, requireOrg, parseBody, errors } from '@/lib/utils/api';
 import { reprocessRecordingSchema } from '@/lib/validations/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -87,7 +88,7 @@ export const POST = apiHandler(async (request: NextRequest, context: ReprocessPa
 
   // Prepare job payloads with all necessary data
   const jobs = jobTypes.map(type => {
-    let payload: any = { recordingId, orgId };
+    const payload: any = { recordingId, orgId };
 
     // Add type-specific payload data
     if (type === 'transcribe') {

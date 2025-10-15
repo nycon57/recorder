@@ -22,6 +22,12 @@ import { syncConnector } from './handlers/sync-connector';
 import { processImportedDocument } from './handlers/process-imported-doc';
 import { processWebhook } from './handlers/process-webhook';
 
+// Content processing handlers
+import { handleExtractAudio } from './handlers/extract-audio';
+import { handleExtractTextPdf } from './handlers/extract-text-pdf';
+import { handleExtractTextDocx } from './handlers/extract-text-docx';
+import { handleProcessTextNote } from './handlers/process-text-note';
+
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
 // import { generateDocument } from './handlers/docify-google';
@@ -94,6 +100,12 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   sync_connector: syncConnector, // Phase 5 - Connector sync
   process_imported_doc: processImportedDocument, // Phase 5 - Process imported documents
   process_webhook: processWebhook, // Phase 5 - Process webhook events
+
+  // Content processing handlers
+  extract_audio: handleExtractAudio, // Extract audio track from video files
+  extract_text_pdf: handleExtractTextPdf, // Extract text from PDF documents
+  extract_text_docx: handleExtractTextDocx, // Extract text from DOCX documents
+  process_text_note: handleProcessTextNote, // Process user-created text notes
 };
 
 /**

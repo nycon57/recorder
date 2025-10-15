@@ -5,6 +5,8 @@
  */
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
+
 import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
 import {
   createRecordingShare,
@@ -14,7 +16,6 @@ import {
   type ShareOptions,
 } from '@/lib/services/sharing';
 import { withRateLimit } from '@/lib/rate-limit/middleware';
-import { z } from 'zod';
 
 const createShareSchema = z.object({
   resourceType: z.enum(['recording', 'conversation']),

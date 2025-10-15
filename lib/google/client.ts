@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { SpeechClient } from '@google-cloud/speech';
+
 import { getGoogleAuth } from './credentials';
 
 // Lazy initialization to support environment variable loading

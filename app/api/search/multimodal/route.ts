@@ -5,11 +5,12 @@
  */
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
+
 import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { generateEmbedding } from '@/lib/utils/embeddings';
 import { withRateLimit } from '@/lib/rate-limit/middleware';
-import { z } from 'zod';
 
 /**
  * Multimodal search schema

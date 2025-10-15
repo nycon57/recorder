@@ -1,6 +1,7 @@
 'use client';
 
 import { X, Tag } from 'lucide-react';
+
 import { cn } from '@/lib/utils/cn';
 
 interface TagBadgeProps {

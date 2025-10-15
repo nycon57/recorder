@@ -14,7 +14,9 @@
  */
 
 import { createHash } from 'crypto';
+
 import { Redis } from '@upstash/redis';
+
 import { hierarchicalSearch, type HierarchicalSearchResult } from '@/lib/services/hierarchical-search';
 import { vectorSearch, type SearchResult } from '@/lib/services/vector-search-google';
 import { rerankResults, isCohereConfigured } from '@/lib/services/reranking';
@@ -189,7 +191,7 @@ export async function injectRAGContext(
   }
 
   // Check cache if enabled
-  let cacheHit = false;
+  const cacheHit = false;
   if (enableCache) {
     const cached = await getCachedSearchResults(query, orgId, options);
     if (cached) {

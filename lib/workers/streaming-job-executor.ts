@@ -10,6 +10,7 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 import { streamingManager } from '@/lib/services/streaming-processor';
 import { createLogger } from '@/lib/utils/logger';
+
 import { updateJobProgress, type ProgressCallback } from './job-processor';
 
 // Import job handlers

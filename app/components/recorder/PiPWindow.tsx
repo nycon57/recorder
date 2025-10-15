@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Circle, Square, Pause, Play } from 'lucide-react';
+
 import { useRecording } from '@/app/(dashboard)/record/contexts/RecordingContext';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';

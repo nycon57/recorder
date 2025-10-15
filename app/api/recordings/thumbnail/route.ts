@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
+
 import { apiHandler, requireOrg, successResponse, errors } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { z } from 'zod';
 
 const thumbnailSchema = z.object({
   recordingId: z.string().uuid(),

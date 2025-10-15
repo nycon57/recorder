@@ -6,11 +6,14 @@
  */
 
 import { IncomingMessage } from 'http';
+import { createHash, randomBytes } from 'crypto';
+
 import busboy from 'busboy';
+
 import { supabaseAdmin } from '@/lib/supabase/admin';
+
 import { DocumentParser } from './document-parser';
 import { MediaProcessor } from './media-processor';
-import { createHash, randomBytes } from 'crypto';
 
 export interface UploadedFile {
   id: string;

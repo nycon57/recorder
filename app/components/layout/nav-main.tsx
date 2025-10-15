@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Video, Search, MessageSquare } from "lucide-react"
+import { Home, Video, Search, MessageSquare, Library } from "lucide-react"
 
 import {
   SidebarGroup,
@@ -21,7 +21,13 @@ const navItems = [
     title: "Dashboard",
     url: "/dashboard",
     icon: Home,
-    description: "View all recordings and activity",
+    description: "Overview and recent activity",
+  },
+  {
+    title: "Library",
+    url: "/library",
+    icon: Library,
+    description: "Browse all content",
   },
   {
     title: "Record",
@@ -56,7 +62,10 @@ export function NavMain() {
       <SidebarGroupContent>
         <SidebarMenu>
           {navItems.map((item) => {
-            const isActive = pathname === item.url
+            // Handle Library route - also active for /library/[id]
+            const isActive = item.url === '/library'
+              ? pathname === item.url || pathname.startsWith('/library/')
+              : pathname === item.url
 
             return (
               <SidebarMenuItem key={item.title}>

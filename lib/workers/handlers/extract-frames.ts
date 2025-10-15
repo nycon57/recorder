@@ -4,13 +4,15 @@
  * Background job that extracts and indexes video frames.
  */
 
-import type { Job } from '@/lib/types/jobs';
+import { promises as fs } from 'fs';
+import path from 'path';
+
 import { extractFrames } from '@/lib/services/frame-extraction';
 import { indexRecordingFrames } from '@/lib/services/visual-indexing';
 import { extractFrameText } from '@/lib/services/ocr-service';
 import { createClient } from '@/lib/supabase/admin';
-import { promises as fs } from 'fs';
-import path from 'path';
+
+import type { Job } from '@/lib/types/jobs';
 
 export interface ExtractFramesPayload {
   recordingId: string;

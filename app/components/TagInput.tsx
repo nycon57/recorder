@@ -2,10 +2,12 @@
 
 import * as React from 'react';
 import { Plus, X } from 'lucide-react';
+
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
-import TagBadge from './TagBadge';
 import type { Tag } from '@/lib/types/database';
+
+import TagBadge from './TagBadge';
 
 interface TagInputProps {
   recordingId: string;

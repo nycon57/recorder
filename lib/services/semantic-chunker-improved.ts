@@ -13,6 +13,7 @@
  */
 
 import { pipeline, env } from '@xenova/transformers';
+
 import type {
   ChunkBoundary,
   SemanticChunk,

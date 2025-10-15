@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { Building2, ChevronRight, Check, AlertCircle, Info } from "lucide-react";
+import { toast } from "sonner";
+
 import {
   Dialog,
   DialogContent,
@@ -33,9 +36,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/app/components/ui/popover";
-import { Building2, ChevronRight, Check, AlertCircle, Info } from "lucide-react";
 import { Department } from "@/lib/validations/departments";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 
 interface EditDepartmentModalProps {

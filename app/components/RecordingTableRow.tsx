@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { Eye, Trash2 } from 'lucide-react';
+
 import { Badge } from '@/app/components/ui/badge';
 import { Button, buttonVariants } from '@/app/components/ui/button';
 import { TableCell, TableRow } from '@/app/components/ui/table';
@@ -17,11 +19,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
-import { Eye, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import TagBadge from './TagBadge';
 import type { Tag } from '@/lib/types/database';
 import { fadeInUp } from '@/lib/utils/animations';
+
+import TagBadge from './TagBadge';
 
 interface Recording {
   id: string;
@@ -130,7 +132,7 @@ export default function RecordingTableRow({ recording }: RecordingTableRowProps)
     >
       {/* Thumbnail */}
       <TableCell>
-        <Link href={`/recordings/${recording.id}`}>
+        <Link href={`/library/${recording.id}`}>
           <motion.div
             className="w-16 h-12 bg-muted rounded overflow-hidden cursor-pointer"
             whileHover={{ scale: 1.05, opacity: 0.8 }}
@@ -154,7 +156,7 @@ export default function RecordingTableRow({ recording }: RecordingTableRowProps)
       {/* Title */}
       <TableCell className="font-medium max-w-xs">
         <Link
-          href={`/recordings/${recording.id}`}
+          href={`/library/${recording.id}`}
           className="hover:text-primary transition-colors line-clamp-2"
         >
           {recording.title || `Recording ${recording.id.slice(0, 8)}`}
@@ -200,7 +202,7 @@ export default function RecordingTableRow({ recording }: RecordingTableRowProps)
               size="icon-sm"
               asChild
             >
-              <Link href={`/recordings/${recording.id}`}>
+              <Link href={`/library/${recording.id}`}>
                 <Eye className="h-4 w-4" />
               </Link>
             </Button>

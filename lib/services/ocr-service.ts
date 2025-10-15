@@ -6,6 +6,7 @@
 
 import Tesseract from 'tesseract.js';
 import type { RecognizeResult } from 'tesseract.js';
+
 import { sanitizeOcrText, detectPII, logPIIDetection } from '@/lib/utils/security';
 
 export interface OCRResult {

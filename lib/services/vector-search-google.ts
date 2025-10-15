@@ -6,10 +6,12 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+
 import { GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
+
 import { generateEmbeddingWithFallback } from './embedding-fallback';
 
 type TranscriptChunk = Database['public']['Tables']['transcript_chunks']['Row'];

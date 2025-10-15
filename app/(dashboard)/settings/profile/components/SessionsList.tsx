@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Monitor, Smartphone, Tablet, Globe, MapPin, Clock, Loader2, Shield } from 'lucide-react';
+
 import { useToast } from '@/app/components/ui/use-toast';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';

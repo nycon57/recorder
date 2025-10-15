@@ -4,7 +4,10 @@
  * POST /api/connectors/upload/batch - Upload multiple files in a batch
  */
 
+import crypto from 'crypto';
+
 import { NextRequest } from 'next/server';
+
 import {
   apiHandler,
   requireOrg,
@@ -12,7 +15,6 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import crypto from 'crypto';
 
 /**
  * POST /api/connectors/upload/batch

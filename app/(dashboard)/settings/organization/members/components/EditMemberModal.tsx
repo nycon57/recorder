@@ -34,7 +34,6 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-
 import { DepartmentSelector } from '@/app/components/shared/DepartmentSelector';
 import { updateMemberSchema } from '@/lib/validations/organizations';
 

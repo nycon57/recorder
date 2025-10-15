@@ -13,6 +13,12 @@
  * - Stores imported content in database for processing
  */
 
+import { createHash } from 'crypto';
+
+import axios, { AxiosError } from 'axios';
+
+import { createClient } from '@/lib/supabase/admin';
+
 import {
   Connector,
   ConnectorType,
@@ -27,9 +33,7 @@ import {
   FileContent,
   WebhookEvent,
 } from './base';
-import axios, { AxiosError } from 'axios';
-import { createClient } from '@/lib/supabase/admin';
-import { createHash } from 'crypto';
+
 
 interface ZoomCredentials extends ConnectorCredentials {
   accessToken: string;

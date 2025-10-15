@@ -18,6 +18,7 @@
  */
 
 import { CohereClient } from 'cohere-ai';
+
 import type { SearchResult } from '@/lib/services/vector-search-google';
 
 /**

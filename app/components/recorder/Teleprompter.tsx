@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { X, Play, Pause, RotateCcw, ChevronUp, ChevronDown } from 'lucide-react';
+
 import { Dialog, DialogContent, DialogTitle } from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import { Textarea } from '@/app/components/ui/textarea';

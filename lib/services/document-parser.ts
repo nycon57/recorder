@@ -5,9 +5,10 @@
  * Extracts text content and metadata from various document formats.
  */
 
+import { Readable } from 'stream';
+
 import mammoth from 'mammoth';
 import pdfParse from 'pdf-parse';
-import { Readable } from 'stream';
 
 export interface ParsedDocument {
   content: string;

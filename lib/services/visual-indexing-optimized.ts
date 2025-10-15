@@ -11,10 +11,11 @@
  * Expected performance: 9.5 descriptions/second (2.4x improvement)
  */
 
-import { getGoogleAI } from '@/lib/google/client';
-import { createClient } from '@/lib/supabase/admin';
 import { GoogleGenAI } from '@google/genai';
-import { GOOGLE_CONFIG } from '@/lib/google/client';
+
+import { getGoogleAI , GOOGLE_CONFIG } from '@/lib/google/client';
+import { createClient } from '@/lib/supabase/admin';
+
 import { frameCache } from './cache-layer';
 
 export interface VisualDescription {
