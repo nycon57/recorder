@@ -1,41 +1,21 @@
 {
-  "name": "Record",
+  "name": "Record - AI Knowledge Management",
   "short_name": "Record",
-  "description": "A browser-based screen recorder with picture-in-picture support",
+  "description": "AI-powered knowledge management platform with recording, transcription, and semantic search",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "rgba(0, 0, 0, 0.87)",
+  "theme_color": "#000000",
   "icons": [
     {
-      "src": "/icon-128.png",
-      "sizes": "128x128",
+      "src": "/icon-192.png",
+      "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/icon-256.png",
-      "sizes": "256x256",
+      "src": "/icon-512.png",
+      "sizes": "512x512",
       "type": "image/png"
     }
-  ],
-  "screenshots": [
-    {
-      "src": "/screenshot-01.jpg",
-      "type": "image/jpeg",
-      "sizes": "2400x1350",
-      "form_factor": "wide"
-    },
-    {
-      "src": "/screenshot-02.jpg",
-      "type": "image/jpeg",
-      "sizes": "2400x1350",
-      "form_factor": "wide"
-    },
-    {
-        "src": "/screenshot-03.jpg",
-        "type": "image/jpeg",
-        "sizes": "2400x1350",
-        "form_factor": "wide"
-      }
   ]
 }

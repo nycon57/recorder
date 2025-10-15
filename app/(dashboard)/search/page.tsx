@@ -7,8 +7,10 @@
  */
 
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Filter, Clock, FileText, Video } from 'lucide-react';
 import Link from 'next/link';
+import { staggerContainer, staggerItem, fadeIn } from '@/lib/utils/animations';
 
 interface SearchResult {
   id: string;
@@ -172,59 +174,78 @@ export default function SearchPage() {
       </form>
 
       {/* Results */}
-      {results.length > 0 && (
-        <div className="space-y-4">
-          <div className="text-sm text-muted-foreground mb-4">
-            Found {results.length} result{results.length !== 1 ? 's' : ''} for "{query}"
-          </div>
-
-          {results.map((result) => (
-            <div
-              key={result.id}
-              className="border border-border rounded-lg p-5 hover:border-primary/50 hover:shadow-md transition-all"
+      <AnimatePresence mode="wait">
+        {results.length > 0 && (
+          <motion.div
+            key="search-results"
+            variants={staggerContainer}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="space-y-4"
+          >
+            <motion.div
+              className="text-sm text-muted-foreground mb-4"
+              variants={fadeIn}
             >
-              {/* Result Header */}
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <Link
-                    href={`/recordings/${result.recordingId}${
-                      result.metadata.startTime
-                        ? `?t=${Math.floor(result.metadata.startTime)}`
-                        : ''
-                    }`}
-                    className="text-lg font-semibold text-primary hover:text-primary/80 hover:underline"
-                  >
-                    {result.recordingTitle}
-                  </Link>
-                  <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      {result.metadata.source === 'transcript' ? (
-                        <><Video className="w-4 h-4" /> Transcript</>
-                      ) : (
-                        <><FileText className="w-4 h-4" /> Document</>
-                      )}
-                    </span>
-                    {result.metadata.startTime !== undefined && (
+              Found {results.length} result{results.length !== 1 ? 's' : ''} for "{query}"
+            </motion.div>
+
+            {results.map((result) => (
+              <motion.div
+                key={result.id}
+                variants={staggerItem}
+                className="border border-border rounded-lg p-5 transition-all"
+                whileHover={{
+                  borderColor: 'rgba(var(--primary), 0.5)',
+                  boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                  y: -2,
+                  transition: { duration: 0.2 },
+                }}
+              >
+                {/* Result Header */}
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <Link
+                      href={`/recordings/${result.recordingId}${
+                        result.metadata.startTime
+                          ? `?t=${Math.floor(result.metadata.startTime)}`
+                          : ''
+                      }`}
+                      className="text-lg font-semibold text-primary hover:text-primary/80 hover:underline"
+                    >
+                      {result.recordingTitle}
+                    </Link>
+                    <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                       <span className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {formatTime(result.metadata.startTime)}
+                        {result.metadata.source === 'transcript' ? (
+                          <><Video className="w-4 h-4" /> Transcript</>
+                        ) : (
+                          <><FileText className="w-4 h-4" /> Document</>
+                        )}
                       </span>
-                    )}
-                    <span className="text-success font-medium">
-                      {Math.round(result.similarity * 100)}% match
-                    </span>
+                      {result.metadata.startTime !== undefined && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
+                          {formatTime(result.metadata.startTime)}
+                        </span>
+                      )}
+                      <span className="text-success font-medium">
+                        {Math.round(result.similarity * 100)}% match
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Result Text */}
-              <p className="text-foreground leading-relaxed">
-                {highlightText(result.chunkText, query)}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
+                {/* Result Text */}
+                <p className="text-foreground leading-relaxed">
+                  {highlightText(result.chunkText, query)}
+                </p>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* No Results */}
       {results.length === 0 && query && !loading && (

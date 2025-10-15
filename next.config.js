@@ -56,6 +56,7 @@ const nextConfig = {
               "media-src 'self' blob: data:",
               "connect-src 'self' https://*.supabase.co https://*.clerk.com https://*.clerk.accounts.dev https://*.upstash.io wss://*.supabase.co",
               "frame-src 'self' https://challenges.cloudflare.com https://*.clerk.accounts.dev https://*.clerk.com",
+              "worker-src 'self' blob:",
               "object-src 'none'",
               "base-uri 'self'",
               "form-action 'self'",
@@ -110,6 +111,7 @@ const nextConfig = {
               "media-src 'self' blob: data:",
               "connect-src 'self' https://*.supabase.co https://*.clerk.com https://*.clerk.accounts.dev https://*.upstash.io wss://*.supabase.co",
               "frame-src 'self' https://challenges.cloudflare.com https://*.clerk.accounts.dev https://*.clerk.com",
+              "worker-src 'self' blob:",
               "object-src 'none'",
               "base-uri 'self'",
               "form-action 'self'",
@@ -133,12 +135,6 @@ const nextConfig = {
         tls: false,
       };
     }
-
-    // Handle worker files
-    config.module.rules.push({
-      test: /\.worker\.(js|ts)$/,
-      use: { loader: 'worker-loader' },
-    });
 
     return config;
   },

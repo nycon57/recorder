@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL, fetchFile } from '@ffmpeg/util';
+import { toast } from 'sonner';
+import ReprocessStreamModal from '@/app/components/ReprocessStreamModal';
 
 interface RecordingModalProps {
   isOpen: boolean;
@@ -20,6 +22,11 @@ export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModa
   const [isUploading, setIsUploading] = useState(false);
   const [isConvertingToMP4, setIsConvertingToMP4] = useState(false);
   const [ffmpeg, setFFmpeg] = useState<FFmpeg | null>(null);
+
+  // Streaming modal state
+  const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false);
+  const [processingRecordingId, setProcessingRecordingId] = useState<string>('');
+  const [processingTitle, setProcessingTitle] = useState<string>('');
 
   // Initialize FFMPEG
   useEffect(() => {
@@ -119,14 +126,22 @@ export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModa
         throw new Error('Failed to upload video');
       }
 
-      // 3. Finalize upload (triggers transcription)
-      await fetch(`/api/recordings/${recording.id}/finalize`, {
+      // 3. Finalize upload and start processing
+      const finalizeResponse = await fetch(`/api/recordings/${recording.id}/finalize`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startProcessing: true }),
       });
 
-      // Success - redirect to dashboard
-      router.push('/dashboard');
-      onClose();
+      if (!finalizeResponse.ok) {
+        throw new Error('Failed to finalize recording');
+      }
+
+      // Open streaming modal for processing
+      setProcessingRecordingId(recording.id);
+      setProcessingTitle(title || `Recording ${new Date().toLocaleDateString()}`);
+      setIsProcessingModalOpen(true);
+      // Don't close modal or redirect yet - let streaming modal handle it
     } catch (error) {
       console.error('Upload error:', error);
       alert('Failed to upload recording. Please try again.');
@@ -138,7 +153,8 @@ export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModa
   if (!isOpen || !recordingBlob) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-card rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h2 className="text-2xl font-bold mb-4 text-foreground">Recording Complete!</h2>
@@ -206,5 +222,23 @@ export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModa
         </div>
       </div>
     </div>
+
+    {/* Streaming Processing Modal */}
+    <ReprocessStreamModal
+      open={isProcessingModalOpen}
+      onOpenChange={(open) => {
+        setIsProcessingModalOpen(open);
+        if (!open) {
+          // Modal closed - redirect to dashboard
+          router.push('/dashboard');
+          onClose();
+        }
+      }}
+      recordingId={processingRecordingId}
+      step="all"
+      recordingTitle={processingTitle}
+      mode="finalize"
+    />
+    </>
   );
 }

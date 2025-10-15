@@ -15,7 +15,7 @@ export async function classifyQueryIntent(
   query: string
 ): Promise<IntentClassification> {
   const model = googleAI.getGenerativeModel({
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-2.5-flash',
   });
 
   const prompt = `You are a query analysis assistant. Classify the following user query.
@@ -47,14 +47,14 @@ Respond in JSON format:
   "reasoning": "explanation"
 }`;
 
-  const result = await withTimeout(
-    model.generateContent(prompt),
-    5000, // 5 second timeout
-    'Query intent classification timed out'
-  );
-  const responseText = result.response.text();
-
   try {
+    const result = await withTimeout(
+      model.generateContent(prompt),
+      10000, // 10 second timeout (increased from 5s)
+      'Query intent classification timed out'
+    );
+    const responseText = result.response.text();
+
     // Extract JSON from response (might have markdown code blocks)
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -70,7 +70,7 @@ Respond in JSON format:
       complexity: parsed.complexity,
     };
   } catch (error) {
-    console.error('[Query Intent] Parsing error:', error);
+    console.error('[Query Intent] LLM classification failed, using fallback:', error instanceof Error ? error.message : 'Unknown error');
 
     // Fallback: simple heuristic classification
     return fallbackClassification(query);
@@ -130,14 +130,17 @@ function fallbackClassification(query: string): IntentClassification {
   // Exploration indicators
   if (
     lowerQuery.startsWith('tell me about') ||
+    lowerQuery.startsWith('tell me more') ||
     lowerQuery.startsWith('explain') ||
-    lowerQuery.startsWith('what is')
+    lowerQuery.startsWith('what is') ||
+    lowerQuery.includes('tell me about') ||
+    lowerQuery.includes('tell me more')
   ) {
     return {
       intent: 'exploration',
-      confidence: 0.6,
-      reasoning: 'Query requests broad explanation',
-      complexity: 2,
+      confidence: 0.8,
+      reasoning: 'Query requests broad explanation or exploration',
+      complexity: 3,
     };
   }
 

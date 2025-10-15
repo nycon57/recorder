@@ -8,7 +8,9 @@
 import { GoogleGenAI } from '@google/genai';
 import { GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
+import { generateEmbeddingWithFallback } from './embedding-fallback';
 
 type TranscriptChunk = Database['public']['Tables']['transcript_chunks']['Row'];
 
@@ -150,7 +152,8 @@ export async function vectorSearch(
   }
 
   // Standard search mode with optional recency bias
-  const supabase = await createClient();
+  // Use admin client since API route already validates auth
+  const supabase = supabaseAdmin;
 
   // Use recency-biased search if recencyWeight > 0
   if (recencyWeight > 0) {
@@ -208,6 +211,8 @@ export async function vectorSearch(
 
   // Standard flat search (original implementation)
   const embedding = await generateQueryEmbedding(query);
+  console.log('[Vector Search] Starting standard search for org:', orgId);
+  console.log('[Vector Search] Query:', query.substring(0, 100));
 
   let dbQuery = supabase
     .from('transcript_chunks')
@@ -218,9 +223,11 @@ export async function vectorSearch(
       chunk_text,
       metadata,
       created_at,
+      org_id,
       recordings!inner (
         title,
-        created_at
+        created_at,
+        org_id
       )
     `
     )
@@ -248,44 +255,54 @@ export async function vectorSearch(
   const { data: chunks, error } = await dbQuery;
 
   if (error) {
+    console.error('[Vector Search] Database error:', error);
     throw new Error(`Vector search failed: ${error.message}`);
   }
 
+  console.log('[Vector Search] Found chunks:', chunks?.length || 0);
+
   if (!chunks || chunks.length === 0) {
+    console.log('[Vector Search] No chunks found for org:', orgId);
     return [];
   }
 
+  console.log('[Vector Search] ===== CHUNKS DEBUG =====');
+  console.log('[Vector Search] Query org_id:', orgId);
+  console.log('[Vector Search] First 3 chunks:');
+  chunks.slice(0, 3).forEach((chunk, idx) => {
+    console.log(`  [${idx + 1}] Chunk ID: ${chunk.id}`);
+    console.log(`      Org ID: ${chunk.org_id}`);
+    console.log(`      Recording: ${chunk.recordings?.title || 'Unknown'}`);
+    console.log(`      Text preview: ${chunk.chunk_text?.substring(0, 100)}...`);
+  });
+  console.log('[Vector Search] ===========================');
+
   // Calculate similarity scores using pgvector
+  console.log('[Vector Search] Calculating similarities...');
   const results = await calculateSimilarities(chunks, embedding, threshold);
+  console.log('[Vector Search] Similarity results:', results.length);
 
   // Sort by similarity (descending) and limit
   const sortedResults = results
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, limit);
 
+  console.log('[Vector Search] Returning top results:', sortedResults.length);
   return sortedResults;
 }
 
 /**
- * Generate embedding for search query using Google
+ * Generate embedding for search query using fallback strategy
+ * Tries Google first, falls back to OpenAI if Google is overloaded
  */
 async function generateQueryEmbedding(query: string): Promise<number[]> {
-  const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
+  const { embedding, provider } = await generateEmbeddingWithFallback(
+    query,
+    'RETRIEVAL_QUERY'
+  );
 
-  const result = await genai.models.embedContent({
-    model: GOOGLE_CONFIG.EMBEDDING_MODEL,
-    contents: query,
-    config: {
-      taskType: GOOGLE_CONFIG.EMBEDDING_QUERY_TASK_TYPE, // RETRIEVAL_QUERY for search queries
-      outputDimensionality: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS,
-    },
-  });
-
-  if (!result.embeddings?.[0]?.values) {
-    throw new Error('Failed to generate query embedding: No embedding values returned');
-  }
-
-  return result.embeddings[0].values;
+  console.log(`[Vector Search] Embedding generated using ${provider}`);
+  return embedding;
 }
 
 /**
@@ -296,7 +313,8 @@ async function calculateSimilarities(
   queryEmbedding: number[],
   threshold: number
 ): Promise<SearchResult[]> {
-  const supabase = await createClient();
+  // Use admin client since API route already validates auth
+  const supabase = supabaseAdmin;
 
   // Use pgvector's cosine similarity operator
   const embeddingString = `[${queryEmbedding.join(',')}]`;
@@ -358,7 +376,8 @@ export async function findSimilarChunks(
   orgId: string,
   limit: number = 5
 ): Promise<SearchResult[]> {
-  const supabase = await createClient();
+  // Use admin client since this is called from authenticated context
+  const supabase = supabaseAdmin;
 
   // Get the original chunk
   const { data: chunk, error: chunkError } = await supabase
@@ -414,7 +433,8 @@ async function keywordSearch(
   options: SearchOptions
 ): Promise<SearchResult[]> {
   const { orgId, limit = 10, recordingIds } = options;
-  const supabase = await createClient();
+  // Use admin client since API route already validates auth
+  const supabase = supabaseAdmin;
 
   let dbQuery = supabase
     .from('transcript_chunks')

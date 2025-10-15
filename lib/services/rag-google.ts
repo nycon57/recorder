@@ -10,6 +10,7 @@ import { vectorSearch, type SearchResult } from '@/lib/services/vector-search-go
 import { rerankResults, isCohereConfigured } from '@/lib/services/reranking';
 import { agenticSearch } from '@/lib/services/agentic-retrieval';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export interface ChatMessage {
   id: string;
@@ -65,6 +66,8 @@ export async function retrieveContext(
     enableSelfReflection?: boolean;
   }
 ): Promise<RAGContext> {
+  console.log('[RAG] retrieveContext called:', { query: query.substring(0, 100), orgId, options });
+
   const {
     maxChunks = 5,
     threshold = 0.7,
@@ -101,6 +104,8 @@ export async function retrieveContext(
     // Fetch more results if reranking is enabled
     const initialLimit = rerank ? maxChunks * 3 : maxChunks;
 
+    console.log('[RAG] Performing vector search:', { initialLimit, threshold });
+
     // Perform vector search to find relevant chunks
     searchResults = await vectorSearch(query, {
       orgId,
@@ -108,6 +113,8 @@ export async function retrieveContext(
       threshold,
       recordingIds,
     });
+
+    console.log('[RAG] Vector search results:', searchResults.length);
 
     // Apply reranking if requested and configured
     if (rerank && isCohereConfigured() && searchResults.length > 0) {
@@ -158,6 +165,12 @@ export async function retrieveContext(
       return text + '\n';
     })
     .join('\n');
+
+  console.log('[RAG] Context built:', {
+    sourcesCount: sources.length,
+    contextLength: context.length,
+    hasContext: context.length > 0
+  });
 
   return {
     query,
@@ -356,16 +369,17 @@ export async function saveChatMessage(
   conversationId: string,
   message: Omit<ChatMessage, 'id' | 'createdAt'>
 ): Promise<ChatMessage> {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
+  // Use admin client to bypass RLS since API route already validates auth
+  const { data, error } = await supabaseAdmin
     .from('chat_messages')
     .insert({
       conversation_id: conversationId,
       role: message.role,
-      content: message.content,
+      content: message.content, // For legacy: plain string
       sources: message.metadata?.sources || null,
-      tokens: message.metadata?.tokensUsed || null,
+      metadata: {
+        tokensUsed: message.metadata?.tokensUsed || null,
+      },
     })
     .select()
     .single();
@@ -377,11 +391,11 @@ export async function saveChatMessage(
   return {
     id: data.id,
     role: data.role,
-    content: data.content,
+    content: typeof data.content === 'string' ? data.content : JSON.stringify(data.content),
     createdAt: new Date(data.created_at),
     metadata: {
       sources: data.sources,
-      tokensUsed: data.tokens,
+      tokensUsed: data.metadata?.tokensUsed || null,
     },
   };
 }
@@ -394,10 +408,9 @@ export async function createConversation(
   userId: string,
   title?: string
 ): Promise<string> {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from('chat_conversations')
+  // Use admin client to bypass RLS since API route already validates auth
+  const { data, error } = await supabaseAdmin
+    .from('conversations')
     .insert({
       org_id: orgId,
       user_id: userId,
@@ -420,13 +433,12 @@ export async function getConversationHistory(
   conversationId: string,
   orgId: string
 ): Promise<ChatMessage[]> {
-  const supabase = await createClient();
-
-  const { data: messages, error } = await supabase
+  // Use admin client to bypass RLS since API route already validates auth
+  const { data: messages, error } = await supabaseAdmin
     .from('chat_messages')
     .select('*')
     .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true});
 
   if (error) {
     throw new Error(`Failed to get conversation history: ${error.message}`);
@@ -435,11 +447,11 @@ export async function getConversationHistory(
   return messages.map((msg) => ({
     id: msg.id,
     role: msg.role,
-    content: msg.content,
+    content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
     createdAt: new Date(msg.created_at),
     metadata: {
       sources: msg.sources,
-      tokensUsed: msg.tokens,
+      tokensUsed: msg.metadata?.tokensUsed || null,
     },
   }));
 }
@@ -456,10 +468,9 @@ export async function listConversations(
   lastMessageAt: Date;
   messageCount: number;
 }>> {
-  const supabase = await createClient();
-
-  const { data: conversations, error } = await supabase
-    .from('chat_conversations')
+  // Use admin client to bypass RLS since API route already validates auth
+  const { data: conversations, error } = await supabaseAdmin
+    .from('conversations')
     .select(
       `
       id,

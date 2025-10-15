@@ -13,6 +13,9 @@ import { writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
+import { createLogger } from '@/lib/utils/logger';
+import { streamingManager } from '@/lib/services/streaming-processor';
+import { streamTranscription, isStreamingAvailable, sendCompletionNotification } from '@/lib/services/llm-streaming-helper';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -57,9 +60,20 @@ export async function transcribeRecording(job: Job): Promise<void> {
   const payload = job.payload as unknown as TranscribePayload;
   const { recordingId, orgId, storagePath } = payload;
 
-  console.log(
-    `[Transcribe-Video] Starting video transcription for recording ${recordingId}`
-  );
+  const logger = createLogger({ service: 'transcribe-gemini' });
+
+  // Check if streaming is available for this recording
+  const isStreaming = isStreamingAvailable(recordingId);
+
+  logger.info('Starting video transcription', {
+    context: {
+      recordingId,
+      orgId,
+      storagePath,
+      jobId: job.id,
+      streamingEnabled: isStreaming,
+    },
+  });
 
   const supabase = createAdminClient();
 
@@ -71,9 +85,12 @@ export async function transcribeRecording(job: Job): Promise<void> {
     .single();
 
   if (existingTranscript) {
-    console.log(
-      `[Transcribe-Video] Transcript already exists (${existingTranscript.id}), skipping transcription`
-    );
+    logger.info('Transcript already exists, skipping transcription', {
+      context: {
+        recordingId,
+        transcriptId: existingTranscript.id,
+      },
+    });
 
     // Ensure recording status is correct
     await supabase
@@ -118,7 +135,14 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
   try {
     // Download video from Supabase Storage
-    console.log(`[Transcribe-Video] Downloading video from ${storagePath}`);
+    logger.info('Downloading video from storage', {
+      context: { storagePath },
+    });
+
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'transcribe', 10, 'Downloading video from storage...');
+    }
+
     const { data: videoBlob, error: downloadError } = await supabase.storage
       .from('recordings')
       .download(storagePath);
@@ -131,34 +155,59 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     // Get file size
     const fileSize = videoBlob.size;
-    console.log(
-      `[Transcribe-Video] Video size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`
-    );
+    const fileSizeMB = (fileSize / 1024 / 1024).toFixed(2);
+
+    logger.info('Video downloaded successfully', {
+      context: { fileSize, fileSizeMB },
+    });
+
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'transcribe', 20, `Downloaded video (${fileSizeMB} MB)`);
+    }
 
     // Save to temp file
     tempFilePath = join(tmpdir(), `${randomUUID()}.webm`);
     const buffer = await videoBlob.arrayBuffer();
     await writeFile(tempFilePath, Buffer.from(buffer));
 
-    console.log(`[Transcribe-Video] Saved to temp file: ${tempFilePath}`);
+    logger.info('Saved to temp file', {
+      context: { tempFilePath, bufferSize: buffer.byteLength },
+    });
 
     // Read video file as base64
     const videoBytes = await readFile(tempFilePath);
     const videoBase64 = videoBytes.toString('base64');
 
-    console.log(`[Transcribe-Video] Prepared ${videoBytes.length} bytes for Gemini`);
+    logger.info('Prepared video for Gemini', {
+      context: {
+        bytesLength: videoBytes.length,
+        base64Length: videoBase64.length,
+      },
+    });
+
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'transcribe', 30, 'Preparing video for analysis...');
+    }
 
     // Determine method based on file size
     const use20MBLimit = fileSize < 20 * 1024 * 1024;
 
-    console.log(
-      `[Transcribe-Video] Using ${use20MBLimit ? 'inline' : 'File API'} method`
-    );
+    logger.info('Selected Gemini upload method', {
+      context: {
+        method: use20MBLimit ? 'inline' : 'File API',
+        fileSizeMB: fileSizeMB,
+        threshold: '20MB',
+      },
+    });
 
     // Call Gemini API
     const googleAI = getGoogleAI();
     const model = googleAI.getGenerativeModel({
       model: GOOGLE_CONFIG.DOCIFY_MODEL, // gemini-2.5-flash
+    });
+
+    logger.info('Initialized Gemini model', {
+      context: { model: GOOGLE_CONFIG.DOCIFY_MODEL },
     });
 
     // Structured prompt for video analysis
@@ -224,26 +273,51 @@ Return ONLY valid JSON matching this structure:
 
 IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory text.`;
 
-    console.log(`[Transcribe-Video] Sending video to Gemini for analysis...`);
-
-    // Send video to Gemini
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: 'video/webm',
-          data: videoBase64,
-        },
+    const startTime = Date.now();
+    logger.info('Sending video to Gemini for analysis', {
+      context: {
+        promptLength: prompt.length,
+        videoDataSize: videoBase64.length,
       },
-      { text: prompt },
-    ]);
+    });
 
-    const responseText = result.response.text();
-    console.log(
-      `[Transcribe-Video] Received response (${responseText.length} chars)`
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'transcribe', 50, 'Analyzing video with Gemini AI...');
+    }
+
+    // Use streaming helper for transcription
+    const streamingResult = await streamTranscription(
+      model,
+      videoBase64,
+      prompt,
+      {
+        recordingId,
+        chunkBufferSize: 500,
+        chunkDelayMs: 100,
+        punctuationChunking: true,
+        progressUpdateInterval: 5,
+      }
     );
+
+    const responseText = streamingResult.fullText;
+    const analysisTime = Date.now() - startTime;
+
+    logger.info('Received Gemini response', {
+      context: {
+        responseLength: responseText.length,
+        responsePreview: responseText.substring(0, 200),
+        analysisTime,
+        streamedToClient: streamingResult.streamedToClient,
+      },
+    });
+
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'transcribe', 70, 'Processing Gemini response...');
+    }
 
     // Parse JSON response (strip markdown if present)
     let parsedResponse: GeminiVideoResponse;
+
     try {
       // Remove markdown code blocks if present
       const jsonText = responseText
@@ -252,12 +326,32 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
         .trim();
 
       parsedResponse = JSON.parse(jsonText);
-      console.log(
-        `[Transcribe-Video] Parsed response: ${parsedResponse.audioTranscript.length} audio segments, ${parsedResponse.visualEvents.length} visual events`
-      );
+
+      logger.info('Parsed response successfully', {
+        context: {
+          audioSegments: parsedResponse.audioTranscript.length,
+          visualEvents: parsedResponse.visualEvents.length,
+          keyMoments: parsedResponse.keyMoments?.length || 0,
+          duration: parsedResponse.duration,
+        },
+      });
+
+      if (isStreaming) {
+        streamingManager.sendProgress(
+          recordingId,
+          'transcribe',
+          80,
+          `Extracted ${parsedResponse.audioTranscript.length} audio segments and ${parsedResponse.visualEvents.length} visual events`
+        );
+      }
     } catch (parseError) {
-      console.error(`[Transcribe-Video] Failed to parse JSON:`, parseError);
-      console.error(`[Transcribe-Video] Raw response:`, responseText);
+      logger.error('Failed to parse Gemini JSON response', {
+        context: {
+          responseLength: responseText.length,
+          responsePreview: responseText.substring(0, 500),
+        },
+        error: parseError as Error,
+      });
       throw new Error(
         `Failed to parse Gemini response as JSON: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`
       );
@@ -293,6 +387,14 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
     };
 
     // Save transcript to database
+    logger.info('Saving transcript to database', {
+      context: {
+        textLength: fullTranscript.length,
+        visualEventsCount: parsedResponse.visualEvents.length,
+        duration: parsedResponse.duration,
+      },
+    });
+
     const { data: transcript, error: transcriptError } = await supabase
       .from('transcripts')
       .insert({
@@ -309,19 +411,25 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       .single();
 
     if (transcriptError) {
+      logger.error('Failed to save transcript', {
+        context: { recordingId },
+        error: transcriptError,
+      });
       throw new Error(`Failed to save transcript: ${transcriptError.message}`);
     }
 
-    console.log(`[Transcribe-Video] Saved transcript ${transcript.id}`);
-    console.log(
-      `[Transcribe-Video] - Audio: ${fullTranscript.substring(0, 100)}...`
-    );
-    console.log(
-      `[Transcribe-Video] - Visual events: ${parsedResponse.visualEvents.length}`
-    );
-    console.log(
-      `[Transcribe-Video] - Duration: ${parsedResponse.duration}s`
-    );
+    logger.info('Transcript saved successfully', {
+      context: {
+        transcriptId: transcript.id,
+        audioPreview: fullTranscript.substring(0, 100),
+        visualEventsCount: parsedResponse.visualEvents.length,
+        duration: parsedResponse.duration,
+      },
+    });
+
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'transcribe', 90, 'Transcript saved successfully');
+    }
 
     // Update recording status
     await supabase
@@ -341,9 +449,16 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       dedupe_key: `doc_generate:${recordingId}`,
     });
 
-    console.log(
-      `[Transcribe-Video] Enqueued document generation job for recording ${recordingId}`
-    );
+    logger.info('Enqueued document generation job', {
+      context: {
+        recordingId,
+        transcriptId: transcript.id,
+      },
+    });
+
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'transcribe', 95, 'Processing complete, starting document generation');
+    }
 
     // Create event for notifications
     await supabase.from('events').insert({
@@ -356,8 +471,39 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
         visualEventsCount: parsedResponse.visualEvents.length,
       },
     });
+
+    const totalTime = Date.now() - startTime;
+    logger.info('Video transcription completed', {
+      context: {
+        recordingId,
+        transcriptId: transcript.id,
+        hasVisualContext: true,
+        visualEventsCount: parsedResponse.visualEvents.length,
+        totalTime,
+      },
+    });
+
+    if (isStreaming) {
+      sendCompletionNotification(recordingId, 'Transcription', totalTime);
+      streamingManager.sendComplete(recordingId, `Transcription complete in ${Math.round(totalTime / 1000)}s`);
+    }
+
   } catch (error) {
-    console.error(`[Transcribe-Video] Error:`, error);
+    const errorMessage = error instanceof Error ? error.message : 'Video transcription failed';
+
+    logger.error('Video transcription failed', {
+      context: {
+        recordingId,
+        orgId,
+        storagePath,
+        jobId: job.id,
+      },
+      error: error as Error,
+    });
+
+    if (isStreaming) {
+      streamingManager.sendError(recordingId, errorMessage);
+    }
 
     // Update recording status to error
     await supabase
@@ -365,10 +511,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       .update({
         status: 'error',
         metadata: {
-          error:
-            error instanceof Error
-              ? error.message
-              : 'Video transcription failed',
+          error: errorMessage,
           errorType: 'transcription',
           timestamp: new Date().toISOString(),
         },
@@ -381,9 +524,16 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
     if (tempFilePath) {
       try {
         await unlink(tempFilePath);
-        console.log(`[Transcribe-Video] Cleaned up temp file`);
+        logger.info('Cleaned up temp file', {
+          context: { tempFilePath },
+        });
       } catch (err) {
-        console.error(`[Transcribe-Video] Failed to delete temp file:`, err);
+        logger.warn('Failed to delete temp file', {
+          context: {
+            tempFilePath,
+            error: (err as Error).message,
+          },
+        });
       }
     }
   }

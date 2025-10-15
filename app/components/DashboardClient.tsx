@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
 import RecordingCard from '@/app/components/RecordingCard';
 import RecordingTableRow from '@/app/components/RecordingTableRow';
 import { Input } from '@/app/components/ui/input';
@@ -10,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { LayoutGrid, Table as TableIcon, Search, X, Filter } from 'lucide-react';
 import { Badge } from '@/app/components/ui/badge';
+import { staggerContainer, staggerContainerFast, fadeInUp } from '@/lib/utils/animations';
 
 interface Recording {
   id: string;
@@ -219,65 +221,6 @@ export default function DashboardClient({ recordings }: DashboardClientProps) {
         )}
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-card p-6 rounded-lg border border-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Total Recordings</p>
-              <p className="text-2xl font-bold text-foreground mt-1">
-                {recordings.length}
-              </p>
-            </div>
-            <div className="text-3xl">📹</div>
-          </div>
-        </div>
-
-        <div className="bg-card p-6 rounded-lg border border-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Transcribed</p>
-              <p className="text-2xl font-bold text-foreground mt-1">
-                {
-                  recordings.filter((r) =>
-                    ['transcribed', 'completed'].includes(r.status)
-                  ).length
-                }
-              </p>
-            </div>
-            <div className="text-3xl">📝</div>
-          </div>
-        </div>
-
-        <div className="bg-card p-6 rounded-lg border border-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Processing</p>
-              <p className="text-2xl font-bold text-foreground mt-1">
-                {
-                  recordings.filter((r) =>
-                    ['uploading', 'uploaded', 'transcribing'].includes(r.status)
-                  ).length
-                }
-              </p>
-            </div>
-            <div className="text-3xl">⚙️</div>
-          </div>
-        </div>
-
-        <div className="bg-card p-6 rounded-lg border border-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Documents</p>
-              <p className="text-2xl font-bold text-foreground mt-1">
-                {recordings.filter((r) => r.status === 'completed').length}
-              </p>
-            </div>
-            <div className="text-3xl">📄</div>
-          </div>
-        </div>
-      </div>
-
       {/* Recordings Display */}
       {recordings.length === 0 ? (
         // No recordings at all
@@ -319,37 +262,53 @@ export default function DashboardClient({ recordings }: DashboardClientProps) {
           </div>
 
           {/* Grid View */}
-          {viewMode === 'grid' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredRecordings.map((recording) => (
-                <RecordingCard key={recording.id} recording={recording} />
-              ))}
-            </div>
-          )}
+          <AnimatePresence mode="wait">
+            {viewMode === 'grid' && (
+              <motion.div
+                key="grid-view"
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                variants={staggerContainerFast}
+                initial="hidden"
+                animate="show"
+                exit="exit"
+              >
+                {filteredRecordings.map((recording, index) => (
+                  <RecordingCard key={recording.id} recording={recording} index={index} />
+                ))}
+              </motion.div>
+            )}
 
-          {/* Table View */}
-          {viewMode === 'table' && (
-            <div className="bg-card rounded-lg border border-border overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-20">Thumbnail</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead className="w-48">Tags</TableHead>
-                    <TableHead className="w-32">Status</TableHead>
-                    <TableHead className="w-24">Duration</TableHead>
-                    <TableHead className="w-40">Created</TableHead>
-                    <TableHead className="w-32">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRecordings.map((recording) => (
-                    <RecordingTableRow key={recording.id} recording={recording} />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+            {/* Table View */}
+            {viewMode === 'table' && (
+              <motion.div
+                key="table-view"
+                className="bg-card rounded-lg border border-border overflow-hidden"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-20">Thumbnail</TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead className="w-48">Tags</TableHead>
+                      <TableHead className="w-32">Status</TableHead>
+                      <TableHead className="w-24">Duration</TableHead>
+                      <TableHead className="w-40">Created</TableHead>
+                      <TableHead className="w-32">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRecordings.map((recording, index) => (
+                      <RecordingTableRow key={recording.id} recording={recording} index={index} />
+                    ))}
+                  </TableBody>
+                </Table>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </>
       )}
     </div>

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +18,7 @@ import { buttonVariants } from '@/app/components/ui/button';
 import { cn } from '@/lib/utils';
 import TagBadge from './TagBadge';
 import type { Tag } from '@/lib/types/database';
+import { staggerItem } from '@/lib/utils/animations';
 
 interface Recording {
   id: string;
@@ -32,6 +34,7 @@ interface Recording {
 
 interface RecordingCardProps {
   recording: Recording;
+  index?: number;
 }
 
 export default function RecordingCard({ recording }: RecordingCardProps) {
@@ -118,23 +121,43 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
   };
 
   return (
-    <div className="bg-card rounded-lg border border-border overflow-hidden hover:shadow-lg transition-shadow">
+    <motion.div
+      className="bg-card rounded-lg border border-border overflow-hidden"
+      variants={staggerItem}
+      whileHover={{
+        y: -6,
+        boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
+        transition: { duration: 0.2 },
+      }}
+      transition={{ duration: 0.2 }}
+    >
       {/* Thumbnail */}
       <Link href={`/recordings/${recording.id}`}>
-        <div className="aspect-video bg-muted relative group cursor-pointer">
+        <motion.div className="aspect-video bg-muted relative group cursor-pointer overflow-hidden">
           {recording.thumbnail_url ? (
-            <img
+            <motion.img
               src={recording.thumbnail_url}
               alt={recording.title || 'Recording thumbnail'}
               className="w-full h-full object-cover"
+              whileHover={{ scale: 1.05 }}
+              transition={{ duration: 0.3 }}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <span className="text-6xl opacity-50">🎥</span>
             </div>
           )}
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-opacity flex items-center justify-center">
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+          <motion.div
+            className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center"
+            initial={{ opacity: 0 }}
+            whileHover={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              whileHover={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.2 }}
+            >
               <div className="bg-card rounded-full p-4">
                 <svg
                   className="w-8 h-8 text-foreground"
@@ -144,8 +167,8 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
                   <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
                 </svg>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
           {/* Duration Badge */}
           {recording.duration_sec && (
@@ -153,7 +176,7 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
               {formatDuration(recording.duration_sec)}
             </div>
           )}
-        </div>
+        </motion.div>
       </Link>
 
       {/* Content */}
@@ -200,13 +223,14 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
           >
             View
           </Link>
-          <button
+          <motion.button
             onClick={() => setIsDeleteDialogOpen(true)}
             disabled={isDeleting}
             className="px-3 py-2 bg-destructive text-destructive-foreground rounded hover:bg-destructive/90 transition text-sm disabled:opacity-50"
+            whileTap={{ scale: 0.97 }}
           >
             {isDeleting ? 'Deleting...' : 'Delete'}
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -231,6 +255,6 @@ export default function RecordingCard({ recording }: RecordingCardProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </motion.div>
   );
 }

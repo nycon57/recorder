@@ -15,6 +15,9 @@ import { createSemanticChunker } from '@/lib/services/semantic-chunker';
 import { classifyContent } from '@/lib/services/content-classifier';
 import { getAdaptiveChunkConfig } from '@/lib/services/adaptive-sizing';
 import { sanitizeMetadata } from '@/lib/utils/config-validation';
+import { createLogger } from '@/lib/utils/logger';
+import { streamingManager } from '@/lib/services/streaming-processor';
+import { sendEmbeddingProgress, isStreamingAvailable } from '@/lib/services/llm-streaming-helper';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -35,7 +38,21 @@ export async function generateEmbeddings(job: Job): Promise<void> {
   const payload = job.payload as unknown as EmbeddingsPayload;
   const { recordingId, transcriptId, documentId, orgId } = payload;
 
-  console.log(`[Embeddings] Starting embedding generation for recording ${recordingId}`);
+  const logger = createLogger({ service: 'embeddings-google' });
+
+  // Check if streaming is available for this recording
+  const isStreaming = isStreamingAvailable(recordingId);
+
+  logger.info('Starting embedding generation', {
+    context: {
+      recordingId,
+      transcriptId,
+      documentId,
+      orgId,
+      jobId: job.id,
+      streamingEnabled: isStreaming,
+    },
+  });
 
   const supabase = createAdminClient();
 
@@ -46,9 +63,12 @@ export async function generateEmbeddings(job: Job): Promise<void> {
     .eq('recording_id', recordingId);
 
   if (count && count > 0) {
-    console.log(
-      `[Embeddings] Embeddings already exist (${count} chunks), skipping generation`
-    );
+    logger.info('Embeddings already exist, skipping generation', {
+      context: {
+        recordingId,
+        existingChunks: count,
+      },
+    });
 
     // Enqueue summary generation job (in case pipeline was interrupted)
     const { data: existingSummaryJob } = await supabase
@@ -101,7 +121,13 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       throw new Error(`Failed to fetch document: ${documentError?.message || 'Not found'}`);
     }
 
-    console.log(`[Embeddings] Loaded transcript and document`);
+    logger.info('Loaded transcript and document', {
+      context: {
+        transcriptLength: transcript.text.length,
+        documentLength: document.markdown.length,
+        provider: transcript.provider,
+      },
+    });
 
     // Extract segments from words_json
     const wordsData = (transcript.words_json || {}) as Record<string, any>;
@@ -112,7 +138,14 @@ export async function generateEmbeddings(job: Job): Promise<void> {
     const hasVisualContext = visualEvents.length > 0;
     const isGeminiVideo = transcript.provider === 'gemini-video';
 
-    console.log(`[Embeddings] Transcript type: ${isGeminiVideo ? 'Gemini Video' : 'Audio-only'}, Visual events: ${visualEvents.length}`);
+    logger.info('Processing transcript type', {
+      context: {
+        type: isGeminiVideo ? 'Gemini Video' : 'Audio-only',
+        visualEventsCount: visualEvents.length,
+        hasVisualContext,
+        segments: segments.length,
+      },
+    });
 
     // Chunk transcript based on type
     let transcriptChunks: VideoTranscriptChunk[] | Array<any>;
@@ -125,7 +158,13 @@ export async function generateEmbeddings(job: Job): Promise<void> {
         visualEvents,
         { maxTokens: 500, overlapTokens: 50 }
       );
-      console.log(`[Embeddings] Created ${transcriptChunks.length} video transcript chunks (with visual context)`);
+      logger.info('Created video transcript chunks', {
+        context: {
+          chunkCount: transcriptChunks.length,
+          hasVisualContext: true,
+          chunkingStrategy: 'video-enhanced',
+        },
+      });
     } else {
       // Use standard chunking for audio-only transcripts
       transcriptChunks = chunkTranscriptWithSegments(
@@ -133,13 +172,24 @@ export async function generateEmbeddings(job: Job): Promise<void> {
         segments,
         { maxTokens: 500, overlapTokens: 50 }
       );
-      console.log(`[Embeddings] Created ${transcriptChunks.length} audio transcript chunks`);
+      logger.info('Created audio transcript chunks', {
+        context: {
+          chunkCount: transcriptChunks.length,
+          hasVisualContext: false,
+          chunkingStrategy: 'segment-based',
+        },
+      });
     }
 
     // Chunk document using semantic chunking (always markdown format)
     // Classify content type first
     const documentClassification = classifyContent(document.markdown);
-    console.log(`[Embeddings] Document content type: ${documentClassification.type} (confidence: ${documentClassification.confidence.toFixed(2)})`);
+    logger.info('Document content classified', {
+      context: {
+        contentType: documentClassification.type,
+        confidence: documentClassification.confidence.toFixed(2),
+      },
+    });
 
     // Get adaptive config for content type
     const documentChunkConfig = getAdaptiveChunkConfig(documentClassification.type);
@@ -153,7 +203,13 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       contentType: documentClassification.type,
     });
 
-    console.log(`[Embeddings] Created ${semanticDocumentChunks.length} semantic document chunks`);
+    logger.info('Created semantic document chunks', {
+      context: {
+        chunkCount: semanticDocumentChunks.length,
+        contentType: documentClassification.type,
+        chunkingStrategy: 'semantic',
+      },
+    });
 
     // Combine all chunks with enhanced metadata
     const allChunks = [
@@ -215,20 +271,69 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       })),
     ];
 
-    console.log(`[Embeddings] Total chunks to embed: ${allChunks.length}`);
+    // Filter out chunks with empty or whitespace-only text
+    // Google's embedContent API throws an error for empty strings
+    const validChunks = allChunks.filter(chunk => chunk.text && chunk.text.trim().length > 0);
+
+    if (validChunks.length < allChunks.length) {
+      logger.warn('Filtered out empty chunks', {
+        context: {
+          originalCount: allChunks.length,
+          validCount: validChunks.length,
+          emptyCount: allChunks.length - validChunks.length,
+        },
+      });
+    }
+
+    logger.info('Prepared chunks for embedding', {
+      context: {
+        totalChunks: validChunks.length,
+        transcriptChunks: transcriptChunks.length,
+        documentChunks: semanticDocumentChunks.length,
+        filteredEmpty: allChunks.length - validChunks.length,
+      },
+    });
+
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'embeddings', 10, `Preparing to embed ${validChunks.length} chunks...`);
+    }
 
     // PERFORMANCE FIX: Create Google GenAI client once (not for every chunk)
     const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
     // Generate embeddings in batches
     const embeddingRecords = [];
+    const totalBatches = Math.ceil(validChunks.length / BATCH_SIZE);
 
-    for (let i = 0; i < allChunks.length; i += BATCH_SIZE) {
-      const batch = allChunks.slice(i, i + BATCH_SIZE);
+    logger.info('Starting batch embedding generation', {
+      context: {
+        totalBatches,
+        batchSize: BATCH_SIZE,
+        totalChunks: validChunks.length,
+      },
+    });
 
-      console.log(
-        `[Embeddings] Generating embeddings for batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(allChunks.length / BATCH_SIZE)}`
-      );
+    for (let i = 0; i < validChunks.length; i += BATCH_SIZE) {
+      const batch = validChunks.slice(i, i + BATCH_SIZE);
+      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+
+      logger.info(`Processing embedding batch ${batchNumber}/${totalBatches}`, {
+        context: {
+          batchNumber,
+          batchSize: batch.length,
+          startIndex: i,
+          endIndex: Math.min(i + BATCH_SIZE, validChunks.length),
+        },
+      });
+
+      if (isStreaming) {
+        sendEmbeddingProgress(
+          recordingId,
+          batchNumber,
+          totalBatches,
+          `Generating embeddings: batch ${batchNumber}/${totalBatches}`
+        );
+      }
 
       // PERFORMANCE FIX: Process chunks in parallel using Promise.all
       const batchResults = await Promise.all(
@@ -280,21 +385,39 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       // Add batch results to records
       embeddingRecords.push(...batchResults);
 
+      logger.info(`Completed batch ${batchNumber}/${totalBatches}`, {
+        context: {
+          batchNumber,
+          recordsGenerated: batchResults.length,
+        },
+      });
+
       // Small delay to avoid rate limits
-      if (i + BATCH_SIZE < allChunks.length) {
+      if (i + BATCH_SIZE < validChunks.length) {
         await sleep(100);
       }
     }
 
-    console.log(`[Embeddings] Generated ${embeddingRecords.length} embeddings, saving to database in batches`);
+    logger.info(`Generated ${embeddingRecords.length} embeddings, saving to database in batches`, {
+      context: { totalRecords: embeddingRecords.length },
+    });
+
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'embeddings', 80, 'Saving embeddings to database...');
+    }
 
     // Save embeddings to database in batches to prevent memory issues and timeout
     for (let i = 0; i < embeddingRecords.length; i += DB_INSERT_BATCH_SIZE) {
       const batch = embeddingRecords.slice(i, Math.min(i + DB_INSERT_BATCH_SIZE, embeddingRecords.length));
+      const batchNumber = Math.floor(i / DB_INSERT_BATCH_SIZE) + 1;
+      const totalSaveBatches = Math.ceil(embeddingRecords.length / DB_INSERT_BATCH_SIZE);
 
-      console.log(
-        `[Embeddings] Saving batch ${Math.floor(i / DB_INSERT_BATCH_SIZE) + 1}/${Math.ceil(embeddingRecords.length / DB_INSERT_BATCH_SIZE)} (${batch.length} records)`
-      );
+      logger.info(`Saving batch ${batchNumber}/${totalSaveBatches}`, {
+        context: {
+          batchNumber,
+          batchSize: batch.length,
+        },
+      });
 
       const { error: insertError } = await supabase
         .from('transcript_chunks')
@@ -312,7 +435,13 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       }
     }
 
-    console.log(`[Embeddings] Successfully saved ${embeddingRecords.length} embeddings for recording ${recordingId}`);
+    logger.info(`Successfully saved ${embeddingRecords.length} embeddings`, {
+      context: { recordingId, totalRecords: embeddingRecords.length },
+    });
+
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'embeddings', 90, 'Finalizing embedding generation...');
+    }
 
     // Update recording with embeddings timestamp and clear refresh flag
     await supabase
@@ -332,7 +461,9 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       })
       .eq('recording_id', recordingId);
 
-    console.log(`[Embeddings] Updated embeddings timestamp for recording ${recordingId}`);
+    logger.info('Updated embeddings timestamp', {
+      context: { recordingId },
+    });
 
     // Create event for notifications
     await supabase.from('events').insert({
@@ -359,10 +490,26 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       dedupe_key: `generate_summary:${recordingId}`,
     });
 
-    console.log(`[Embeddings] Enqueued summary generation for recording ${recordingId}`);
+    logger.info('Enqueued summary generation', {
+      context: { recordingId },
+    });
+
+    if (isStreaming) {
+      streamingManager.sendComplete(recordingId, `Embedding generation complete: ${embeddingRecords.length} chunks processed`);
+    }
 
   } catch (error) {
-    console.error(`[Embeddings] Error:`, error);
+    logger.error('Embedding generation error', {
+      context: { recordingId, orgId },
+      error: error as Error,
+    });
+
+    if (isStreaming) {
+      streamingManager.sendError(
+        recordingId,
+        `Embedding generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
 
     // Note: We don't update recording status here since it's already 'completed'
     // from the document generation step. Embedding failures are non-critical.

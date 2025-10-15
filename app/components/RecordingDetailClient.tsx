@@ -42,6 +42,7 @@ import ProcessingPipeline from './ProcessingPipeline';
 import TranscriptViewer from './TranscriptViewer';
 import DocumentViewer from './DocumentViewer';
 import EditRecordingModal from './EditRecordingModal';
+import ReprocessStreamModal from './ReprocessStreamModal';
 import TagBadge from './TagBadge';
 import type { Tag } from '@/lib/types/database';
 
@@ -101,6 +102,9 @@ export default function RecordingDetailClient({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [tags, setTags] = React.useState<Tag[]>(initialTags);
+  const [isReprocessModalOpen, setIsReprocessModalOpen] = React.useState(false);
+  const [reprocessStep, setReprocessStep] = React.useState<'transcribe' | 'document' | 'embeddings' | 'all'>('all');
+  const [videoDuration, setVideoDuration] = React.useState<number | null>(recording.duration_sec);
 
   const getStatusBadgeVariant = (status: Recording['status']) => {
     switch (status) {
@@ -141,11 +145,15 @@ export default function RecordingDetailClient({
     }
   };
 
-  const formatDuration = (seconds: number | null) => {
-    if (!seconds) return 'N/A';
+  const formatDuration = (seconds: number | null | undefined) => {
+    if (!seconds || seconds === 0) return 'N/A';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleVideoDurationChange = (duration: number) => {
+    setVideoDuration(duration);
   };
 
   const formatDate = (dateString: string) => {
@@ -243,36 +251,28 @@ export default function RecordingDetailClient({
     }
   };
 
-  const handleReprocess = async (step: string) => {
-    try {
-      // Map ProcessingPipeline step IDs to API step names
-      let apiStep = step;
-      if (step === 'transcribe') {
-        apiStep = 'transcribe';
-      } else if (step === 'document') {
-        apiStep = 'document';
-      } else if (step === 'embeddings') {
-        apiStep = 'embeddings';
-      }
+  const handleReprocess = (step: string) => {
+    // Map ProcessingPipeline step IDs to API step names
+    let apiStep: 'transcribe' | 'document' | 'embeddings' | 'all' = 'all';
+    if (step === 'transcribe') {
+      apiStep = 'transcribe';
+    } else if (step === 'document') {
+      apiStep = 'document';
+    } else if (step === 'embeddings') {
+      apiStep = 'embeddings';
+    }
 
-      const response = await fetch(`/api/recordings/${recording.id}/reprocess`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: apiStep }),
-      });
+    // Set the step and open the streaming modal
+    setReprocessStep(apiStep);
+    setIsReprocessModalOpen(true);
+  };
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || 'Failed to reprocess recording');
-      }
-
-      toast.success(`Reprocessing started: ${apiStep}`);
-
-      // Reload to show updated status
+  // Handle modal close - refresh the page to show updated recording data
+  const handleReprocessModalClose = (wasSuccessful?: boolean) => {
+    setIsReprocessModalOpen(false);
+    if (wasSuccessful) {
+      // Refresh to show updated recording status
       router.refresh();
-    } catch (error) {
-      console.error('Reprocess error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to start reprocessing');
     }
   };
 
@@ -317,7 +317,10 @@ export default function RecordingDetailClient({
           <div className="lg:col-span-2 space-y-6">
             {/* Video Player */}
             {recording.videoUrl && (
-              <RecordingPlayer videoUrl={recording.videoUrl} />
+              <RecordingPlayer
+                videoUrl={recording.videoUrl}
+                onDurationChange={handleVideoDurationChange}
+              />
             )}
 
             {/* Tabs */}
@@ -366,7 +369,7 @@ export default function RecordingDetailClient({
                       <div>
                         <p className="text-sm font-medium mb-1">Duration</p>
                         <p className="text-sm text-muted-foreground">
-                          {formatDuration(recording.duration_sec)}
+                          {formatDuration(videoDuration)}
                         </p>
                       </div>
                       <div>
@@ -512,6 +515,14 @@ export default function RecordingDetailClient({
         recording={recording}
         initialTags={tags}
         onTagsChange={setTags}
+      />
+
+      <ReprocessStreamModal
+        open={isReprocessModalOpen}
+        onOpenChange={setIsReprocessModalOpen}
+        recordingId={recording.id}
+        step={reprocessStep}
+        recordingTitle={recording.title || undefined}
       />
 
       {/* Delete Confirmation Dialog */}

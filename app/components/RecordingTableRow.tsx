@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { Badge } from '@/app/components/ui/badge';
 import { Button, buttonVariants } from '@/app/components/ui/button';
 import { TableCell, TableRow } from '@/app/components/ui/table';
@@ -20,6 +21,7 @@ import { Eye, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TagBadge from './TagBadge';
 import type { Tag } from '@/lib/types/database';
+import { fadeInUp } from '@/lib/utils/animations';
 
 interface Recording {
   id: string;
@@ -34,6 +36,7 @@ interface Recording {
 
 interface RecordingTableRowProps {
   recording: Recording;
+  index?: number;
 }
 
 export default function RecordingTableRow({ recording }: RecordingTableRowProps) {
@@ -119,11 +122,20 @@ export default function RecordingTableRow({ recording }: RecordingTableRowProps)
   };
 
   return (
-    <TableRow>
+    <motion.tr
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+    >
       {/* Thumbnail */}
       <TableCell>
         <Link href={`/recordings/${recording.id}`}>
-          <div className="w-16 h-12 bg-muted rounded overflow-hidden cursor-pointer hover:opacity-80 transition-opacity">
+          <motion.div
+            className="w-16 h-12 bg-muted rounded overflow-hidden cursor-pointer"
+            whileHover={{ scale: 1.05, opacity: 0.8 }}
+            transition={{ duration: 0.2 }}
+          >
             {recording.thumbnail_url ? (
               <img
                 src={recording.thumbnail_url}
@@ -135,7 +147,7 @@ export default function RecordingTableRow({ recording }: RecordingTableRowProps)
                 🎥
               </div>
             )}
-          </div>
+          </motion.div>
         </Link>
       </TableCell>
 
@@ -182,24 +194,28 @@ export default function RecordingTableRow({ recording }: RecordingTableRowProps)
       {/* Actions */}
       <TableCell>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            asChild
-          >
-            <Link href={`/recordings/${recording.id}`}>
-              <Eye className="h-4 w-4" />
-            </Link>
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isDeleting}
-            className="hover:bg-destructive hover:text-destructive-foreground"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              asChild
+            >
+              <Link href={`/recordings/${recording.id}`}>
+                <Eye className="h-4 w-4" />
+              </Link>
+            </Button>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={isDeleting}
+              className="hover:bg-destructive hover:text-destructive-foreground"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </motion.div>
         </div>
       </TableCell>
 
@@ -224,6 +240,6 @@ export default function RecordingTableRow({ recording }: RecordingTableRowProps)
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </TableRow>
+    </motion.tr>
   );
 }
