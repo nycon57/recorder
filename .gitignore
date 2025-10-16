@@ -78,7 +78,6 @@ yarn-error.log*
 *.md
 
 # Directories
-
 /__tests__
 /__mocks__
 /supabase/migrations

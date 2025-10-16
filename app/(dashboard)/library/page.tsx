@@ -37,11 +37,23 @@ import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/app/hooks/useKeyboardS
 
 import { SelectableContentCard } from './components/SelectableContentCard';
 import { ContentItem } from './components/ContentCard';
+import { LibraryTable } from './components/LibraryTable';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/app/components/ui/pagination';
 
 type ContentTypeFilter = 'all' | 'recording' | 'video' | 'audio' | 'document' | 'text';
 type SortOption = 'recent' | 'oldest' | 'name-asc' | 'name-desc' | 'size-asc' | 'size-desc' | 'duration-asc' | 'duration-desc';
 type ViewMode = 'grid' | 'list';
 type QuickFilter = 'all' | 'today' | 'week' | 'month';
+
+const ITEMS_PER_PAGE = 25;
 
 /**
  * Enhanced Library Page Component
@@ -103,6 +115,9 @@ function LibraryPageContent() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [showCollectionSidebar, setShowCollectionSidebar] = useState(true);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Search input ref for keyboard shortcuts
   const searchInputRef = React.useRef<HTMLInputElement>(null);
@@ -286,7 +301,51 @@ function LibraryPageContent() {
     }
 
     setFilteredItems(filtered);
+    // Reset to first page when filters change
+    setCurrentPage(1);
   }, [items, contentType, sortBy, searchQuery, quickFilter, selectedTagIds, tagFilterMode, advancedFilters, selectedCollectionId]);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedItems = viewMode === 'list' ? filteredItems.slice(startIndex, endIndex) : filteredItems;
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const pages: (number | 'ellipsis')[] = [];
+    const maxVisiblePages = 7;
+
+    if (totalPages <= maxVisiblePages) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+
+    // Always show first page
+    pages.push(1);
+
+    if (currentPage > 3) {
+      pages.push('ellipsis');
+    }
+
+    // Show pages around current page
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    if (currentPage < totalPages - 2) {
+      pages.push('ellipsis');
+    }
+
+    // Always show last page
+    if (totalPages > 1) {
+      pages.push(totalPages);
+    }
+
+    return pages;
+  };
 
   async function fetchTags() {
     try {
@@ -306,7 +365,7 @@ function LibraryPageContent() {
       if (!response.ok) throw new Error('Failed to fetch collections');
 
       const data = await response.json();
-      setCollections(data.data || []);
+      setCollections(data.collections || []);
     } catch (error) {
       console.error('Error fetching collections:', error);
     }
@@ -374,8 +433,10 @@ function LibraryPageContent() {
   }, []);
 
   const handleSelectAll = useCallback((checked: boolean) => {
-    setSelectedIds(checked ? filteredItems.map(item => item.id) : []);
-  }, [filteredItems]);
+    // In list view, only select items on current page
+    const itemsToSelect = viewMode === 'list' ? paginatedItems : filteredItems;
+    setSelectedIds(checked ? itemsToSelect.map(item => item.id) : []);
+  }, [filteredItems, paginatedItems, viewMode]);
 
   const handleClearSelection = useCallback(() => {
     setSelectedIds([]);
@@ -824,14 +885,64 @@ function LibraryPageContent() {
                 </div>
               </div>
             )
+          ) : viewMode === 'list' ? (
+            <div className="space-y-4">
+              <LibraryTable
+                items={paginatedItems}
+                selectedIds={selectedIds}
+                onSelect={handleSelect}
+                onSelectAll={handleSelectAll}
+                onDelete={handleDelete}
+                onShare={handleShare}
+                onDownload={handleDownload}
+              />
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {startIndex + 1} to {Math.min(endIndex, filteredItems.length)} of {filteredItems.length} items
+                  </p>
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                          disabled={currentPage === 1}
+                          className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+
+                      {getPageNumbers().map((page, index) => (
+                        <PaginationItem key={`page-${index}`}>
+                          {page === 'ellipsis' ? (
+                            <PaginationEllipsis />
+                          ) : (
+                            <PaginationLink
+                              onClick={() => setCurrentPage(page as number)}
+                              isActive={currentPage === page}
+                              className="cursor-pointer"
+                            >
+                              {page}
+                            </PaginationLink>
+                          )}
+                        </PaginationItem>
+                      ))}
+
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                          disabled={currentPage === totalPages}
+                          className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
+            </div>
           ) : (
-            <div
-              className={
-                viewMode === 'grid'
-                  ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
-                  : 'space-y-4'
-              }
-            >
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filteredItems.map((item) => (
                 <SelectableContentCard
                   key={item.id}

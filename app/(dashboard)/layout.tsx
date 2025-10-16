@@ -29,28 +29,34 @@ export default async function DashboardLayout({
     redirect('/');
   }
 
-  // Fetch user role for conditional admin navigation
+  // Fetch user role and system admin status for conditional navigation
   // Using admin client to bypass RLS (safe in server component)
   let userRole: 'owner' | 'admin' | 'contributor' | 'reader' = 'reader';
+  let isSystemAdmin = false;
 
   try {
     const { data: userData } = await supabaseAdmin
       .from('users')
-      .select('role')
+      .select('role, is_system_admin')
       .eq('clerk_id', userId)
       .single();
 
     if (userData?.role) {
       userRole = userData.role as typeof userRole;
     }
+
+    // System admin flag for platform-level admin access
+    if (userData?.is_system_admin === true) {
+      isSystemAdmin = true;
+    }
   } catch (error) {
-    console.error('[DashboardLayout] Error fetching user role:', error);
-    // Continue with default 'reader' role if fetch fails
+    console.error('[DashboardLayout] Error fetching user data:', error);
+    // Continue with defaults if fetch fails
   }
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <AppSidebar role={userRole} />
+      <AppSidebar role={userRole} isSystemAdmin={isSystemAdmin} />
       <SidebarInset>
         {/* Header with sidebar trigger and breadcrumbs */}
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">

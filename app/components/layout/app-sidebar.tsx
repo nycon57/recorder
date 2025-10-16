@@ -12,7 +12,6 @@ import {
   SidebarRail,
 } from "@/app/components/ui/sidebar"
 import { NavMain } from "@/app/components/layout/nav-main"
-import { NavConnectors } from "@/app/components/layout/nav-connectors"
 import { NavInsights } from "@/app/components/layout/nav-insights"
 import { NavSettings } from "@/app/components/layout/nav-settings"
 import { NavAdmin } from "@/app/components/layout/nav-admin"
@@ -25,21 +24,23 @@ import { NavUser } from "@/app/components/layout/nav-user"
  * Features:
  * - Collapsible/expandable with keyboard shortcut (Cmd/Ctrl + B)
  * - Mobile responsive (drawer on mobile, fixed on desktop)
- * - Role-based navigation (admin section for owners/admins only)
+ * - Role-based navigation (system admin section for platform operators only)
  * - Persistent state via cookie
  * - Smooth animations and transitions
  * - Tooltips in collapsed state
  *
  * Props:
- * - role: User role for conditional admin navigation
+ * - role: User role within their organization
+ * - isSystemAdmin: Platform-level admin flag (SaaS operator access)
  */
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   role?: "owner" | "admin" | "contributor" | "reader"
+  isSystemAdmin?: boolean
 }
 
-export function AppSidebar({ role, ...props }: AppSidebarProps) {
-  // Determine if user has admin access
-  const hasAdminAccess = role === "owner" || role === "admin"
+export function AppSidebar({ role, isSystemAdmin = false, ...props }: AppSidebarProps) {
+  // System admin access is only for platform operators, not org-level admins
+  const hasSystemAdminAccess = isSystemAdmin === true
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -70,11 +71,6 @@ export function AppSidebar({ role, ...props }: AppSidebarProps) {
 
         <SidebarSeparator className="mx-0" />
 
-        {/* Connectors (Phase 5) */}
-        <NavConnectors />
-
-        <SidebarSeparator className="mx-0" />
-
         {/* Insights */}
         <NavInsights />
 
@@ -83,8 +79,8 @@ export function AppSidebar({ role, ...props }: AppSidebarProps) {
         {/* Settings */}
         <NavSettings />
 
-        {/* Admin section (conditional) */}
-        {hasAdminAccess && (
+        {/* System Admin section (conditional - platform operators only) */}
+        {hasSystemAdminAccess && (
           <>
             <SidebarSeparator className="mx-0" />
             <NavAdmin />

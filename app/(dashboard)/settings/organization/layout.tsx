@@ -57,14 +57,14 @@ const navItems: NavItem[] = [
     title: "Integrations",
     href: "/settings/organization/integrations",
     icon: Plug,
-    description: "Connected services",
+    description: "External sources & APIs",
     requiredRole: "admin",
   },
   {
     title: "Billing",
-    href: "/settings/billing",
+    href: "/settings/organization/billing",
     icon: CreditCard,
-    description: "Subscription",
+    description: "Subscription & usage",
     requiredRole: "admin",
   },
   {

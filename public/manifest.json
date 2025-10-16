@@ -1,11 +1,11 @@
 {
-  "name": "Record - AI Knowledge Management",
+  "name": "Record - AI Knowledge Platform",
   "short_name": "Record",
-  "description": "AI-powered knowledge management platform with recording, transcription, and semantic search",
+  "description": "AI-powered knowledge management platform with screen recording, transcription, and semantic search",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "theme_color": "#3b82f6",
   "icons": [
     {
       "src": "/icon-192.png",
