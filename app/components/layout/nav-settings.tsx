@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { User, Building2, CreditCard } from "lucide-react"
+import { User, Building2 } from "lucide-react"
 
 import {
   SidebarGroup,
@@ -29,13 +29,7 @@ const settingsItems = [
     title: "Organization",
     url: "/settings/organization",
     icon: Building2,
-    description: "Org settings",
-  },
-  {
-    title: "Billing & Quotas",
-    url: "/settings/billing",
-    icon: CreditCard,
-    description: "Subscription and usage",
+    description: "Team & billing",
   },
 ]
 

@@ -178,7 +178,7 @@ export default function AssistantPage() {
         <div className="flex gap-2">
           <input
             type="text"
-            value={input}
+            value={input || ''}
             onChange={handleInputChange}
             placeholder="Ask a question about your recordings..."
             disabled={isLoading}
@@ -187,7 +187,7 @@ export default function AssistantPage() {
           />
           <button
             type="submit"
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || !input?.trim()}
             className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
           >
             {isLoading ? (
