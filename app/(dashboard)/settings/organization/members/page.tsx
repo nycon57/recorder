@@ -29,11 +29,13 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 
-import { MemberTable } from './components/MemberTable';
-import { InviteMemberModal } from './components/InviteMemberModal';
-import { MemberDetailDrawer } from './components/MemberDetailDrawer';
-import { BulkActionsBar } from './components/BulkActionsBar';
-import { MemberFilters } from './components/MemberFilters';
+import {
+  MemberTable,
+  InviteMemberModal,
+  MemberDetailDrawer,
+  BulkActionsBar,
+  MemberFilters,
+} from '@/app/components/settings';
 import type { OrganizationMember, MemberFiltersState } from './types';
 
 export default function MembersPage() {

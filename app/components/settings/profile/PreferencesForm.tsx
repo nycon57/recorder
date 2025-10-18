@@ -146,8 +146,23 @@ export function PreferencesForm() {
   const savePreferences = async () => {
     setIsLoading(true);
     try {
-      // Save preferences to localStorage for now
-      // In production, these would be saved to the database via API
+      // Save to API
+      const response = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          notification_preferences: notificationPrefs,
+          ui_preferences: uiPrefs,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save preferences');
+      }
+
+      // Also save to localStorage for immediate UI updates
       localStorage.setItem('notification_preferences', JSON.stringify(notificationPrefs));
       localStorage.setItem('ui_preferences', JSON.stringify(uiPrefs));
 

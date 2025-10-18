@@ -37,10 +37,12 @@ import {
 } from '@/app/components/ui/table';
 
 // Import chart components
-import SearchVolumeChart from './components/SearchVolumeChart';
-import SearchTypesChart from './components/SearchTypesChart';
-import SearchLatencyChart from './components/SearchLatencyChart';
-import ActivityHeatmap from './components/ActivityHeatmap';
+import {
+  SearchVolumeChart,
+  SearchTypesChart,
+  SearchLatencyChart,
+  ActivityHeatmap,
+} from '@/app/components/analytics';
 
 interface AnalyticsSummary {
   totalSearches: number;

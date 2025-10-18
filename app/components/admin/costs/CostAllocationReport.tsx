@@ -24,10 +24,13 @@ interface AllocationEntry {
 }
 
 interface AllocationData {
-  entries: AllocationEntry[];
-  totalCost: number;
-  period: string;
-  generatedAt: string;
+  allocations: AllocationEntry[];
+  totals: {
+    totalCost: number;
+    totalStorage: number;
+    totalUsers: number;
+    totalRecordings: number;
+  };
 }
 
 export default function CostAllocationReport() {
@@ -99,7 +102,7 @@ export default function CostAllocationReport() {
   const getSortedEntries = () => {
     if (!data) return [];
 
-    const entries = [...data.entries];
+    const entries = [...data.allocations];
     switch (sortBy) {
       case 'cost':
         return entries.sort((a, b) => b.totalCost - a.totalCost);
@@ -112,9 +115,17 @@ export default function CostAllocationReport() {
     }
   };
 
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+  const getCurrentPeriod = (): string => {
+    const now = new Date();
+    return now.toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+    });
+  };
+
+  const getGeneratedTime = (): string => {
+    const now = new Date();
+    return now.toLocaleDateString('en-US', {
       month: 'long',
       day: 'numeric',
       year: 'numeric',
@@ -164,7 +175,7 @@ export default function CostAllocationReport() {
             </CardTitle>
             <CardDescription className="flex items-center gap-2 mt-1">
               <Calendar className="h-3 w-3" />
-              {data.period} • Generated {formatDate(data.generatedAt)}
+              {getCurrentPeriod()} • Generated {getGeneratedTime()}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -298,7 +309,7 @@ export default function CostAllocationReport() {
             <div className="grid grid-cols-12 gap-4 px-4 py-3 border-t bg-muted/50 rounded-lg font-semibold">
               <div className="col-span-3">Total Platform</div>
               <div className="col-span-2">
-                <Badge className="text-xs">{formatCurrency(data.totalCost)}</Badge>
+                <Badge className="text-xs">{formatCurrency(data.totals.totalCost)}</Badge>
               </div>
               <div className="col-span-7"></div>
             </div>

@@ -2,10 +2,12 @@ import { auth } from '@clerk/nextjs/server';
 import { redirect, notFound } from 'next/navigation';
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import VideoDetailView from './components/VideoDetailView';
-import AudioDetailView from './components/AudioDetailView';
-import DocumentDetailView from './components/DocumentDetailView';
-import TextNoteDetailView from './components/TextNoteDetailView';
+import {
+  VideoDetailView,
+  AudioDetailView,
+  DocumentDetailView,
+  TextNoteDetailView,
+} from '@/app/components/library';
 
 async function getContentItem(id: string, clerkOrgId: string) {
   const supabase = supabaseAdmin;

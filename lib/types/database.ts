@@ -83,6 +83,10 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
  * - 'batch_deduplicate': Batch deduplication for organization
  * - 'detect_similarity': Detect similar files using perceptual hashing
  * - 'batch_detect_similarity': Batch similarity detection for organization
+ * - 'collect_metrics': Collect and aggregate storage metrics hourly
+ * - 'generate_alerts': Generate alerts based on configured thresholds
+ * - 'generate_recommendations': Analyze usage patterns and generate optimization recommendations
+ * - 'perform_health_check': Monitor system health and log metrics
  */
 export type JobType =
   | 'transcribe'
@@ -103,7 +107,11 @@ export type JobType =
   | 'deduplicate_file'
   | 'batch_deduplicate'
   | 'detect_similarity'
-  | 'batch_detect_similarity';
+  | 'batch_detect_similarity'
+  | 'collect_metrics'
+  | 'generate_alerts'
+  | 'generate_recommendations'
+  | 'perform_health_check';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 

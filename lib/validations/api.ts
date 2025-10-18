@@ -456,6 +456,9 @@ export const updateProfileSchema = z.object({
     .optional()
     .nullable(),
   timezone: timezoneSchema.optional(),
+  notification_preferences: z.record(z.any()).optional(),
+  ui_preferences: z.record(z.any()).optional(),
+  status: z.enum(['active', 'suspended', 'deleted']).optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
@@ -1352,6 +1355,72 @@ export const healthQuerySchema = z.object({
 });
 
 export type HealthQueryInput = z.infer<typeof healthQuerySchema>;
+
+// ----------------------------------------------------------------------------
+// Organization Deep Dive Schemas
+// ----------------------------------------------------------------------------
+
+/**
+ * Organization top files query schema
+ */
+export const organizationTopFilesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).optional().default(10),
+  sortBy: z.enum(['size', 'created_at']).optional().default('size'),
+});
+
+export type OrganizationTopFilesQueryInput = z.infer<typeof organizationTopFilesQuerySchema>;
+
+/**
+ * Organization action schema
+ */
+export const organizationActionSchema = z.object({
+  action: z.enum(['compress', 'migrate', 'cleanup', 'report']),
+});
+
+export type OrganizationActionInput = z.infer<typeof organizationActionSchema>;
+
+// ----------------------------------------------------------------------------
+// Optimization Recommendations Schemas
+// ----------------------------------------------------------------------------
+
+/**
+ * Recommendations query schema
+ */
+export const recommendationsQuerySchema = z.object({
+  status: z.enum(['pending', 'in-progress', 'completed', 'dismissed']).optional(),
+  impact: z.enum(['high', 'medium', 'low']).optional(),
+  timeframe: z.enum(['immediate', 'short-term', 'long-term']).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+});
+
+export type RecommendationsQueryInput = z.infer<typeof recommendationsQuerySchema>;
+
+/**
+ * Implement recommendation schema
+ */
+export const recommendationImplementSchema = z.object({
+  estimatedCompletionDays: z.number().int().min(1).max(365).optional(),
+});
+
+export type RecommendationImplementInput = z.infer<typeof recommendationImplementSchema>;
+
+/**
+ * Complete recommendation schema
+ */
+export const recommendationCompleteSchema = z.object({
+  actualSavings: z.number().min(0).optional(),
+});
+
+export type RecommendationCompleteInput = z.infer<typeof recommendationCompleteSchema>;
+
+/**
+ * Update recommendation progress schema
+ */
+export const recommendationProgressSchema = z.object({
+  progress: z.number().int().min(0).max(100),
+});
+
+export type RecommendationProgressInput = z.infer<typeof recommendationProgressSchema>;
 
 // Common response types
 export type ApiError = {

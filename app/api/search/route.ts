@@ -42,15 +42,9 @@ export const POST = withRateLimit(
     const body = await parseBody(request, multimodalSearchSchema);
     const startTime = Date.now();
 
-    // Performance Optimization: Execute rate limit and quota check+consume in parallel
-    // Expected improvement: 11.5ms per request (from sequential to parallel)
-    // SECURITY: Using atomic checkAndConsumeQuota to prevent race conditions
-    const [rateLimit, quotaCheck] = await Promise.all([
-      RateLimiter.checkLimit('search', orgId),
-      QuotaManager.checkAndConsumeQuota(orgId, 'search', 1)
-    ]);
+    // Check rate limit first before consuming quota
+    const rateLimit = await RateLimiter.checkLimit('search', orgId);
 
-    // Check rate limit result
     if (!rateLimit.success) {
       return errors.rateLimitExceeded({
         limit: rateLimit.limit,
@@ -58,6 +52,10 @@ export const POST = withRateLimit(
         resetAt: new Date(rateLimit.reset * 1000).toISOString(),
       });
     }
+
+    // Only consume quota after rate limit check passes
+    // SECURITY: Using atomic checkAndConsumeQuota to prevent race conditions
+    const quotaCheck = await QuotaManager.checkAndConsumeQuota(orgId, 'search', 1);
 
     // Check quota result (already consumed if allowed)
     if (!quotaCheck.allowed) {
@@ -167,9 +165,6 @@ export const POST = withRateLimit(
       userId,
     }).catch((error) => console.error('[Search API] Analytics tracking failed:', error));
 
-    // Wait for quota consumption to complete
-    await quotaConsumePromise;
-
     return successResponse({
       query,
       results: agenticResult.finalResults,
@@ -204,13 +199,14 @@ export const POST = withRateLimit(
 
   // Multi-layer cache with 5-minute TTL
   const cache = getCache();
-  const cacheKey = `search:${orgId}:${mode}:${query}:${JSON.stringify({
-    limit,
-    threshold,
+  const cacheKey = `vector:total:${JSON.stringify({
+    query,
     recordingIds,
     source,
     dateFrom,
     dateTo,
+    limit,
+    threshold,
     rerank,
   })}`;
 
@@ -218,7 +214,7 @@ export const POST = withRateLimit(
   let cacheLayer: 'memory' | 'redis' | 'none' = 'none';
   let searchStartTime = Date.now();
 
-  // Try to get from cache
+  // Try to get from cache with orgId for proper isolation
   const cachedResult = await cache.get(cacheKey, async () => {
     cacheHit = false;
     searchStartTime = Date.now();
@@ -261,7 +257,7 @@ export const POST = withRateLimit(
       rerankingTime,
       rerankMetadata,
     };
-  }, { ttl: 300 }); // 5 minutes
+  }, { ttl: 300, orgId, namespace: 'search' }); // 5 minutes with orgId for isolation
 
   // Determine cache layer
   if (cacheHit) {

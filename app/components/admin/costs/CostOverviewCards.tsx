@@ -10,10 +10,11 @@ import { formatCurrency } from '@/lib/utils/formatting';
 interface CostMetrics {
   currentMonth: number;
   lastMonth: number;
-  yearToDate: number;
-  projectedMonth: number;
-  changePercent: number;
-  savingsFromOptimization: number;
+  ytd: number;
+  projected: number;
+  monthOverMonthChange: number;
+  projectedChange: number;
+  savingsOpportunity: number;
 }
 
 export default function CostOverviewCards() {
@@ -106,7 +107,7 @@ export default function CostOverviewCards() {
     return null;
   }
 
-  const isIncreasing = metrics.changePercent > 0;
+  const isIncreasing = metrics.monthOverMonthChange > 0;
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -125,7 +126,7 @@ export default function CostOverviewCards() {
               <TrendingDown className="h-3 w-3 text-green-600" />
             )}
             <p className={`text-xs ${isIncreasing ? 'text-red-600' : 'text-green-600'}`}>
-              {isIncreasing ? '+' : ''}{metrics.changePercent.toFixed(1)}% vs last month
+              {isIncreasing ? '+' : ''}{metrics.monthOverMonthChange.toFixed(1)}% vs last month
             </p>
           </div>
         </CardContent>
@@ -138,7 +139,7 @@ export default function CostOverviewCards() {
           <Calendar className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(metrics.projectedMonth)}</div>
+          <div className="text-2xl font-bold">{formatCurrency(metrics.projected)}</div>
           <p className="text-xs text-muted-foreground mt-1">
             Based on current usage trends
           </p>
@@ -152,9 +153,9 @@ export default function CostOverviewCards() {
           <TrendingUp className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(metrics.yearToDate)}</div>
+          <div className="text-2xl font-bold">{formatCurrency(metrics.ytd)}</div>
           <p className="text-xs text-muted-foreground mt-1">
-            {formatCurrency(metrics.yearToDate / Math.max(1, new Date().getMonth() + 1))} monthly average
+            {formatCurrency(metrics.ytd / Math.max(1, new Date().getMonth() + 1))} monthly average
           </p>
         </CardContent>
       </Card>
@@ -167,7 +168,7 @@ export default function CostOverviewCards() {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-green-600">
-            {formatCurrency(metrics.savingsFromOptimization)}
+            {formatCurrency(metrics.savingsOpportunity)}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
             From compression & optimization

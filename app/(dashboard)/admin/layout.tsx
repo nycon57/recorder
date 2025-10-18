@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from 'react';
 import { Menu, X } from 'lucide-react';
-import AdminNavigation from './components/AdminNavigation';
+import AdminNavigation from '@/app/components/admin/AdminNavigation';
 
 interface AdminLayoutProps {
   children: ReactNode;

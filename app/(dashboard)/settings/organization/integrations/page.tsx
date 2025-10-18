@@ -4,10 +4,11 @@ import { useState } from 'react';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
-
-import { ApiKeysTab } from './components/ApiKeysTab';
-import { WebhooksTab } from './components/WebhooksTab';
-import { ExternalSourcesTab } from './components/ExternalSourcesTab';
+import {
+  ApiKeysTab,
+  WebhooksTab,
+  ExternalSourcesTab,
+} from '@/app/components/settings';
 
 export default function IntegrationsPage() {
   const [activeTab, setActiveTab] = useState('external-sources');

@@ -34,13 +34,20 @@ export function DangerZone() {
 
   const handleExportData = async () => {
     try {
-      toast({
-        title: 'Export Started',
-        description: 'We\'re preparing your data export. You\'ll receive an email when it\'s ready.',
+      const response = await fetch('/api/profile/export', {
+        method: 'POST',
       });
 
-      // Mock implementation - in production this would trigger a background job
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (!response.ok) {
+        throw new Error('Failed to request data export');
+      }
+
+      const data = await response.json();
+
+      toast({
+        title: 'Export Started',
+        description: data.data?.message || 'We\'re preparing your data export. You\'ll receive an email when it\'s ready.',
+      });
     } catch (error) {
       console.error('Error exporting data:', error);
       toast({

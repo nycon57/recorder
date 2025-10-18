@@ -144,22 +144,41 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
-  // Top recordings (mock data for now - would need view tracking)
-  // In a real implementation, you'd track recording views in a separate table
+  // Top recordings - fetch with real view counts
   const { data: recordings } = await supabase
     .from('recordings')
     .select('id, title, duration_sec, created_at')
     .eq('created_by', internalUserId)
     .order('created_at', { ascending: false })
-    .limit(5);
+    .limit(20); // Get more to filter by view count
 
+  // Get view counts for these recordings
+  const recordingIds = recordings?.map(r => r.id) || [];
+  const { data: viewCounts } = recordingIds.length > 0
+    ? await supabase
+        .from('recording_view_counts')
+        .select('recording_id, total_views, last_viewed_at')
+        .in('recording_id', recordingIds)
+    : { data: null };
+
+  // Create a map of view counts
+  const viewCountMap = new Map(
+    viewCounts?.map(vc => [vc.recording_id, {
+      count: vc.total_views,
+      lastViewed: vc.last_viewed_at
+    }]) || []
+  );
+
+  // Combine and sort by view count
   const topRecordings = recordings?.map((rec) => ({
     id: rec.id,
     title: rec.title || 'Untitled Recording',
-    viewCount: Math.floor(Math.random() * 20) + 1, // Mock data
+    viewCount: viewCountMap.get(rec.id)?.count || 0,
     duration: rec.duration_sec || 0,
-    lastViewed: rec.created_at,
-  })) || [];
+    lastViewed: viewCountMap.get(rec.id)?.lastViewed ?? null,
+  }))
+    .sort((a, b) => b.viewCount - a.viewCount)
+    .slice(0, 5) || [];
 
   return successResponse({
     summary: {

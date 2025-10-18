@@ -3,6 +3,22 @@
     {
       "path": "/api/admin/storage/schedule-migrations",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/collect-metrics",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/generate-alerts",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/generate-recommendations",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/perform-health-check",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

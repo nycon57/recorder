@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Shield, Key, Smartphone, ExternalLink, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
 
@@ -16,7 +16,7 @@ export function SecuritySettings() {
 
   // Auto-refresh user state after 2FA setup
   // Use a ref to avoid re-registering the listener when user changes
-  const latestUserRef = React.useRef(user);
+  const latestUserRef = useRef(user);
 
   useEffect(() => {
     latestUserRef.current = user;

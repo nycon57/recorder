@@ -35,9 +35,8 @@ import UploadModal from '@/app/components/upload/UploadModal';
 import ExportModal from '@/app/components/library/ExportModal';
 import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/app/hooks/useKeyboardShortcuts';
 
-import { SelectableContentCard } from './components/SelectableContentCard';
-import { ContentItem } from './components/ContentCard';
-import { LibraryTable } from './components/LibraryTable';
+import { SelectableContentCard, LibraryTable } from '@/app/components/library';
+import { ContentItem } from '@/app/components/content';
 import {
   Pagination,
   PaginationContent,

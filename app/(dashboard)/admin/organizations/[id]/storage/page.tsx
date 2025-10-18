@@ -1,10 +1,12 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import OrgStorageOverview from './components/OrgStorageOverview';
-import TopFilesTable from './components/TopFilesTable';
-import OrgIssues from './components/OrgIssues';
-import AdminActionsPanel from './components/AdminActionsPanel';
+import {
+  OrgStorageOverview,
+  TopFilesTable,
+  OrgIssues,
+  AdminActionsPanel,
+} from '@/app/components/admin';
 
 export const metadata: Metadata = {
   title: 'Organization Storage | Admin',

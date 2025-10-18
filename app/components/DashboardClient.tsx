@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutGrid, Table as TableIcon, Search, X, Filter } from 'lucide-react';
 
-import RecordingCard from '@/app/components/RecordingCard';
+import { BaseContentCard, ContentItem } from '@/app/components/content';
 import RecordingTableRow from '@/app/components/RecordingTableRow';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
@@ -23,6 +23,10 @@ interface Recording {
   thumbnail_url: string | null;
   created_at: string;
   updated_at: string;
+  created_by?: string;
+  org_id?: string;
+  file_type?: string | null;
+  original_filename?: string | null;
 }
 
 interface DashboardClientProps {
@@ -34,6 +38,44 @@ type SortOption = 'newest' | 'oldest' | 'title-asc' | 'title-desc';
 type StatusFilter = 'all' | 'uploaded' | 'transcribing' | 'transcribed' | 'completed' | 'error';
 
 export default function DashboardClient({ recordings }: DashboardClientProps) {
+  // Helper function to derive file_type from filename if not present
+  const deriveFileType = (recording: Recording): string => {
+    // Use file_type if available
+    if (recording.file_type) {
+      return recording.file_type;
+    }
+
+    // Fallback: derive from original_filename extension
+    if (recording.original_filename) {
+      const extension = recording.original_filename.split('.').pop()?.toLowerCase();
+      if (extension) {
+        return extension;
+      }
+    }
+
+    // Default fallback for recordings
+    return 'webm';
+  };
+
+  // Helper function to convert Recording to ContentItem
+  const recordingToContentItem = (recording: Recording): ContentItem => ({
+    id: recording.id,
+    title: recording.title,
+    description: recording.description,
+    content_type: 'recording',
+    file_type: deriveFileType(recording),
+    status: recording.status,
+    created_at: recording.created_at,
+    updated_at: recording.updated_at,
+    duration_sec: recording.duration_sec,
+    file_size: null,
+    thumbnail_url: recording.thumbnail_url,
+    original_filename: recording.original_filename || null,
+    created_by: recording.created_by || '',
+    org_id: recording.org_id || '',
+    metadata: null,
+  });
+
   // State
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -274,7 +316,10 @@ export default function DashboardClient({ recordings }: DashboardClientProps) {
                 exit="exit"
               >
                 {filteredRecordings.map((recording, index) => (
-                  <RecordingCard key={recording.id} recording={recording} index={index} />
+                  <BaseContentCard
+                    key={recording.id}
+                    item={recordingToContentItem(recording)}
+                  />
                 ))}
               </motion.div>
             )}
