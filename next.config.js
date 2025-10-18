@@ -136,6 +136,7 @@ const nextConfig = {
   experimental: {
     serverActions: {
       allowedOrigins: ['localhost:3000', 'localhost:3001'],
+      bodySizeLimit: '500mb', // Allow large video/audio file uploads
     },
   },
 };

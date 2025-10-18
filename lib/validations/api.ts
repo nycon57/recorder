@@ -1308,6 +1308,51 @@ export const revokeSessionSchema = z.object({
 
 export type RevokeSessionInput = z.infer<typeof revokeSessionSchema>;
 
+// ----------------------------------------------------------------------------
+// Alert Management Schemas
+// ----------------------------------------------------------------------------
+
+/**
+ * Alert query schema
+ */
+export const alertsQuerySchema = z.object({
+  resolved: z
+    .string()
+    .optional()
+    .transform((val) => val === 'true'),
+  severity: z.enum(['critical', 'warning', 'info']).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export type AlertsQueryInput = z.infer<typeof alertsQuerySchema>;
+
+/**
+ * Alert configuration schema
+ */
+export const alertConfigSchema = z.object({
+  storageThreshold: z.number().min(0).max(100).optional(),
+  costThreshold: z.number().min(0).optional(),
+  enableEmailNotifications: z.boolean().optional(),
+  enableSlackNotifications: z.boolean().optional(),
+  slackWebhookUrl: z.string().url().optional().nullable(),
+  checkInterval: z.number().min(1).max(1440).optional(),
+});
+
+export type AlertConfigInput = z.infer<typeof alertConfigSchema>;
+
+/**
+ * Health query schema
+ */
+export const healthQuerySchema = z.object({
+  detailed: z
+    .string()
+    .optional()
+    .default('false')
+    .transform((val) => val === 'true'),
+});
+
+export type HealthQueryInput = z.infer<typeof healthQuerySchema>;
+
 // Common response types
 export type ApiError = {
   code: string;

@@ -61,9 +61,9 @@ export default function ReprocessStreamModal({
   const router = useRouter();
   const [currentStage, setCurrentStage] = React.useState<string>('transcribe');
   const [stages, setStages] = React.useState<ProcessingStage[]>([
-    { id: 'transcribe', label: 'Transcribing Audio', status: 'in_progress', progress: 0 },
-    { id: 'document', label: 'Generating Document', status: 'pending', progress: 0 },
-    { id: 'embeddings', label: 'Creating Embeddings', status: 'pending', progress: 0 },
+    { id: 'transcribe', label: 'Transcribing audio...', status: 'in_progress', progress: 0 },
+    { id: 'document', label: 'Generating document...', status: 'pending', progress: 0 },
+    { id: 'embeddings', label: 'Preparing search...', status: 'pending', progress: 0 },
   ]);
   const [streamingText, setStreamingText] = React.useState('');
   const [contentType, setContentType] = React.useState<'transcript' | 'document'>('transcript');

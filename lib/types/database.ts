@@ -76,6 +76,13 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
  * - 'sync_connector': Sync external connectors (Google Drive, Notion, etc.)
  * - 'process_imported_doc': Process documents imported from connectors
  * - 'process_webhook': Handle webhook events
+ * - 'compress_video': Compress video files using H.265 codec
+ * - 'compress_audio': Compress audio files using Opus/AAC codec
+ * - 'migrate_storage_tier': Migrate files between storage tiers
+ * - 'deduplicate_file': Deduplicate single file using SHA-256 hash
+ * - 'batch_deduplicate': Batch deduplication for organization
+ * - 'detect_similarity': Detect similar files using perceptual hashing
+ * - 'batch_detect_similarity': Batch similarity detection for organization
  */
 export type JobType =
   | 'transcribe'
@@ -89,7 +96,14 @@ export type JobType =
   | 'process_text_note'
   | 'sync_connector'
   | 'process_imported_doc'
-  | 'process_webhook';
+  | 'process_webhook'
+  | 'compress_video'
+  | 'compress_audio'
+  | 'migrate_storage_tier'
+  | 'deduplicate_file'
+  | 'batch_deduplicate'
+  | 'detect_similarity'
+  | 'batch_detect_similarity';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 
@@ -114,6 +128,132 @@ export type ImportedDocumentStatus =
   | 'error';
 
 export type SearchMode = 'standard' | 'agentic' | 'hybrid' | 'hierarchical';
+
+/**
+ * Storage tier classification for multi-tier storage strategy.
+ * - 'hot': Recent files in Supabase Storage (< 30 days) - $0.021/GB/month
+ * - 'warm': Moderate-age files in Cloudflare R2 (30-180 days) - $0.015/GB/month
+ * - 'cold': Archive files in Cloudflare R2 (> 180 days) - $0.01/GB/month
+ */
+export type StorageTier = 'hot' | 'warm' | 'cold';
+
+/**
+ * Storage provider for multi-tier storage.
+ * - 'supabase': Supabase Storage (primary hot tier)
+ * - 'r2': Cloudflare R2 (warm and cold tiers)
+ */
+export type StorageProvider = 'supabase' | 'r2';
+
+/**
+ * Compression profiles for video and audio optimization.
+ * - 'screenRecording': Optimized for screen captures with high text readability (CRF 28-30)
+ * - 'uploadedVideo': Balanced quality for camera footage (CRF 23-26)
+ * - 'highQuality': Premium quality for important content (CRF 20-23)
+ * - 'audioVoice': Voice-optimized audio compression (Opus 64kbps)
+ * - 'audioMusic': Music-optimized audio compression (AAC 128kbps)
+ */
+export type CompressionProfile =
+  | 'screenRecording'
+  | 'uploadedVideo'
+  | 'highQuality'
+  | 'audioVoice'
+  | 'audioMusic';
+
+/**
+ * Compression statistics stored in recordings.compression_stats JSONB field.
+ * Tracks file size reduction, encoding parameters, and quality metrics.
+ */
+export interface CompressionStats {
+  /** Original file size in bytes before compression */
+  original_size: number;
+  /** Compressed file size in bytes after compression */
+  compressed_size: number;
+  /** Compression ratio (original_size / compressed_size) */
+  compression_ratio: number;
+  /** Video codec used (e.g., 'libx265', 'libx264', 'vp9') */
+  codec: string;
+  /** Constant Rate Factor value used for encoding */
+  crf: number;
+  /** Encoding preset (e.g., 'slow', 'medium', 'fast') */
+  preset?: string;
+  /** Audio codec used (e.g., 'libopus', 'aac', 'mp3') */
+  audio_codec?: string;
+  /** Audio bitrate (e.g., '64k', '128k', '192k') */
+  audio_bitrate?: string;
+  /** Time taken to encode the file in seconds */
+  encoding_time_seconds: number;
+  /** Quality metrics comparing original vs compressed */
+  quality_score?: {
+    /** VMAF score (Video Multi-Method Assessment Fusion), 0-100 scale */
+    vmaf?: number;
+    /** SSIM score (Structural Similarity Index), 0-1 scale */
+    ssim?: number;
+  };
+  /** Compression profile used */
+  profile: CompressionProfile;
+  /** Timestamp when compression was completed */
+  compressed_at: string;
+}
+
+/**
+ * Job payload for video compression tasks.
+ */
+export interface CompressVideoJobPayload {
+  /** Recording ID to compress */
+  recordingId: string;
+  /** Organization ID for the recording */
+  orgId: string;
+  /** Storage path to input (raw) video file */
+  inputPath: string;
+  /** Storage path for output (compressed) video file */
+  outputPath: string;
+  /** Compression profile to use */
+  profile: CompressionProfile;
+  /** Content type of the recording */
+  contentType: ContentType;
+  /** File type of the recording */
+  fileType: FileType;
+}
+
+/**
+ * Job payload for audio compression tasks.
+ */
+export interface CompressAudioJobPayload {
+  /** Recording ID to compress */
+  recordingId: string;
+  /** Organization ID for the recording */
+  orgId: string;
+  /** Storage path to input (raw) audio file */
+  inputPath: string;
+  /** Storage path for output (compressed) audio file */
+  outputPath: string;
+  /** Compression profile to use */
+  profile: CompressionProfile;
+  /** Content type of the recording */
+  contentType: ContentType;
+  /** File type of the recording */
+  fileType: FileType;
+}
+
+/**
+ * Job payload for storage tier migration tasks.
+ */
+export interface MigrateStorageTierJobPayload {
+  /** Recording ID to migrate */
+  recordingId: string;
+  /** Organization ID for the recording */
+  orgId: string;
+  /** Current storage provider */
+  fromProvider: StorageProvider;
+  /** Current storage tier */
+  fromTier: StorageTier;
+  /** Target storage tier */
+  toTier: StorageTier;
+  /** Source storage path (Supabase or R2) */
+  sourcePath: string;
+  /** File size in bytes */
+  fileSize: number;
+}
 
 export interface Tag {
   id: string;
@@ -312,6 +452,18 @@ export interface Database {
           mime_type: string | null;
           /** File size in bytes */
           file_size: number | null;
+          /** Compression statistics (file size reduction, quality metrics, encoding params) */
+          compression_stats: CompressionStats | null;
+          /** Storage tier for multi-tier storage strategy (hot, warm, cold) */
+          storage_tier: StorageTier | null;
+          /** Current storage provider (supabase or r2) */
+          storage_provider: StorageProvider | null;
+          /** Object key in Cloudflare R2 bucket (if stored in R2) */
+          storage_path_r2: string | null;
+          /** Timestamp when file was last migrated between tiers */
+          tier_migrated_at: string | null;
+          /** Flag indicating if tier migration job is scheduled */
+          tier_migration_scheduled: boolean | null;
         };
         Insert: {
           id?: string;
@@ -335,6 +487,12 @@ export interface Database {
           original_filename?: string | null;
           mime_type?: string | null;
           file_size?: number | null;
+          compression_stats?: CompressionStats | null;
+          storage_tier?: StorageTier | null;
+          storage_provider?: StorageProvider | null;
+          storage_path_r2?: string | null;
+          tier_migrated_at?: string | null;
+          tier_migration_scheduled?: boolean | null;
         };
         Update: {
           title?: string | null;
@@ -354,6 +512,12 @@ export interface Database {
           original_filename?: string | null;
           mime_type?: string | null;
           file_size?: number | null;
+          compression_stats?: CompressionStats | null;
+          storage_tier?: StorageTier | null;
+          storage_provider?: StorageProvider | null;
+          storage_path_r2?: string | null;
+          tier_migrated_at?: string | null;
+          tier_migration_scheduled?: boolean | null;
         };
       };
       recording_summaries: {

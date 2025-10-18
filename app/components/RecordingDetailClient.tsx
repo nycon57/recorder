@@ -140,15 +140,15 @@ export default function RecordingDetailClient({
       case 'uploaded':
         return 'Uploaded';
       case 'transcribing':
-        return 'Transcribing';
+        return 'Processing';
       case 'transcribed':
-        return 'Transcribed';
+        return 'Processing';
       case 'doc_generating':
-        return 'Generating Document';
+        return 'Processing';
       case 'completed':
-        return 'Completed';
+        return 'Ready';
       case 'error':
-        return 'Error';
+        return 'Failed';
       default:
         return status;
     }
