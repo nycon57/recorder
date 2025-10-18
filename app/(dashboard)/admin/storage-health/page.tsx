@@ -1,9 +1,11 @@
 import { Metadata } from 'next';
 
-import HealthScoreGauge from './components/HealthScoreGauge';
-import ComponentBreakdown from './components/ComponentBreakdown';
-import ServiceStatusGrid from './components/ServiceStatusGrid';
-import PerformanceMetrics from './components/PerformanceMetrics';
+import {
+  HealthScoreGauge,
+  ComponentBreakdown,
+  ServiceStatusGrid,
+  PerformanceMetrics,
+} from '@/app/components/admin';
 
 export const metadata: Metadata = {
   title: 'Storage Health | Admin',

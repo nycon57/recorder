@@ -1,8 +1,10 @@
 import { Metadata } from 'next';
 
-import ActionPlanOverview from './components/ActionPlanOverview';
-import RecommendationsList from './components/RecommendationsList';
-import ImplementationTracker from './components/ImplementationTracker';
+import {
+  ActionPlanOverview,
+  RecommendationsList,
+  ImplementationTracker,
+} from '@/app/components/admin';
 
 export const metadata: Metadata = {
   title: 'Storage Recommendations | Admin',

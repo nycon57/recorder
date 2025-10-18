@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/admin';
 
 export interface SearchTrackingData {
   query: string;

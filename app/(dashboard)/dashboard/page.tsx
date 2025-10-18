@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 
-import { DashboardContent } from './components/DashboardContent';
+import { DashboardContent } from '@/app/components/dashboard';
 
 export const metadata = {
   title: 'Dashboard - Record',

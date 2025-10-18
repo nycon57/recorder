@@ -41,6 +41,12 @@ import { handleDeduplicateFile, handleBatchDeduplicate } from './handlers/dedupl
 // Similarity detection handlers
 import { handleDetectSimilarity, handleBatchDetectSimilarity } from './handlers/detect-similarity';
 
+// Analytics and monitoring handlers
+import { handleCollectMetrics } from './handlers/collect-metrics';
+import { handleGenerateAlerts } from './handlers/generate-alerts';
+import { handleGenerateRecommendations } from './handlers/generate-recommendations';
+import { handlePerformHealthCheck } from './handlers/perform-health-check';
+
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
 // import { generateDocument } from './handlers/docify-google';
@@ -169,6 +175,12 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
       throw new Error('Batch similarity detection failed');
     }
   },
+
+  // Analytics and monitoring handlers
+  collect_metrics: handleCollectMetrics,
+  generate_alerts: handleGenerateAlerts,
+  generate_recommendations: handleGenerateRecommendations,
+  perform_health_check: handlePerformHealthCheck,
 };
 
 /**

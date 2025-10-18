@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/admin';
 
 export type QuotaType = 'search' | 'recording' | 'ai' | 'storage' | 'connector';
 export type PlanTier = 'free' | 'starter' | 'professional' | 'enterprise';

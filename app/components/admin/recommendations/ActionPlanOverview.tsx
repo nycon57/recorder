@@ -41,7 +41,7 @@ export default function ActionPlanOverview() {
           immediate: data.immediate?.count || 0,
           shortTerm: data.shortTerm?.count || 0,
           longTerm: data.longTerm?.count || 0,
-          totalSavings: data.totalSavings || 0,
+          totalSavings: data.totalPotentialSavings || 0,
         });
         setError(null);
       } catch (err) {

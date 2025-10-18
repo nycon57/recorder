@@ -1,8 +1,10 @@
 import { Metadata } from 'next';
 
-import AlertSummaryCards from './components/AlertSummaryCards';
-import ActiveAlertsList from './components/ActiveAlertsList';
-import AlertConfiguration from './components/AlertConfiguration';
+import {
+  AlertSummaryCards,
+  ActiveAlertsList,
+  AlertConfiguration,
+} from '@/app/components/admin';
 
 export const metadata: Metadata = {
   title: 'Storage Alerts | Admin',

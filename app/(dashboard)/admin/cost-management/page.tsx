@@ -1,10 +1,12 @@
 import { Metadata } from 'next';
 
-import CostOverviewCards from './components/CostOverviewCards';
-import CostBreakdown from './components/CostBreakdown';
-import BudgetTracker from './components/BudgetTracker';
-import CostProjections from './components/CostProjections';
-import CostAllocationReport from './components/CostAllocationReport';
+import {
+  CostOverviewCards,
+  CostBreakdown,
+  BudgetTracker,
+  CostProjections,
+  CostAllocationReport,
+} from '@/app/components/admin';
 
 export const metadata: Metadata = {
   title: 'Cost Management | Admin',

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Monitor, Smartphone, Tablet, Globe, MapPin, Clock, Loader2, Shield } from 'lucide-react';
+import { useSession } from '@clerk/nextjs';
 
 import { useToast } from '@/app/components/ui/use-toast';
 import { Button } from '@/app/components/ui/button';
@@ -41,6 +42,7 @@ interface Session {
 
 export function SessionsList() {
   const { toast } = useToast();
+  const { session: clerkSession } = useSession();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRevoking, setIsRevoking] = useState<string | null>(null);
@@ -53,23 +55,32 @@ export function SessionsList() {
 
   const fetchSessions = async () => {
     try {
-      // Mock data for demonstration
-      // In production, this would fetch from the API
-      const mockSessions: Session[] = [
-        {
-          id: '1',
-          device_name: 'Chrome on MacBook Pro',
-          device_type: 'desktop',
-          browser: 'Chrome 118',
-          os: 'macOS 14.0',
-          ip_address: '192.168.1.1',
-          location: 'San Francisco, CA',
-          is_current: true,
-          last_active_at: new Date().toISOString(),
-          created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ];
-      setSessions(mockSessions);
+      const response = await fetch('/api/profile/sessions');
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch sessions');
+      }
+
+      const data = await response.json();
+
+      // Get current Clerk session ID
+      const currentSessionId = clerkSession?.id;
+
+      // Transform API response to match component's Session interface
+      const formattedSessions: Session[] = (data.data?.sessions || []).map((session: any) => ({
+        id: session.id,
+        device_name: `${session.browser} on ${session.os}`,
+        device_type: session.deviceType || 'unknown',
+        browser: session.browser,
+        os: session.os,
+        ip_address: session.ipAddress,
+        location: session.location || 'Unknown',
+        is_current: currentSessionId ? session.id === currentSessionId : false,
+        last_active_at: session.lastActiveAt,
+        created_at: session.createdAt,
+      }));
+
+      setSessions(formattedSessions);
     } catch (error) {
       const err = error as Error;
       console.error('Error fetching sessions:', err.message);
@@ -86,8 +97,17 @@ export function SessionsList() {
   const revokeSession = async (session: Session) => {
     setIsRevoking(session.id);
     try {
-      // Mock implementation - in production this would call the API
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await fetch('/api/profile/sessions', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sessionId: session.id }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to revoke session');
+      }
 
       setSessions((prev) => prev.filter((s) => s.id !== session.id));
 

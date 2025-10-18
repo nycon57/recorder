@@ -10,13 +10,14 @@ import {
   TabsTrigger,
 } from '@/app/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
-
-import { ProfileForm } from './components/ProfileForm';
-import { AvatarUpload } from './components/AvatarUpload';
-import { PreferencesForm } from './components/PreferencesForm';
-import { SessionsList } from './components/SessionsList';
-import { SecuritySettings } from './components/SecuritySettings';
-import { DangerZone } from './components/DangerZone';
+import {
+  ProfileForm,
+  AvatarUpload,
+  PreferencesForm,
+  SessionsList,
+  SecuritySettings,
+  DangerZone,
+} from '@/app/components/settings';
 
 export default function ProfilePage() {
   const { userId } = useAuth();
