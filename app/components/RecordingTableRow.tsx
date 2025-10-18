@@ -89,15 +89,15 @@ export default function RecordingTableRow({ recording }: RecordingTableRowProps)
       case 'uploaded':
         return 'Uploaded';
       case 'transcribing':
-        return 'Transcribing';
+        return 'Processing';
       case 'transcribed':
-        return 'Transcribed';
+        return 'Processing';
       case 'doc_generating':
-        return 'Generating Doc';
+        return 'Processing';
       case 'completed':
         return 'Ready';
       case 'error':
-        return 'Error';
+        return 'Failed';
       default:
         return status;
     }

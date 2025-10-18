@@ -233,7 +233,7 @@ export function SaveRecordingModal({
         // Don't call handleClose() yet - let streaming modal handle it
       } else {
         // Save only - close immediately
-        toast.success('Recording saved successfully');
+        toast.success('Upload successful! Your recording has been saved and is ready to view in your library.');
         onSaveComplete?.();
         handleClose();
       }

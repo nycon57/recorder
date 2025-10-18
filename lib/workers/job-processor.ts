@@ -28,6 +28,19 @@ import { handleExtractTextPdf } from './handlers/extract-text-pdf';
 import { handleExtractTextDocx } from './handlers/extract-text-docx';
 import { handleProcessTextNote } from './handlers/process-text-note';
 
+// Compression handlers
+import { handleCompressVideo } from './handlers/compress-video';
+import { handleCompressAudio } from './handlers/compress-audio';
+
+// Storage tier migration handlers
+import { handleMigrateStorageTier } from './handlers/migrate-storage-tier';
+
+// Deduplication handlers
+import { handleDeduplicateFile, handleBatchDeduplicate } from './handlers/deduplicate-file';
+
+// Similarity detection handlers
+import { handleDetectSimilarity, handleBatchDetectSimilarity } from './handlers/detect-similarity';
+
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
 // import { generateDocument } from './handlers/docify-google';
@@ -106,6 +119,56 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   extract_text_pdf: handleExtractTextPdf, // Extract text from PDF documents
   extract_text_docx: handleExtractTextDocx, // Extract text from DOCX documents
   process_text_note: handleProcessTextNote, // Process user-created text notes
+
+  // Compression handlers
+  compress_video: async (job: Job) => {
+    const result = await handleCompressVideo(job.payload as any);
+    if (!result.success) {
+      throw new Error(result.error || 'Video compression failed');
+    }
+  },
+  compress_audio: async (job: Job) => {
+    const result = await handleCompressAudio(job.payload as any);
+    if (!result.success) {
+      throw new Error(result.error || 'Audio compression failed');
+    }
+  },
+
+  // Storage tier migration
+  migrate_storage_tier: async (job: Job) => {
+    const result = await handleMigrateStorageTier(job.payload as any);
+    if (!result.success) {
+      throw new Error(result.error || 'Storage tier migration failed');
+    }
+  },
+
+  // Deduplication handlers
+  deduplicate_file: async (job: Job) => {
+    const result = await handleDeduplicateFile(job.payload as any);
+    if (!result.success) {
+      throw new Error(result.error || 'File deduplication failed');
+    }
+  },
+  batch_deduplicate: async (job: Job) => {
+    const result = await handleBatchDeduplicate(job.payload as any);
+    if (!result.success) {
+      throw new Error('Batch deduplication failed');
+    }
+  },
+
+  // Similarity detection handlers
+  detect_similarity: async (job: Job) => {
+    const result = await handleDetectSimilarity(job.payload as any);
+    if (!result.success) {
+      throw new Error(result.error || 'Similarity detection failed');
+    }
+  },
+  batch_detect_similarity: async (job: Job) => {
+    const result = await handleBatchDetectSimilarity(job.payload as any);
+    if (!result.success) {
+      throw new Error('Batch similarity detection failed');
+    }
+  },
 };
 
 /**

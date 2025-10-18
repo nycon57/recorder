@@ -53,8 +53,8 @@ export function RecordingCard({ item, onDelete, onShare, onDownload }: Recording
   const statusText = {
     uploading: 'Uploading',
     uploaded: 'Uploaded',
-    transcribing: 'Transcribing',
-    transcribed: 'Transcribed',
+    transcribing: 'Processing',
+    transcribed: 'Processing',
     doc_generating: 'Processing',
     completed: 'Ready',
     error: 'Failed',

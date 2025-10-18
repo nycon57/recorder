@@ -456,6 +456,45 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       },
     });
 
+    // Enqueue compression job (runs in parallel with doc generation)
+    // Get recording info to determine if compression is needed
+    const { data: recording } = await supabase
+      .from('recordings')
+      .select('content_type, file_type, file_size, storage_path_raw')
+      .eq('id', recordingId)
+      .single();
+
+    if (recording && recording.storage_path_raw) {
+      const contentType = recording.content_type || 'recording';
+      const outputPath = recording.storage_path_raw.replace('/raw.', '/compressed.');
+
+      // Only compress video/audio content types
+      if (['recording', 'video', 'audio'].includes(contentType)) {
+        await supabase.from('jobs').insert({
+          type: contentType === 'audio' ? 'compress_audio' : 'compress_video',
+          status: 'pending',
+          payload: {
+            recordingId,
+            orgId,
+            inputPath: recording.storage_path_raw,
+            outputPath,
+            profile: 'uploadedVideo', // Will be determined by classifier
+            contentType,
+            fileType: recording.file_type || 'mp4',
+          },
+          dedupe_key: `compress_${contentType}:${recordingId}`,
+        });
+
+        logger.info('Enqueued compression job', {
+          context: {
+            recordingId,
+            contentType,
+            jobType: contentType === 'audio' ? 'compress_audio' : 'compress_video',
+          },
+        });
+      }
+    }
+
     if (isStreaming) {
       streamingManager.sendProgress(recordingId, 'transcribe', 95, 'Processing complete, starting document generation');
     }

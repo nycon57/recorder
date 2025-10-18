@@ -77,13 +77,13 @@ export default function ProcessingPipeline({
     } else if (recording.status === 'transcribing') {
       steps.push({
         id: 'transcribe',
-        label: 'Transcribing',
+        label: 'Transcribing audio...',
         status: 'in_progress',
       });
     } else {
       steps.push({
         id: 'transcribe',
-        label: 'Transcription Pending',
+        label: 'Pending transcription',
         status: 'pending',
       });
     }
@@ -105,13 +105,13 @@ export default function ProcessingPipeline({
     } else if (recording.status === 'doc_generating') {
       steps.push({
         id: 'document',
-        label: 'Generating Document',
+        label: 'Generating document...',
         status: 'in_progress',
       });
     } else if (hasTranscript) {
       steps.push({
         id: 'document',
-        label: 'Document Generation Pending',
+        label: 'Pending document',
         status: 'pending',
       });
     }
@@ -120,14 +120,14 @@ export default function ProcessingPipeline({
     if (recording.status === 'completed') {
       steps.push({
         id: 'embeddings',
-        label: 'Embeddings Created',
+        label: 'Ready to search',
         status: 'completed',
         timestamp: recording.completed_at || recording.updated_at,
       });
     } else if (hasDocument) {
       steps.push({
         id: 'embeddings',
-        label: 'Creating Embeddings',
+        label: 'Preparing search...',
         status: 'in_progress',
       });
     }

@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { useRef, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 
@@ -22,13 +23,32 @@ interface RecordingPlayerProps {
   onDurationChange?: (duration: number) => void;
 }
 
-export default function RecordingPlayer({ videoUrl, initialTime, onDurationChange }: RecordingPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+const RecordingPlayer = React.forwardRef<HTMLVideoElement, RecordingPlayerProps>(({ videoUrl, initialTime, onDurationChange }, ref) => {
+  const internalRef = useRef<HTMLVideoElement>(null);
   const searchParams = useSearchParams();
+
+  // Combine refs
+  useEffect(() => {
+    const node = internalRef.current;
+    if (typeof ref === 'function') {
+      ref(node);
+    } else if (ref) {
+      ref.current = node;
+    }
+
+    // Cleanup: clear the forwarded ref on unmount
+    return () => {
+      if (typeof ref === 'function') {
+        ref(null);
+      } else if (ref && ref.current === node) {
+        ref.current = null;
+      }
+    };
+  }, [ref]);
 
   // Handle video loading, duration extraction, and timestamp
   useEffect(() => {
-    const video = videoRef.current;
+    const video = internalRef.current;
     if (!video) return;
 
     const handleLoadedMetadata = () => {
@@ -65,7 +85,7 @@ export default function RecordingPlayer({ videoUrl, initialTime, onDurationChang
   return (
     <VideoPlayer className="w-full rounded-lg overflow-hidden border border-border">
       <VideoPlayerContent
-        ref={videoRef}
+        ref={internalRef}
         slot="media"
         src={videoUrl}
         crossOrigin="anonymous"
@@ -83,4 +103,8 @@ export default function RecordingPlayer({ videoUrl, initialTime, onDurationChang
       </VideoPlayerControlBar>
     </VideoPlayer>
   );
-}
+});
+
+RecordingPlayer.displayName = 'RecordingPlayer';
+
+export default RecordingPlayer;

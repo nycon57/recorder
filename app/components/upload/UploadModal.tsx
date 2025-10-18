@@ -225,10 +225,11 @@ export default function UploadModal({
       // Track upload progress
       const xhr = new XMLHttpRequest();
 
-      // Progress tracking
+      // Progress tracking - cap at 90% to leave room for server processing
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
-          const percentComplete = (event.loaded / event.total) * 100;
+          // Cap upload progress at 90% to indicate server processing is still needed
+          const percentComplete = Math.min((event.loaded / event.total) * 90, 90);
           setFiles((prev) =>
             prev.map((f) => {
               const isInBatch = batchFiles.some(bf => bf.id === f.id);
@@ -261,6 +262,14 @@ export default function UploadModal({
       xhr.open('POST', '/api/library/upload');
       xhr.send(formData);
 
+      // Update progress to 95% while waiting for response
+      setFiles((prev) =>
+        prev.map((f) => {
+          const isInBatch = batchFiles.some(bf => bf.id === f.id);
+          return isInBatch ? { ...f, progress: 95 } : f;
+        })
+      );
+
       const result = await uploadPromise;
       const recordingIds: string[] = [];
 
@@ -278,7 +287,7 @@ export default function UploadModal({
                   ? {
                       ...f,
                       status: 'success',
-                      progress: 100,
+                      progress: 100, // Now set to 100% after server confirms
                       recordingId: uploadResult.id,
                     }
                   : f
@@ -292,6 +301,7 @@ export default function UploadModal({
                       ...f,
                       status: 'error',
                       error: uploadResult.error || 'Upload failed',
+                      progress: 0, // Reset progress on error
                       retryCount: (f.retryCount || 0) + 1,
                     }
                   : f

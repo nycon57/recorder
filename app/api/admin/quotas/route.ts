@@ -129,6 +129,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   });
 
   // Filter for organizations near limit
+  let orgsNearLimit = results;
   if (nearLimit) {
     results = results.filter((r) => {
       return (
@@ -138,9 +139,53 @@ export const GET = apiHandler(async (request: NextRequest) => {
         r.quotas.aiRequests.usage >= limitThreshold * 100
       );
     });
+  } else {
+    // For non-filtered requests, calculate organizations near limits
+    orgsNearLimit = results.filter((r) => {
+      return (
+        r.quotas.searches.usage >= 80 ||
+        r.quotas.storage.usage >= 80 ||
+        r.quotas.recordings.usage >= 80 ||
+        r.quotas.aiRequests.usage >= 80
+      );
+    });
   }
 
+  // Calculate summary statistics
+  const totalOrgs = count || 0;
+  const orgsNearSearchLimit = results.filter(r => r.quotas.searches.usage >= 80).length;
+  const orgsNearStorageLimit = results.filter(r => r.quotas.storage.usage >= 80).length;
+
+  const totalStorageUsedGb = results.reduce((sum, r) => sum + parseFloat(r.quotas.storage.used), 0);
+  const totalStorageLimitGb = results.reduce((sum, r) => sum + r.quotas.storage.limit, 0);
+
+  // Calculate plan distribution
+  const planDistribution: Record<string, number> = {};
+  results.forEach(r => {
+    const plan = r.orgPlan || 'free';
+    planDistribution[plan] = (planDistribution[plan] || 0) + 1;
+  });
+
+  // Format organizations for the admin quotas page
+  const orgsForDisplay = orgsNearLimit.map(r => ({
+    id: r.orgId,
+    name: r.orgName,
+    plan: r.orgPlan,
+    storageUsed: parseFloat(r.quotas.storage.used),
+    storageLimit: r.quotas.storage.limit,
+    searchesUsed: r.quotas.searches.used,
+    searchesLimit: r.quotas.searches.limit,
+  }));
+
   return successResponse({
+    totalOrgs,
+    orgsNearSearchLimit,
+    orgsNearStorageLimit,
+    totalStorageUsedGb,
+    totalStorageLimitGb,
+    planDistribution,
+    orgs: orgsForDisplay,
+    // Keep the detailed data for other use cases
     organizations: results,
     pagination: {
       page,

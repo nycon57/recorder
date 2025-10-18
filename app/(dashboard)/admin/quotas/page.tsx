@@ -110,7 +110,9 @@ export default function AdminQuotasPage() {
     return null;
   }
 
-  const storageUtilization = (data.totalStorageUsedGb / data.totalStorageLimitGb) * 100;
+  const storageUtilization = data.totalStorageLimitGb && data.totalStorageLimitGb > 0
+    ? (data.totalStorageUsedGb / data.totalStorageLimitGb) * 100
+    : 0;
 
   return (
     <div className="p-6 space-y-6">
@@ -134,7 +136,7 @@ export default function AdminQuotasPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.totalOrgs}</div>
+            <div className="text-2xl font-bold">{data.totalOrgs ?? 0}</div>
           </CardContent>
         </Card>
 
@@ -144,9 +146,11 @@ export default function AdminQuotasPage() {
             <AlertTriangle className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.orgsNearSearchLimit}</div>
+            <div className="text-2xl font-bold">{data.orgsNearSearchLimit ?? 0}</div>
             <p className="text-xs text-muted-foreground">
-              {((data.orgsNearSearchLimit / data.totalOrgs) * 100).toFixed(0)}% of orgs
+              {data.totalOrgs && data.totalOrgs > 0
+                ? (((data.orgsNearSearchLimit ?? 0) / data.totalOrgs) * 100).toFixed(0)
+                : '0'}% of orgs
             </p>
           </CardContent>
         </Card>
@@ -157,9 +161,11 @@ export default function AdminQuotasPage() {
             <HardDrive className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.orgsNearStorageLimit}</div>
+            <div className="text-2xl font-bold">{data.orgsNearStorageLimit ?? 0}</div>
             <p className="text-xs text-muted-foreground">
-              {((data.orgsNearStorageLimit / data.totalOrgs) * 100).toFixed(0)}% of orgs
+              {data.totalOrgs && data.totalOrgs > 0
+                ? (((data.orgsNearStorageLimit ?? 0) / data.totalOrgs) * 100).toFixed(0)
+                : '0'}% of orgs
             </p>
           </CardContent>
         </Card>
@@ -171,45 +177,49 @@ export default function AdminQuotasPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {data.totalStorageUsedGb.toFixed(0)}GB
+              {(data.totalStorageUsedGb ?? 0).toFixed(0)}GB
             </div>
             <p className="text-xs text-muted-foreground">
-              of {data.totalStorageLimitGb}GB ({storageUtilization.toFixed(1)}%)
+              of {data.totalStorageLimitGb ?? 0}GB ({storageUtilization.toFixed(1)}%)
             </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Plan Distribution */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Plan Distribution</CardTitle>
-          <CardDescription>Organizations by subscription tier</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {Object.entries(data.planDistribution).map(([plan, count]) => {
-              const percentage = (count / data.totalOrgs) * 100;
-              return (
-                <div key={plan} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge variant={getPlanBadgeVariant(plan)}>
-                        {plan.toUpperCase()}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {count} organizations
-                      </span>
+      {data.planDistribution && Object.keys(data.planDistribution).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Plan Distribution</CardTitle>
+            <CardDescription>Organizations by subscription tier</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Object.entries(data.planDistribution).map(([plan, count]) => {
+                const percentage = data.totalOrgs && data.totalOrgs > 0
+                  ? (count / data.totalOrgs) * 100
+                  : 0;
+                return (
+                  <div key={plan} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={getPlanBadgeVariant(plan)}>
+                          {plan.toUpperCase()}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {count} organizations
+                        </span>
+                      </div>
+                      <span className="text-sm font-medium">{percentage.toFixed(1)}%</span>
                     </div>
-                    <span className="text-sm font-medium">{percentage.toFixed(1)}%</span>
+                    <Progress value={percentage} className="h-2" />
                   </div>
-                  <Progress value={percentage} className="h-2" />
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Organizations Near Limits */}
       {data.orgs && data.orgs.length > 0 && (
@@ -231,22 +241,26 @@ export default function AdminQuotasPage() {
               </TableHeader>
               <TableBody>
                 {data.orgs.map((org) => {
-                  const storagePercent = (org.storageUsed / org.storageLimit) * 100;
-                  const searchPercent = (org.searchesUsed / org.searchesLimit) * 100;
+                  const storagePercent = org.storageLimit && org.storageLimit > 0
+                    ? (org.storageUsed / org.storageLimit) * 100
+                    : 0;
+                  const searchPercent = org.searchesLimit && org.searchesLimit > 0
+                    ? (org.searchesUsed / org.searchesLimit) * 100
+                    : 0;
                   const nearLimit = storagePercent > 80 || searchPercent > 80;
 
                   return (
                     <TableRow key={org.id}>
-                      <TableCell className="font-medium">{org.name}</TableCell>
+                      <TableCell className="font-medium">{org.name || 'Unknown'}</TableCell>
                       <TableCell>
-                        <Badge variant={getPlanBadgeVariant(org.plan)}>
-                          {org.plan}
+                        <Badge variant={getPlanBadgeVariant(org.plan || 'free')}>
+                          {org.plan || 'free'}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1">
                           <div className="text-sm">
-                            {org.storageUsed.toFixed(1)} / {org.storageLimit} GB
+                            {(org.storageUsed ?? 0).toFixed(1)} / {org.storageLimit ?? 0} GB
                           </div>
                           <Progress
                             value={storagePercent}
@@ -257,7 +271,7 @@ export default function AdminQuotasPage() {
                       <TableCell>
                         <div className="space-y-1">
                           <div className="text-sm">
-                            {org.searchesUsed.toLocaleString()} / {org.searchesLimit.toLocaleString()}
+                            {(org.searchesUsed ?? 0).toLocaleString()} / {(org.searchesLimit ?? 0).toLocaleString()}
                           </div>
                           <Progress
                             value={searchPercent}

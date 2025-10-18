@@ -13,6 +13,8 @@ import {
   getFileTypeFromMimeType,
   FILE_EXTENSION_TO_CONTENT_TYPE,
   getProcessingJobs,
+  formatFileSize,
+  FILE_SIZE_LIMIT_LABELS,
 } from '@/lib/types/content';
 import { generateStoragePath } from '@/lib/validations/library';
 import type { ContentType, FileType, JobType } from '@/lib/types/database';
@@ -172,11 +174,30 @@ export const POST = apiHandler(async (request: NextRequest) => {
               .delete()
               .eq('id', recording.id);
 
+            // Provide more specific error messages
+            let errorMessage = `Storage upload failed: ${uploadError.message}`;
+
+            // Check for common error scenarios
+            // Handle statusCode as both string and number
+            const statusCode = typeof uploadError.statusCode === 'string'
+              ? parseInt(uploadError.statusCode, 10)
+              : uploadError.statusCode;
+
+            if (uploadError.message?.includes('exceeded') || statusCode === 413) {
+              // Use shared constants for file size limits
+              const videoLimit = FILE_SIZE_LIMIT_LABELS.video;
+              const audioLimit = FILE_SIZE_LIMIT_LABELS.audio;
+              const documentLimit = FILE_SIZE_LIMIT_LABELS.document;
+              errorMessage = `File too large. Your file (${formatFileSize(file.size)}) exceeds the storage limit. Maximum: ${videoLimit} for videos, ${audioLimit} for audio, ${documentLimit} for documents.`;
+            } else if (uploadError.message?.includes('mime') || uploadError.message?.includes('type')) {
+              errorMessage = `File type not supported. Supported formats: MP4, MOV, WEBM, AVI (video), MP3, WAV, M4A, OGG (audio), PDF, DOCX (documents), TXT, MD (text).`;
+            }
+
             return {
               index,
               status: 'error' as const,
               title: file.name,
-              error: `Storage upload failed: ${uploadError.message}`,
+              error: errorMessage,
             };
           }
 
