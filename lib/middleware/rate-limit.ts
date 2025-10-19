@@ -14,12 +14,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
-// Initialize Redis client
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
-
 /**
  * Rate limit tiers with different limits for different endpoint types
  * Using sliding window algorithm for accurate rate limiting
@@ -31,33 +25,57 @@ export enum RateLimitTier {
   ADMIN = 'admin',         // 500 req/min - Admin endpoints (higher limit)
 }
 
-// Rate limiter instances for each tier
-const rateLimiters: Record<RateLimitTier, Ratelimit> = {
-  [RateLimitTier.AUTH]: new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(5, '1 m'), // 5 requests per minute
-    analytics: true,
-    prefix: 'ratelimit:auth',
-  }),
-  [RateLimitTier.API]: new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(100, '1 m'), // 100 requests per minute
-    analytics: true,
-    prefix: 'ratelimit:api',
-  }),
-  [RateLimitTier.PUBLIC]: new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(20, '1 m'), // 20 requests per minute
-    analytics: true,
-    prefix: 'ratelimit:public',
-  }),
-  [RateLimitTier.ADMIN]: new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(500, '1 m'), // 500 requests per minute
-    analytics: true,
-    prefix: 'ratelimit:admin',
-  }),
-};
+// Lazy-initialized Redis client and rate limiters (avoid build-time errors)
+let redis: Redis | null = null;
+let rateLimiters: Record<RateLimitTier, Ratelimit> | null = null;
+
+/**
+ * Initialize Redis and rate limiters (lazy initialization)
+ * Returns null if Redis is not configured (allows build to succeed)
+ */
+function getRateLimiters(): Record<RateLimitTier, Ratelimit> | null {
+  // Skip if env vars not available (e.g., during build)
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    return null;
+  }
+
+  // Lazy initialization - only create instances when first needed
+  if (!rateLimiters) {
+    redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+
+    rateLimiters = {
+      [RateLimitTier.AUTH]: new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(5, '1 m'),
+        analytics: true,
+        prefix: 'ratelimit:auth',
+      }),
+      [RateLimitTier.API]: new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(100, '1 m'),
+        analytics: true,
+        prefix: 'ratelimit:api',
+      }),
+      [RateLimitTier.PUBLIC]: new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(20, '1 m'),
+        analytics: true,
+        prefix: 'ratelimit:public',
+      }),
+      [RateLimitTier.ADMIN]: new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(500, '1 m'),
+        analytics: true,
+        prefix: 'ratelimit:admin',
+      }),
+    };
+  }
+
+  return rateLimiters;
+}
 
 /**
  * Get client identifier from request
@@ -148,13 +166,16 @@ export function rateLimit(
     handler: T
   ): T {
     return (async (request: NextRequest, ...args: any[]) => {
-      // Skip rate limiting if Redis is not configured (development)
-      if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-        console.warn('[Rate Limit] Redis not configured - skipping rate limit');
-        return handler(request, ...args);
-      }
-
       try {
+        // Get rate limiters (lazy initialization)
+        const limiters = getRateLimiters();
+
+        // Skip rate limiting if Redis is not configured (e.g., during build or development)
+        if (!limiters) {
+          console.warn('[Rate Limit] Redis not configured - skipping rate limit');
+          return handler(request, ...args);
+        }
+
         // Get user ID if provided
         const userId = getUserId ? await getUserId(request) : undefined;
 
@@ -162,7 +183,7 @@ export function rateLimit(
         const identifier = getClientIdentifier(request, userId);
 
         // Check rate limit
-        const { success, limit, remaining, reset } = await rateLimiters[tier].limit(identifier);
+        const { success, limit, remaining, reset } = await limiters[tier].limit(identifier);
 
         // Add rate limit headers to response
         const headers = {
