@@ -11,9 +11,9 @@ import { ScrollArea } from '@/app/components/ui/scroll-area';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
 import PDFDocumentViewer from './PDFDocumentViewer';
 
-import MetadataSidebar from './shared/MetadataSidebar';
-import AIDocumentPanel from './shared/AIDocumentPanel';
-import ShareControls from './shared/ShareControls';
+import MetadataSidebar from '../shared/MetadataSidebar';
+import AIDocumentPanel from '../shared/AIDocumentPanel';
+import ShareControls from '../shared/ShareControls';
 
 import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
 import type { Tag } from '@/lib/types/database';

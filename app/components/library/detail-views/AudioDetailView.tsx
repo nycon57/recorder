@@ -12,10 +12,10 @@ import ProcessingPipeline from '@/app/components/ProcessingPipeline';
 import ReprocessStreamModal from '@/app/components/ReprocessStreamModal';
 import AudioPlayer from './AudioPlayer';
 
-import MetadataSidebar from './shared/MetadataSidebar';
-import TranscriptPanel from './shared/TranscriptPanel';
-import AIDocumentPanel from './shared/AIDocumentPanel';
-import ShareControls from './shared/ShareControls';
+import MetadataSidebar from '../shared/MetadataSidebar';
+import TranscriptPanel from '../shared/TranscriptPanel';
+import AIDocumentPanel from '../shared/AIDocumentPanel';
+import ShareControls from '../shared/ShareControls';
 
 import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
 import type { Tag } from '@/lib/types/database';
