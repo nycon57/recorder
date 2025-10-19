@@ -64,7 +64,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     });
   } catch (error) {
     console.error('[Analytics What-If] Error:', error);
-    throw errors.serverError(
+    throw new Error(
       `Failed to run what-if analysis: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }

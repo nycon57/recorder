@@ -134,7 +134,7 @@ async function collectMetricsForOrganization(
   if (usersError) {
     logger.warn('Failed to count users', {
       context: { organizationId: orgId },
-      error: usersError,
+      error: new Error(usersError.message),
     });
   }
 
@@ -147,8 +147,8 @@ async function collectMetricsForOrganization(
 
   const storageCost = recordings.reduce((sum, r) => {
     const sizeGB = (r.file_size || 0) / 1e9;
-    const tier = r.storage_tier || 'hot';
-    return sum + (sizeGB * (tierPricing[tier] || 0));
+    const tier = (r.storage_tier || 'hot') as 'hot' | 'warm' | 'cold';
+    return sum + (sizeGB * (tierPricing[tier] ?? 0));
   }, 0);
 
   // Get processing costs from completed jobs (last hour)
@@ -199,7 +199,7 @@ async function collectMetricsForOrganization(
 
   if (similarityError) {
     logger.debug('similarity_matches table not available, skipping deduplication metrics', {
-      error: similarityError.message,
+      error: new Error(similarityError.message),
     });
   } else if (similarityMatches) {
     deduplicationSavings = similarityMatches.reduce(

@@ -9,10 +9,10 @@ import {
 import { createClient } from '@/lib/supabase/server';
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string; // Recording/item ID
     tagId: string; // Tag ID
-  };
+  }>;
 }
 
 /**
@@ -20,7 +20,7 @@ interface RouteParams {
  */
 export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
   const { orgId } = await requireOrg();
-  const { id, tagId } = params;
+  const { id, tagId } = await params;
   const supabase = await createClient();
 
   // Verify item exists and belongs to org

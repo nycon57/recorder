@@ -62,7 +62,7 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteParams
 
   if (updateError) {
     console.error('[AdminJobRetry] Error updating job:', updateError);
-    throw errors.internal('Failed to retry job');
+    throw new Error('Failed to retry job');
   }
 
   return successResponse({

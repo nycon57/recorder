@@ -39,7 +39,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     });
   } catch (error) {
     console.error('[Analytics Forecast] Error:', error);
-    throw errors.serverError(
+    throw new Error(
       `Failed to generate cost forecast: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }

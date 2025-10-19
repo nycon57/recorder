@@ -34,7 +34,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const expectedSecret = process.env.CRON_SECRET;
 
   if (!expectedSecret) {
-    throw errors.serverError(
+    throw new Error(
       'CRON_SECRET not configured. Set CRON_SECRET environment variable.'
     );
   }
@@ -106,7 +106,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const { data: organizations, error: orgsError } = await query;
 
     if (orgsError) {
-      throw errors.serverError(`Failed to fetch organizations: ${orgsError.message}`);
+      throw new Error(`Failed to fetch organizations: ${orgsError.message}`);
     }
 
     if (!organizations || organizations.length === 0) {
@@ -176,7 +176,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     });
   } catch (error) {
     console.error('[schedule-migrations] Migration scheduling failed:', error);
-    throw errors.serverError(
+    throw new Error(
       `Migration scheduling failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
@@ -192,7 +192,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const expectedSecret = process.env.CRON_SECRET;
 
   if (!expectedSecret) {
-    throw errors.serverError('CRON_SECRET not configured');
+    throw new Error('CRON_SECRET not configured');
   }
 
   if (cronSecret !== expectedSecret) {

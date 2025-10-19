@@ -56,10 +56,10 @@ export async function handlePerformHealthCheck(job: Job): Promise<void> {
       storage_health: storageHealth.score,
       api_health: apiHealth.score,
       jobs_health: jobsHealth.score,
-      api_response_time: apiHealth.responseTime,
-      job_processing_time: jobsHealth.avgProcessingTime,
-      storage_latency: storageHealth.latency,
-      throughput: apiHealth.throughput,
+      api_response_time: apiHealth.responseTime ?? 0,
+      job_processing_time: jobsHealth.avgProcessingTime ?? 0,
+      storage_latency: storageHealth.latency ?? 0,
+      throughput: apiHealth.throughput ?? 0,
     });
 
     // Log warning if overall score is low
@@ -98,7 +98,7 @@ async function checkDatabaseHealth(
     const { error } = await supabase.from('organizations').select('id').limit(1);
 
     if (error) {
-      logger.error('Database health check failed', { error: error.message });
+      logger.error('Database health check failed', { error: new Error(error.message) });
       return { score: 0, latency: 0 };
     }
 
@@ -131,7 +131,7 @@ async function checkStorageHealth(
     const { data, error } = await supabase.storage.from('recordings').list('', { limit: 1 });
 
     if (error) {
-      logger.error('Storage health check failed', { error: error.message });
+      logger.error('Storage health check failed', { error: new Error(error.message) });
       return { score: 0, latency: 0 };
     }
 

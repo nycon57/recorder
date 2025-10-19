@@ -1,8 +1,16 @@
+/**
+ * @jest-environment node
+ */
+
 import { GET, POST } from '@/app/api/recordings/route';
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createMockQueryBuilder, createMockStorageBucket, type MockQueryBuilder, type MockStorageBucket } from '@/__mocks__/supabase';
 
 // Mock Supabase
+let mockQueryBuilder: MockQueryBuilder;
+let mockStorageBucket: MockStorageBucket;
+
 jest.mock('@/lib/supabase/server', () => ({
   createClient: jest.fn(),
 }));
@@ -20,17 +28,13 @@ describe('Recordings API', () => {
   let mockSupabase: any;
 
   beforeEach(() => {
+    mockQueryBuilder = createMockQueryBuilder();
+    mockStorageBucket = createMockStorageBucket();
+
     mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      insert: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      order: jest.fn().mockReturnThis(),
-      range: jest.fn().mockReturnThis(),
-      single: jest.fn(),
+      from: jest.fn(() => mockQueryBuilder),
       storage: {
-        from: jest.fn().mockReturnThis(),
-        createSignedUploadUrl: jest.fn(),
+        from: jest.fn(() => mockStorageBucket),
       },
     };
 
@@ -48,7 +52,7 @@ describe('Recordings API', () => {
         { id: '2', title: 'Recording 2', org_id: 'test-org-id' },
       ];
 
-      mockSupabase.single.mockResolvedValue({
+      mockQueryBuilder.single.mockResolvedValue({
         data: mockRecordings,
         error: null,
         count: 2,
@@ -64,7 +68,7 @@ describe('Recordings API', () => {
     });
 
     it('should respect pagination params', async () => {
-      mockSupabase.single.mockResolvedValue({
+      mockQueryBuilder.single.mockResolvedValue({
         data: [],
         error: null,
         count: 0,
@@ -73,13 +77,13 @@ describe('Recordings API', () => {
       const request = new NextRequest('http://localhost:3000/api/recordings?limit=50&offset=100');
       await GET(request);
 
-      expect(mockSupabase.range).toHaveBeenCalledWith(100, 149);
+      expect(mockQueryBuilder.range).toHaveBeenCalledWith(100, 149);
     });
 
     it('should handle errors gracefully', async () => {
-      mockSupabase.single.mockResolvedValue({
+      mockQueryBuilder.single.mockResolvedValue({
         data: null,
-        error: { message: 'Database error' },
+        error: { message: 'Database error' } as any,
       });
 
       const request = new NextRequest('http://localhost:3000/api/recordings');
@@ -98,12 +102,12 @@ describe('Recordings API', () => {
         status: 'uploading',
       };
 
-      mockSupabase.single.mockResolvedValue({
+      mockQueryBuilder.single.mockResolvedValue({
         data: mockRecording,
         error: null,
       });
 
-      mockSupabase.storage.createSignedUploadUrl.mockResolvedValue({
+      mockStorageBucket.createSignedUploadUrl.mockResolvedValue({
         data: {
           signedUrl: 'https://supabase.co/upload/signed-url',
           path: 'org_test-org-id/recordings/new-recording-id/raw.webm',
@@ -129,12 +133,12 @@ describe('Recordings API', () => {
     });
 
     it('should handle missing title/description', async () => {
-      mockSupabase.single.mockResolvedValue({
+      mockQueryBuilder.single.mockResolvedValue({
         data: { id: 'test-id' },
         error: null,
       });
 
-      mockSupabase.storage.createSignedUploadUrl.mockResolvedValue({
+      mockStorageBucket.createSignedUploadUrl.mockResolvedValue({
         data: { signedUrl: 'url', path: 'path', token: 'token' },
         error: null,
       });

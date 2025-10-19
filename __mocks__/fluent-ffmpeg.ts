@@ -32,7 +32,9 @@ const mockFFmpegCommand: FFmpegCommand = {
   }),
 };
 
-const mockFfmpeg = jest.fn(() => mockFFmpegCommand);
+const mockFfmpeg = jest.fn(() => mockFFmpegCommand) as jest.Mock<FFmpegCommand, [], any> & {
+  ffprobe: jest.Mock;
+};
 
 // Mock ffprobe
 mockFfmpeg.ffprobe = jest.fn((videoPath: string, callback: Function) => {

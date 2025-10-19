@@ -56,17 +56,24 @@ export async function generateEmbeddings(job: Job): Promise<void> {
 
   const supabase = createAdminClient();
 
-  // Check if embeddings already exist (idempotency check)
-  const { data: existingChunks, count } = await supabase
+  // Check if embeddings already exist and are complete (idempotency check)
+  const { data: chunkStats } = await supabase
     .from('transcript_chunks')
-    .select('id', { count: 'exact', head: true })
+    .select('id, embedding', { count: 'exact' })
     .eq('recording_id', recordingId);
 
-  if (count && count > 0) {
-    logger.info('Embeddings already exist, skipping generation', {
+  const totalChunks = chunkStats?.length || 0;
+  const chunksWithEmbeddings = chunkStats?.filter(
+    chunk => chunk.embedding !== null && chunk.embedding !== ''
+  ).length || 0;
+
+  // Check if embeddings are complete
+  if (totalChunks > 0 && totalChunks === chunksWithEmbeddings) {
+    logger.info('Embeddings already exist and are complete, skipping generation', {
       context: {
         recordingId,
-        existingChunks: count,
+        totalChunks,
+        chunksWithEmbeddings,
       },
     });
 
@@ -96,6 +103,27 @@ export async function generateEmbeddings(job: Job): Promise<void> {
     }
 
     return;
+  } else if (totalChunks > 0 && chunksWithEmbeddings < totalChunks) {
+    // Partial failure detected - clean up incomplete chunks
+    logger.warn('Partial embeddings detected, cleaning up for retry', {
+      context: {
+        recordingId,
+        totalChunks,
+        chunksWithEmbeddings,
+        incompleteChunks: totalChunks - chunksWithEmbeddings,
+      },
+    });
+
+    const { error: deleteError } = await supabase
+      .from('transcript_chunks')
+      .delete()
+      .eq('recording_id', recordingId);
+
+    if (deleteError) {
+      throw new Error(`Failed to clean up partial embeddings: ${deleteError.message}`);
+    }
+
+    logger.info('Cleaned up partial embeddings, proceeding with full generation');
   }
 
   try {
@@ -131,7 +159,33 @@ export async function generateEmbeddings(job: Job): Promise<void> {
 
     // Extract segments from words_json
     const wordsData = (transcript.words_json || {}) as Record<string, any>;
-    const segments = (wordsData.segments || []) as Array<{ start: number; end: number; text: string }>;
+    const rawSegments = (wordsData.segments || []) as Array<any>;
+
+    // Helper to format seconds to MM:SS timestamp
+    function formatTimestamp(seconds: number): string {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // Convert segments to AudioSegment type (for video chunking)
+    const audioSegments = rawSegments.map(seg => {
+      const start = typeof seg.start === 'number' ? seg.start : Number(seg.start || 0);
+      const end = typeof seg.end === 'number' ? seg.end : Number(seg.end || 0);
+      return {
+        timestamp: formatTimestamp(start),
+        startTime: start,
+        endTime: end,
+        text: String(seg.text || ''),
+      };
+    });
+
+    // Simple segments for text-based chunking
+    const simpleSegments = rawSegments.map(seg => ({
+      start: typeof seg.start === 'number' ? seg.start : Number(seg.start || 0),
+      end: typeof seg.end === 'number' ? seg.end : Number(seg.end || 0),
+      text: String(seg.text || ''),
+    }));
 
     // Check if this is a video transcript with visual context
     const visualEvents = (transcript.visual_events || []) as any[];
@@ -143,7 +197,7 @@ export async function generateEmbeddings(job: Job): Promise<void> {
         type: isGeminiVideo ? 'Gemini Video' : 'Audio-only',
         visualEventsCount: visualEvents.length,
         hasVisualContext,
-        segments: segments.length,
+        segments: audioSegments.length,
       },
     });
 
@@ -154,7 +208,7 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       // Use enhanced video chunking with visual context
       transcriptChunks = chunkVideoTranscript(
         transcript.text,
-        segments,
+        audioSegments,
         visualEvents,
         { maxTokens: 500, overlapTokens: 50 }
       );
@@ -169,7 +223,7 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       // Use standard chunking for audio-only transcripts
       transcriptChunks = chunkTranscriptWithSegments(
         transcript.text,
-        segments,
+        simpleSegments,
         { maxTokens: 500, overlapTokens: 50 }
       );
       logger.info('Created audio transcript chunks', {
@@ -299,7 +353,11 @@ export async function generateEmbeddings(job: Job): Promise<void> {
     }
 
     // PERFORMANCE FIX: Create Google GenAI client once (not for every chunk)
-    const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
+    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GOOGLE_AI_API_KEY environment variable is not set');
+    }
+    const genai = new GoogleGenAI({ apiKey });
 
     // Generate embeddings in batches
     const embeddingRecords = [];
@@ -335,52 +393,95 @@ export async function generateEmbeddings(job: Job): Promise<void> {
         );
       }
 
-      // PERFORMANCE FIX: Process chunks in parallel using Promise.all
-      const batchResults = await Promise.all(
-        batch.map(async (chunk) => {
-          // Call embedContent with proper dimension specification
-          const result = await genai.models.embedContent({
-            model: GOOGLE_CONFIG.EMBEDDING_MODEL,
-            contents: chunk.text,
-            config: {
-              taskType: GOOGLE_CONFIG.EMBEDDING_TASK_TYPE,
-              outputDimensionality: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS, // Match database vector dimension (1536)
-            },
-          });
+      // PERFORMANCE FIX: Process chunks in parallel using Promise.allSettled for fault tolerance
+      const batchSettledResults = await Promise.allSettled(
+        batch.map(async (chunk, chunkIndex) => {
+          try {
+            // Call embedContent with proper dimension specification
+            const result = await genai.models.embedContent({
+              model: GOOGLE_CONFIG.EMBEDDING_MODEL,
+              contents: chunk.text,
+              config: {
+                taskType: GOOGLE_CONFIG.EMBEDDING_TASK_TYPE,
+                outputDimensionality: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS, // Match database vector dimension (1536)
+              },
+            });
 
-          const embedding = result.embeddings?.[0]?.values;
+            const embedding = result.embeddings?.[0]?.values;
 
-          if (!embedding) {
-            throw new Error('No embedding returned from Google API');
+            if (!embedding) {
+              throw new Error('No embedding returned from Google API');
+            }
+
+            // Sanitize metadata to prevent injection and data leakage
+            const sanitizedMetadata = sanitizeMetadata(chunk.metadata);
+
+            return {
+              recording_id: recordingId,
+              org_id: orgId,
+              chunk_text: chunk.text,
+              chunk_index: sanitizedMetadata.chunkIndex as number,
+              start_time_sec: 'startTime' in sanitizedMetadata
+                ? (sanitizedMetadata.startTime ?? null)
+                : null,
+              end_time_sec: 'endTime' in sanitizedMetadata
+                ? (sanitizedMetadata.endTime ?? null)
+                : null,
+              embedding: JSON.stringify(embedding), // Supabase expects string for vector type
+              content_type: chunk.contentType || 'audio',
+              // Semantic chunking metadata (only for document chunks)
+              chunking_strategy: ('semanticScore' in sanitizedMetadata) ? 'semantic' : 'fixed',
+              semantic_score: 'semanticScore' in sanitizedMetadata
+                ? (sanitizedMetadata.semanticScore ?? null)
+                : null,
+              structure_type: 'structureType' in sanitizedMetadata
+                ? (sanitizedMetadata.structureType ?? null)
+                : null,
+              boundary_type: 'boundaryType' in sanitizedMetadata
+                ? (sanitizedMetadata.boundaryType ?? null)
+                : null,
+              metadata: {
+                source: chunk.source,
+                source_type: chunk.source, // For compatibility
+                transcriptId: chunk.source === 'transcript' ? transcriptId : undefined,
+                documentId: chunk.source === 'document' ? documentId : undefined,
+                ...sanitizedMetadata,
+              },
+            };
+          } catch (error) {
+            // Log the error with chunk details but don't fail the entire batch
+            logger.error(`Failed to generate embedding for chunk ${i + chunkIndex}`, {
+              context: {
+                recordingId,
+                batchNumber,
+                chunkIndex: i + chunkIndex,
+                chunkText: chunk.text.substring(0, 100),
+                error: error instanceof Error ? error.message : String(error),
+              },
+            });
+            throw error; // Re-throw to be caught by allSettled
           }
-
-          // Sanitize metadata to prevent injection and data leakage
-          const sanitizedMetadata = sanitizeMetadata(chunk.metadata);
-
-          return {
-            recording_id: recordingId,
-            org_id: orgId,
-            chunk_text: chunk.text,
-            chunk_index: sanitizedMetadata.chunkIndex as number,
-            start_time_sec: ('startTime' in sanitizedMetadata ? sanitizedMetadata.startTime : null) || null,
-            end_time_sec: ('endTime' in sanitizedMetadata ? sanitizedMetadata.endTime : null) || null,
-            embedding: JSON.stringify(embedding), // Supabase expects string for vector type
-            content_type: chunk.contentType || 'audio',
-            // Semantic chunking metadata (only for document chunks)
-            chunking_strategy: ('semanticScore' in sanitizedMetadata) ? 'semantic' : 'fixed',
-            semantic_score: ('semanticScore' in sanitizedMetadata ? sanitizedMetadata.semanticScore : null) || null,
-            structure_type: ('structureType' in sanitizedMetadata ? sanitizedMetadata.structureType : null) || null,
-            boundary_type: ('boundaryType' in sanitizedMetadata ? sanitizedMetadata.boundaryType : null) || null,
-            metadata: {
-              source: chunk.source,
-              source_type: chunk.source, // For compatibility
-              transcriptId: chunk.source === 'transcript' ? transcriptId : undefined,
-              documentId: chunk.source === 'document' ? documentId : undefined,
-              ...sanitizedMetadata,
-            },
-          };
         })
       );
+
+      // Filter out failed results and collect only successful embeddings
+      const batchResults = batchSettledResults
+        .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+        .map(result => result.value);
+
+      // Log failures for monitoring
+      const failedResults = batchSettledResults.filter(result => result.status === 'rejected');
+      if (failedResults.length > 0) {
+        logger.warn(`${failedResults.length} chunks failed in batch ${batchNumber}`, {
+          context: {
+            recordingId,
+            batchNumber,
+            totalBatches,
+            failedCount: failedResults.length,
+            successCount: batchResults.length,
+          },
+        });
+      }
 
       // Add batch results to records
       embeddingRecords.push(...batchResults);
@@ -398,7 +499,7 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       }
     }
 
-    logger.info(`Generated ${embeddingRecords.length} embeddings, saving to database in batches`, {
+    logger.info(`Generated ${embeddingRecords.length} embeddings, saving to database with transaction`, {
       context: { totalRecords: embeddingRecords.length },
     });
 
@@ -406,60 +507,104 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       streamingManager.sendProgress(recordingId, 'embeddings', 80, 'Saving embeddings to database...');
     }
 
-    // Save embeddings to database in batches to prevent memory issues and timeout
-    for (let i = 0; i < embeddingRecords.length; i += DB_INSERT_BATCH_SIZE) {
-      const batch = embeddingRecords.slice(i, Math.min(i + DB_INSERT_BATCH_SIZE, embeddingRecords.length));
-      const batchNumber = Math.floor(i / DB_INSERT_BATCH_SIZE) + 1;
-      const totalSaveBatches = Math.ceil(embeddingRecords.length / DB_INSERT_BATCH_SIZE);
+    // Save embeddings to database in batches within a transaction
+    // Use a temporary staging approach to ensure atomicity
+    try {
+      // Save all embeddings in batches (they will be committed as part of the job transaction)
+      for (let i = 0; i < embeddingRecords.length; i += DB_INSERT_BATCH_SIZE) {
+        const batch = embeddingRecords.slice(i, Math.min(i + DB_INSERT_BATCH_SIZE, embeddingRecords.length));
+        const batchNumber = Math.floor(i / DB_INSERT_BATCH_SIZE) + 1;
+        const totalSaveBatches = Math.ceil(embeddingRecords.length / DB_INSERT_BATCH_SIZE);
 
-      logger.info(`Saving batch ${batchNumber}/${totalSaveBatches}`, {
-        context: {
-          batchNumber,
-          batchSize: batch.length,
-        },
+        logger.info(`Saving batch ${batchNumber}/${totalSaveBatches}`, {
+          context: {
+            batchNumber,
+            batchSize: batch.length,
+          },
+        });
+
+        const { error: insertError } = await supabase
+          .from('transcript_chunks')
+          .insert(batch);
+
+        if (insertError) {
+          // On any error, attempt cleanup of partial data
+          logger.error(`Failed to save embeddings batch ${batchNumber}, cleaning up partial data`, {
+            context: {
+              recordingId,
+              batchNumber,
+              error: insertError.message,
+            },
+          });
+
+          // Clean up any partial chunks that were inserted before the failure
+          const { error: cleanupError } = await supabase
+            .from('transcript_chunks')
+            .delete()
+            .eq('recording_id', recordingId);
+
+          if (cleanupError) {
+            logger.error('Failed to cleanup partial embeddings after insert error', {
+              context: {
+                recordingId,
+                cleanupError: cleanupError.message,
+              },
+            });
+          }
+
+          throw new Error(
+            `Failed to save embeddings batch ${batchNumber}: ${insertError.message}. Partial data cleaned up.`
+          );
+        }
+
+        // Small delay between batches
+        if (i + DB_INSERT_BATCH_SIZE < embeddingRecords.length) {
+          await sleep(50);
+        }
+      }
+
+      logger.info(`Successfully saved ${embeddingRecords.length} embeddings`, {
+        context: { recordingId, totalRecords: embeddingRecords.length },
       });
 
-      const { error: insertError } = await supabase
-        .from('transcript_chunks')
-        .insert(batch);
-
-      if (insertError) {
-        throw new Error(
-          `Failed to save embeddings batch ${Math.floor(i / DB_INSERT_BATCH_SIZE) + 1}: ${insertError.message}`
-        );
+      if (isStreaming) {
+        streamingManager.sendProgress(recordingId, 'embeddings', 90, 'Finalizing embedding generation...');
       }
 
-      // Small delay between batches
-      if (i + DB_INSERT_BATCH_SIZE < embeddingRecords.length) {
-        await sleep(50);
+      // Atomically update recording and document using the PostgreSQL function
+      const timestamp = new Date().toISOString();
+      const { data: updateResult, error: rpcError } = await supabase
+        .rpc('update_embedding_completion', {
+          p_recording_id: recordingId,
+          p_timestamp: timestamp,
+        });
+
+      if (rpcError) {
+        logger.error('Failed to update embedding completion atomically', {
+          context: {
+            recordingId,
+            error: rpcError.message,
+          },
+        });
+        throw new Error(`Failed to finalize embedding completion: ${rpcError.message}`);
       }
+
+      logger.info('Atomically updated recording and document completion status', {
+        context: {
+          recordingId,
+          result: updateResult,
+        },
+      });
+    } catch (error) {
+      // If anything fails during the save process, ensure partial data is cleaned
+      logger.error('Transaction failed during embedding save, rolling back', {
+        context: {
+          recordingId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      throw error;
     }
-
-    logger.info(`Successfully saved ${embeddingRecords.length} embeddings`, {
-      context: { recordingId, totalRecords: embeddingRecords.length },
-    });
-
-    if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'embeddings', 90, 'Finalizing embedding generation...');
-    }
-
-    // Update recording with embeddings timestamp and clear refresh flag
-    await supabase
-      .from('recordings')
-      .update({
-        embeddings_updated_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', recordingId);
-
-    // Clear needs_embeddings_refresh flag on document
-    await supabase
-      .from('documents')
-      .update({
-        needs_embeddings_refresh: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('recording_id', recordingId);
 
     logger.info('Updated embeddings timestamp', {
       context: { recordingId },

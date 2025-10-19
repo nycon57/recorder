@@ -28,14 +28,14 @@ import {
  * - sort: Sort order (created_asc, created_desc, title_asc, title_desc)
  */
 export const GET = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId } = await requireOrg();
     const query = parseSearchParams<ListCollectionItemsQueryInput>(
       request,
       listCollectionItemsQuerySchema
     );
     const supabase = await createClient();
-    const collectionId = params.id;
+    const { id: collectionId } = await params;
 
     // Verify collection exists and belongs to this org
     const { data: collection, error: collectionError } = await supabase
@@ -132,11 +132,11 @@ export const GET = apiHandler(
  * - item_ids: Array of recording IDs to add (1-100 items)
  */
 export const POST = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId, userId } = await requireOrg();
     const body = await parseBody<AddCollectionItemsInput>(request, addCollectionItemsSchema);
     const supabase = await createClient();
-    const collectionId = params.id;
+    const { id: collectionId } = await params;
 
     // Verify collection exists and belongs to this org
     const { data: collection, error: collectionError } = await supabase
@@ -215,11 +215,11 @@ export const POST = apiHandler(
  * - item_ids: Array of recording IDs to remove (1-100 items)
  */
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId, userId } = await requireOrg();
     const body = await parseBody<RemoveCollectionItemsInput>(request, removeCollectionItemsSchema);
     const supabase = await createClient();
-    const collectionId = params.id;
+    const { id: collectionId } = await params;
 
     // Verify collection exists and belongs to this org
     const { data: collection, error: collectionError } = await supabase

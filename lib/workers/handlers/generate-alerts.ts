@@ -37,7 +37,7 @@ export async function handleGenerateAlerts(job: Job): Promise<void> {
       const { data, error } = await configQuery;
       if (error) {
         logger.warn('alert_config table not found, using default thresholds', {
-          error: error.message,
+          error: new Error(error.message),
         });
         // Use default config for all organizations
         const { data: organizations } = await supabase
@@ -254,7 +254,7 @@ async function createOrUpdateAlert(
         .eq('id', existingAlert.id);
 
       if (error) {
-        logger.warn('Failed to update existing alert', { error: error.message });
+        logger.warn('Failed to update existing alert', { error: new Error(error.message) });
       }
     }
   } catch (error) {

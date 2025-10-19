@@ -14,13 +14,13 @@ export const metadata: Metadata = {
 };
 
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
-export default function OrganizationStoragePage({ params }: PageProps) {
-  const { id } = params;
+export default async function OrganizationStoragePage({ params }: PageProps) {
+  const { id } = await params;
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
