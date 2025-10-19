@@ -53,8 +53,9 @@ export const STORAGE_TIERS: StorageTierConfig[] = [
 
 /**
  * Get R2 configuration from environment variables
+ * Returns null if R2 is not configured (allows build to succeed)
  */
-export function getR2Config(): R2Config {
+export function getR2Config(): R2Config | null {
   const accountId = process.env.R2_ACCOUNT_ID;
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
@@ -62,10 +63,9 @@ export function getR2Config(): R2Config {
   const publicUrl = process.env.R2_PUBLIC_URL;
   const region = process.env.R2_REGION || 'auto';
 
+  // Return null if R2 is not configured (e.g., during build)
   if (!accountId || !accessKeyId || !secretAccessKey) {
-    throw new Error(
-      'R2 configuration missing. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY environment variables.'
-    );
+    return null;
   }
 
   return {
@@ -150,15 +150,14 @@ export function validateR2Config(): {
   error?: string;
   config?: R2Config;
 } {
-  try {
-    const config = getR2Config();
-    return { valid: true, config };
-  } catch (error) {
+  const config = getR2Config();
+  if (!config) {
     return {
       valid: false,
-      error: error instanceof Error ? error.message : 'Invalid R2 configuration',
+      error: 'R2 configuration missing. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY environment variables.',
     };
   }
+  return { valid: true, config };
 }
 
 /**
