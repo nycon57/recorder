@@ -6,7 +6,8 @@
  * It will log all events received from the server.
  */
 
-import EventSource from 'eventsource';
+import * as EventSourceModule from 'eventsource';
+const EventSource = (EventSourceModule as any).default || EventSourceModule;
 
 const RECORDING_ID = '80e70735-9b25-4c8a-8345-c7d41545ccc7';
 const BASE_URL = 'http://localhost:3000';

@@ -121,16 +121,16 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
       // Extract words with timestamps
       wordInfos.forEach(wordInfo => {
-        const startSec = wordInfo.startTime?.seconds || 0;
-        const startNanos = wordInfo.startTime?.nanos || 0;
-        const endSec = wordInfo.endTime?.seconds || 0;
-        const endNanos = wordInfo.endTime?.nanos || 0;
+        const startSec = Number(wordInfo.startTime?.seconds || 0);
+        const startNanos = Number(wordInfo.startTime?.nanos || 0);
+        const endSec = Number(wordInfo.endTime?.seconds || 0);
+        const endNanos = Number(wordInfo.endTime?.nanos || 0);
 
         words.push({
           word: wordInfo.word || '',
           startTime: startSec + startNanos / 1e9,
           endTime: endSec + endNanos / 1e9,
-          confidence: wordInfo.confidence,
+          confidence: wordInfo.confidence ?? undefined,
         });
       });
 
@@ -139,10 +139,10 @@ export async function transcribeRecording(job: Job): Promise<void> {
         const firstWord = wordInfos[0];
         const lastWord = wordInfos[wordInfos.length - 1];
 
-        const startSec = firstWord.startTime?.seconds || 0;
-        const startNanos = firstWord.startTime?.nanos || 0;
-        const endSec = lastWord.endTime?.seconds || 0;
-        const endNanos = lastWord.endTime?.nanos || 0;
+        const startSec = Number(firstWord.startTime?.seconds || 0);
+        const startNanos = Number(firstWord.startTime?.nanos || 0);
+        const endSec = Number(lastWord.endTime?.seconds || 0);
+        const endNanos = Number(lastWord.endTime?.nanos || 0);
 
         segments.push({
           start: startSec + startNanos / 1e9,

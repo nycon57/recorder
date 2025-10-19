@@ -250,7 +250,7 @@ export function apiHandler<T = any>(
   handler: (
     request: NextRequest,
     context?: any
-  ) => Promise<NextResponse<ApiSuccess<T>>>
+  ) => Promise<NextResponse<ApiSuccess<T>> | NextResponse<ApiError>>
 ) {
   return async (request: NextRequest, context?: any) => {
     const requestId = generateRequestId();

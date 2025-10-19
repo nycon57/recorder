@@ -23,6 +23,31 @@ import { syncConnector } from './handlers/sync-connector';
 import { processImportedDocument } from './handlers/process-imported-doc';
 import { processWebhook } from './handlers/process-webhook';
 
+// Content processing handlers
+import { handleExtractAudio } from './handlers/extract-audio';
+import { handleExtractTextPdf } from './handlers/extract-text-pdf';
+import { handleExtractTextDocx } from './handlers/extract-text-docx';
+import { handleProcessTextNote } from './handlers/process-text-note';
+
+// Compression handlers
+import { handleCompressVideo } from './handlers/compress-video';
+import { handleCompressAudio } from './handlers/compress-audio';
+
+// Storage tier migration handlers
+import { handleMigrateStorageTier } from './handlers/migrate-storage-tier';
+
+// Deduplication handlers
+import { handleDeduplicateFile, handleBatchDeduplicate } from './handlers/deduplicate-file';
+
+// Similarity detection handlers
+import { handleDetectSimilarity, handleBatchDetectSimilarity } from './handlers/detect-similarity';
+
+// Analytics and monitoring handlers
+import { handleCollectMetrics } from './handlers/collect-metrics';
+import { handleGenerateAlerts } from './handlers/generate-alerts';
+import { handleGenerateRecommendations } from './handlers/generate-recommendations';
+import { handlePerformHealthCheck } from './handlers/perform-health-check';
+
 const logger = createLogger({ service: 'streaming-job-executor' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
@@ -42,6 +67,68 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   sync_connector: syncConnector,
   process_imported_doc: processImportedDocument,
   process_webhook: processWebhook,
+
+  // Content processing handlers
+  extract_audio: handleExtractAudio,
+  extract_text_pdf: handleExtractTextPdf,
+  extract_text_docx: handleExtractTextDocx,
+  process_text_note: handleProcessTextNote,
+
+  // Compression handlers
+  compress_video: async (job: Job) => {
+    const result = await handleCompressVideo(job.payload as any);
+    if (!result.success) {
+      throw new Error(result.error || 'Video compression failed');
+    }
+  },
+  compress_audio: async (job: Job) => {
+    const result = await handleCompressAudio(job.payload as any);
+    if (!result.success) {
+      throw new Error(result.error || 'Audio compression failed');
+    }
+  },
+
+  // Storage tier migration
+  migrate_storage_tier: async (job: Job) => {
+    const result = await handleMigrateStorageTier(job.payload as any);
+    if (!result.success) {
+      throw new Error(result.error || 'Storage tier migration failed');
+    }
+  },
+
+  // Deduplication handlers
+  deduplicate_file: async (job: Job) => {
+    const result = await handleDeduplicateFile(job.payload as any);
+    if (!result.success) {
+      throw new Error(result.error || 'File deduplication failed');
+    }
+  },
+  batch_deduplicate: async (job: Job) => {
+    const result = await handleBatchDeduplicate(job.payload as any);
+    if (!result.success) {
+      throw new Error('Batch deduplication failed');
+    }
+  },
+
+  // Similarity detection handlers
+  detect_similarity: async (job: Job) => {
+    const result = await handleDetectSimilarity(job.payload as any);
+    if (!result.success) {
+      throw new Error(result.error || 'Similarity detection failed');
+    }
+  },
+  batch_detect_similarity: async (job: Job) => {
+    const result = await handleBatchDetectSimilarity(job.payload as any);
+    if (!result.success) {
+      throw new Error('Batch similarity detection failed');
+    }
+  },
+
+  // Analytics and monitoring handlers
+  collect_metrics: handleCollectMetrics,
+  generate_alerts: handleGenerateAlerts,
+  generate_recommendations: handleGenerateRecommendations,
+  perform_health_check: handlePerformHealthCheck,
 };
 
 /**
@@ -70,7 +157,7 @@ export async function executeJobWithStreaming(
     const errorMsg = `Job not found: ${jobId}`;
     logger.error(errorMsg, {
       context: { jobId, recordingId },
-      error: jobError,
+      error: jobError as Error | undefined,
     });
     streamingManager.sendError(recordingId, errorMsg);
     throw new Error(errorMsg);
@@ -99,7 +186,7 @@ export async function executeJobWithStreaming(
     });
 
     // Get handler for job type
-    const handler = JOB_HANDLERS[job.type];
+    const handler = JOB_HANDLERS[job.type as JobType];
     if (!handler) {
       throw new Error(`Unknown job type: ${job.type}`);
     }

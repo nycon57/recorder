@@ -17,10 +17,10 @@ import {
  * GET /api/collections/[id] - Get a single collection
  */
 export const GET = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId } = await requireOrg();
     const supabase = await createClient();
-    const collectionId = params.id;
+    const { id: collectionId } = await params;
 
     const { data: collection, error } = await supabase
       .from('collections')
@@ -59,11 +59,11 @@ export const GET = apiHandler(
  * - visibility: Visibility level (optional)
  */
 export const PATCH = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId, userId } = await requireOrg();
     const body = await parseBody<UpdateCollectionInput>(request, updateCollectionSchema);
     const supabase = await createClient();
-    const collectionId = params.id;
+    const { id: collectionId } = await params;
 
     // Verify collection exists and belongs to this org
     const { data: existing, error: fetchError } = await supabase
@@ -146,10 +146,10 @@ export const PATCH = apiHandler(
  * Child collections can be optionally handled (future enhancement).
  */
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: { id: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId, userId } = await requireOrg();
     const supabase = await createClient();
-    const collectionId = params.id;
+    const { id: collectionId } = await params;
 
     // Verify collection exists and belongs to this org
     const { data: existing, error: fetchError } = await supabase

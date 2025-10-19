@@ -34,36 +34,36 @@ console.log(`\n${YELLOW}Testing Tool Schema Compatibility with Gemini API${RESET
 const toolsWithContext = {
   searchRecordings: tool({
     description: toolDescriptions.searchRecordings,
-    parameters: searchRecordingsInputSchema,
-    execute: async (args) => {
+    inputSchema: searchRecordingsInputSchema,
+    execute: async (args: any) => {
       return await executeSearchRecordings(args, { orgId: 'test', userId: 'test' });
     },
   }),
   getDocument: tool({
     description: toolDescriptions.getDocument,
-    parameters: getDocumentInputSchema,
-    execute: async (args) => {
+    inputSchema: getDocumentInputSchema,
+    execute: async (args: any) => {
       return await executeGetDocument(args, { orgId: 'test', userId: 'test' });
     },
   }),
   getTranscript: tool({
     description: toolDescriptions.getTranscript,
-    parameters: getTranscriptInputSchema,
-    execute: async (args) => {
+    inputSchema: getTranscriptInputSchema,
+    execute: async (args: any) => {
       return await executeGetTranscript(args, { orgId: 'test', userId: 'test' });
     },
   }),
   getRecordingMetadata: tool({
     description: toolDescriptions.getRecordingMetadata,
-    parameters: getRecordingMetadataInputSchema,
-    execute: async (args) => {
+    inputSchema: getRecordingMetadataInputSchema,
+    execute: async (args: any) => {
       return await executeGetRecordingMetadata(args, { orgId: 'test', userId: 'test' });
     },
   }),
   listRecordings: tool({
     description: toolDescriptions.listRecordings,
-    parameters: listRecordingsInputSchema,
-    execute: async (args) => {
+    inputSchema: listRecordingsInputSchema,
+    execute: async (args: any) => {
       return await executeListRecordings(args, { orgId: 'test', userId: 'test' });
     },
   }),
@@ -83,13 +83,13 @@ for (const [toolName, toolDef] of Object.entries(toolsWithContext)) {
     console.log(`  ${GREEN}✓${RESET} Description: "${toolDef.description.substring(0, 50)}..."`);
   }
 
-  // Check parameters
-  if (!toolDef.parameters) {
-    console.log(`  ${RED}✗${RESET} Parameters schema is missing`);
+  // Check inputSchema
+  if (!toolDef.inputSchema) {
+    console.log(`  ${RED}✗${RESET} Input schema is missing`);
     allPassed = false;
   } else {
     // Verify it's a Zod schema with the right shape
-    const schema = toolDef.parameters as any;
+    const schema = toolDef.inputSchema as any;
 
     // Check if it's a Zod object schema
     if (schema._def && schema._def.typeName === 'ZodObject') {

@@ -11,8 +11,9 @@ import { extractFrames } from '@/lib/services/frame-extraction';
 import { indexRecordingFrames } from '@/lib/services/visual-indexing';
 import { extractFrameText } from '@/lib/services/ocr-service';
 import { createClient } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/types/database';
 
-import type { Job } from '@/lib/types/jobs';
+type Job = Database['public']['Tables']['jobs']['Row'];
 
 export interface ExtractFramesPayload {
   recordingId: string;
@@ -21,10 +22,36 @@ export interface ExtractFramesPayload {
   videoUrl?: string;
 }
 
+// Generic job type with typed payload
+type TypedJob<T> = Omit<Job, 'payload'> & { payload: T };
+
 export async function handleExtractFrames(
-  job: Job<ExtractFramesPayload>
+  job: TypedJob<ExtractFramesPayload>
 ): Promise<void> {
-  const { recordingId, orgId, videoPath, videoUrl } = job.payload;
+  // Validate payload structure at runtime
+  const payload = job.payload;
+
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Invalid payload: expected object');
+  }
+
+  if (!payload.recordingId || typeof payload.recordingId !== 'string') {
+    throw new Error('Invalid payload: recordingId is required and must be a string');
+  }
+
+  if (!payload.orgId || typeof payload.orgId !== 'string') {
+    throw new Error('Invalid payload: orgId is required and must be a string');
+  }
+
+  if (payload.videoPath && typeof payload.videoPath !== 'string') {
+    throw new Error('Invalid payload: videoPath must be a string if provided');
+  }
+
+  if (payload.videoUrl && typeof payload.videoUrl !== 'string') {
+    throw new Error('Invalid payload: videoUrl must be a string if provided');
+  }
+
+  const { recordingId, orgId, videoPath, videoUrl } = payload;
 
   console.log('[Job: Extract Frames] Starting:', {
     jobId: job.id,

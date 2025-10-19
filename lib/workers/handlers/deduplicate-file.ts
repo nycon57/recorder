@@ -49,7 +49,7 @@ export async function handleDeduplicateFile(
 
   try {
     // 1. Download file from storage
-    const storageManager = StorageManager.getInstance();
+    const storageManager = new StorageManager();
     const supabase = createClient();
 
     const { data: recording } = await supabase

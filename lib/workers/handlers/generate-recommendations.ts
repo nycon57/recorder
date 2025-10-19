@@ -197,7 +197,7 @@ async function generateRecommendationsForOrganization(
 
     if (duplicatesError) {
       logger.debug('similarity_matches table not available, skipping duplicate recommendations', {
-        error: duplicatesError.message,
+        error: new Error(duplicatesError.message),
       });
     } else if (duplicates && duplicates.length > RECOMMENDATION_THRESHOLDS.MIN_DUPLICATE_FILES) {
       const totalDuplicateSize = duplicates.reduce(

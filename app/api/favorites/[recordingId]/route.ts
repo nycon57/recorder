@@ -12,10 +12,10 @@ import { createClient } from '@/lib/supabase/server';
  * DELETE /api/favorites/[recordingId] - Remove item from favorites
  */
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: { recordingId: string } }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ recordingId: string }> }) => {
     const { orgId, userId } = await requireOrg();
     const supabase = await createClient();
-    const recordingId = params.recordingId;
+    const { recordingId } = await params;
 
     // Verify favorite exists for this user
     const { data: existing, error: fetchError } = await supabase
