@@ -9,9 +9,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/components/ui/ta
 import EditRecordingModal from '@/app/components/EditRecordingModal';
 import TextNoteViewer from './TextNoteViewer';
 
-import MetadataSidebar from './shared/MetadataSidebar';
-import AIDocumentPanel from './shared/AIDocumentPanel';
-import ShareControls from './shared/ShareControls';
+import MetadataSidebar from '../shared/MetadataSidebar';
+import AIDocumentPanel from '../shared/AIDocumentPanel';
+import ShareControls from '../shared/ShareControls';
 
 import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
 import type { Tag } from '@/lib/types/database';

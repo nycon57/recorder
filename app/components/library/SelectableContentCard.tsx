@@ -5,7 +5,7 @@ import React from 'react';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 
-import { ContentCard, ContentItem } from './ContentCard';
+import { ContentCard, ContentItem } from '../content/ContentCard';
 
 interface SelectableContentCardProps {
   item: ContentItem;

@@ -2,7 +2,7 @@
 # Ensures FFmpeg and Node.js are available in the build environment
 
 [phases.setup]
-nixPkgs = ['nodejs', 'npm', 'ffmpeg']
+nixPkgs = ['nodejs', 'ffmpeg']
 
 [phases.install]
 cmds = ['npm install']
