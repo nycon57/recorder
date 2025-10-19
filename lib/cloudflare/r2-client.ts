@@ -54,8 +54,7 @@ export class R2Client {
   private bucketName: string;
   private accountId: string;
 
-  private constructor() {
-    const config = getR2Config();
+  private constructor(config: NonNullable<ReturnType<typeof getR2Config>>) {
     this.bucketName = config.bucketName;
     this.accountId = config.accountId;
 
@@ -72,10 +71,16 @@ export class R2Client {
 
   /**
    * Get R2 client singleton instance
+   * Returns null if R2 is not configured (allows build to succeed)
    */
-  static getInstance(): R2Client {
+  static getInstance(): R2Client | null {
+    // Lazy initialization - only create instance when first needed
     if (!R2Client.instance) {
-      R2Client.instance = new R2Client();
+      const config = getR2Config();
+      if (!config) {
+        return null; // R2 not configured
+      }
+      R2Client.instance = new R2Client(config);
     }
     return R2Client.instance;
   }
@@ -399,6 +404,24 @@ export class R2Client {
 }
 
 /**
- * Get R2 client instance (convenience export)
+ * Get R2 client instance (convenience function with lazy initialization)
+ * Returns null if R2 is not configured
  */
-export const r2Client = R2Client.getInstance();
+export function getR2Client(): R2Client | null {
+  return R2Client.getInstance();
+}
+
+/**
+ * Legacy export for backward compatibility
+ * Use getR2Client() instead for explicit lazy loading
+ */
+export const r2Client = new Proxy({} as R2Client, {
+  get(_target, prop) {
+    const instance = getR2Client();
+    if (!instance) {
+      console.warn('[R2Client] R2 not configured - operation skipped');
+      return () => null;
+    }
+    return instance[prop as keyof R2Client];
+  }
+});
