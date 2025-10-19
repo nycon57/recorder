@@ -1,0 +1,14 @@
+# Nixpacks configuration for Railway deployment
+# Ensures FFmpeg and Node.js are available in the build environment
+
+[phases.setup]
+nixPkgs = ['nodejs', 'npm', 'ffmpeg']
+
+[phases.install]
+cmds = ['npm install']
+
+[phases.build]
+cmds = ['npm run build']
+
+[start]
+cmd = 'npm run worker'
