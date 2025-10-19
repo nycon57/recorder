@@ -7,6 +7,9 @@ import { AppSidebar } from '@/app/components/layout/app-sidebar';
 import { Breadcrumbs } from '@/app/components/layout/breadcrumbs';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
+// Force dynamic rendering for all dashboard pages (auth required)
+export const dynamic = 'force-dynamic';
+
 /**
  * Dashboard Layout
  * Protected layout with sidebar navigation
