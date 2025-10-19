@@ -7,7 +7,7 @@
 import { NextRequest } from 'next/server';
 
 import { apiHandler, requireOrg, successResponse, errors } from '@/lib/utils/api';
-import { getConversationHistory } from '@/lib/services/rag';
+import { getConversationHistory } from '@/lib/services/rag-google';
 import { createClient } from '@/lib/supabase/server';
 
 /**
