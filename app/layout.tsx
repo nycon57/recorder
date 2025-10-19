@@ -8,6 +8,10 @@ import { QueryProvider } from '@/lib/providers/query-provider';
 
 import './globals.css';
 
+// Force dynamic rendering to prevent static generation at build time
+// Root layout uses ClerkProvider which requires runtime env vars
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
