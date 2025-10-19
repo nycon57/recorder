@@ -2,6 +2,10 @@
 
 import { Navbar, Footer } from '@/app/components/layout';
 
+// Force dynamic rendering to prevent static generation at build time
+// Marketing pages use Clerk components which require runtime env vars
+export const dynamic = 'force-dynamic';
+
 export default function MarketingLayout({
   children,
 }: {
