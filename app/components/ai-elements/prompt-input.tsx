@@ -149,7 +149,7 @@ export function PromptInputProvider({
   const clearInput = useCallback(() => setTextInput(""), []);
 
   // ----- attachments state (global when wrapped)
-  const [attachements, setAttachements] = useState<
+  const [attachments, setAttachments] = useState<
     (FileUIPart & { id: string })[]
   >([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -159,7 +159,7 @@ export function PromptInputProvider({
     const incoming = Array.from(files);
     if (incoming.length === 0) return;
 
-    setAttachements((prev) =>
+    setAttachments((prev) =>
       prev.concat(
         incoming.map((file) => ({
           id: nanoid(),
@@ -173,7 +173,7 @@ export function PromptInputProvider({
   }, []);
 
   const remove = useCallback((id: string) => {
-    setAttachements((prev) => {
+    setAttachments((prev) => {
       const found = prev.find((f) => f.id === id);
       if (found?.url) URL.revokeObjectURL(found.url);
       return prev.filter((f) => f.id !== id);
@@ -181,7 +181,7 @@ export function PromptInputProvider({
   }, []);
 
   const clear = useCallback(() => {
-    setAttachements((prev) => {
+    setAttachments((prev) => {
       for (const f of prev) if (f.url) URL.revokeObjectURL(f.url);
       return [];
     });
@@ -191,16 +191,16 @@ export function PromptInputProvider({
     openRef.current?.();
   }, []);
 
-  const attachments = useMemo<AttachmentsContext>(
+  const attachmentsContext = useMemo<AttachmentsContext>(
     () => ({
-      files: attachements,
+      files: attachments,
       add,
       remove,
       clear,
       openFileDialog,
       fileInputRef,
     }),
-    [attachements, add, remove, clear, openFileDialog]
+    [attachments, add, remove, clear, openFileDialog]
   );
 
   const __registerFileInput = useCallback(
@@ -226,7 +226,7 @@ export function PromptInputProvider({
 
   return (
     <PromptInputController.Provider value={controller}>
-      <ProviderAttachmentsContext.Provider value={attachments}>
+      <ProviderAttachmentsContext.Provider value={attachmentsContext}>
         {children}
       </ProviderAttachmentsContext.Provider>
     </PromptInputController.Provider>
@@ -454,6 +454,7 @@ export const PromptInput = ({
 
   // ----- Local attachments (only used when no provider)
   const [items, setItems] = useState<(FileUIPart & { id: string })[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const files = usingProvider ? controller.attachments.files : items;
 
   const openFileDialogLocal = useCallback(() => {
@@ -465,11 +466,27 @@ export const PromptInput = ({
       if (!accept || accept.trim() === "") {
         return true;
       }
-      if (accept.includes("image/*")) {
-        return f.type.startsWith("image/");
-      }
-      // NOTE: keep simple; expand as needed
-      return true;
+
+      // Split accept string by commas and trim each token
+      const tokens = accept.split(',').map(token => token.trim());
+
+      // Check if file matches any token
+      return tokens.some(token => {
+        // Handle wildcard MIME types (e.g., "image/*", "video/*")
+        if (token.includes('/*')) {
+          const [type] = token.split('/');
+          return f.type.startsWith(`${type}/`);
+        }
+
+        // Handle exact MIME types (e.g., "image/png", "application/pdf")
+        if (token.includes('/')) {
+          return f.type === token;
+        }
+
+        // Handle file extensions (e.g., ".pdf", "pdf")
+        const ext = token.startsWith('.') ? token : `.${token}`;
+        return f.name.toLowerCase().endsWith(ext.toLowerCase());
+      });
     },
     [accept]
   );
@@ -620,6 +637,7 @@ export const PromptInput = ({
     };
   }, [add, globalDrop]);
 
+  // Only revoke URLs on component unmount, not on every files change
   useEffect(
     () => () => {
       if (!usingProvider) {
@@ -628,7 +646,8 @@ export const PromptInput = ({
         }
       }
     },
-    [usingProvider, files]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [usingProvider]  // Only run cleanup on unmount
   );
 
   const handleChange: ChangeEventHandler<HTMLInputElement> = (event) => {
@@ -663,6 +682,9 @@ export const PromptInput = ({
   const handleSubmit: FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
 
+    // Prevent submission while already submitting
+    if (isSubmitting) return;
+
     const form = event.currentTarget;
     const text = usingProvider
       ? controller.textInput.value
@@ -671,11 +693,8 @@ export const PromptInput = ({
           return (formData.get("message") as string) || "";
         })();
 
-    // Reset form immediately after capturing text to avoid race condition
-    // where user input during async blob conversion would be lost
-    if (!usingProvider) {
-      form.reset();
-    }
+    // Set submitting state to disable form and prevent input loss
+    setIsSubmitting(true);
 
     // Convert blob URLs to data URLs asynchronously
     Promise.all(
@@ -696,6 +715,10 @@ export const PromptInput = ({
         if (result instanceof Promise) {
           result
             .then(() => {
+              // Reset form and clear after successful async submission
+              if (!usingProvider) {
+                event.currentTarget.reset();
+              }
               clear();
               if (usingProvider) {
                 controller.textInput.clear();
@@ -703,17 +726,29 @@ export const PromptInput = ({
             })
             .catch(() => {
               // Don't clear on error - user may want to retry
+            })
+            .finally(() => {
+              setIsSubmitting(false);
             });
         } else {
           // Sync function completed without throwing, clear attachments
+          // Reset form after successful sync submission
+          if (!usingProvider) {
+            event.currentTarget.reset();
+          }
           clear();
           if (usingProvider) {
             controller.textInput.clear();
           }
+          setIsSubmitting(false);
         }
       } catch (error) {
         // Don't clear on error - user may want to retry
+        setIsSubmitting(false);
       }
+    }).catch(() => {
+      // Handle blob conversion errors
+      setIsSubmitting(false);
     });
   };
 
