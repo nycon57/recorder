@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Clock,
 } from 'lucide-react';
+import { useFetchWithInterval } from '@/app/hooks/useFetchWithAbort';
 
 interface DashboardMetrics {
   summary: {
@@ -39,38 +40,30 @@ interface DashboardMetrics {
 
 export default function AdminDashboard() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ✅ Set document title once (legitimate side effect)
   useEffect(() => {
     document.title = 'System Admin Dashboard - Record';
-    fetchMetrics();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchMetrics, 30000);
-    return () => clearInterval(interval);
   }, []);
 
-  async function fetchMetrics() {
-    try {
-      const response = await fetch('/api/admin/metrics?timeRange=24h');
-
-      if (!response.ok) {
-        if (response.status === 403) {
-          throw new Error('Access denied. System admin privileges required.');
-        }
-        throw new Error('Failed to fetch metrics');
-      }
-
-      const data = await response.json();
-      setMetrics(data.data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
+  // ✅ Use interval-based fetch with abort controller (prevents race conditions)
+  const { loading, error: fetchError } = useFetchWithInterval<any>(
+    '/api/admin/metrics?timeRange=24h',
+    30000, // Refresh every 30 seconds
+    {
+      onSuccess: (data) => {
+        setMetrics(data.data);
+        setError(null);
+      },
+      onError: (err) => {
+        const errorMessage = err.message.includes('403')
+          ? 'Access denied. System admin privileges required.'
+          : err.message || 'Failed to fetch metrics';
+        setError(errorMessage);
+      },
     }
-  }
+  );
 
   if (loading && !metrics) {
     return (

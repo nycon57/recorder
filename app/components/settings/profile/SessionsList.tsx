@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Monitor, Smartphone, Tablet, Globe, MapPin, Clock, Loader2, Shield } from 'lucide-react';
 import { useSession } from '@clerk/nextjs';
 
+import { useFetchWithAbort } from '@/app/hooks/useFetchWithAbort';
 import { useToast } from '@/app/components/ui/use-toast';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
@@ -44,55 +45,44 @@ export function SessionsList() {
   const { toast } = useToast();
   const { session: clerkSession } = useSession();
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isRevoking, setIsRevoking] = useState<string | null>(null);
   const [sessionToRevoke, setSessionToRevoke] = useState<Session | null>(null);
   const [showRevokeDialog, setShowRevokeDialog] = useState(false);
 
-  useEffect(() => {
-    fetchSessions();
-  }, []);
+  // ✅ Use abort-safe data fetching hook (prevents race conditions)
+  const { loading: isLoading, error: fetchError, refetch } = useFetchWithAbort<any>(
+    '/api/profile/sessions',
+    {
+      onSuccess: (data) => {
+        // Get current Clerk session ID
+        const currentSessionId = clerkSession?.id;
 
-  const fetchSessions = async () => {
-    try {
-      const response = await fetch('/api/profile/sessions');
+        // Transform API response to match component's Session interface
+        const formattedSessions: Session[] = (data.data?.sessions || []).map((session: any) => ({
+          id: session.id,
+          device_name: `${session.browser} on ${session.os}`,
+          device_type: session.deviceType || 'unknown',
+          browser: session.browser,
+          os: session.os,
+          ip_address: session.ipAddress,
+          location: session.location || 'Unknown',
+          is_current: currentSessionId ? session.id === currentSessionId : false,
+          last_active_at: session.lastActiveAt,
+          created_at: session.createdAt,
+        }));
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch sessions');
-      }
-
-      const data = await response.json();
-
-      // Get current Clerk session ID
-      const currentSessionId = clerkSession?.id;
-
-      // Transform API response to match component's Session interface
-      const formattedSessions: Session[] = (data.data?.sessions || []).map((session: any) => ({
-        id: session.id,
-        device_name: `${session.browser} on ${session.os}`,
-        device_type: session.deviceType || 'unknown',
-        browser: session.browser,
-        os: session.os,
-        ip_address: session.ipAddress,
-        location: session.location || 'Unknown',
-        is_current: currentSessionId ? session.id === currentSessionId : false,
-        last_active_at: session.lastActiveAt,
-        created_at: session.createdAt,
-      }));
-
-      setSessions(formattedSessions);
-    } catch (error) {
-      const err = error as Error;
-      console.error('Error fetching sessions:', err.message);
-      toast({
-        title: 'Error',
-        description: 'Failed to load sessions',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
+        setSessions(formattedSessions);
+      },
+      onError: (error) => {
+        console.error('Error fetching sessions:', error.message);
+        toast({
+          title: 'Error',
+          description: 'Failed to load sessions',
+          variant: 'destructive',
+        });
+      },
     }
-  };
+  );
 
   const revokeSession = async (session: Session) => {
     setIsRevoking(session.id);

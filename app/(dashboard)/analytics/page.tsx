@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   BarChart3,
   TrendingUp,
@@ -16,6 +16,7 @@ import {
   Activity
 } from 'lucide-react';
 
+import { useFetchWithAbort } from '@/app/hooks/useFetchWithAbort';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Badge } from '@/app/components/ui/badge';
@@ -81,36 +82,29 @@ export default function AnalyticsPage() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [topQueries, setTopQueries] = useState<TopQuery[]>([]);
   const [topRecordings, setTopRecordings] = useState<TopRecording[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Set page title
   useEffect(() => {
     document.title = 'My Analytics - Record';
   }, []);
 
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(`/api/analytics/user?timeRange=${timeRange}`);
+  // ✅ Use memoized URL to trigger refetch when timeRange changes
+  const analyticsUrl = useMemo(
+    () => `/api/analytics/user?timeRange=${timeRange}`,
+    [timeRange]
+  );
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch analytics');
-        }
-
-        const data = await response.json();
-        setSummary(data.data.summary);
-        setTopQueries(data.data.topQueries || []);
-        setTopRecordings(data.data.topRecordings || []);
-      } catch (err) {
-        console.error('Error fetching analytics:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAnalytics();
-  }, [timeRange]);
+  // ✅ Use abort-safe data fetching (prevents race conditions when switching time ranges)
+  const { loading } = useFetchWithAbort<any>(analyticsUrl, {
+    onSuccess: (data) => {
+      setSummary(data.data.summary);
+      setTopQueries(data.data.topQueries || []);
+      setTopRecordings(data.data.topRecordings || []);
+    },
+    onError: (err) => {
+      console.error('Error fetching analytics:', err);
+    },
+  });
 
   const getTimeRangeLabel = (range: TimeRange) => {
     switch (range) {
