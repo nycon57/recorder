@@ -75,7 +75,6 @@ function LibraryPageContent() {
 
   // State management
   const [items, setItems] = useState<ContentItem[]>([]);
-  const [filteredItems, setFilteredItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -172,8 +171,8 @@ function LibraryPageContent() {
     fetchCollections();
   }, []);
 
-  // Filter and sort items when filters change
-  useEffect(() => {
+  // ✅ Compute filtered and sorted items during render (no Effect needed)
+  const filteredItems = useMemo(() => {
     let filtered = [...items];
 
     // Filter by content type (from tabs)
@@ -214,25 +213,29 @@ function LibraryPageContent() {
       filtered = filtered.filter(item => (item as any).is_favorite === true);
     }
 
-      filtered = filtered.filter(item => {
-        const createdAt = new Date(item.created_at);
-        switch (quickFilter) {
-          case 'today':
-            return createdAt >= today;
-          case 'week': {
-            const weekAgo = new Date(today);
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            return createdAt >= weekAgo;
-          }
-          case 'month': {
-            const monthAgo = new Date(today);
-            monthAgo.setMonth(monthAgo.getMonth() - 1);
-            return createdAt >= monthAgo;
-          }
-          default:
-            return true;
+    // Quick filter by date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    filtered = filtered.filter(item => {
+      const createdAt = new Date(item.created_at);
+      switch (quickFilter) {
+        case 'today':
+          return createdAt >= today;
+        case 'week': {
+          const weekAgo = new Date(today);
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          return createdAt >= weekAgo;
         }
-      });
+        case 'month': {
+          const monthAgo = new Date(today);
+          monthAgo.setMonth(monthAgo.getMonth() - 1);
+          return createdAt >= monthAgo;
+        }
+        default:
+          return true;
+      }
+    });
 
     // Filter by selected collection
     if (selectedCollectionId) {
@@ -299,10 +302,13 @@ function LibraryPageContent() {
         break;
     }
 
-    setFilteredItems(filtered);
-    // Reset to first page when filters change
-    setCurrentPage(1);
+    return filtered;
   }, [items, contentType, sortBy, searchQuery, quickFilter, selectedTagIds, tagFilterMode, advancedFilters, selectedCollectionId]);
+
+  // ✅ Separate Effect for pagination reset (legitimate side effect)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [contentType, sortBy, searchQuery, quickFilter, selectedTagIds, tagFilterMode, advancedFilters, selectedCollectionId]);
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
