@@ -102,8 +102,24 @@ export const WebPreviewNavigationButton = ({
   tooltip,
   children,
   ...props
-}: WebPreviewNavigationButtonProps) => (
-  <TooltipProvider>
+}: WebPreviewNavigationButtonProps) => {
+  // NOTE: TooltipProvider should be mounted once at app root or layout level
+  if (!tooltip) {
+    return (
+      <Button
+        className="h-8 w-8 p-0 hover:text-foreground"
+        disabled={disabled}
+        onClick={onClick}
+        size="sm"
+        variant="ghost"
+        {...props}
+      >
+        {children}
+      </Button>
+    );
+  }
+
+  return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
@@ -121,8 +137,8 @@ export const WebPreviewNavigationButton = ({
         <p>{tooltip}</p>
       </TooltipContent>
     </Tooltip>
-  </TooltipProvider>
-);
+  );
+};
 
 export type WebPreviewUrlProps = ComponentProps<typeof Input>;
 
@@ -135,31 +151,44 @@ export const WebPreviewUrl = ({
   const { url, setUrl } = useWebPreview();
   const [inputValue, setInputValue] = useState(url);
 
-  // Sync input value with context URL when it changes externally
+  // Determine if component is controlled
+  const isControlled = value !== undefined;
+
+  // Sync input value with context URL when it changes externally (only for uncontrolled)
   useEffect(() => {
-    setInputValue(url);
-  }, [url]);
+    if (!isControlled) {
+      setInputValue(url);
+    }
+  }, [url, isControlled]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(event.target.value);
+    // Update internal state only if uncontrolled
+    if (!isControlled) {
+      setInputValue(event.target.value);
+    }
+    // Always call external onChange
     onChange?.(event);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
+      // Use current input value from event target
       const target = event.target as HTMLInputElement;
       setUrl(target.value);
     }
     onKeyDown?.(event);
   };
 
+  // Use controlled value if provided, otherwise use internal state
+  const inputValueProp = isControlled ? value : inputValue;
+
   return (
     <Input
       className="h-8 flex-1 text-sm"
-      onChange={onChange ?? handleChange}
+      onChange={handleChange}
       onKeyDown={handleKeyDown}
       placeholder="Enter URL..."
-      value={value ?? inputValue}
+      value={inputValueProp}
       {...props}
     />
   );

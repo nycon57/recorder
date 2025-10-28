@@ -145,14 +145,17 @@ export const QueueItemAttachment = ({
   <div className={cn("mt-1 flex flex-wrap gap-2", className)} {...props} />
 );
 
-export type QueueItemImageProps = ComponentProps<"img">;
+export type QueueItemImageProps = ComponentProps<"img"> & {
+  alt: string;
+};
 
 export const QueueItemImage = ({
   className,
+  alt,
   ...props
 }: QueueItemImageProps) => (
   <img
-    alt=""
+    alt={alt}
     className={cn("h-8 w-8 rounded border object-cover", className)}
     height={32}
     width={32}
@@ -244,7 +247,7 @@ export const QueueSectionLabel = ({
     <ChevronDownIcon className="group-data-[state=closed]:-rotate-90 size-4 transition-transform" />
     {icon}
     <span>
-      {count} {label}
+      {count ?? 0} {label}
     </span>
   </span>
 );
