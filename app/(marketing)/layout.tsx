@@ -1,5 +1,3 @@
-'use client';
-
 import { Navbar, Footer } from '@/app/components/layout';
 
 // Force dynamic rendering to prevent static generation at build time

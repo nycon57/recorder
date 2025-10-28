@@ -108,7 +108,14 @@ const AVAILABLE_EVENTS = [
 export function EditWebhookModal({ webhook, open, onOpenChange }: EditWebhookModalProps) {
   const queryClient = useQueryClient();
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [customHeaders, setCustomHeaders] = useState<{ key: string; value: string }[]>([]);
+
+  // ✅ Use lazy initialization instead of Effect (better performance, no double render)
+  const [customHeaders, setCustomHeaders] = useState<{ key: string; value: string }[]>(() => {
+    if (webhook.headers && Object.keys(webhook.headers).length > 0) {
+      return Object.entries(webhook.headers).map(([key, value]) => ({ key, value }));
+    }
+    return [{ key: '', value: '' }];
+  });
 
   const form = useForm<UpdateWebhookInput>({
     resolver: zodResolver(updateWebhookSchema),
@@ -124,29 +131,7 @@ export function EditWebhookModal({ webhook, open, onOpenChange }: EditWebhookMod
     },
   });
 
-  // Initialize headers when webhook changes
-  useEffect(() => {
-    if (webhook.headers && Object.keys(webhook.headers).length > 0) {
-      const headerArray = Object.entries(webhook.headers).map(([key, value]) => ({
-        key,
-        value,
-      }));
-      setCustomHeaders(headerArray);
-    } else {
-      setCustomHeaders([{ key: '', value: '' }]);
-    }
-
-    form.reset({
-      name: webhook.name,
-      description: webhook.description || '',
-      url: webhook.url,
-      events: webhook.events,
-      enabled: webhook.enabled,
-      retry_enabled: webhook.retry_enabled,
-      max_retries: webhook.max_retries,
-      timeout_ms: webhook.timeout_ms,
-    });
-  }, [webhook, form]);
+  // ✅ Removed form reset Effect - Dialog key prop handles form reset automatically
 
   const updateWebhookMutation = useMutation({
     mutationFn: async (data: UpdateWebhookInput) => {
@@ -202,7 +187,7 @@ export function EditWebhookModal({ webhook, open, onOpenChange }: EditWebhookMod
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleClose} key={webhook.id}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Webhook</DialogTitle>

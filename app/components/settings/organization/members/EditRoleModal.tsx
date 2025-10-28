@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Shield } from 'lucide-react';
 import { toast } from 'sonner';
@@ -40,13 +40,10 @@ const ROLES = [
 ] as const;
 
 export function EditRoleModal({ member, open, onClose, onSuccess }: EditRoleModalProps) {
-  const [selectedRole, setSelectedRole] = useState<string>(member.role);
+  // ✅ Use lazy initialization instead of Effect
+  const [selectedRole, setSelectedRole] = useState<string>(() => member.role);
 
-  useEffect(() => {
-    if (open) {
-      setSelectedRole(member.role);
-    }
-  }, [open, member.role]);
+  // ✅ Removed reset Effect - Dialog key prop handles state reset automatically
 
   const updateRoleMutation = useMutation({
     mutationFn: async (role: string) => {
@@ -77,7 +74,7 @@ export function EditRoleModal({ member, open, onClose, onSuccess }: EditRoleModa
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onClose} key={member.id}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

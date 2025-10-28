@@ -93,16 +93,7 @@ export function EditMemberModal({
     },
   });
 
-  // Reset form when member changes
-  React.useEffect(() => {
-    if (member) {
-      form.reset({
-        role: member.role || 'reader',
-        department_ids: member.departments?.map((d) => d.id) || [],
-        status: (member.status as 'active' | 'suspended') || 'active',
-      });
-    }
-  }, [member, form]);
+  // ✅ Removed form reset Effect - Dialog key prop handles form reset automatically
 
   const updateMutation = useMutation({
     mutationFn: (data: FormValues) => updateMember(member!.id, data),
@@ -131,7 +122,7 @@ export function EditMemberModal({
   const canEditStatus = currentUserRole === 'owner' || currentUserRole === 'admin';
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onClose} key={member?.id}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Edit Member</DialogTitle>

@@ -48,15 +48,15 @@ export default function AdminDashboard() {
   }, []);
 
   // ✅ Use interval-based fetch with abort controller (prevents race conditions)
-  const { loading, error: fetchError } = useFetchWithInterval<any>(
+  const { loading, error: fetchError } = useFetchWithInterval<{ data: DashboardMetrics }>(
     '/api/admin/metrics?timeRange=24h',
     30000, // Refresh every 30 seconds
     {
-      onSuccess: (data) => {
+      onSuccess: (data: { data: DashboardMetrics }) => {
         setMetrics(data.data);
         setError(null);
       },
-      onError: (err) => {
+      onError: (err: Error) => {
         const errorMessage = err.message.includes('403')
           ? 'Access denied. System admin privileges required.'
           : err.message || 'Failed to fetch metrics';
