@@ -47,7 +47,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
-import {
+import React, {
   type ChangeEvent,
   type ChangeEventHandler,
   Children,
@@ -1350,3 +1350,132 @@ export const PromptInputCommandSeparator = ({
 }: PromptInputCommandSeparatorProps) => (
   <CommandSeparator className={cn(className)} {...props} />
 );
+
+// ============================================================================
+// Additional Attachment Component Exports
+// ============================================================================
+
+export type PromptInputAttachFilesProps = ComponentProps<typeof Button> & {
+  asChild?: boolean;
+};
+
+export const PromptInputAttachFiles = ({
+  asChild,
+  children,
+  className,
+  onClick,
+  ...props
+}: PromptInputAttachFilesProps) => {
+  const attachments = usePromptInputAttachments();
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      attachments.openFileDialog();
+      onClick?.(e);
+    },
+    [attachments, onClick]
+  );
+
+  // When using asChild, need to clone the child element with the click handler
+  if (asChild && children) {
+    const child = Children.only(children);
+    if (!React.isValidElement(child)) {
+      return <>{children}</>;
+    }
+    return React.cloneElement(child, {
+      onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
+        handleClick(e);
+        // @ts-ignore - child props might have onClick
+        child.props?.onClick?.(e);
+      },
+    } as any);
+  }
+
+  return (
+    <Button
+      type="button"
+      onClick={handleClick}
+      className={cn(className)}
+      {...props}
+    >
+      {children ?? (
+        <>
+          <PaperclipIcon className="size-4" />
+          <span className="sr-only">Attach files</span>
+        </>
+      )}
+    </Button>
+  );
+};
+
+export type PromptInputAttachmentNameProps = HTMLAttributes<HTMLSpanElement> & {
+  data: FileUIPart & { id: string };
+};
+
+export const PromptInputAttachmentName = ({
+  data,
+  className,
+  ...props
+}: PromptInputAttachmentNameProps) => {
+  const filename = data.filename || "Attachment";
+  return (
+    <span className={cn("truncate", className)} {...props}>
+      {filename}
+    </span>
+  );
+};
+
+export type PromptInputAttachmentRemoveProps = ComponentProps<typeof Button> & {
+  data: FileUIPart & { id: string };
+};
+
+export const PromptInputAttachmentRemove = ({
+  data,
+  className,
+  ...props
+}: PromptInputAttachmentRemoveProps) => {
+  const attachments = usePromptInputAttachments();
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      onClick={(e) => {
+        e.stopPropagation();
+        attachments.remove(data.id);
+      }}
+      className={cn(className)}
+      {...props}
+    >
+      <XIcon className="size-3" />
+      <span className="sr-only">Remove attachment</span>
+    </Button>
+  );
+};
+
+export type PromptInputAttachmentPreviewProps = HTMLAttributes<HTMLDivElement> & {
+  data: FileUIPart & { id: string };
+};
+
+export const PromptInputAttachmentPreview = ({
+  data,
+  className,
+  ...props
+}: PromptInputAttachmentPreviewProps) => {
+  const isImage = data.mediaType?.startsWith("image/");
+
+  if (!isImage || !data.url) {
+    return null;
+  }
+
+  return (
+    <div className={cn("overflow-hidden rounded", className)} {...props}>
+      <img
+        src={data.url}
+        alt={data.filename || "Attachment preview"}
+        className="size-full object-cover"
+      />
+    </div>
+  );
+};

@@ -261,10 +261,14 @@ export function AssistantChat({
   }, [extendedMessages, examplePrompts]);
 
   return (
-    <div className={cn('h-full flex flex-col', className)}>
+    <div className={cn('h-full flex flex-col', className)} role="main" aria-label="AI Assistant Chat">
       {/* Error Display */}
       {error && (
-        <div className="px-4 py-3 bg-destructive/10 border-b border-destructive/20 text-destructive text-sm">
+        <div
+          className="px-4 py-3 bg-destructive/10 border-b border-destructive/20 text-destructive text-sm"
+          role="alert"
+          aria-live="assertive"
+        >
           <strong>Error:</strong> {error.message}
         </div>
       )}
@@ -289,7 +293,7 @@ export function AssistantChat({
       />
 
       {/* Chat Input */}
-      <div className="border-t p-4">
+      <div className="border-t p-3">
         <ChatInput
           value={input}
           onChange={setInput}

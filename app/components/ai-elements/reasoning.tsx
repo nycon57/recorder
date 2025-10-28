@@ -65,6 +65,13 @@ export const Reasoning = memo(
     const [hasAutoClosed, setHasAutoClosed] = useState(false);
     const [startTime, setStartTime] = useState<number | null>(null);
 
+    // Reset hasAutoClosed when new streaming cycle starts
+    useEffect(() => {
+      if (isStreaming) {
+        setHasAutoClosed(false);
+      }
+    }, [isStreaming]);
+
     // Track duration when streaming starts and ends
     useEffect(() => {
       if (isStreaming) {
