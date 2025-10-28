@@ -94,8 +94,16 @@ export default function AnalyticsPage() {
     [timeRange]
   );
 
+  interface AnalyticsResponse {
+    data: {
+      summary: AnalyticsSummary;
+      topQueries?: TopQuery[];
+      topRecordings?: TopRecording[];
+    };
+  }
+
   // ✅ Use abort-safe data fetching (prevents race conditions when switching time ranges)
-  const { loading } = useFetchWithAbort<any>(analyticsUrl, {
+  const { loading } = useFetchWithAbort<AnalyticsResponse>(analyticsUrl, {
     onSuccess: (data) => {
       setSummary(data.data.summary);
       setTopQueries(data.data.topQueries || []);

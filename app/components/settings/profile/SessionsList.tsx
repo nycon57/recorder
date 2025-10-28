@@ -49,8 +49,25 @@ export function SessionsList() {
   const [sessionToRevoke, setSessionToRevoke] = useState<Session | null>(null);
   const [showRevokeDialog, setShowRevokeDialog] = useState(false);
 
+  interface ApiSession {
+    id: string;
+    browser: string;
+    os: string;
+    deviceType?: 'desktop' | 'mobile' | 'tablet' | 'unknown';
+    ipAddress?: string;
+    location?: string;
+    lastActiveAt?: string;
+    createdAt?: string;
+  }
+
+  interface ApiSessionsResponse {
+    data: {
+      sessions: ApiSession[];
+    };
+  }
+
   // ✅ Use abort-safe data fetching hook (prevents race conditions)
-  const { loading: isLoading, error: fetchError, refetch } = useFetchWithAbort<any>(
+  const { loading: isLoading } = useFetchWithAbort<ApiSessionsResponse>(
     '/api/profile/sessions',
     {
       onSuccess: (data) => {
@@ -58,22 +75,22 @@ export function SessionsList() {
         const currentSessionId = clerkSession?.id;
 
         // Transform API response to match component's Session interface
-        const formattedSessions: Session[] = (data.data?.sessions || []).map((session: any) => ({
+        const formattedSessions: Session[] = (data.data?.sessions || []).map((session) => ({
           id: session.id,
           device_name: `${session.browser} on ${session.os}`,
           device_type: session.deviceType || 'unknown',
           browser: session.browser,
           os: session.os,
-          ip_address: session.ipAddress,
+          ip_address: session.ipAddress || '',
           location: session.location || 'Unknown',
           is_current: currentSessionId ? session.id === currentSessionId : false,
-          last_active_at: session.lastActiveAt,
-          created_at: session.createdAt,
+          last_active_at: session.lastActiveAt || new Date().toISOString(),
+          created_at: session.createdAt || new Date().toISOString(),
         }));
 
         setSessions(formattedSessions);
       },
-      onError: (error) => {
+      onError: (error: Error) => {
         console.error('Error fetching sessions:', error.message);
         toast({
           title: 'Error',

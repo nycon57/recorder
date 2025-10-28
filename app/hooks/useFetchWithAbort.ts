@@ -40,6 +40,14 @@ export function useFetchWithAbort<T = any>(
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+
+  // Update refs whenever callbacks change
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+    onErrorRef.current = onError;
+  }, [onSuccess, onError]);
 
   const fetchData = useCallback(async () => {
     if (!url || !enabled) return;
@@ -69,7 +77,29 @@ export function useFetchWithAbort<T = any>(
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
+      const contentType = response.headers.get('content-type');
+      let data;
+
+      try {
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          const text = await response.text();
+          throw new Error(
+            `Expected JSON response but received ${contentType || 'unknown content-type'}. ` +
+            `Status: ${response.status}, Body: ${text.substring(0, 200)}`
+          );
+        }
+      } catch (parseError) {
+        if (parseError instanceof Error && parseError.message.includes('Expected JSON')) {
+          throw parseError;
+        }
+        const text = await response.text();
+        throw new Error(
+          `Failed to parse JSON response. Status: ${response.status}, ` +
+          `Content-Type: ${contentType || 'unknown'}, Body: ${text.substring(0, 200)}`
+        );
+      }
 
       // Double-check abort status after async operation
       if (abortController.signal.aborted) {
@@ -77,7 +107,7 @@ export function useFetchWithAbort<T = any>(
       }
 
       setState({ data, loading: false, error: null });
-      onSuccess?.(data);
+      onSuccessRef.current?.(data);
     } catch (error) {
       // Ignore abort errors (expected when cleaning up)
       if (error instanceof Error && error.name === 'AbortError') {
@@ -86,9 +116,9 @@ export function useFetchWithAbort<T = any>(
 
       const errorObj = error instanceof Error ? error : new Error('Unknown error');
       setState({ data: null, loading: false, error: errorObj });
-      onError?.(errorObj);
+      onErrorRef.current?.(errorObj);
     }
-  }, [url, enabled, onSuccess, onError]);
+  }, [url, enabled]);
 
   useEffect(() => {
     fetchData();
@@ -137,6 +167,14 @@ export function useFetchWithInterval<T = any>(
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+
+  // Update refs whenever callbacks change
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+    onErrorRef.current = onError;
+  }, [onSuccess, onError]);
 
   const fetchData = useCallback(async () => {
     if (!url || !enabled) return;
@@ -162,12 +200,34 @@ export function useFetchWithInterval<T = any>(
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
+      const contentType = response.headers.get('content-type');
+      let data;
+
+      try {
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          const text = await response.text();
+          throw new Error(
+            `Expected JSON response but received ${contentType || 'unknown content-type'}. ` +
+            `Status: ${response.status}, Body: ${text.substring(0, 200)}`
+          );
+        }
+      } catch (parseError) {
+        if (parseError instanceof Error && parseError.message.includes('Expected JSON')) {
+          throw parseError;
+        }
+        const text = await response.text();
+        throw new Error(
+          `Failed to parse JSON response. Status: ${response.status}, ` +
+          `Content-Type: ${contentType || 'unknown'}, Body: ${text.substring(0, 200)}`
+        );
+      }
 
       if (abortController.signal.aborted) return;
 
       setState({ data, loading: false, error: null });
-      onSuccess?.(data);
+      onSuccessRef.current?.(data);
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         return;
@@ -175,9 +235,9 @@ export function useFetchWithInterval<T = any>(
 
       const errorObj = error instanceof Error ? error : new Error('Unknown error');
       setState({ data: null, loading: false, error: errorObj });
-      onError?.(errorObj);
+      onErrorRef.current?.(errorObj);
     }
-  }, [url, enabled, onSuccess, onError]);
+  }, [url, enabled]);
 
   useEffect(() => {
     fetchData(); // Initial fetch
