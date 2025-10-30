@@ -73,6 +73,10 @@ export const InlineCitationCardTrigger = ({
   className,
   ...props
 }: InlineCitationCardTriggerProps) => {
+  if (!sources || sources.length === 0) {
+    return null;
+  }
+
   const display = getSourceDisplay(sources[0]);
   return (
     <HoverCardTrigger asChild>

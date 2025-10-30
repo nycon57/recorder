@@ -99,21 +99,6 @@ const nextConfig = {
     ];
   },
 
-  // Webpack configuration for workers
-  webpack: (config, { isServer }) => {
-    // Add fallbacks for client-side
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        tls: false,
-      };
-    }
-
-    return config;
-  },
-
   // Enable React strict mode
   reactStrictMode: true,
 

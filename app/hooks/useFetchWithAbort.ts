@@ -80,24 +80,23 @@ export function useFetchWithAbort<T = any>(
       const contentType = response.headers.get('content-type');
       let data;
 
-      try {
-        if (contentType && contentType.includes('application/json')) {
-          data = await response.json();
-        } else {
-          const text = await response.text();
+      if (contentType && contentType.includes('application/json')) {
+        const text = await response.text();
+        try {
+          data = JSON.parse(text);
+        } catch (parseError) {
+          const bodyPreview = process.env.NODE_ENV === 'development'
+            ? text.substring(0, 200)
+            : '[REDACTED]';
           throw new Error(
-            `Expected JSON response but received ${contentType || 'unknown content-type'}. ` +
-            `Status: ${response.status}, Body: ${text.substring(0, 200)}`
+            `Failed to parse JSON response. Status: ${response.status}, ` +
+            `Content-Type: ${contentType}, Body: ${bodyPreview}`
           );
         }
-      } catch (parseError) {
-        if (parseError instanceof Error && parseError.message.includes('Expected JSON')) {
-          throw parseError;
-        }
-        const text = await response.text();
+      } else {
         throw new Error(
-          `Failed to parse JSON response. Status: ${response.status}, ` +
-          `Content-Type: ${contentType || 'unknown'}, Body: ${text.substring(0, 200)}`
+          `Expected JSON response but received ${contentType || 'unknown content-type'}. ` +
+          `Status: ${response.status}`
         );
       }
 
@@ -203,24 +202,23 @@ export function useFetchWithInterval<T = any>(
       const contentType = response.headers.get('content-type');
       let data;
 
-      try {
-        if (contentType && contentType.includes('application/json')) {
-          data = await response.json();
-        } else {
-          const text = await response.text();
+      if (contentType && contentType.includes('application/json')) {
+        const text = await response.text();
+        try {
+          data = JSON.parse(text);
+        } catch (parseError) {
+          const bodyPreview = process.env.NODE_ENV === 'development'
+            ? text.substring(0, 200)
+            : '[REDACTED]';
           throw new Error(
-            `Expected JSON response but received ${contentType || 'unknown content-type'}. ` +
-            `Status: ${response.status}, Body: ${text.substring(0, 200)}`
+            `Failed to parse JSON response. Status: ${response.status}, ` +
+            `Content-Type: ${contentType}, Body: ${bodyPreview}`
           );
         }
-      } catch (parseError) {
-        if (parseError instanceof Error && parseError.message.includes('Expected JSON')) {
-          throw parseError;
-        }
-        const text = await response.text();
+      } else {
         throw new Error(
-          `Failed to parse JSON response. Status: ${response.status}, ` +
-          `Content-Type: ${contentType || 'unknown'}, Body: ${text.substring(0, 200)}`
+          `Expected JSON response but received ${contentType || 'unknown content-type'}. ` +
+          `Status: ${response.status}`
         );
       }
 

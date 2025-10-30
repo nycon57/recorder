@@ -84,8 +84,8 @@ export function SessionsList() {
           ip_address: session.ipAddress || '',
           location: session.location || 'Unknown',
           is_current: currentSessionId ? session.id === currentSessionId : false,
-          last_active_at: session.lastActiveAt || new Date().toISOString(),
-          created_at: session.createdAt || new Date().toISOString(),
+          last_active_at: session.lastActiveAt || '',
+          created_at: session.createdAt || '',
         }));
 
         setSessions(formattedSessions);
@@ -222,9 +222,11 @@ export function SessionsList() {
                   <TableCell>
                     <div className="flex items-center gap-1 text-sm">
                       <Clock className="h-3 w-3" />
-                      {formatDistanceToNow(new Date(session.last_active_at), {
-                        addSuffix: true
-                      })}
+                      {session.last_active_at
+                        ? formatDistanceToNow(new Date(session.last_active_at), {
+                            addSuffix: true
+                          })
+                        : 'Unknown'}
                     </div>
                   </TableCell>
                   <TableCell>

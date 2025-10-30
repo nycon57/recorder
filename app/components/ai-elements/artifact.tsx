@@ -117,7 +117,7 @@ export const ArtifactAction = ({
       {...props}
     >
       {Icon ? <Icon className="size-4" /> : children}
-      <span className="sr-only">{label || tooltip}</span>
+      {(label || tooltip) && <span className="sr-only">{label || tooltip}</span>}
     </Button>
   );
 

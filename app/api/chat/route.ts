@@ -8,11 +8,12 @@
  * - Message persistence to Supabase
  */
 
-import { streamText, UIMessage, convertToModelMessages, tool, stepCountIs } from 'ai';
+import { streamText, UIMessage, tool, stepCountIs } from 'ai';
 import { google } from '@ai-sdk/google';
 
 import { requireOrg } from '@/lib/utils/api';
 import { retrieveContext } from '@/lib/services/rag-google';
+import { preprocessQuery } from '@/lib/services/query-preprocessor';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { routeQuery, getRetrievalConfig, explainRoute, type QueryRoute } from '@/lib/services/query-router';
 import { isCohereConfigured } from '@/lib/services/reranking';
@@ -39,6 +40,34 @@ export const maxDuration = 30;
 const ENABLE_AGENTIC_RAG = process.env.ENABLE_AGENTIC_RAG !== 'false';
 const ENABLE_RERANKING = process.env.ENABLE_RERANKING !== 'false';
 const ENABLE_CHAT_TOOLS = process.env.ENABLE_CHAT_TOOLS !== 'false';
+
+// Store sources temporarily (keyed by timestamp for retrieval)
+// This is a workaround since AI SDK v5 doesn't support custom data in streaming responses
+const sourcesCache = new Map<string, any[]>();
+
+/**
+ * GET /api/chat - Retrieve sources by cache key
+ */
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const cacheKey = url.searchParams.get('sourcesKey');
+
+  if (!cacheKey) {
+    return new Response(JSON.stringify({ sources: [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const sources = sourcesCache.get(cacheKey) || [];
+  // Delete after retrieval to free memory
+  sourcesCache.delete(cacheKey);
+
+  return new Response(JSON.stringify({ sources }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
 export async function POST(req: Request) {
   try {
@@ -87,6 +116,18 @@ export async function POST(req: Request) {
 
     console.log('[Chat API] Parsed user query:', userQuery);
 
+    // Preprocess query to extract topics from meta-questions
+    const preprocessed = preprocessQuery(userQuery);
+    const searchableQuery = preprocessed.processedQuery;
+
+    if (preprocessed.wasTransformed) {
+      console.log('[Chat API] Query preprocessed:', {
+        original: preprocessed.originalQuery,
+        processed: preprocessed.processedQuery,
+        method: preprocessed.transformation,
+      });
+    }
+
     // Retrieve RAG context if there's a query
     let ragContext;
     let route: QueryRoute | undefined;
@@ -117,8 +158,9 @@ export async function POST(req: Request) {
         agenticEnabled: ENABLE_AGENTIC_RAG,
       });
 
-      // Route query to appropriate retrieval strategy
-      route = await routeQuery(userQuery, {
+      // Route query using the SEARCHABLE query (preprocessed if needed)
+      // This ensures meta-questions like "Do I have recordings about X?" are treated as content searches
+      route = await routeQuery(searchableQuery, {
         recordingsCount: actualRecordingsCount,
         hasSummaries,
         hasReranking,
@@ -126,6 +168,24 @@ export async function POST(req: Request) {
 
       console.log('[Chat API] Query routing:');
       console.log(explainRoute(route));
+
+      // IMPORTANT: If query was preprocessed from a meta-question, force standard_search
+      // Meta-questions like "Do I have recordings about X?" should always search content, not list recordings
+      if (preprocessed.wasTransformed && (route.strategy === 'direct_listing' || route.strategy === 'topic_overview')) {
+        console.log('[Chat API] Overriding route: Meta-question preprocessed, forcing standard_search');
+        route = {
+          strategy: 'standard_search',
+          intent: route.intent,
+          reasoning: 'Meta-question preprocessed to content query. Using standard vector search.',
+          config: {
+            useAgentic: false,
+            useHierarchical: false,
+            useReranking: hasReranking,
+            maxChunks: 10,
+            threshold: 0.7,
+          },
+        };
+      }
 
       // For direct_listing or topic_overview strategies, let tools handle it
       if (route.strategy === 'direct_listing' || route.strategy === 'topic_overview') {
@@ -135,7 +195,8 @@ export async function POST(req: Request) {
         // Get retrieval configuration from route
         const retrievalConfig = getRetrievalConfig(route);
 
-        ragContext = await retrieveContext(userQuery, orgId, {
+        // Use searchable query for RAG context retrieval
+        ragContext = await retrieveContext(searchableQuery, orgId, {
           ...retrievalConfig,
           recordingIds,
           // Force disable agentic if globally disabled
@@ -200,18 +261,30 @@ Remember: You're helping users discover what knowledge is available in their lib
 4. Cite the specific recording title when answering
 5. If you're uncertain, say "The context doesn't provide enough information to answer this."
 
+**SPECIAL RULE FOR META-QUESTIONS:**
+When the user asks whether you have recordings about a topic (e.g., "Do I have recordings about X?", "Do you know about Y?", "What do you have on Z?"):
+- If Context is provided below about that topic, respond with: "Yes, I have recordings about [topic]:" followed by a summary of what's in the recordings
+- If no Context is provided, respond with: "I don't have any recordings about that topic."
+- The presence of Context means recordings exist - don't say you "don't have information" when Context is clearly provided
+
+**CITATION FORMAT:**
+When referencing sources from the Context, use ONLY the citation numbers in brackets, like [1], [2], [3].
+DO NOT include the recording title before the citation number.
+Example: "The login process involves navigating to the URL [1] and entering credentials [2]."
+NOT: "The login process involves navigating to the URL (Recording Title [1]) and entering credentials (Recording Title [2])."
+
 **Context from User's Recordings:**
 ${ragContext.context}
 
 **Your Task:**
-Answer the user's question using ONLY the above Context. Do not invent or assume anything.`;
+Answer the user's question using ONLY the above Context. Do not invent or assume anything. Remember: if Context exists about the topic they're asking about, that means recordings exist - confirm this and summarize them. Use citation numbers [1], [2], etc. to reference sources.`;
     } else {
       // No recordings or no route determined
       systemPrompt = 'You are a helpful AI assistant. The user has no recordings yet. Let them know they need to create recordings first before you can answer questions about them.';
     }
 
     // Log the actual context being sent to the LLM (for debugging)
-    if (ragContext) {
+    if (ragContext && ragContext.sources && Array.isArray(ragContext.sources)) {
       console.log('[Chat API] ===== RAG CONTEXT DEBUG =====');
       console.log('[Chat API] Sources:');
       ragContext.sources.forEach((source, idx) => {
@@ -223,6 +296,8 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
       console.log('[Chat API] Full context length:', ragContext.context.length);
       console.log('[Chat API] Context preview:', ragContext.context.substring(0, 500));
       console.log('[Chat API] ===========================');
+    } else if (ragContext) {
+      console.log('[Chat API] RAG context exists but sources is not an array:', typeof ragContext.sources);
     }
 
     // Create tools with bound context
@@ -275,10 +350,38 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
       toolChoice: isExploratoryQuery ? 'auto (exploratory)' : 'auto',
     });
 
+    // Convert messages to model format manually
+    // Handle different message formats from the client
+    const modelMessages = messages.map((msg: any) => {
+      let content = '';
+
+      // Extract text content from various formats
+      if (typeof msg.content === 'string') {
+        content = msg.content;
+      } else if (typeof msg.text === 'string') {
+        content = msg.text;
+      } else if (Array.isArray(msg.parts)) {
+        content = msg.parts
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join(' ');
+      } else if (Array.isArray(msg.content)) {
+        content = msg.content
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join(' ');
+      }
+
+      return {
+        role: msg.role,
+        content,
+      };
+    });
+
     const result = streamText({
       model: google('gemini-2.5-flash'),
       system: systemPrompt,
-      messages: convertToModelMessages(messages),
+      messages: modelMessages,
       temperature: 0.7,
       maxOutputTokens: 4096,
       // Enable tools with bound context
@@ -357,8 +460,45 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
       },
     });
 
-    // Return streaming response (AI SDK v5)
-    return result.toUIMessageStreamResponse();
+    // Return streaming response (AI SDK v5) with sources metadata
+    // Convert sources to SourceCitation format for frontend
+    const sourceCitations = ragContext?.sources?.map((source, index) => ({
+      id: `source-${index + 1}`,
+      recordingId: source.recordingId,
+      title: source.recordingTitle,
+      url: source.url || `/library/${source.recordingId}`,
+      snippet: source.chunkText.substring(0, 200),
+      relevanceScore: source.similarity,
+      timestamp: source.timestampRange || (source.timestamp ? `${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')}` : undefined),
+      metadata: {
+        chunkId: source.chunkId,
+        hasVisualContext: source.hasVisualContext,
+        contentType: source.contentType,
+      },
+    })) || [];
+
+    console.log('[Chat API] Attaching sources to response:', {
+      sourcesCount: sourceCitations.length,
+      firstSourceUrl: sourceCitations[0]?.url,
+    });
+
+    // Store sources in cache using user message ID as key
+    // This allows the frontend to fetch sources after the assistant response completes
+    const cacheKey = lastUserMessage?.id || Date.now().toString();
+    sourcesCache.set(cacheKey, sourceCitations);
+    console.log('[Chat API] Stored sources with cache key:', cacheKey);
+
+    // Clean up old entries (keep last 10)
+    if (sourcesCache.size > 10) {
+      const firstKey = sourcesCache.keys().next().value;
+      sourcesCache.delete(firstKey);
+    }
+
+    // Return streaming response with cache key in header
+    const response = result.toUIMessageStreamResponse();
+    response.headers.set('X-Sources-Cache-Key', cacheKey);
+
+    return response;
   } catch (error: any) {
     console.error('[Chat API] Error:', error);
     return new Response(

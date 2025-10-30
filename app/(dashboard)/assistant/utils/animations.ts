@@ -5,6 +5,7 @@
  * for consistent, smooth animations throughout the chat interface.
  */
 
+import { useState, useEffect } from 'react';
 import type { Variants, Transition } from 'framer-motion';
 
 /**
@@ -438,16 +439,39 @@ export const customDuration = (
 });
 
 /**
- * Accessibility-friendly reduced motion check
+ * Accessibility-friendly reduced motion hook
+ * Updates dynamically when user changes OS accessibility settings
  */
-export const prefersReducedMotion =
-  typeof window !== 'undefined' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+export function usePrefersReducedMotion(): boolean {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      setPrefersReducedMotion(event.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange);
+    };
+  }, []);
+
+  return prefersReducedMotion;
+}
 
 /**
  * Get animation variants with reduced motion support
+ * Note: Use usePrefersReducedMotion() hook in components instead of this function
  */
-export const getVariants = (variants: Variants): Variants => {
+export const getVariants = (variants: Variants, prefersReducedMotion: boolean): Variants => {
   if (prefersReducedMotion) {
     // Return simplified animations for reduced motion preference
     return {

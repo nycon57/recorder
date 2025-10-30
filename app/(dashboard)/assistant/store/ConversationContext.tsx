@@ -169,13 +169,19 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     (messageId: string, updates: Partial<ExtendedMessage>) => {
       setState((prev) => ({
         ...prev,
-        conversations: prev.conversations.map((c) => ({
-          ...c,
-          messages: c.messages.map((m) =>
-            m.id === messageId ? { ...m, ...updates } : m
-          ),
-          updatedAt: new Date(),
-        })),
+        conversations: prev.conversations.map((c) => {
+          const containsMessage = c.messages.some((m) => m.id === messageId);
+          if (containsMessage) {
+            return {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === messageId ? { ...m, ...updates } : m
+              ),
+              updatedAt: new Date(),
+            };
+          }
+          return c;
+        }),
       }));
     },
     []
@@ -187,18 +193,24 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
   const deleteMessage = useCallback((messageId: string) => {
     setState((prev) => ({
       ...prev,
-      conversations: prev.conversations.map((c) => ({
-        ...c,
-        messages: c.messages.filter((m) => m.id !== messageId),
-        updatedAt: new Date(),
-      })),
+      conversations: prev.conversations.map((c) => {
+        const containsMessage = c.messages.some((m) => m.id === messageId);
+        if (containsMessage) {
+          return {
+            ...c,
+            messages: c.messages.filter((m) => m.id !== messageId),
+            updatedAt: new Date(),
+          };
+        }
+        return c;
+      }),
     }));
   }, []);
 
   /**
    * Branch conversation from a specific message
    */
-  const branchConversation = useCallback((messageId: string): Conversation => {
+  const branchConversation = useCallback((messageId: string): Conversation | null => {
     let branchedConv: Conversation | null = null;
 
     setState((prev) => {
@@ -234,7 +246,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       };
     });
 
-    return branchedConv!;
+    return branchedConv;
   }, []);
 
   /**

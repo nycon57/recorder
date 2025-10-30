@@ -1,52 +1,26 @@
 /**
  * Message Item Component
  *
- * Displays a single message with:
- * - User/Assistant styling
- * - Sources/citations
- * - Reasoning/chain-of-thought
- * - Tool call visualization
- * - Message actions (copy, edit, etc.)
- * - Markdown rendering
- * - Code blocks
- * - File attachments
+ * Refactored to use standardized ai-elements components:
+ * - Message, MessageContent, MessageAvatar for base structure
+ * - Sources for citations
+ * - ChainOfThought for reasoning
+ * - Tool for tool calls
+ * - Actions for message actions
+ * - Response for markdown rendering
  */
 
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import Link from 'next/link';
-import {
-  Bot,
-  User,
-  Copy,
-  Check,
-  MoreVertical,
-  FileText,
-  ExternalLink,
-  ChevronDown,
-  ChevronUp,
-  Wrench,
-  Sparkles,
-} from 'lucide-react';
+import { Bot, Copy, Check, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ReactMarkdown from 'react-markdown';
+import { useUser } from '@clerk/nextjs';
 import {
   messageVariants,
-  iconButtonVariants,
-  fadeVariants,
-  getVariants,
+  usePrefersReducedMotion,
 } from '../utils/animations';
 import { Button } from '@/app/components/ui/button';
-import { Badge } from '@/app/components/ui/badge';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/app/components/ui/dropdown-menu';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/app/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import type { ExtendedMessage } from '../types';
 import {
@@ -58,7 +32,36 @@ import {
   messageHasToolCalls,
   copyMessageToClipboard,
   getMessageColor,
+  parseCitationsToMarkdown,
 } from '../utils/message-utils';
+
+// Import ai-elements components
+import {
+  Message,
+  MessageContent,
+  MessageAvatar,
+} from '@/app/components/ai-elements/message';
+import {
+  Sources,
+  SourcesTrigger,
+  SourcesContent,
+  Source,
+} from '@/app/components/ai-elements/sources';
+import {
+  ChainOfThought,
+  ChainOfThoughtHeader,
+  ChainOfThoughtContent,
+  ChainOfThoughtStep,
+} from '@/app/components/ai-elements/chain-of-thought';
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from '@/app/components/ai-elements/tool';
+import { Response } from '@/app/components/ai-elements/response';
+import { Badge } from '@/app/components/ui/badge';
 
 /**
  * Message Item Props
@@ -131,9 +134,8 @@ export function MessageItem({
   animate = true,
 }: MessageItemProps) {
   const [copied, setCopied] = useState(false);
-  const [sourcesExpanded, setSourcesExpanded] = useState(false);
-  const [reasoningExpanded, setReasoningExpanded] = useState(false);
-  const [toolCallsExpanded, setToolCallsExpanded] = useState(false);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const { user } = useUser();
 
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
@@ -143,6 +145,29 @@ export function MessageItem({
   const hasSources = messageHasSources(message);
   const hasReasoning = messageHasReasoning(message);
   const hasToolCalls = messageHasToolCalls(message);
+
+  // Debug logging
+  if (message.role === 'assistant') {
+    console.log('[MessageItem] Rendering assistant message:', {
+      messageId: message.id,
+      hasSourcesField: 'sources' in message,
+      sourcesCount: sources.length,
+      hasSources,
+      messageTextLength: messageText.length,
+    });
+  }
+
+  // Parse citations in message text to make them clickable
+  const messageTextWithCitations = parseCitationsToMarkdown(messageText, sources);
+
+  // Debug logging for parsed citations
+  if (message.role === 'assistant' && sources.length > 0) {
+    console.log('[MessageItem] Citation parsing:', {
+      originalText: messageText.substring(0, 200),
+      parsedText: messageTextWithCitations.substring(0, 200),
+      hasMarkdownLinks: messageTextWithCitations.includes('](/library/'),
+    });
+  }
 
   /**
    * Handle copy
@@ -161,341 +186,178 @@ export function MessageItem({
   const colors = getMessageColor(message);
 
   const messageContent = (
-    <div
-      className={cn(
-        'flex gap-3',
-        isUser ? 'justify-end' : 'justify-start',
-        className
-      )}
+    <Message
+      from={message.role}
+      className={cn('py-3', className)}
       role="article"
       aria-label={`${isUser ? 'User' : 'Assistant'} message${message.createdAt ? ` from ${formatMessageTimestamp(message.createdAt, 'long')}` : ''}`}
     >
-      {/* Assistant Avatar */}
-      {isAssistant && (
-        <div
-          className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0"
+      {/* Avatar - show for user on left */}
+      {isUser && (
+        <MessageAvatar
+          src={user?.imageUrl || '/user-avatar.png'}
+          name={user?.fullName || user?.firstName || 'You'}
+          className="bg-muted"
           aria-hidden="true"
-        >
-          <Bot className="w-5 h-5 text-primary" />
-        </div>
+        />
       )}
 
-      {/* Message Content */}
-      <div className="max-w-3xl space-y-2 flex-1">
-        {/* Tool Calls (if assistant) */}
-        {isAssistant && hasToolCalls && (
-          <Collapsible open={toolCallsExpanded} onOpenChange={setToolCallsExpanded}>
-            <div
-              className="bg-muted/50 dark:bg-muted/30 rounded-lg border border-border dark:border-border/50 overflow-hidden"
-              role="region"
-              aria-label="Tool calls used by assistant"
-            >
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-between text-xs font-medium p-3 h-auto"
-                  aria-expanded={toolCallsExpanded}
-                  aria-label={`${toolCallsExpanded ? 'Hide' : 'Show'} ${message.toolInvocations?.length || 0} tool ${message.toolInvocations?.length !== 1 ? 'calls' : 'call'}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Wrench className="w-3 h-3" aria-hidden="true" />
-                    <span>
-                      {message.toolInvocations?.length || 0} Tool{' '}
-                      {message.toolInvocations?.length !== 1 ? 'Calls' : 'Call'}
-                    </span>
-                  </div>
-                  {toolCallsExpanded ? (
-                    <ChevronUp className="w-3 h-3" aria-hidden="true" />
-                  ) : (
-                    <ChevronDown className="w-3 h-3" aria-hidden="true" />
+      {/* Message Content Container */}
+      <div className={cn('flex-1 space-y-3')}>
+        {/* Tool Calls */}
+        {isAssistant && hasToolCalls && message.toolInvocations && (
+          <div className="space-y-2">
+            {message.toolInvocations.map((tool, idx) => (
+              <Tool key={idx} defaultOpen={false}>
+                <ToolHeader
+                  title={tool.toolName}
+                  type={tool.toolName as any}
+                  state={tool.state}
+                />
+                <ToolContent>
+                  {tool.args && (
+                    <ToolInput input={tool.args} />
                   )}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="p-3 space-y-2 border-t">
-                  {message.toolInvocations?.map((tool, idx) => (
-                    <div key={idx} className="text-xs space-y-1">
-                      <div className="font-medium flex items-center gap-1">
-                        <Badge variant="secondary" className="text-xs">
-                          {tool.toolName}
-                        </Badge>
-                      </div>
-                      {tool.args && (
-                        <pre className="bg-background p-2 rounded text-xs overflow-x-auto">
-                          {JSON.stringify(tool.args, null, 2)}
-                        </pre>
-                      )}
-                      {tool.result && (
-                        <div className="bg-background p-2 rounded">
-                          <div className="text-[10px] text-muted-foreground mb-1">
-                            Result:
-                          </div>
-                          <pre className="text-xs overflow-x-auto">
-                            {typeof tool.result === 'string'
-                              ? tool.result
-                              : JSON.stringify(tool.result, null, 2)}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </div>
-          </Collapsible>
+                  {(tool.result || tool.state === 'output-error') && (
+                    <ToolOutput
+                      output={tool.result}
+                      errorText={tool.state === 'output-error' ? 'Tool execution failed' : undefined}
+                    />
+                  )}
+                </ToolContent>
+              </Tool>
+            ))}
+          </div>
         )}
 
-        {/* Reasoning (if available) */}
-        {hasReasoning && (
-          <Collapsible open={reasoningExpanded} onOpenChange={setReasoningExpanded}>
-            <div
-              className="bg-accent/30 dark:bg-accent/20 rounded-lg border border-border dark:border-border/50 overflow-hidden"
-              role="region"
-              aria-label="Assistant reasoning steps"
-            >
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-between text-xs font-medium p-3 h-auto"
-                  aria-expanded={reasoningExpanded}
-                  aria-label={`${reasoningExpanded ? 'Hide' : 'Show'} reasoning steps`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-3 h-3" aria-hidden="true" />
-                    <span>Reasoning</span>
+        {/* Reasoning / Chain of Thought */}
+        {hasReasoning && message.reasoning && (
+          <ChainOfThought defaultOpen={false}>
+            <ChainOfThoughtHeader>
+              Reasoning ({message.reasoning.steps.length} steps)
+            </ChainOfThoughtHeader>
+            <ChainOfThoughtContent>
+              {message.reasoning.steps.map((step, idx) => (
+                <ChainOfThoughtStep
+                  key={step.id || idx}
+                  label={step.content}
+                  description={step.type}
+                  status={idx === message.reasoning!.steps.length - 1 ? 'complete' : 'complete'}
+                />
+              ))}
+              {message.reasoning.conclusion && (
+                <div className="mt-4 rounded-lg border border-border bg-muted/50 p-3">
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                    Conclusion
                   </div>
-                  {reasoningExpanded ? (
-                    <ChevronUp className="w-3 h-3" aria-hidden="true" />
-                  ) : (
-                    <ChevronDown className="w-3 h-3" aria-hidden="true" />
-                  )}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="p-3 space-y-2 border-t">
-                  {message.reasoning?.steps.map((step, idx) => (
-                    <div key={step.id || idx} className="text-xs space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-[10px]">
-                          Step {idx + 1}
-                        </Badge>
-                        <span className="text-muted-foreground capitalize">
-                          {step.type}
-                        </span>
-                      </div>
-                      <div className="text-muted-foreground whitespace-pre-wrap">
-                        {step.content}
-                      </div>
-                    </div>
-                  ))}
-                  {message.reasoning?.conclusion && (
-                    <div className="text-xs pt-2 border-t">
-                      <div className="font-medium mb-1">Conclusion:</div>
-                      <div className="text-muted-foreground">
-                        {message.reasoning.conclusion}
-                      </div>
-                    </div>
-                  )}
+                  <div className="text-sm text-foreground">
+                    {message.reasoning.conclusion}
+                  </div>
                 </div>
-              </CollapsibleContent>
-            </div>
-          </Collapsible>
+              )}
+            </ChainOfThoughtContent>
+          </ChainOfThought>
         )}
 
-        {/* Sources (if available) */}
+        {/* Sources */}
         {hasSources && sources.length > 0 && (
-          <Collapsible open={sourcesExpanded} onOpenChange={setSourcesExpanded}>
-            <div
-              className="bg-muted/50 dark:bg-muted/30 rounded-lg border border-border dark:border-border/50 overflow-hidden"
-              role="region"
-              aria-label="Source citations"
-            >
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-between text-xs font-medium p-3 h-auto"
-                  aria-expanded={sourcesExpanded}
-                  aria-label={`${sourcesExpanded ? 'Hide' : 'Show'} ${sources.length} source ${sources.length === 1 ? 'citation' : 'citations'}`}
+          <Sources>
+            <SourcesTrigger count={sources.length} />
+            <SourcesContent role="list" aria-label="Source citations">
+              {sources.map((source, idx) => (
+                <div
+                  key={source.id || idx}
+                  role="listitem"
+                  className="rounded-lg border border-border bg-background p-3 hover:bg-accent/50 transition-colors"
                 >
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-3 h-3" aria-hidden="true" />
-                    <span>
-                      {sources.length} {sources.length === 1 ? 'Source' : 'Sources'}
-                    </span>
-                  </div>
-                  {sourcesExpanded ? (
-                    <ChevronUp className="w-3 h-3" aria-hidden="true" />
-                  ) : (
-                    <ChevronDown className="w-3 h-3" aria-hidden="true" />
-                  )}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="p-3 space-y-2 border-t" role="list" aria-label="Source citations">
-                  {sources.map((source, idx) => (
-                    <Link
-                      key={source.id || idx}
-                      href={source.url}
-                      className="block text-xs hover:bg-accent dark:hover:bg-accent/50 p-2 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-primary/60"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      role="listitem"
-                      aria-label={`Source ${idx + 1}: ${source.title}${source.relevanceScore ? `, ${(source.relevanceScore * 100).toFixed(0)}% relevance` : ''}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <ExternalLink className="w-3 h-3 mt-0.5 shrink-0" aria-hidden="true" />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">{source.title}</div>
-                          {source.snippet && (
-                            <div className="text-muted-foreground line-clamp-2 mt-1">
-                              {source.snippet}
-                            </div>
-                          )}
-                          {source.relevanceScore && (
-                            <div className="text-[10px] text-muted-foreground mt-1">
+                  <Source
+                    href={source.url}
+                    title={source.title}
+                    aria-label={`Source ${idx + 1}: ${source.title}${source.relevanceScore ? `, ${(source.relevanceScore * 100).toFixed(0)}% relevance` : ''}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <ExternalLink className="h-4 w-4 mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm mb-1 truncate">{source.title}</div>
+                        {source.snippet && (
+                          <div className="text-xs text-muted-foreground line-clamp-2">
+                            {source.snippet}
+                          </div>
+                        )}
+                        {source.relevanceScore && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <Badge variant="secondary" className="text-xs">
                               Relevance: {(source.relevanceScore * 100).toFixed(0)}%
-                            </div>
-                          )}
-                        </div>
+                            </Badge>
+                          </div>
+                        )}
                       </div>
-                    </Link>
-                  ))}
+                    </div>
+                  </Source>
                 </div>
-              </CollapsibleContent>
-            </div>
-          </Collapsible>
+              ))}
+            </SourcesContent>
+          </Sources>
         )}
 
-        {/* Main Message Bubble */}
-        <div className="relative group">
-          <div
+        {/* Main Message Content */}
+        <div className={cn('flex flex-col', isUser && 'max-w-[80%]', isAssistant && 'max-w-[80%]')}>
+          <MessageContent
+            variant={isUser ? 'contained' : 'flat'}
             className={cn(
-              'rounded-lg px-4 py-3',
-              colors.bg,
-              colors.text
+              'relative',
+              isUser && colors.bg,
+              isUser && colors.text
             )}
           >
-            {/* Message Content */}
+            {/* Markdown Content */}
             <div className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown>{messageText}</ReactMarkdown>
+              <Response>{messageTextWithCitations}</Response>
             </div>
+          </MessageContent>
 
+          {/* Timestamp and Actions Row */}
+          <div className="flex items-center gap-2 mt-2 px-1">
             {/* Timestamp */}
             {message.createdAt && (
-              <div className="text-xs opacity-60 mt-2">
+              <div className="text-xs opacity-60">
                 {formatMessageTimestamp(message.createdAt, 'short')}
               </div>
             )}
-          </div>
 
-          {/* Message Actions */}
-          {showActions && (
-            <AnimatePresence>
-              <motion.div
-                className="absolute -bottom-8 right-0"
-                variants={fadeVariants}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                role="toolbar"
-                aria-label="Message actions"
+            {/* Copy button for AI messages only */}
+            {showActions && isAssistant && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                onClick={handleCopy}
+                aria-label={copied ? 'Message copied' : 'Copy message to clipboard'}
               >
-                <div className="flex items-center gap-1 bg-background dark:bg-background/95 border dark:border-border/50 rounded-lg shadow-sm dark:shadow-md p-1">
-                  {/* Copy */}
-                  <motion.div
-                    variants={iconButtonVariants}
-                    whileHover="hover"
-                    whileTap="tap"
-                  >
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={handleCopy}
-                      title="Copy message"
-                      aria-label={copied ? 'Message copied' : 'Copy message to clipboard'}
+                <AnimatePresence mode="wait">
+                  {copied ? (
+                    <motion.div
+                      key="check"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
                     >
-                      <AnimatePresence mode="wait">
-                        {copied ? (
-                          <motion.div
-                            key="check"
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            exit={{ scale: 0 }}
-                          >
-                            <Check className="h-3 w-3 text-green-500" aria-hidden="true" />
-                          </motion.div>
-                        ) : (
-                          <motion.div
-                            key="copy"
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            exit={{ scale: 0 }}
-                          >
-                            <Copy className="h-3 w-3" aria-hidden="true" />
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </Button>
-                  </motion.div>
-
-                  {/* More Actions */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <motion.div
-                        variants={iconButtonVariants}
-                        whileHover="hover"
-                        whileTap="tap"
-                      >
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          title="More actions"
-                          aria-label="More message actions"
-                          aria-haspopup="menu"
-                        >
-                          <MoreVertical className="h-3 w-3" aria-hidden="true" />
-                        </Button>
-                      </motion.div>
-                    </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" role="menu">
-                    {isUser && onEdit && (
-                      <DropdownMenuItem onClick={() => onEdit(message)} role="menuitem">
-                        Edit message
-                      </DropdownMenuItem>
-                    )}
-                    {isAssistant && onRegenerate && (
-                      <DropdownMenuItem onClick={() => onRegenerate(message)} role="menuitem">
-                        Regenerate response
-                      </DropdownMenuItem>
-                    )}
-                    {onBranch && (
-                      <DropdownMenuItem onClick={() => onBranch(message)} role="menuitem">
-                        Branch conversation
-                      </DropdownMenuItem>
-                    )}
-                    {onDelete && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => onDelete(message)}
-                          className="text-destructive"
-                          role="menuitem"
-                        >
-                          Delete message
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </motion.div>
-          </AnimatePresence>
-          )}
+                      <Check className="h-3 w-3 text-green-500" aria-hidden="true" />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="copy"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                    >
+                      <Copy className="h-3 w-3" aria-hidden="true" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* File Attachments */}
@@ -504,9 +366,14 @@ export function MessageItem({
             {message.attachments.map((attachment) => (
               <div
                 key={attachment.id}
-                className="flex items-center gap-2 rounded-lg border bg-muted p-2 text-xs"
+                className="flex items-center gap-2 rounded-lg border border-border bg-muted p-2 text-xs"
               >
-                <FileText className="h-4 w-4" />
+                <div className="h-4 w-4 flex items-center justify-center">
+                  {attachment.type === 'image' && '🖼️'}
+                  {attachment.type === 'file' && '📄'}
+                  {attachment.type === 'audio' && '🎵'}
+                  {attachment.type === 'video' && '🎬'}
+                </div>
                 <span className="font-medium">{attachment.name}</span>
                 <span className="text-muted-foreground">
                   ({(attachment.size / 1024).toFixed(1)} KB)
@@ -517,25 +384,32 @@ export function MessageItem({
         )}
       </div>
 
-      {/* User Avatar */}
-      {isUser && (
-        <div
-          className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0"
+      {/* AI Avatar on right side */}
+      {isAssistant && (
+        <MessageAvatar
+          src="/bot-avatar.png"
+          name=""
+          className="bg-primary/10"
           aria-hidden="true"
         >
-          <User className="w-5 h-5 text-muted-foreground" />
-        </div>
+          <Bot className="h-5 w-5 text-primary" />
+        </MessageAvatar>
       )}
-    </div>
+    </Message>
   );
 
   if (!animate) {
     return messageContent;
   }
 
+  // Use simplified animations for reduced motion preference
+  const variants = prefersReducedMotion
+    ? { hidden: { opacity: 0 }, visible: { opacity: 1 }, exit: { opacity: 0 } }
+    : messageVariants;
+
   return (
     <motion.div
-      variants={getVariants(messageVariants)}
+      variants={variants}
       initial="hidden"
       animate="visible"
       exit="exit"

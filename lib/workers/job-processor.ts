@@ -184,23 +184,29 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 };
 
 /**
- * Main job processing loop
+ * Main job processing loop with exponential backoff for idle periods
  */
 export async function processJobs(options?: {
   batchSize?: number;
   pollInterval?: number;
   maxRetries?: number;
+  maxPollInterval?: number;
 }) {
   const {
     batchSize = 10,
-    pollInterval = 5000,
+    pollInterval = 5000, // Base interval: 5 seconds
     maxRetries = 3,
+    maxPollInterval = 60000, // Max interval when idle: 60 seconds
   } = options || {};
 
   const supabase = createAdminClient();
 
-  console.log('[Job Processor] Starting job processor...');
-  console.log(`[Job Processor] Batch size: ${batchSize}, Poll interval: ${pollInterval}ms`);
+  console.log('[Job Processor] Starting job processor with exponential backoff...');
+  console.log(`[Job Processor] Batch size: ${batchSize}, Base poll interval: ${pollInterval}ms, Max poll interval: ${maxPollInterval}ms`);
+
+  // Exponential backoff state
+  let currentPollInterval = pollInterval;
+  let consecutiveEmptyPolls = 0;
 
   // Main processing loop
   while (true) {
@@ -215,14 +221,36 @@ export async function processJobs(options?: {
 
       if (error) {
         console.error('[Job Processor] Error fetching jobs:', error);
-        await sleep(pollInterval);
+        await sleep(currentPollInterval);
         continue;
       }
 
       if (!jobs || jobs.length === 0) {
-        // No jobs to process
-        await sleep(pollInterval);
+        // No jobs to process - increase poll interval with exponential backoff
+        consecutiveEmptyPolls++;
+
+        // Double the interval with each empty poll, up to max
+        currentPollInterval = Math.min(
+          pollInterval * Math.pow(2, consecutiveEmptyPolls),
+          maxPollInterval
+        );
+
+        // Log backoff changes to help with monitoring
+        if (consecutiveEmptyPolls === 1) {
+          console.log(`[Job Processor] No jobs found, entering backoff mode (current interval: ${currentPollInterval}ms)`);
+        } else if (consecutiveEmptyPolls % 5 === 0) {
+          console.log(`[Job Processor] Still idle after ${consecutiveEmptyPolls} polls (current interval: ${currentPollInterval}ms)`);
+        }
+
+        await sleep(currentPollInterval);
         continue;
+      }
+
+      // Jobs found! Reset backoff
+      if (consecutiveEmptyPolls > 0) {
+        console.log(`[Job Processor] Jobs detected, resetting poll interval to ${pollInterval}ms`);
+        consecutiveEmptyPolls = 0;
+        currentPollInterval = pollInterval;
       }
 
       console.log(`[Job Processor] Found ${jobs.length} pending jobs`);
@@ -232,9 +260,12 @@ export async function processJobs(options?: {
         jobs.map(job => processJob(job, maxRetries))
       );
 
+      // After processing, poll immediately for more jobs
+      // (Don't sleep if we just processed a batch)
+
     } catch (error) {
       console.error('[Job Processor] Unexpected error in main loop:', error);
-      await sleep(pollInterval);
+      await sleep(currentPollInterval);
     }
   }
 }

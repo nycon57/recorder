@@ -17,8 +17,8 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { useState, type ReactNode } from 'react';
+// import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { type ReactNode, useRef } from 'react';
 
 /**
  * Create query client with performance-optimized defaults
@@ -72,21 +72,8 @@ function makeQueryClient() {
   });
 }
 
-// Browser-side query client (singleton pattern)
-let browserQueryClient: QueryClient | undefined = undefined;
-
-function getQueryClient() {
-  if (typeof window === 'undefined') {
-    // Server: always create a new query client
-    return makeQueryClient();
-  } else {
-    // Browser: reuse existing client or create new one
-    if (!browserQueryClient) {
-      browserQueryClient = makeQueryClient();
-    }
-    return browserQueryClient;
-  }
-}
+// Removed singleton pattern for React 19 compatibility
+// Each component instance will manage its own client via useRef
 
 /**
  * Query Provider Component
@@ -113,17 +100,21 @@ function getQueryClient() {
  * ```
  */
 export function QueryProvider({ children }: { children: ReactNode }) {
-  // Create client once per component mount
-  // This ensures we get a fresh client on the server, but reuse on the client
-  const [queryClient] = useState(() => getQueryClient());
+  // Use useRef to create a stable client instance across renders (React 19 compatible)
+  // This ensures the client is created once per component mount
+  const queryClientRef = useRef<QueryClient | null>(null);
+
+  if (!queryClientRef.current) {
+    queryClientRef.current = makeQueryClient();
+  }
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClientRef.current}>
       {children}
-      {/* Show React Query DevTools in development */}
-      {process.env.NODE_ENV === 'development' && (
+      {/* ReactQueryDevtools temporarily disabled for React 19 compatibility */}
+      {/* {process.env.NODE_ENV === 'development' && (
         <ReactQueryDevtools initialIsOpen={false} position="bottom" />
-      )}
+      )} */}
     </QueryClientProvider>
   );
 }

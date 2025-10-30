@@ -39,8 +39,23 @@ export const Branch = ({
   className,
   ...props
 }: BranchProps) => {
-  const [currentBranch, setCurrentBranch] = useState(defaultBranch);
   const [branches, setBranches] = useState<ReactElement[]>([]);
+  const [currentBranch, setCurrentBranch] = useState(() => {
+    // Return defaultBranch directly; clamping will happen in useEffect once branches are populated
+    return Math.max(0, defaultBranch);
+  });
+
+  // Validate and clamp currentBranch when branches or defaultBranch change
+  useEffect(() => {
+    if (branches.length === 0) {
+      if (currentBranch !== 0) setCurrentBranch(0);
+      return;
+    }
+    const clampedIndex = Math.max(0, Math.min(currentBranch, branches.length - 1));
+    if (clampedIndex !== currentBranch) {
+      setCurrentBranch(clampedIndex);
+    }
+  }, [branches.length, defaultBranch]);
 
   const handleBranchChange = (newBranch: number) => {
     setCurrentBranch(newBranch);
@@ -91,28 +106,35 @@ export const BranchMessages = ({ children, ...props }: BranchMessagesProps) => {
 
   // Use useEffect to update branches when they change
   useEffect(() => {
-    // Deep check: compare lengths and keys
+    // Deep check: compare lengths and keys (with fallback to index)
     const needsUpdate =
       branches.length !== childrenArray.length ||
-      childrenArray.some((child, i) => child.key !== branches[i]?.key);
+      childrenArray.some((child, i) => {
+        const childId = child.key ?? i;
+        const branchId = branches[i]?.key ?? i;
+        return childId !== branchId;
+      });
 
     if (needsUpdate) {
       setBranches(childrenArray);
     }
-  }, [childrenArray, branches, setBranches]);
+  }, [childrenArray, setBranches]);
 
-  return childrenArray.map((branch, index) => (
-    <div
-      className={cn(
-        "grid gap-2 overflow-hidden [&>div]:pb-0",
-        index === currentBranch ? "block" : "hidden"
-      )}
-      key={branch.key}
-      {...props}
-    >
-      {branch}
+  return (
+    <div {...props}>
+      {childrenArray.map((branch, index) => (
+        <div
+          className={cn(
+            "grid gap-2 overflow-hidden [&>div]:pb-0",
+            index === currentBranch ? "block" : "hidden"
+          )}
+          key={branch.key ?? index}
+        >
+          {branch}
+        </div>
+      ))}
     </div>
-  ));
+  );
 };
 
 export type BranchSelectorProps = HTMLAttributes<HTMLDivElement> & {

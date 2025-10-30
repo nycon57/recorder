@@ -44,7 +44,7 @@ export const Action = ({
       {...props}
     >
       {children}
-      <span className="sr-only">{label || tooltip}</span>
+      {(label || tooltip) && <span className="sr-only">{label || tooltip}</span>}
     </Button>
   );
 

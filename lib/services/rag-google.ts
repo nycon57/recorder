@@ -9,6 +9,7 @@ import { googleAI, PROMPTS, GOOGLE_CONFIG } from '@/lib/google/client';
 import { vectorSearch, type SearchResult } from '@/lib/services/vector-search-google';
 import { rerankResults, isCohereConfigured } from '@/lib/services/reranking';
 import { agenticSearch } from '@/lib/services/agentic-retrieval';
+import { preprocessQuery } from '@/lib/services/query-preprocessor';
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
@@ -35,6 +36,7 @@ export interface CitedSource {
   hasVisualContext?: boolean;
   visualDescription?: string;
   contentType?: 'audio' | 'visual' | 'combined' | 'document';
+  url?: string; // URL to the recording detail page for clickable citations
 }
 
 export interface RAGContext {
@@ -78,12 +80,24 @@ export async function retrieveContext(
     enableSelfReflection = true,
   } = options || {};
 
+  // Preprocess query to extract topic from meta-questions
+  const preprocessed = preprocessQuery(query);
+  const searchQuery = preprocessed.processedQuery;
+
+  if (preprocessed.wasTransformed) {
+    console.log('[RAG] Query preprocessed:', {
+      original: preprocessed.originalQuery,
+      processed: preprocessed.processedQuery,
+      method: preprocessed.transformation,
+    });
+  }
+
   let searchResults: SearchResult[];
   let agenticMetadata: RAGContext['agenticMetadata'];
 
   // Use agentic search if enabled
   if (useAgentic) {
-    const agenticResult = await agenticSearch(query, {
+    const agenticResult = await agenticSearch(searchQuery, {
       orgId,
       maxIterations,
       enableSelfReflection,
@@ -107,7 +121,7 @@ export async function retrieveContext(
     console.log('[RAG] Performing vector search:', { initialLimit, threshold });
 
     // Perform vector search to find relevant chunks
-    searchResults = await vectorSearch(query, {
+    searchResults = await vectorSearch(searchQuery, {
       orgId,
       limit: initialLimit,
       threshold,
@@ -117,6 +131,7 @@ export async function retrieveContext(
     console.log('[RAG] Vector search results:', searchResults.length);
 
     // Apply reranking if requested and configured
+    // Use original query for reranking to maintain full context
     if (rerank && isCohereConfigured() && searchResults.length > 0) {
       const rerankResult = await rerankResults(query, searchResults, {
         topN: maxChunks,
@@ -139,6 +154,8 @@ export async function retrieveContext(
     hasVisualContext: result.metadata.hasVisualContext || false,
     visualDescription: result.metadata.visualDescription,
     contentType: result.metadata.contentType || 'audio',
+    // Add URL for clickable citations
+    url: `/library/${result.recordingId}`,
   }));
 
   // Build context string from chunks with visual descriptions

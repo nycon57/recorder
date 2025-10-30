@@ -20,8 +20,8 @@ import type { Appearance } from '@clerk/types';
  * Applied globally through ClerkProvider
  */
 export const clerkAppearance: Appearance = {
-  // Required for Tailwind CSS v4 compatibility
-  cssLayerName: 'clerk',
+  // Note: cssLayerName removed temporarily due to compatibility issues
+  // cssLayerName: 'clerk',
 
   variables: {
     // Brand colors

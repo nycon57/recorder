@@ -10,14 +10,39 @@ import type { ExtendedMessage, MessagePart, SourceCitation } from '../types';
  * Extract text content from a message
  */
 export function extractMessageText(message: ExtendedMessage): string {
+  // Try multiple sources for text content to support different AI SDK versions
+
+  // 1. Try content field (string) - AI SDK standard format
   if (typeof message.content === 'string') {
     return message.content;
   }
 
-  return message.content
-    .filter((p) => p.type === 'text')
-    .map((p) => p.text)
-    .join('\n\n');
+  // 2. Try content field (array of parts) - structured content
+  if (message.content && Array.isArray(message.content)) {
+    const text = message.content
+      .filter((p) => p.type === 'text')
+      .map((p) => p.text)
+      .join('\n\n');
+    if (text) return text;
+  }
+
+  // 3. Try 'text' field directly - alternative format
+  if ('text' in message && typeof (message as any).text === 'string') {
+    return (message as any).text;
+  }
+
+  // 4. Try parts array - AI SDK v5 streaming format
+  // This is used by useChat() when streaming responses
+  if ('parts' in message && Array.isArray((message as any).parts)) {
+    const text = (message as any).parts
+      .filter((p: any) => p.type === 'text')
+      .map((p: any) => p.text || '')
+      .join('\n\n');
+    if (text) return text;
+  }
+
+  // Return empty string if no text content found
+  return '';
 }
 
 /**
@@ -168,6 +193,11 @@ export function formatSources(
   // First, check if message has sources array
   if (message.sources && message.sources.length > 0) {
     return message.sources;
+  }
+
+  // Check if sources are in message.data (from AI SDK streaming response)
+  if ((message as any).data?.sources && Array.isArray((message as any).data.sources)) {
+    return (message as any).data.sources;
   }
 
   // Otherwise, extract from message parts
@@ -349,4 +379,41 @@ export function getMessageColor(message: ExtendedMessage): {
         text: 'text-foreground',
       };
   }
+}
+
+/**
+ * Parse citations from message text and convert to markdown links
+ * Converts patterns like "[1]", "[2, 3]", "[1, 2, 3]" to clickable markdown links
+ */
+export function parseCitationsToMarkdown(
+  text: string,
+  sources: SourceCitation[]
+): string {
+  if (!sources || sources.length === 0) return text;
+
+  // Create a map of citation numbers to source URLs
+  const citationMap = new Map<number, string>();
+  sources.forEach((source, index) => {
+    citationMap.set(index + 1, source.url);
+  });
+
+  // Replace citation patterns:
+  // - Single: [1] -> [1](url)
+  // - Multiple: [1, 2, 3] -> [1](url1), [2](url2), [3](url3)
+  return text.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (match, nums) => {
+    // Split by comma to handle multiple citations
+    const citationNums = nums.split(/\s*,\s*/).map((n: string) => parseInt(n, 10));
+
+    // Convert each number to a markdown link
+    const links = citationNums.map((num: number) => {
+      const url = citationMap.get(num);
+      if (url) {
+        return `[[${num}]](${url})`;
+      }
+      return `[${num}]`;
+    });
+
+    // Join with commas and space
+    return links.join(', ');
+  });
 }

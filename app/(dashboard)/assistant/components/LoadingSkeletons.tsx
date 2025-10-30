@@ -13,6 +13,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { Loader } from '@/app/components/ai-elements/loader';
+import { Shimmer } from '@/app/components/ai-elements/shimmer';
 
 /**
  * Base Skeleton Component
@@ -23,10 +25,10 @@ interface SkeletonProps {
 }
 
 export function Skeleton({ className, animate = true }: SkeletonProps) {
-  const baseClass = 'bg-muted dark:bg-muted/60 rounded animate-pulse';
+  const baseClass = 'bg-muted dark:bg-muted/60 rounded';
 
   if (!animate) {
-    return <div className={cn(baseClass, className)} />;
+    return <div className={cn(baseClass, 'animate-pulse', className)} />;
   }
 
   return (
@@ -153,38 +155,39 @@ export function TypingIndicator({
 
 /**
  * Shimmer Effect Skeleton
+ * Uses ai-elements Shimmer component for text shimmer effect
  */
 interface ShimmerSkeletonProps {
   className?: string;
   lines?: number;
+  duration?: number;
+  spread?: number;
 }
 
 export function ShimmerSkeleton({
   className,
   lines = 3,
+  duration = 2,
+  spread = 2,
 }: ShimmerSkeletonProps) {
   return (
     <div className={cn('space-y-2', className)}>
       {Array.from({ length: lines }).map((_, i) => (
-        <motion.div
+        <div
           key={i}
-          className="h-4 bg-gradient-to-r from-muted via-muted/50 to-muted dark:from-muted/60 dark:via-muted/30 dark:to-muted/60 rounded overflow-hidden"
+          className="h-4 overflow-hidden"
           style={{
             width: i === lines - 1 ? '60%' : '100%',
           }}
         >
-          <motion.div
-            className="h-full w-full bg-gradient-to-r from-transparent via-white/20 dark:via-white/10 to-transparent"
-            animate={{
-              x: ['-100%', '100%'],
-            }}
-            transition={{
-              duration: 1.5,
-              repeat: Infinity,
-              ease: 'linear',
-            }}
-          />
-        </motion.div>
+          <Shimmer
+            duration={duration}
+            spread={spread}
+            className="block h-full"
+          >
+            {'\u00A0'.repeat(50)}
+          </Shimmer>
+        </div>
       ))}
     </div>
   );
@@ -291,6 +294,7 @@ export function PulseDot({ className, color = 'bg-primary' }: PulseDotProps) {
 
 /**
  * Loading Spinner
+ * Uses ai-elements Loader component
  */
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg';
@@ -301,21 +305,16 @@ export function LoadingSpinner({
   size = 'md',
   className,
 }: LoadingSpinnerProps) {
-  const sizeClasses = {
-    sm: 'w-4 h-4',
-    md: 'w-6 h-6',
-    lg: 'w-8 h-8',
+  const sizeValues = {
+    sm: 16,
+    md: 24,
+    lg: 32,
   };
 
   return (
-    <motion.div
-      className={cn('border-2 border-primary dark:border-primary/80 border-t-transparent rounded-full', sizeClasses[size], className)}
-      animate={{ rotate: 360 }}
-      transition={{
-        duration: 1,
-        repeat: Infinity,
-        ease: 'linear',
-      }}
+    <Loader
+      size={sizeValues[size]}
+      className={className}
     />
   );
 }

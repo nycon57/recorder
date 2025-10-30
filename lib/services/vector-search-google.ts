@@ -281,7 +281,7 @@ export async function vectorSearch(
 
   // Calculate similarity scores using pgvector
   console.log('[Vector Search] Calculating similarities...');
-  const results = await calculateSimilarities(chunks, embedding, threshold);
+  const results = await calculateSimilarities(chunks, embedding, threshold, orgId);
   console.log('[Vector Search] Similarity results:', results.length);
 
   // Sort by similarity (descending) and limit
@@ -313,7 +313,8 @@ async function generateQueryEmbedding(query: string): Promise<number[]> {
 async function calculateSimilarities(
   chunks: any[],
   queryEmbedding: number[],
-  threshold: number
+  threshold: number,
+  orgId: string
 ): Promise<SearchResult[]> {
   // Use admin client since API route already validates auth
   const supabase = supabaseAdmin;
@@ -325,6 +326,7 @@ async function calculateSimilarities(
     query_embedding: embeddingString,
     match_threshold: threshold,
     match_count: chunks.length,
+    filter_org_id: orgId, // CRITICAL: Filter by org_id to ensure proper isolation
   });
 
   if (error) {
