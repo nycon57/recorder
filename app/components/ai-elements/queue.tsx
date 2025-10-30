@@ -247,7 +247,7 @@ export const QueueSectionLabel = ({
     <ChevronDownIcon className="group-data-[state=closed]:-rotate-90 size-4 transition-transform" />
     {icon}
     <span>
-      {count ?? 0} {label}
+      {count != null ? `${count} ${label}` : label}
     </span>
   </span>
 );

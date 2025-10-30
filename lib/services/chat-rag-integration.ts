@@ -242,21 +242,27 @@ export async function injectRAGContext(
       });
 
       // Convert hierarchical results to standard format
-      searchResults = hierarchicalResults.map((r) => ({
-        id: r.id,
-        recordingId: r.recordingId,
-        recordingTitle: r.recordingTitle,
-        chunkText: r.chunkText,
-        similarity: r.similarity,
-        metadata: r.metadata,
-        createdAt: r.createdAt,
-      }));
+      // Add defensive check to ensure hierarchicalResults is an array
+      if (!hierarchicalResults || !Array.isArray(hierarchicalResults)) {
+        console.error('[ChatRAG] hierarchicalResults is not an array:', typeof hierarchicalResults);
+        searchResults = [];
+      } else {
+        searchResults = hierarchicalResults.map((r) => ({
+          id: r.id,
+          recordingId: r.recordingId,
+          recordingTitle: r.recordingTitle,
+          chunkText: r.chunkText,
+          similarity: r.similarity,
+          metadata: r.metadata,
+          createdAt: r.createdAt,
+        }));
 
-      // Apply filters
-      if (recordingIds && recordingIds.length > 0) {
-        searchResults = searchResults.filter((r) =>
-          recordingIds.includes(r.recordingId)
-        );
+        // Apply filters
+        if (recordingIds && recordingIds.length > 0) {
+          searchResults = searchResults.filter((r) =>
+            recordingIds.includes(r.recordingId)
+          );
+        }
       }
 
     } else {
@@ -284,10 +290,15 @@ export async function injectRAGContext(
     }
 
     // Filter by relevance threshold
-    searchResults = searchResults.filter((r) => r.similarity >= minRelevance);
-
-    // Limit results
-    searchResults = searchResults.slice(0, limit);
+    // Add defensive check to ensure searchResults is an array
+    if (!searchResults || !Array.isArray(searchResults)) {
+      console.error('[ChatRAG] searchResults is not an array before filter:', typeof searchResults);
+      searchResults = [];
+    } else {
+      searchResults = searchResults.filter((r) => r.similarity >= minRelevance);
+      // Limit results
+      searchResults = searchResults.slice(0, limit);
+    }
 
     // Format sources for citations
     const sources = extractSourceCitations(searchResults);
@@ -344,7 +355,8 @@ export async function injectRAGContext(
  * @returns Formatted context string with citations
  */
 export function formatSourcesForPrompt(sources: SearchResult[]): string {
-  if (!sources || sources.length === 0) {
+  // Add defensive check
+  if (!sources || !Array.isArray(sources) || sources.length === 0) {
     return 'No relevant context found for this query.';
   }
 
@@ -410,6 +422,12 @@ export function formatSourcesForPrompt(sources: SearchResult[]): string {
  * @returns Array of formatted source citations
  */
 export function extractSourceCitations(sources: SearchResult[]): SourceCitation[] {
+  // Add defensive check
+  if (!sources || !Array.isArray(sources)) {
+    console.error('[ChatRAG] extractSourceCitations received non-array:', typeof sources);
+    return [];
+  }
+
   return sources.map((source) => {
     // Generate URL based on source type
     const url = source.metadata.source === 'transcript'

@@ -218,10 +218,10 @@ export function PromptInputProvider({
         setInput: setTextInput,
         clear: clearInput,
       },
-      attachments,
+      attachments: attachmentsContext,
       __registerFileInput,
     }),
-    [textInput, clearInput, attachments, __registerFileInput]
+    [textInput, clearInput, attachmentsContext, __registerFileInput]
   );
 
   return (
@@ -680,10 +680,14 @@ export const PromptInput = ({
   );
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = (event) => {
+    console.log('[PromptInput] handleSubmit called, event:', event.type);
     event.preventDefault();
 
     // Prevent submission while already submitting
-    if (isSubmitting) return;
+    if (isSubmitting) {
+      console.log('[PromptInput] Already submitting, skipping');
+      return;
+    }
 
     const form = event.currentTarget;
     const text = usingProvider
@@ -692,6 +696,9 @@ export const PromptInput = ({
           const formData = new FormData(form);
           return (formData.get("message") as string) || "";
         })();
+
+    console.log('[PromptInput] Text value:', text);
+    console.log('[PromptInput] Files count:', files.length);
 
     // Set submitting state to disable form and prevent input loss
     setIsSubmitting(true);
@@ -709,10 +716,13 @@ export const PromptInput = ({
       })
     ).then((convertedFiles: FileUIPart[]) => {
       try {
+        console.log('[PromptInput] Calling onSubmit with:', { text, filesCount: convertedFiles.length });
         const result = onSubmit({ text, files: convertedFiles }, event);
 
         // Handle both sync and async onSubmit
         if (result instanceof Promise) {
+          console.log('[PromptInput] onSubmit returned Promise');
+
           result
             .then(() => {
               // Reset form and clear after successful async submission

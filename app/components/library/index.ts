@@ -4,7 +4,7 @@
  */
 
 // Main library components
-export { default as LibraryTable } from './LibraryTable';
+export { LibraryTable } from './LibraryTable';
 export { SelectableContentCard } from './SelectableContentCard';
 
 // Detail views

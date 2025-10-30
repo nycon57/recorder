@@ -14,6 +14,10 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { toast } from 'sonner';
+import {
+  PromptInputProvider,
+  usePromptInputController,
+} from '@/app/components/ai-elements/prompt-input';
 import { ChatInput } from './ChatInput';
 import { MessageList } from './MessageList';
 import { useConversations } from '../store/ConversationContext';
@@ -46,11 +50,24 @@ export interface AssistantChatProps {
 }
 
 /**
- * AssistantChat Component
+ * AssistantChat Component (Wrapper with PromptInputProvider)
  *
  * Complete chat interface with all state-of-the-art features.
  */
-export function AssistantChat({
+export function AssistantChat(props: AssistantChatProps) {
+  return (
+    <PromptInputProvider>
+      <AssistantChatInner {...props} />
+    </PromptInputProvider>
+  );
+}
+
+/**
+ * AssistantChatInner Component
+ *
+ * Inner chat component that uses PromptInputController.
+ */
+function AssistantChatInner({
   apiEndpoint = '/api/chat',
   className,
   showAdvancedFeatures = true,
@@ -60,6 +77,8 @@ export function AssistantChat({
     'Find mentions of the budget',
   ],
 }: AssistantChatProps) {
+  // Get PromptInput controller from provider
+  const promptController = usePromptInputController();
   const {
     getCurrentConversation,
     addMessage,
@@ -71,34 +90,84 @@ export function AssistantChat({
   const currentConversation = getCurrentConversation();
 
   /**
+   * Store last user message ID for source fetching
+   */
+  const lastUserMessageIdRef = React.useRef<string | null>(null);
+
+  /**
+   * Store sources by USER message ID for merging with aiMessages
+   * Key = user message ID, Value = sources for the assistant's response
+   */
+  const [messageSourcesMap, setMessageSourcesMap] = React.useState<Map<string, any[]>>(new Map());
+
+  /**
    * AI SDK useChat hook
    */
   const {
     messages: aiMessages,
-    input,
-    setInput,
-    handleSubmit: aiHandleSubmit,
-    isLoading,
+    sendMessage,
+    regenerate,
+    status,
     error,
-    reload,
     stop,
-    append,
   } = useChat({
     api: apiEndpoint,
-    onFinish: (message) => {
+    onFinish: async (message) => {
+      console.log('[AssistantChat] useChat onFinish called:', message);
+
+      // Use the stored user message ID to fetch sources
+      const cacheKey = lastUserMessageIdRef.current;
+
+      let messageWithSources = message;
+
+      if (cacheKey) {
+        try {
+          console.log('[AssistantChat] Fetching sources with user message key:', cacheKey);
+          const sourcesResponse = await fetch(`${apiEndpoint}?sourcesKey=${cacheKey}`);
+          const { sources } = await sourcesResponse.json();
+
+          if (sources && sources.length > 0) {
+            messageWithSources = {
+              ...message,
+              sources,
+            };
+            // Store sources in map using USER message ID as key
+            setMessageSourcesMap(prev => new Map(prev).set(cacheKey, sources));
+            console.log('[AssistantChat] Stored sources for user message:', cacheKey);
+            console.log('[AssistantChat] Attached sources to message:', sources.length);
+            console.log('[AssistantChat] Message with sources:', messageWithSources);
+            console.log('[AssistantChat] First source URL:', sources[0]?.url);
+          } else {
+            console.log('[AssistantChat] No sources found for key:', cacheKey);
+          }
+        } catch (e) {
+          console.error('[AssistantChat] Failed to fetch sources:', e);
+        }
+        // Clear the ref after use
+        lastUserMessageIdRef.current = null;
+      } else {
+        console.log('[AssistantChat] No user message ID available for fetching sources');
+      }
+
       // Sync finished message to conversation store
       const extendedMessage: ExtendedMessage = {
-        ...message,
+        ...messageWithSources,
         createdAt: new Date(),
       };
       addMessage(extendedMessage);
     },
     onError: (error) => {
+      console.error('[AssistantChat] useChat onError called:', error);
       toast.error('Failed to send message', {
         description: error.message,
       });
     },
   });
+
+  /**
+   * Compute isLoading from status (for compatibility)
+   */
+  const isLoading = status === 'streaming' || status === 'submitted';
 
   /**
    * Sync AI messages to conversation store
@@ -132,14 +201,17 @@ export function AssistantChat({
    */
   const handleSubmit = useCallback(
     async (data: { text: string; files?: MessageAttachment[] }) => {
+      console.log('[AssistantChat] handleSubmit called with:', data);
       const { text, files } = data;
 
       if (!text.trim() && (!files || files.length === 0)) {
+        console.log('[AssistantChat] Skipping empty submission');
         return;
       }
 
       // Create conversation if none exists
       if (!currentConversation) {
+        console.log('[AssistantChat] Creating new conversation');
         createConversation(text.slice(0, 50));
       }
 
@@ -147,19 +219,39 @@ export function AssistantChat({
       if (files && files.length > 0) {
         // TODO: Implement multi-modal file upload
         // For now, just send text
+        console.log('[AssistantChat] Files attached (not yet supported):', files.length);
         toast.info('File uploads coming soon!');
       }
 
-      // Submit to AI
-      await append({
-        role: 'user',
-        content: text,
-      });
+      // Generate a unique ID for this user message to use as cache key
+      const messageId = `user-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      lastUserMessageIdRef.current = messageId;
+      console.log('[AssistantChat] Generated message ID for caching:', messageId);
 
-      // Clear input
-      setInput('');
+      // Submit to AI
+      console.log('[AssistantChat] Calling sendMessage with:', { role: 'user', content: text });
+      try {
+        await sendMessage({
+          id: messageId,
+          role: 'user',
+          content: text,
+        });
+        console.log('[AssistantChat] sendMessage() completed successfully');
+      } catch (error) {
+        console.error('[AssistantChat] sendMessage() failed:', error);
+        toast.error('Failed to send message', {
+          description: error instanceof Error ? error.message : 'Unknown error',
+        });
+        // Clear the ref on error
+        lastUserMessageIdRef.current = null;
+        return;
+      }
+
+      // Clear input using PromptInput controller
+      console.log('[AssistantChat] Clearing input');
+      promptController.textInput.clear();
     },
-    [currentConversation, createConversation, append, setInput]
+    [currentConversation, createConversation, sendMessage, promptController]
   );
 
   /**
@@ -167,9 +259,9 @@ export function AssistantChat({
    */
   const handleExampleClick = useCallback(
     (prompt: string) => {
-      setInput(prompt);
+      promptController.textInput.setInput(prompt);
     },
-    [setInput]
+    [promptController]
   );
 
   /**
@@ -184,20 +276,20 @@ export function AssistantChat({
    */
   const handleEdit = useCallback(
     (message: ExtendedMessage) => {
-      // Set input to message text for editing
-      setInput(
-        typeof message.content === 'string'
-          ? message.content
-          : message.content
-              .filter((p) => p.type === 'text')
-              .map((p) => p.text)
-              .join(' ')
-      );
+      // Set input to message text for editing using PromptInput controller
+      const textContent = typeof message.content === 'string'
+        ? message.content
+        : message.content
+            .filter((p) => p.type === 'text')
+            .map((p) => p.text)
+            .join(' ');
+
+      promptController.textInput.setInput(textContent);
 
       // TODO: Delete messages after this one and regenerate from edited message
       toast.info('Edit mode - modify and send to regenerate');
     },
-    [setInput]
+    [promptController]
   );
 
   /**
@@ -206,13 +298,13 @@ export function AssistantChat({
   const handleRegenerate = useCallback(
     async (message: ExtendedMessage) => {
       try {
-        await reload();
+        await regenerate();
         toast.success('Regenerating response...');
       } catch (error) {
         toast.error('Failed to regenerate response');
       }
     },
-    [reload]
+    [regenerate]
   );
 
   /**
@@ -238,15 +330,37 @@ export function AssistantChat({
   );
 
   /**
-   * Convert AI messages to ExtendedMessage format
+   * Convert AI messages to ExtendedMessage format, merging sources from map
    */
   const extendedMessages: ExtendedMessage[] = useMemo(
-    () =>
-      aiMessages.map((msg) => ({
-        ...msg,
-        createdAt: new Date(),
-      })),
-    [aiMessages]
+    () => {
+      console.log('[AssistantChat] Building extended messages, map size:', messageSourcesMap.size);
+      console.log('[AssistantChat] Map keys:', Array.from(messageSourcesMap.keys()));
+
+      return aiMessages.map((msg, index) => {
+        // For assistant messages, find the preceding user message to get sources
+        let sources: any[] | undefined;
+
+        if (msg.role === 'assistant' && index > 0) {
+          // Look backwards for the most recent user message
+          for (let i = index - 1; i >= 0; i--) {
+            if (aiMessages[i].role === 'user') {
+              const userMessageId = aiMessages[i].id;
+              sources = messageSourcesMap.get(userMessageId);
+              console.log('[AssistantChat] Assistant message at index', index, 'looking up sources via user message:', userMessageId, 'found:', sources?.length || 0);
+              break;
+            }
+          }
+        }
+
+        return {
+          ...msg,
+          ...(sources && { sources }),
+          createdAt: new Date(),
+        };
+      });
+    },
+    [aiMessages, messageSourcesMap]
   );
 
   /**
@@ -293,10 +407,8 @@ export function AssistantChat({
       />
 
       {/* Chat Input */}
-      <div className="border-t p-3">
+      <div className="border-t">
         <ChatInput
-          value={input}
-          onChange={setInput}
           onSubmit={handleSubmit}
           isLoading={isLoading}
           placeholder="Ask a question about your recordings..."

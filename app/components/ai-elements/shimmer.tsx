@@ -29,10 +29,13 @@ const ShimmerComponent = ({
     Component as keyof JSX.IntrinsicElements
   );
 
-  const dynamicSpread = useMemo(
-    () => (children?.length ?? 0) * spread,
-    [children, spread]
-  );
+  const MIN_SPREAD = 10; // Minimum spread value for visibility
+
+  const dynamicSpread = useMemo(() => {
+    const baseCount = typeof children === 'string' ? children.length : 1;
+    const computed = baseCount * spread;
+    return Math.max(computed, MIN_SPREAD);
+  }, [children, spread]);
 
   return (
     <MotionComponent

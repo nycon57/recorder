@@ -15,8 +15,10 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Clock, FileText, Video, Loader2, SlidersHorizontal, Bookmark, X } from 'lucide-react';
+import { Search, Filter, Clock, FileText, Video, SlidersHorizontal, Bookmark, X } from 'lucide-react';
 import Link from 'next/link';
+
+import { Loader } from '@/app/components/ai-elements/loader';
 
 import { staggerContainer, staggerItem, fadeIn } from '@/lib/utils/animations';
 import { SearchNoResultsState, SearchInitialState } from '@/app/components/empty-states/SearchEmptyState';
@@ -623,7 +625,7 @@ function SearchPageContent() {
             exit={{ opacity: 0 }}
             className="flex flex-col items-center justify-center py-12"
           >
-            <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
+            <Loader size={48} className="text-primary mb-4" />
             <p className="text-muted-foreground">Searching your knowledge base...</p>
           </motion.div>
         ) : results.length > 0 ? (

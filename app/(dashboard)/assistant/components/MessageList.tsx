@@ -2,18 +2,23 @@
  * Message List Component
  *
  * Displays a scrollable list of messages with:
- * - Auto-scroll to bottom
- * - Empty state
+ * - Auto-scroll to bottom via ai-elements Conversation
+ * - Empty state via ConversationEmptyState
  * - Loading indicators
  * - Smooth animations
  */
 
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import { Bot } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from '@/app/components/ai-elements/conversation';
 import { MessageItem, type MessageItemProps } from './MessageItem';
 import { TypingIndicator } from './LoadingSkeletons';
 import type { ExtendedMessage } from '../types';
@@ -67,11 +72,6 @@ export interface MessageListProps {
    * Custom className
    */
   className?: string;
-
-  /**
-   * Whether to enable auto-scroll to bottom
-   */
-  autoScroll?: boolean;
 }
 
 /**
@@ -91,78 +91,69 @@ export function MessageList({
   onExampleClick,
   messageItemProps,
   className,
-  autoScroll = true,
 }: MessageListProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-
-  /**
-   * Scroll to bottom
-   */
-  const scrollToBottom = React.useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
-
-  /**
-   * Auto-scroll when messages change
-   */
-  useEffect(() => {
-    if (autoScroll) {
-      scrollToBottom();
-    }
-  }, [messages, isLoading, autoScroll, scrollToBottom]);
+  const isEmpty = messages.length === 0 && !isLoading;
 
   return (
     <div className={cn('flex-1 overflow-hidden', className)} role="region" aria-label="Chat messages">
-      <ScrollArea className="h-full" ref={scrollAreaRef}>
-        <div className="space-y-4 p-4">
+      <Conversation className="h-full">
+        <ConversationContent className="space-y-4">
           {/* Empty State */}
-          {messages.length === 0 && !isLoading && (
-            <div className="text-center py-12 px-4" role="status" aria-live="polite">
-              <Bot className="w-16 h-16 mx-auto mb-4 text-muted-foreground" aria-hidden="true" />
-              <h3 className="text-lg font-medium mb-2">{emptyTitle}</h3>
-              <p className="text-sm text-muted-foreground mb-6">
-                {emptyDescription}
-              </p>
-
-              {/* Example Prompts */}
-              {examplePrompts.length > 0 && (
-                <div className="max-w-md mx-auto space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground mb-3">
-                    Try asking:
-                  </p>
-                  <div role="group" aria-label="Example prompts">
-                    {examplePrompts.map((prompt, index) => (
-                      <button
-                        key={index}
-                        onClick={() => onExampleClick?.(prompt)}
-                        className={cn(
-                          'w-full text-left p-3 rounded-lg border dark:border-border/50',
-                          'bg-muted/50 dark:bg-muted/30 hover:bg-muted dark:hover:bg-muted/50 transition-colors',
-                          'text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-primary/60'
-                        )}
-                        aria-label={`Ask: ${prompt}`}
-                      >
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
+          {isEmpty && (
+            <ConversationEmptyState
+              title={emptyTitle}
+              description={emptyDescription}
+              icon={<Bot className="w-16 h-16 text-muted-foreground" aria-hidden="true" />}
+            >
+              {/* Custom content with example prompts */}
+              <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
+                <Bot className="w-16 h-16 text-muted-foreground" aria-hidden="true" />
+                <div className="space-y-1">
+                  <h3 className="font-medium text-lg">{emptyTitle}</h3>
+                  <p className="text-muted-foreground text-sm">{emptyDescription}</p>
                 </div>
-              )}
-            </div>
+
+                {/* Example Prompts */}
+                {examplePrompts.length > 0 && (
+                  <div className="max-w-md mx-auto space-y-2 mt-4">
+                    <p className="text-xs font-medium text-muted-foreground mb-3">
+                      Try asking:
+                    </p>
+                    <div role="group" aria-label="Example prompts" className="space-y-2">
+                      {examplePrompts.map((prompt, index) => (
+                        <button
+                          key={index}
+                          onClick={() => onExampleClick?.(prompt)}
+                          className={cn(
+                            'w-full text-left p-3 rounded-lg border dark:border-border/50',
+                            'bg-muted/50 dark:bg-muted/30 hover:bg-muted dark:hover:bg-muted/50 transition-colors',
+                            'text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-primary/60'
+                          )}
+                          aria-label={`Ask: ${prompt}`}
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ConversationEmptyState>
           )}
 
           {/* Messages */}
-          <AnimatePresence mode="popLayout">
-            {messages.map((message) => (
-              <MessageItem
-                key={message.id}
-                message={message}
-                {...messageItemProps}
-                animate={true}
-              />
-            ))}
-          </AnimatePresence>
+          {!isEmpty && (
+            <AnimatePresence mode="popLayout">
+              {messages.map((message) => (
+                <MessageItem
+                  key={message.id}
+                  message={message}
+                  {...messageItemProps}
+                  animate={true}
+                />
+              ))}
+            </AnimatePresence>
+          )}
 
           {/* Loading Indicator */}
           {isLoading && (
@@ -183,11 +174,11 @@ export function MessageList({
               </div>
             </div>
           )}
+        </ConversationContent>
 
-          {/* Scroll Anchor */}
-          <div ref={messagesEndRef} aria-hidden="true" />
-        </div>
-      </ScrollArea>
+        {/* Auto-hiding scroll to bottom button */}
+        <ConversationScrollButton />
+      </Conversation>
 
       {/* Screen reader announcements for new messages */}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
