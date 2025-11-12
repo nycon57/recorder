@@ -32,18 +32,66 @@ import {
   getRecordingMetadataInputSchema,
   listRecordingsInputSchema,
 } from '@/lib/validations/chat';
+import { searchMonitor } from '@/lib/services/search-monitoring';
+import { assignVariant, getExperimentConfig, logExperimentResult } from '@/lib/services/ab-testing';
+import { nanoid } from 'nanoid';
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
+
+// Force dynamic rendering to enable streaming
+export const dynamic = 'force-dynamic';
 
 // Configuration flags (can be overridden via env vars)
 const ENABLE_AGENTIC_RAG = process.env.ENABLE_AGENTIC_RAG !== 'false';
 const ENABLE_RERANKING = process.env.ENABLE_RERANKING !== 'false';
 const ENABLE_CHAT_TOOLS = process.env.ENABLE_CHAT_TOOLS !== 'false';
+const ENABLE_SEARCH_MONITORING = process.env.ENABLE_SEARCH_MONITORING === 'true';
+const AB_TESTING_ENABLED = process.env.ENABLE_SEARCH_AB_TESTING === 'true';
 
 // Store sources temporarily (keyed by timestamp for retrieval)
 // This is a workaround since AI SDK v5 doesn't support custom data in streaming responses
-const sourcesCache = new Map<string, any[]>();
+// Cache entries: { sources: any[], timestamp: number }
+const sourcesCache = new Map<string, { sources: any[]; timestamp: number }>();
+
+// Cache TTL: 5 minutes (enough time for navigation between chat and detail pages)
+const SOURCES_CACHE_TTL = 5 * 60 * 1000;
+
+/**
+ * Clean up expired cache entries
+ */
+function cleanupExpiredCache() {
+  const now = Date.now();
+  for (const [key, entry] of sourcesCache.entries()) {
+    if (now - entry.timestamp > SOURCES_CACHE_TTL) {
+      sourcesCache.delete(key);
+    }
+  }
+}
+
+/**
+ * Alert when search returns no results but user has content in their library
+ */
+async function alertSearchFailure(
+  query: string,
+  orgId: string,
+  attempts: number,
+  config: any,
+  recordingsCount: number
+) {
+  if (recordingsCount > 0) {
+    console.warn('[Chat API] ⚠️ SEARCH FAILURE ALERT:', {
+      query: query.substring(0, 100),
+      orgId,
+      recordingsInLibrary: recordingsCount,
+      retrievalAttempts: attempts,
+      finalThreshold: config.threshold,
+      useAgentic: config.useAgentic,
+      rerank: config.rerank,
+      recommendation: 'User has content but search returned 0 results. Consider further threshold tuning or query preprocessing.',
+    });
+  }
+}
 
 /**
  * GET /api/chat - Retrieve sources by cache key
@@ -52,6 +100,12 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const cacheKey = url.searchParams.get('sourcesKey');
 
+  console.log('[Chat API GET] Retrieving sources:', {
+    cacheKey,
+    cacheSize: sourcesCache.size,
+    cacheKeys: Array.from(sourcesCache.keys()),
+  });
+
   if (!cacheKey) {
     return new Response(JSON.stringify({ sources: [] }), {
       status: 200,
@@ -59,11 +113,38 @@ export async function GET(req: Request) {
     });
   }
 
-  const sources = sourcesCache.get(cacheKey) || [];
-  // Delete after retrieval to free memory
-  sourcesCache.delete(cacheKey);
+  // Clean up expired entries
+  cleanupExpiredCache();
 
-  return new Response(JSON.stringify({ sources }), {
+  const cacheEntry = sourcesCache.get(cacheKey);
+
+  if (!cacheEntry) {
+    console.warn('[Chat API GET] Cache miss for key:', cacheKey);
+    return new Response(JSON.stringify({ sources: [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Check if entry is expired
+  const now = Date.now();
+  if (now - cacheEntry.timestamp > SOURCES_CACHE_TTL) {
+    console.warn('[Chat API GET] Cache entry expired for key:', cacheKey);
+    sourcesCache.delete(cacheKey);
+    return new Response(JSON.stringify({ sources: [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  console.log('[Chat API GET] Cache hit:', {
+    cacheKey,
+    sourcesCount: cacheEntry.sources.length,
+    age: Math.round((now - cacheEntry.timestamp) / 1000) + 's',
+  });
+
+  // Don't delete - allow multiple retrievals within TTL
+  return new Response(JSON.stringify({ sources: cacheEntry.sources }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
@@ -82,6 +163,10 @@ export async function POST(req: Request) {
       messages: UIMessage[];
       recordingIds?: string[];
     } = body;
+
+    // Initialize monitoring if enabled
+    const queryId = nanoid();
+    const requestStartTime = Date.now();
 
     // Get the last user message for RAG
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
@@ -116,8 +201,13 @@ export async function POST(req: Request) {
 
     console.log('[Chat API] Parsed user query:', userQuery);
 
+    // Start search monitoring if enabled
+    if (ENABLE_SEARCH_MONITORING && userQuery) {
+      searchMonitor.startSearch(queryId, userQuery, orgId, userId);
+    }
+
     // Preprocess query to extract topics from meta-questions
-    const preprocessed = preprocessQuery(userQuery);
+    const preprocessed = await preprocessQuery(userQuery);
     const searchableQuery = preprocessed.processedQuery;
 
     if (preprocessed.wasTransformed) {
@@ -131,9 +221,16 @@ export async function POST(req: Request) {
     // Retrieve RAG context if there's a query
     let ragContext;
     let route: QueryRoute | undefined;
+    let retrievalAttempts = 0;
+    let selectedStrategy = 'none';
+    let finalThreshold = 0;
+    let averageSimilarity = 0;
 
     if (userQuery) {
       console.log('[Chat API] Retrieving RAG context for org:', orgId);
+
+      // Track request start time for telemetry
+      const requestStartTime = Date.now();
 
       // Get recording count and summaries status for routing
       const { count: recordingsCount } = await supabaseAdmin
@@ -193,23 +290,315 @@ export async function POST(req: Request) {
         // Don't retrieve RAG context for these - let the LLM use tools instead
       } else {
         // Get retrieval configuration from route
-        const retrievalConfig = getRetrievalConfig(route);
+        let retrievalConfig = getRetrievalConfig(route);
 
-        // Use searchable query for RAG context retrieval
-        ragContext = await retrieveContext(searchableQuery, orgId, {
-          ...retrievalConfig,
-          recordingIds,
-          // Force disable agentic if globally disabled
-          useAgentic: ENABLE_AGENTIC_RAG && retrievalConfig.useAgentic,
-          rerank: ENABLE_RERANKING && retrievalConfig.rerank,
-        });
+        // Track retrieval attempts for logging
+        retrievalAttempts = 1;
+        selectedStrategy = route.strategy;
+        finalThreshold = retrievalConfig.threshold || 0.7;
 
-        console.log('[Chat API] RAG context retrieved:', {
-          sourcesFound: ragContext?.sources?.length || 0,
-          totalChunks: ragContext?.totalChunks || 0,
-          strategy: route.strategy,
-          agenticUsed: ragContext?.agenticMetadata !== undefined,
-        });
+        // Optional A/B testing override
+        if (AB_TESTING_ENABLED && userQuery) {
+          const variant = assignVariant(userId, orgId);
+          const experimentConfig = getExperimentConfig(variant);
+
+          console.log('[Chat API] A/B Test variant assigned:', {
+            variant,
+            userId: userId.substring(0, 8),
+            orgId: orgId.substring(0, 8),
+          });
+
+          // Override config with experiment settings
+          retrievalConfig = {
+            ...retrievalConfig,
+            threshold: experimentConfig.threshold,
+            useHybrid: experimentConfig.useHybrid,
+            useAgentic: ENABLE_AGENTIC_RAG && experimentConfig.useAgentic,
+            maxChunks: experimentConfig.maxChunks,
+          };
+
+          finalThreshold = experimentConfig.threshold;
+        }
+
+        // Update monitoring with configuration
+        if (ENABLE_SEARCH_MONITORING && userQuery) {
+          searchMonitor.updateConfig(queryId, {
+            strategy: selectedStrategy,
+            threshold: finalThreshold,
+            useHybrid: retrievalConfig.useHybrid || false,
+            useAgentic: retrievalConfig.useAgentic || false,
+          });
+        }
+
+        // Wrap retrieval in try-catch for error handling
+        try {
+          // Use searchable query for RAG context retrieval
+          ragContext = await retrieveContext(searchableQuery, orgId, {
+            ...retrievalConfig,
+            recordingIds,
+            // Force disable agentic if globally disabled
+            useAgentic: ENABLE_AGENTIC_RAG && retrievalConfig.useAgentic,
+            rerank: ENABLE_RERANKING && retrievalConfig.rerank,
+          });
+
+          console.log('[Chat API] Initial RAG retrieval:', {
+            sourcesFound: ragContext?.sources?.length || 0,
+            totalChunks: ragContext?.totalChunks || 0,
+            strategy: route.strategy,
+            agenticUsed: ragContext?.agenticMetadata !== undefined,
+          });
+
+          // Retry logic if no results found
+          if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
+            console.log('[Chat API] No RAG results - attempting retry strategies');
+
+            // Strategy 1: Retry with lower threshold (0.5)
+            if (retrievalConfig.threshold && retrievalConfig.threshold > 0.5) {
+              console.log('[Chat API] Retry attempt 1: Lowering threshold to 0.5');
+              retrievalAttempts++;
+
+              // Record retry in monitoring
+              if (ENABLE_SEARCH_MONITORING && userQuery) {
+                searchMonitor.recordRetry(queryId, 'lowerThreshold');
+              }
+
+              try {
+                ragContext = await retrieveContext(searchableQuery, orgId, {
+                  ...retrievalConfig,
+                  threshold: 0.5,
+                  recordingIds,
+                  useAgentic: ENABLE_AGENTIC_RAG && retrievalConfig.useAgentic,
+                  rerank: ENABLE_RERANKING && retrievalConfig.rerank,
+                });
+
+                console.log('[Chat API] Retry 1 results:', {
+                  sourcesFound: ragContext?.sources?.length || 0,
+                });
+              } catch (error) {
+                console.error('[Chat API] Retry 1 failed:', error);
+              }
+            }
+
+            // Strategy 2: Force hybrid search if still no results
+            if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
+              console.log('[Chat API] Retry attempt 2: Forcing hybrid search');
+              retrievalAttempts++;
+
+              // Record retry in monitoring
+              if (ENABLE_SEARCH_MONITORING && userQuery) {
+                searchMonitor.recordRetry(queryId, 'hybrid');
+              }
+
+              try {
+                // Import hybrid search function
+                const { hybridSearch } = await import('@/lib/services/vector-search-google');
+                const hybridResults = await hybridSearch(searchableQuery, {
+                  orgId,
+                  limit: retrievalConfig.maxChunks || 10,
+                  threshold: 0.5,
+                  recordingIds,
+                });
+
+                if (hybridResults && hybridResults.length > 0) {
+                  // Convert hybrid results to RAG context format
+                  const sources = hybridResults.map((result) => ({
+                    recordingId: result.recordingId,
+                    recordingTitle: result.recordingTitle,
+                    chunkId: result.id,
+                    chunkText: result.chunkText,
+                    similarity: result.similarity,
+                    timestamp: result.metadata.startTime,
+                    timestampRange: result.metadata.timestampRange,
+                    source: result.metadata.source,
+                    hasVisualContext: result.metadata.hasVisualContext || false,
+                    visualDescription: result.metadata.visualDescription,
+                    contentType: result.metadata.contentType || 'audio',
+                    url: `/library/${result.recordingId}`,
+                  }));
+
+                  const context = sources
+                    .map((source, index) => {
+                      const citation = `[${index + 1}] ${source.recordingTitle}`;
+                      const timeInfo = source.timestampRange
+                        ? ` (${source.timestampRange})`
+                        : source.timestamp
+                        ? ` (at ${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')})`
+                        : '';
+                      const visualIndicator = source.hasVisualContext ? ' [Video with screen context]' : '';
+                      return `${citation}${timeInfo}${visualIndicator}:\n${source.chunkText}\n`;
+                    })
+                    .join('\n');
+
+                  ragContext = {
+                    query: searchableQuery,
+                    context,
+                    sources,
+                    totalChunks: sources.length,
+                  };
+
+                  console.log('[Chat API] Retry 2 results (hybrid):', {
+                    sourcesFound: ragContext?.sources?.length || 0,
+                  });
+                }
+              } catch (error) {
+                console.error('[Chat API] Retry 2 (hybrid search) failed:', error);
+              }
+            }
+
+            // Strategy 3: Try keyword-only search as last resort
+            if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
+              console.log('[Chat API] Retry attempt 3: Trying keyword-only search');
+              retrievalAttempts++;
+
+              // Record retry in monitoring
+              if (ENABLE_SEARCH_MONITORING && userQuery) {
+                searchMonitor.recordRetry(queryId, 'keyword');
+              }
+
+              try {
+                // Import keyword search function (it's not exported, so we'll use hybridSearch which includes it)
+                const { hybridSearch } = await import('@/lib/services/vector-search-google');
+                const keywordResults = await hybridSearch(searchableQuery, {
+                  orgId,
+                  limit: retrievalConfig.maxChunks || 10,
+                  threshold: 0.3, // Even lower threshold for keyword fallback
+                  recordingIds,
+                });
+
+                if (keywordResults && keywordResults.length > 0) {
+                  // Convert to RAG context format
+                  const sources = keywordResults.map((result) => ({
+                    recordingId: result.recordingId,
+                    recordingTitle: result.recordingTitle,
+                    chunkId: result.id,
+                    chunkText: result.chunkText,
+                    similarity: result.similarity,
+                    timestamp: result.metadata.startTime,
+                    timestampRange: result.metadata.timestampRange,
+                    source: result.metadata.source,
+                    hasVisualContext: result.metadata.hasVisualContext || false,
+                    visualDescription: result.metadata.visualDescription,
+                    contentType: result.metadata.contentType || 'audio',
+                    url: `/library/${result.recordingId}`,
+                  }));
+
+                  const context = sources
+                    .map((source, index) => {
+                      const citation = `[${index + 1}] ${source.recordingTitle}`;
+                      const timeInfo = source.timestampRange
+                        ? ` (${source.timestampRange})`
+                        : source.timestamp
+                        ? ` (at ${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')})`
+                        : '';
+                      const visualIndicator = source.hasVisualContext ? ' [Video with screen context]' : '';
+                      return `${citation}${timeInfo}${visualIndicator}:\n${source.chunkText}\n`;
+                    })
+                    .join('\n');
+
+                  ragContext = {
+                    query: searchableQuery,
+                    context,
+                    sources,
+                    totalChunks: sources.length,
+                  };
+
+                  console.log('[Chat API] Retry 3 results (keyword fallback):', {
+                    sourcesFound: ragContext?.sources?.length || 0,
+                  });
+                }
+              } catch (error) {
+                console.error('[Chat API] Retry 3 (keyword search) failed:', error);
+              }
+            }
+          }
+
+          // Calculate average similarity for diagnostics
+          if (ragContext?.sources && ragContext.sources.length > 0) {
+            const similarities = ragContext.sources
+              .map(s => s.similarity)
+              .filter(s => s != null && !isNaN(s));
+            averageSimilarity = similarities.length > 0
+              ? similarities.reduce((a, b) => a + b, 0) / similarities.length
+              : 0;
+
+            // Update monitoring with search results
+            if (ENABLE_SEARCH_MONITORING && userQuery && similarities.length > 0) {
+              const minSimilarity = Math.min(...similarities);
+              const maxSimilarity = Math.max(...similarities);
+
+              searchMonitor.updateConfig(queryId, {
+                sourcesFound: ragContext.sources.length,
+                avgSimilarity: averageSimilarity,
+                minSimilarity: minSimilarity,
+                maxSimilarity: maxSimilarity,
+                retrievalAttempts: retrievalAttempts,
+                searchTimeMs: Date.now() - requestStartTime,
+              });
+            }
+
+            // Log experiment result if A/B testing is enabled
+            if (AB_TESTING_ENABLED && userQuery) {
+              const variant = assignVariant(userId, orgId);
+              await logExperimentResult(variant, userQuery, orgId, userId, {
+                sourcesFound: ragContext.sources.length,
+                retrievalAttempts,
+                avgSimilarity: averageSimilarity,
+                timeMs: Date.now() - requestStartTime,
+              });
+            }
+          }
+
+          // Log final retrieval outcome
+          console.log('[Chat API] Final RAG retrieval:', {
+            attempts: retrievalAttempts,
+            sourcesFound: ragContext?.sources?.length || 0,
+            finalStrategy: selectedStrategy,
+            threshold: retrievalConfig.threshold,
+            averageSimilarity: averageSimilarity.toFixed(3),
+          });
+
+          // Alert on search failure if user has content
+          if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
+            await alertSearchFailure(searchableQuery, orgId, retrievalAttempts, retrievalConfig, actualRecordingsCount);
+          }
+
+          // Log search quality metrics
+          console.log('[Chat API] Search quality metrics:', {
+            timestamp: new Date().toISOString(),
+            orgId,
+            userId,
+            query: userQuery,
+            queryLength: userQuery.length,
+            queryWordCount: userQuery.split(/\s+/).length,
+            retrievalAttempts,
+            sourcesFound: ragContext?.sources?.length || 0,
+            strategy: selectedStrategy,
+            threshold: retrievalConfig.threshold,
+            agenticUsed: retrievalConfig.useAgentic || false,
+            rerankingUsed: retrievalConfig.rerank || false,
+            retrievalTimeMs: Date.now() - requestStartTime,
+          });
+
+        } catch (error) {
+          console.error('[Chat API] RAG retrieval error:', error);
+
+          // Log detailed error information
+          console.error('[Chat API] Error details:', {
+            query: searchableQuery,
+            orgId,
+            config: retrievalConfig,
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            errorStack: error instanceof Error ? error.stack : undefined,
+          });
+
+          // Set empty context and continue (will use tool fallback)
+          ragContext = {
+            query: searchableQuery,
+            context: '',
+            sources: [],
+            totalChunks: 0,
+          };
+        }
       }
     }
 
@@ -378,6 +767,16 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
       };
     });
 
+    console.log('[Chat API] ===== STARTING STREAM =====');
+    console.log('[Chat API] Stream configuration:', {
+      model: 'gemini-2.5-flash',
+      temperature: 0.7,
+      maxOutputTokens: 4096,
+      hasTools: !!toolsWithContext,
+      messageCount: modelMessages.length,
+      systemPromptLength: systemPrompt.length,
+    });
+
     const result = streamText({
       model: google('gemini-2.5-flash'),
       system: systemPrompt,
@@ -398,6 +797,16 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
       // Step 3+: Model generates response using tool results (or makes additional tool calls)
       stopWhen: stepCountIs(5),
       // Note: experimental_toolCallStreaming is removed in v5, tool call streaming is now default
+      onChunk: ({ chunk }) => {
+        // Gate logging behind debug flag to avoid high-volume production logs
+        if (process.env.DEBUG_CHAT_STREAM === 'true') {
+          console.log('[Chat API] 🔥 CHUNK RECEIVED:', {
+            type: chunk.type,
+            deltaLength: chunk.type === 'text-delta' ? chunk.textDelta?.length : 0,
+            textPreview: chunk.type === 'text-delta' ? chunk.textDelta?.substring(0, 50) : '',
+          });
+        }
+      },
       onStepFinish: async (step) => {
         console.log('[Chat API] Step finished:', {
           finishReason: step.finishReason,
@@ -485,22 +894,68 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
     // Store sources in cache using user message ID as key
     // This allows the frontend to fetch sources after the assistant response completes
     const cacheKey = lastUserMessage?.id || Date.now().toString();
-    sourcesCache.set(cacheKey, sourceCitations);
-    console.log('[Chat API] Stored sources with cache key:', cacheKey);
+    sourcesCache.set(cacheKey, {
+      sources: sourceCitations,
+      timestamp: Date.now(),
+    });
+    console.log('[Chat API] Stored sources with cache key:', {
+      cacheKey,
+      sourcesCount: sourceCitations.length,
+      cacheSize: sourcesCache.size,
+    });
 
-    // Clean up old entries (keep last 10)
-    if (sourcesCache.size > 10) {
-      const firstKey = sourcesCache.keys().next().value;
-      sourcesCache.delete(firstKey);
-    }
+    // Clean up expired entries
+    cleanupExpiredCache();
 
     // Return streaming response with cache key in header
+    console.log('[Chat API] Creating UIMessageStreamResponse...');
     const response = result.toUIMessageStreamResponse();
     response.headers.set('X-Sources-Cache-Key', cacheKey);
+
+    // Add diagnostic headers for debugging and monitoring
+    response.headers.set('X-Search-Strategy', selectedStrategy);
+    response.headers.set('X-Sources-Count', String(ragContext?.sources?.length || 0));
+    response.headers.set('X-Retrieval-Attempts', String(retrievalAttempts));
+    response.headers.set('X-Threshold-Used', String(finalThreshold));
+    response.headers.set('X-Similarity-Avg', averageSimilarity > 0 ? averageSimilarity.toFixed(3) : 'N/A');
+
+    console.log('[Chat API] Response headers:', {
+      contentType: response.headers.get('Content-Type'),
+      cacheKey: response.headers.get('X-Sources-Cache-Key'),
+      transferEncoding: response.headers.get('Transfer-Encoding'),
+      searchStrategy: response.headers.get('X-Search-Strategy'),
+      sourcesCount: response.headers.get('X-Sources-Count'),
+      retrievalAttempts: response.headers.get('X-Retrieval-Attempts'),
+      thresholdUsed: response.headers.get('X-Threshold-Used'),
+      similarityAvg: response.headers.get('X-Similarity-Avg'),
+    });
+    console.log('[Chat API] ===== RETURNING STREAM RESPONSE =====');
+
+    // Complete monitoring if enabled (declare userQuery as needed for this scope)
+    const userQueryForMonitoring = userQuery || '';
+    if (ENABLE_SEARCH_MONITORING && userQueryForMonitoring) {
+      const toolCallsUsed = route?.strategy === 'direct_listing' || route?.strategy === 'topic_overview';
+
+      searchMonitor.endSearch(queryId, {
+        success: (ragContext?.sources?.length || 0) > 0,
+        usedToolFallback: toolCallsUsed,
+        totalTimeMs: Date.now() - requestStartTime,
+      });
+    }
 
     return response;
   } catch (error: any) {
     console.error('[Chat API] Error:', error);
+
+    // Complete monitoring on error if it was initialized
+    // Note: These variables may not be defined if error occurred early
+    if (ENABLE_SEARCH_MONITORING && typeof queryId !== 'undefined' && typeof requestStartTime !== 'undefined') {
+      searchMonitor.endSearch(queryId, {
+        success: false,
+        sourcesFound: 0,
+        totalTimeMs: Date.now() - requestStartTime,
+      });
+    }
     return new Response(
       JSON.stringify({
         error: {

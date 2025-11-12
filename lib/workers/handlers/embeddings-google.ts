@@ -32,6 +32,32 @@ const BATCH_SIZE = 20; // Process embeddings in batches
 const DB_INSERT_BATCH_SIZE = 100; // Insert to database in batches
 
 /**
+ * Validate and sanitize semantic score to ensure it meets database constraints
+ * Constraint: semantic_score IS NULL OR (semantic_score >= 0 AND semantic_score <= 1)
+ */
+function validateSemanticScore(score: any): number | null {
+  // Handle null/undefined
+  if (score === null || score === undefined) {
+    return null;
+  }
+
+  // Convert to number if string
+  const numScore = typeof score === 'string' ? parseFloat(score) : score;
+
+  // Check for NaN or invalid numbers
+  if (typeof numScore !== 'number' || isNaN(numScore) || !isFinite(numScore)) {
+    // Return null for invalid values instead of throwing
+    return null;
+  }
+
+  // Clamp to valid range [0, 1]
+  if (numScore < 0) return 0;
+  if (numScore > 1) return 1;
+
+  return numScore;
+}
+
+/**
  * Generate embeddings for transcript and document using Google
  */
 export async function generateEmbeddings(job: Job): Promise<void> {
@@ -432,7 +458,7 @@ export async function generateEmbeddings(job: Job): Promise<void> {
               // Semantic chunking metadata (only for document chunks)
               chunking_strategy: ('semanticScore' in sanitizedMetadata) ? 'semantic' : 'fixed',
               semantic_score: 'semanticScore' in sanitizedMetadata
-                ? (sanitizedMetadata.semanticScore ?? null)
+                ? validateSemanticScore(sanitizedMetadata.semanticScore)
                 : null,
               structure_type: 'structureType' in sanitizedMetadata
                 ? (sanitizedMetadata.structureType ?? null)

@@ -12,6 +12,10 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { updateLibraryItemSchema } from '@/lib/validations/library';
 import type { ContentType } from '@/lib/types/database';
 
+// Next.js 15 route segment config
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/library/[id]
  *
@@ -71,8 +75,12 @@ export const GET = apiHandler(
     const supabase = await createClient();
 
     try {
+      // Check if viewing deleted items is allowed (for trash view)
+      const url = new URL(request.url);
+      const includeDeleted = url.searchParams.get('includeDeleted') === 'true';
+
       // Fetch content item with related data
-      const { data: item, error } = await supabase
+      let query = supabase
         .from('recordings')
         .select(
           `
@@ -82,9 +90,14 @@ export const GET = apiHandler(
         `
         )
         .eq('id', id)
-        .eq('org_id', orgId)
-        .is('deleted_at', null)
-        .single();
+        .eq('org_id', orgId);
+
+      // Only filter deleted items if not explicitly requesting them
+      if (!includeDeleted) {
+        query = query.is('deleted_at', null);
+      }
+
+      const { data: item, error } = await query.single();
 
       if (error || !item) {
         return errors.notFound('Content item', requestId);
@@ -275,13 +288,21 @@ export const PATCH = apiHandler(
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const requestId = generateRequestId();
+
+    console.log(`[Library Item Delete] Request received`);
+
     const { orgId } = await requireOrg();
-    const { id } = await params;
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
+
+    console.log(`[Library Item Delete] Starting delete for recording ${id}, org ${orgId}`);
 
     try {
       // Check for permanent delete query param
       const url = new URL(request.url);
       const permanent = url.searchParams.get('permanent') === 'true';
+
+      console.log(`[Library Item Delete] Permanent delete: ${permanent}`);
 
       if (permanent) {
         // Hard delete - use admin client
@@ -331,25 +352,55 @@ export const DELETE = apiHandler(
       } else {
         // Soft delete - use regular client
         const supabase = await createClient();
-        const deletedAt = new Date().toISOString();
 
+        console.log(`[Library Item Delete] Performing soft delete for ${id}`);
+
+        // First check if item exists and get current state
+        const { data: existingItem, error: fetchError } = await supabase
+          .from('recordings')
+          .select('id, deleted_at')
+          .eq('id', id)
+          .eq('org_id', orgId)
+          .single();
+
+        if (fetchError || !existingItem) {
+          console.log(`[Library Item Delete] Item not found: ${id}`, fetchError);
+          return errors.notFound('Content item', requestId);
+        }
+
+        // If already soft-deleted, return success (idempotent)
+        if (existingItem.deleted_at) {
+          console.log(`[Library Item Delete] Item already soft deleted: ${id}`);
+          return successResponse(
+            {
+              success: true,
+              message: 'Content item already deleted',
+              deleted_at: existingItem.deleted_at,
+            },
+            requestId
+          );
+        }
+
+        // Perform soft delete
+        const deletedAt = new Date().toISOString();
         const { data: item, error } = await supabase
           .from('recordings')
           .update({ deleted_at: deletedAt })
           .eq('id', id)
           .eq('org_id', orgId)
-          .is('deleted_at', null)
           .select()
           .single();
 
-        if (error || !item) {
-          return errors.notFound('Content item', requestId);
+        if (error) {
+          console.error('[Library Item Delete] Soft delete error:', error);
+          return errors.internalError(requestId);
         }
 
+        console.log(`[Library Item Delete] Successfully soft deleted ${id}`);
         return successResponse(
           {
             success: true,
-            message: 'Content item soft deleted',
+            message: 'Content item moved to trash',
             deleted_at: deletedAt,
           },
           requestId

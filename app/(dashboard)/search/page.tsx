@@ -13,12 +13,15 @@
  * - Keyboard shortcuts
  */
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Clock, FileText, Video, SlidersHorizontal, Bookmark, X } from 'lucide-react';
+import { Search, Filter, Clock, FileText, Video, SlidersHorizontal, Bookmark, X, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import debounce from 'lodash/debounce';
+import ReactMarkdown from 'react-markdown';
 
 import { Loader } from '@/app/components/ai-elements/loader';
+import { Alert, AlertDescription } from '@/app/components/ui/alert';
 
 import { staggerContainer, staggerItem, fadeIn } from '@/lib/utils/animations';
 import { SearchNoResultsState, SearchInitialState } from '@/app/components/empty-states/SearchEmptyState';
@@ -87,6 +90,7 @@ function SearchPageContent() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchMode, setSearchMode] = useState<'vector' | 'hybrid'>('vector');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'transcript' | 'document'>('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -116,6 +120,28 @@ function SearchPageContent() {
     fetchCollections();
   }, []);
 
+  // Debounced search function
+  const debouncedSearch = useCallback(
+    debounce((searchQuery: string, searchFilters: FilterState) => {
+      if (searchQuery.trim()) {
+        handleSearch(undefined, searchQuery, searchFilters);
+      }
+    }, 500),
+    [searchMode, sourceFilter, sortBy]
+  );
+
+  // Auto-search on query or filter changes
+  useEffect(() => {
+    if (query.trim()) {
+      debouncedSearch(query, filters);
+    }
+
+    // Cleanup debounce on unmount
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [query, filters, debouncedSearch]);
+
   async function fetchTags() {
     try {
       const response = await fetch('/api/tags?includeUsageCount=true&limit=100');
@@ -134,7 +160,7 @@ function SearchPageContent() {
       if (!response.ok) throw new Error('Failed to fetch collections');
 
       const data = await response.json();
-      setCollections(data.data || []);
+      setCollections(data.data?.collections || []);
     } catch (error) {
       console.error('Error fetching collections:', error);
     }
@@ -147,10 +173,16 @@ function SearchPageContent() {
     const searchQuery = overrideQuery ?? query;
     const searchFilters = overrideFilters ?? filters;
 
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim()) {
+      // Clear results if query is empty
+      setResults([]);
+      setError(null);
+      return;
+    }
 
     setLoading(true);
     setShowSuggestions(false);
+    setError(null);
 
     try {
       const response = await fetch('/api/search', {
@@ -163,7 +195,7 @@ function SearchPageContent() {
           contentTypes: searchFilters.contentTypes.length > 0 ? searchFilters.contentTypes : undefined,
           dateFrom: searchFilters.dateFrom?.toISOString(),
           dateTo: searchFilters.dateTo?.toISOString(),
-          tags: searchFilters.tagIds.length > 0 ? searchFilters.tagIds : undefined,
+          tagIds: searchFilters.tagIds.length > 0 ? searchFilters.tagIds : undefined,
           collectionId: searchFilters.collectionId || undefined,
           favoritesOnly: searchFilters.favoritesOnly || undefined,
           limit: 20,
@@ -172,7 +204,8 @@ function SearchPageContent() {
       });
 
       if (!response.ok) {
-        throw new Error('Search failed');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Search failed with status ${response.status}`);
       }
 
       const data = await response.json();
@@ -182,9 +215,12 @@ function SearchPageContent() {
       results = sortResults(results, sortBy);
 
       setResults(results);
+      setError(null);
     } catch (error) {
       console.error('Search error:', error);
-      alert('Search failed. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Search failed. Please try again.';
+      setError(errorMessage);
+      setResults([]);
     } finally {
       setLoading(false);
     }
@@ -328,7 +364,7 @@ function SearchPageContent() {
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Search Recordings</h1>
+        <h1 className="text-3xl font-normal mb-2">Search Recordings</h1>
         <p className="text-muted-foreground">
           Search across all your recordings using AI-powered semantic search
         </p>
@@ -595,6 +631,14 @@ function SearchPageContent() {
         )}
       </form>
 
+      {/* Error Display */}
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Sort Options */}
       {results.length > 0 && (
         <div className="flex items-center justify-between mb-4">
@@ -685,9 +729,26 @@ function SearchPageContent() {
                 </div>
 
                 {/* Result Text */}
-                <p className="text-foreground leading-relaxed mb-3">
-                  {highlightText(result.chunkText, query)}
-                </p>
+                <div className="text-foreground leading-relaxed mb-3 prose prose-sm dark:prose-invert max-w-none [&_p]:mb-2 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1">
+                  <ReactMarkdown
+                    components={{
+                      // Custom styling for markdown elements
+                      p: ({ children }) => <p>{children}</p>,
+                      ul: ({ children }) => <ul className="list-disc list-inside">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal list-inside">{children}</ol>,
+                      li: ({ children }) => <li>{children}</li>,
+                      code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm">{children}</code>,
+                      pre: ({ children }) => <pre className="bg-muted p-3 rounded-md overflow-x-auto">{children}</pre>,
+                      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                      em: ({ children }) => <em className="italic">{children}</em>,
+                      h1: ({ children }) => <h1 className="text-xl font-bold mt-3 mb-2">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-lg font-bold mt-2 mb-1">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-base font-semibold mt-2 mb-1">{children}</h3>,
+                    }}
+                  >
+                    {result.chunkText}
+                  </ReactMarkdown>
+                </div>
 
                 {/* Tags */}
                 {result.metadata.tags && result.metadata.tags.length > 0 && (

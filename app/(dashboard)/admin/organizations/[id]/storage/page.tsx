@@ -32,7 +32,7 @@ export default async function OrganizationStoragePage({ params }: PageProps) {
     <div className="container mx-auto py-8 space-y-8">
       {/* Page Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Organization Storage Deep Dive</h1>
+        <h1 className="text-3xl font-normal tracking-tight">Organization Storage Deep Dive</h1>
         <p className="text-muted-foreground">
           Detailed storage analysis and management for this organization
         </p>

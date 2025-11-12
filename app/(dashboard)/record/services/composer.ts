@@ -26,9 +26,25 @@ export const composeStreams = (
   cameraShape: CameraShape = 'circle',
   skipCameraOverlay: boolean = false
 ): MediaStream => {
+  console.log('[Composer] Starting stream composition:', {
+    hasCameraStream: !!cameraStream,
+    hasMicrophoneStream: !!microphoneStream,
+    hasScreenshareStream: !!screenshareStream,
+    cameraShape,
+    skipCameraOverlay,
+  });
+
   const cameraTrack = cameraStream?.getVideoTracks()[0];
   const microphoneTrack = microphoneStream?.getAudioTracks()[0];
   const screenshareTrack = screenshareStream?.getVideoTracks()[0];
+
+  console.log('[Composer] Extracted tracks:', {
+    hasCameraTrack: !!cameraTrack,
+    hasMicrophoneTrack: !!microphoneTrack,
+    hasScreenshareTrack: !!screenshareTrack,
+    microphoneTrackId: microphoneTrack?.id,
+    microphoneTrackLabel: microphoneTrack?.label,
+  });
 
   // Create processors for video tracks
   const screenshareProcessor =
@@ -44,6 +60,33 @@ export const composeStreams = (
     });
 
   const recordingGenerator = new MediaStreamTrackGenerator({ kind: 'video' });
+
+  // Camera-only mode: Use camera stream directly without processing for better compatibility
+  if (!screenshareStream && cameraStream) {
+    console.log('[Composer] Camera-only mode: Using camera stream directly');
+    const recordingStream = new MediaStream();
+
+    // Add camera video track
+    if (cameraTrack) {
+      recordingStream.addTrack(cameraTrack);
+    }
+
+    // Add microphone audio track
+    if (microphoneTrack) {
+      console.log('[Composer] Adding microphone track to camera-only recording:', microphoneTrack.id);
+      recordingStream.addTrack(microphoneTrack);
+    } else {
+      console.warn('[Composer] ⚠️ No microphone track for camera-only recording');
+    }
+
+    console.log('[Composer] Camera-only stream tracks:', {
+      videoTracks: recordingStream.getVideoTracks().length,
+      audioTracks: recordingStream.getAudioTracks().length,
+      allTrackIds: recordingStream.getTracks().map(t => ({ kind: t.kind, id: t.id, readyState: t.readyState })),
+    });
+
+    return recordingStream;
+  }
 
   // Compose screen + camera (unless camera overlay should be skipped for entire screen sharing)
   if (screenshareProcessor && cameraProcessor && !skipCameraOverlay) {
@@ -148,8 +191,17 @@ export const composeStreams = (
   // Create recording stream with video + audio
   const recordingStream = new MediaStream([recordingGenerator]);
   if (microphoneTrack) {
+    console.log('[Composer] Adding microphone track to recording stream:', microphoneTrack.id);
     recordingStream.addTrack(microphoneTrack);
+  } else {
+    console.warn('[Composer] ⚠️ No microphone track available - recording will have no audio!');
   }
+
+  console.log('[Composer] Final recording stream tracks:', {
+    videoTracks: recordingStream.getVideoTracks().length,
+    audioTracks: recordingStream.getAudioTracks().length,
+    allTrackIds: recordingStream.getTracks().map(t => ({ kind: t.kind, id: t.id, label: t.label })),
+  });
 
   return recordingStream;
 };

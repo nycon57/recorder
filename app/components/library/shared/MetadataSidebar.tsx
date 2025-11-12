@@ -35,14 +35,11 @@ import {
 } from '@/app/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/app/components/ui/button';
-import {
-  CONTENT_TYPE_LABELS,
-  CONTENT_TYPE_COLORS,
-  formatFileSize,
-} from '@/lib/types/content';
+import { formatFileSize } from '@/lib/types/content';
 import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
 import type { Tag } from '@/lib/types/database';
 import TagBadge from '@/app/components/TagBadge';
+import ContentTypeBadge from './ContentTypeBadge';
 
 interface MetadataSidebarProps {
   recordingId: string;
@@ -174,7 +171,32 @@ export default function MetadataSidebar({
         });
 
         if (!response.ok) {
-          throw new Error('Failed to delete content');
+          // Try to get error details from response
+          let errorMessage = 'Failed to delete content';
+          try {
+            const contentType = response.headers.get('content-type');
+            console.log('[MetadataSidebar] Delete failed:', {
+              status: response.status,
+              statusText: response.statusText,
+              contentType,
+            });
+
+            if (contentType?.includes('application/json')) {
+              const errorData = await response.json();
+              console.error('[MetadataSidebar] API Error response:', errorData);
+              // API error format: { code, message, details, requestId }
+              errorMessage = errorData.message || errorData.code || errorMessage;
+            } else {
+              const textResponse = await response.text();
+              console.error('[MetadataSidebar] Non-JSON error response:', textResponse);
+              errorMessage = textResponse || `Failed to delete content: ${response.status} ${response.statusText}`;
+            }
+          } catch (parseError) {
+            // If parsing fails, use status text
+            console.error('[MetadataSidebar] Error parsing response:', parseError);
+            errorMessage = `Failed to delete content: ${response.status} ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
         }
 
         toast.success('Content deleted successfully');
@@ -182,12 +204,11 @@ export default function MetadataSidebar({
       }
     } catch (error) {
       console.error('Delete failed:', error);
-      toast.error('Failed to delete content');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete content';
+      toast.error(errorMessage);
       setIsDeleting(false);
     }
   };
-
-  const contentTypeColors = contentType ? CONTENT_TYPE_COLORS[contentType] : null;
 
   return (
     <>
@@ -199,22 +220,13 @@ export default function MetadataSidebar({
           </CardHeader>
           <CardContent className="space-y-3">
             {/* Content Type */}
-            {contentType && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1.5">Type</p>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    'w-full justify-center',
-                    contentTypeColors?.bg,
-                    contentTypeColors?.text,
-                    contentTypeColors?.border
-                  )}
-                >
-                  {CONTENT_TYPE_LABELS[contentType]}
-                </Badge>
-              </div>
-            )}
+            <div>
+              <p className="text-xs text-muted-foreground mb-1.5">Type</p>
+              <ContentTypeBadge
+                contentType={contentType}
+                className="w-full justify-center"
+              />
+            </div>
 
             {/* Status */}
             <div>

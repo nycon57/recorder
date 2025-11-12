@@ -49,7 +49,7 @@ export async function retrieveContext(
     recordingIds?: string[];
   }
 ): Promise<RAGContext> {
-  const { maxChunks = 5, threshold = 0.7, recordingIds } = options || {};
+  const { maxChunks = 5, threshold = 0.5, recordingIds } = options || {}; // Lowered from 0.7 - balancing precision/recall for knowledge management
 
   // Perform vector search to find relevant chunks
   const searchResults = await vectorSearch(query, {
@@ -110,7 +110,7 @@ export async function generateRAGResponse(
   const {
     conversationHistory = [],
     maxChunks = 5,
-    threshold = 0.7,
+    threshold = 0.5, // Lowered from 0.7 - balancing precision/recall for knowledge management
     recordingIds,
     stream = false,
   } = options || {};
@@ -163,7 +163,7 @@ export async function* generateStreamingRAGResponse(
   const {
     conversationHistory = [],
     maxChunks = 5,
-    threshold = 0.7,
+    threshold = 0.5, // Lowered from 0.7 - balancing precision/recall for knowledge management
     recordingIds,
   } = options || {};
 

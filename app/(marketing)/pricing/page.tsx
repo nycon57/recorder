@@ -1,11 +1,11 @@
-import { RecordPricing, RecordFAQ, RecordCTA } from '@/app/components/sections';
+import { ModernPricing, RecordFAQ, ModernCTA } from '@/app/components/sections';
 
 export default function PricingPage() {
   return (
     <>
-      <RecordPricing />
+      <ModernPricing showComparison={true} />
       <RecordFAQ softBg />
-      <RecordCTA />
+      <ModernCTA />
     </>
   );
 }

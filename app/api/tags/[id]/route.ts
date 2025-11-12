@@ -7,7 +7,7 @@ import {
   errors,
   parseBody,
 } from '@/lib/utils/api';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/admin';
 import {
   updateTagSchema,
   normalizeTagName,
@@ -122,6 +122,10 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
     throw new Error('Failed to update tag');
   }
 
+  // PERFORMANCE OPTIMIZATION: Invalidate tags cache
+  const { CacheInvalidation } = await import('@/lib/services/cache');
+  await CacheInvalidation.invalidateTags(orgId);
+
   return successResponse(updatedTag);
 });
 
@@ -173,6 +177,10 @@ export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteP
     console.error('[DELETE /api/tags/[id]] Error deleting tag:', deleteError);
     throw new Error('Failed to delete tag');
   }
+
+  // PERFORMANCE OPTIMIZATION: Invalidate tags cache
+  const { CacheInvalidation } = await import('@/lib/services/cache');
+  await CacheInvalidation.invalidateTags(orgId);
 
   return successResponse({ success: true });
 });

@@ -9,6 +9,9 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 import { ConnectorRegistry } from '@/lib/connectors/registry';
 import { ConnectorType, type WebhookEvent as BaseWebhookEvent } from '@/lib/connectors/base';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger({ service: 'process-webhook' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -26,9 +29,9 @@ export async function processWebhook(job: Job): Promise<void> {
   const payload = job.payload as unknown as ProcessWebhookPayload;
   const { webhookEventId, connectorId, orgId } = payload;
 
-  console.log(
-    `[Process-Webhook] Processing webhook event ${webhookEventId} for connector ${connectorId}`
-  );
+  logger.info('Starting webhook processing', {
+    context: { webhookEventId, connectorId, orgId },
+  });
 
   const supabase = createAdminClient();
 
@@ -41,9 +44,9 @@ export async function processWebhook(job: Job): Promise<void> {
       throw new Error('Webhook event data not found in job payload');
     }
 
-    console.log(
-      `[Process-Webhook] Processing webhook event type: ${webhookEventData.event_type}`
-    );
+    logger.info('Processing webhook event', {
+      context: { webhookEventId, eventType: webhookEventData.event_type },
+    });
 
     // Fetch connector configuration
     const { data: connectorConfig, error: configError } = await supabase
@@ -59,9 +62,9 @@ export async function processWebhook(job: Job): Promise<void> {
 
     // Check if connector is active
     if (!connectorConfig.is_active) {
-      console.log(
-        `[Process-Webhook] Connector ${connectorId} is inactive, skipping webhook processing`
-      );
+      logger.info('Connector inactive, skipping processing', {
+        context: { connectorId, webhookEventId },
+      });
 
       // Mark as processed but note it was skipped
       await supabase
@@ -81,9 +84,9 @@ export async function processWebhook(job: Job): Promise<void> {
     const supportsWebhooks = ConnectorRegistry.supportsWebhooks(connectorType);
 
     if (!supportsWebhooks) {
-      console.log(
-        `[Process-Webhook] Connector type ${connectorType} does not support webhooks`
-      );
+      logger.warn('Connector does not support webhooks', {
+        context: { connectorType, webhookEventId },
+      });
 
       await supabase
         .from('webhook_events')
@@ -97,9 +100,13 @@ export async function processWebhook(job: Job): Promise<void> {
       return;
     }
 
-    console.log(
-      `[Process-Webhook] Processing ${webhookEventData.event_type} event from ${webhookEventData.event_source || 'unknown'}`
-    );
+    logger.info('Processing webhook from source', {
+      context: {
+        webhookEventId,
+        eventType: webhookEventData.event_type,
+        eventSource: webhookEventData.event_source || 'unknown',
+      },
+    });
 
     // Create connector instance
     const credentials = connectorConfig.credentials as any;
@@ -124,9 +131,9 @@ export async function processWebhook(job: Job): Promise<void> {
     // Call connector's webhook handler
     await connector.handleWebhook(connectorWebhookEvent);
 
-    console.log(
-      `[Process-Webhook] Successfully processed webhook event ${webhookEventId}`
-    );
+    logger.info('Successfully processed webhook', {
+      context: { webhookEventId, connectorId },
+    });
 
     // TODO: Mark webhook as processed in webhook_events table (to be created in Phase 5)
     // await supabase.from('webhook_events').update({ processed: true, ... }).eq('id', webhookEventId);
@@ -152,13 +159,10 @@ export async function processWebhook(job: Job): Promise<void> {
       },
     });
   } catch (error) {
-    console.error(`[Process-Webhook] Error:`, error);
-
-    // TODO: Update webhook event error status in webhook_events table (to be created in Phase 5)
-    // For now, just log and rethrow for job retry mechanism
-    console.log(
-      `[Process-Webhook] Webhook processing failed, will retry via job mechanism`
-    );
+    logger.error('Webhook processing failed', {
+      context: { webhookEventId, connectorId, orgId },
+      error: error as Error,
+    });
 
     throw error;
   }
@@ -181,9 +185,9 @@ async function handleWebhookEventType(
     eventType.includes('document.created') ||
     eventType.includes('document.updated')
   ) {
-    console.log(
-      `[Process-Webhook] Handling ${eventType} - triggering connector sync`
-    );
+    logger.info('Handling file/document change event', {
+      context: { eventType, connectorId, orgId },
+    });
 
     // Enqueue a targeted sync job for this specific file/document
     const fileId = payload?.fileId || payload?.documentId || payload?.id;
@@ -210,9 +214,9 @@ async function handleWebhookEventType(
           dedupe_key: `process_imported_doc:${existingDoc.id}:${Date.now()}`,
         });
 
-        console.log(
-          `[Process-Webhook] Enqueued update job for document ${existingDoc.id}`
-        );
+        logger.info('Enqueued update job for document', {
+          context: { documentId: existingDoc.id, fileId },
+        });
       } else {
         // New document, trigger sync to import it
         await supabase.from('jobs').insert({
@@ -227,9 +231,9 @@ async function handleWebhookEventType(
           dedupe_key: `sync_connector:${connectorId}:webhook:${Date.now()}`,
         });
 
-        console.log(
-          `[Process-Webhook] Enqueued sync job for new document ${fileId}`
-        );
+        logger.info('Enqueued sync job for new document', {
+          context: { fileId, connectorId },
+        });
       }
     }
   }
@@ -239,7 +243,9 @@ async function handleWebhookEventType(
     eventType.includes('file.deleted') ||
     eventType.includes('document.deleted')
   ) {
-    console.log(`[Process-Webhook] Handling ${eventType} - marking document as deleted`);
+    logger.info('Handling file/document deletion', {
+      context: { eventType, connectorId },
+    });
 
     const fileId = payload?.fileId || payload?.documentId || payload?.id;
 
@@ -268,18 +274,18 @@ async function handleWebhookEventType(
           .delete()
           .eq('imported_document_id', doc.id);
 
-        console.log(
-          `[Process-Webhook] Deleted chunks for document ${doc.id}`
-        );
+        logger.info('Deleted chunks for document', {
+          context: { documentId: doc.id, fileId },
+        });
       }
     }
   }
 
   // Handle permission change events
   else if (eventType.includes('permissions.changed')) {
-    console.log(
-      `[Process-Webhook] Handling ${eventType} - triggering permission sync`
-    );
+    logger.info('Handling permissions change', {
+      context: { eventType, connectorId },
+    });
 
     // Enqueue sync job to re-check accessible documents
     await supabase.from('jobs').insert({
@@ -297,6 +303,8 @@ async function handleWebhookEventType(
 
   // Other event types can be handled here as needed
   else {
-    console.log(`[Process-Webhook] Event type ${eventType} requires no special handling`);
+    logger.info('No special handling required for event type', {
+      context: { eventType },
+    });
   }
 }

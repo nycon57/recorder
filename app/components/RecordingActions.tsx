@@ -3,18 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/app/components/ui/alert-dialog';
-import { buttonVariants } from '@/app/components/ui/button';
-import { cn } from '@/lib/utils';
+import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 
 interface RecordingActionsProps {
   recordingId: string;
@@ -39,12 +28,13 @@ export default function RecordingActions({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete recording');
+        throw new Error('Failed to move recording to trash');
       }
 
-      router.push('/dashboard');
+      // Redirect to library after moving to trash
+      router.push('/library');
     } catch (error) {
-      console.error('Error deleting recording:', error);
+      console.error('Error moving recording to trash:', error);
       setIsDeleting(false);
     }
   };
@@ -80,33 +70,25 @@ export default function RecordingActions({
                 disabled={isDeleting}
                 className="w-full text-left px-4 py-2 text-sm text-destructive hover:bg-accent disabled:opacity-50"
               >
-                {isDeleting ? 'Deleting...' : 'Delete Recording'}
+                {isDeleting ? 'Moving to Trash...' : 'Move to Trash'}
               </button>
             </div>
           </div>
         </>
       )}
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Recording?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this recording? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className={cn(buttonVariants({ variant: 'destructive' }))}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Move to Trash Confirmation Dialog */}
+      <ConfirmationDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Move to Trash?"
+        description="This recording will be moved to trash. You can restore it later from the trash page."
+        confirmText="Move to Trash"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleDelete}
+        useAlertDialog
+      />
     </div>
   );
 }

@@ -30,12 +30,12 @@ import {
 } from '@/app/components/ui/select';
 
 import {
-  MemberTable,
   InviteMemberModal,
   MemberDetailDrawer,
   BulkActionsBar,
   MemberFilters,
 } from '@/app/components/settings';
+import { MemberDataTable } from '@/app/components/settings/organization/members/MemberDataTable';
 import type { OrganizationMember, MemberFiltersState } from './types';
 
 export default function MembersPage() {
@@ -149,7 +149,7 @@ export default function MembersPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
+          <h1 className="text-3xl font-normal flex items-center gap-3">
             <Users2 className="h-8 w-8 text-primary" />
             Team Members
           </h1>
@@ -258,7 +258,7 @@ export default function MembersPage() {
 
       {/* Members Table */}
       <div className="border rounded-lg">
-        <MemberTable
+        <MemberDataTable
           members={members}
           isLoading={isLoading}
           selectedIds={selectedMemberIds}

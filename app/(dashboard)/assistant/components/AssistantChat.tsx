@@ -95,6 +95,11 @@ function AssistantChatInner({
   const lastUserMessageIdRef = React.useRef<string | null>(null);
 
   /**
+   * Store last assistant message ID for updating with sources
+   */
+  const lastAssistantMessageIdRef = React.useRef<string | null>(null);
+
+  /**
    * Store sources by USER message ID for merging with aiMessages
    * Key = user message ID, Value = sources for the assistant's response
    */
@@ -112,8 +117,17 @@ function AssistantChatInner({
     stop,
   } = useChat({
     api: apiEndpoint,
+    streamProtocol: 'data',
+    onResponse: (response) => {
+      // Stream started
+    },
     onFinish: async (message) => {
-      console.log('[AssistantChat] useChat onFinish called:', message);
+      console.log('[AssistantChat] onFinish called with message:', {
+        hasId: 'id' in message,
+        id: (message as any).id,
+        keys: Object.keys(message),
+        message: message,
+      });
 
       // Use the stored user message ID to fetch sources
       const cacheKey = lastUserMessageIdRef.current;
@@ -122,7 +136,6 @@ function AssistantChatInner({
 
       if (cacheKey) {
         try {
-          console.log('[AssistantChat] Fetching sources with user message key:', cacheKey);
           const sourcesResponse = await fetch(`${apiEndpoint}?sourcesKey=${cacheKey}`);
           const { sources } = await sourcesResponse.json();
 
@@ -130,31 +143,58 @@ function AssistantChatInner({
             messageWithSources = {
               ...message,
               sources,
+              // Store sourceKey in metadata for building highlight URLs
+              metadata: {
+                ...message.metadata,
+                custom: {
+                  ...message.metadata?.custom,
+                  sourceKey: cacheKey,
+                },
+              },
             };
             // Store sources in map using USER message ID as key
             setMessageSourcesMap(prev => new Map(prev).set(cacheKey, sources));
-            console.log('[AssistantChat] Stored sources for user message:', cacheKey);
-            console.log('[AssistantChat] Attached sources to message:', sources.length);
-            console.log('[AssistantChat] Message with sources:', messageWithSources);
-            console.log('[AssistantChat] First source URL:', sources[0]?.url);
-          } else {
-            console.log('[AssistantChat] No sources found for key:', cacheKey);
+
+            console.log('[AssistantChat] Created message with sources and metadata:', {
+              messageId: message.id,
+              cacheKey,
+              sourcesCount: sources.length,
+              hasMetadata: !!messageWithSources.metadata,
+              hasSourceKey: !!messageWithSources.metadata?.custom?.sourceKey,
+            });
           }
         } catch (e) {
           console.error('[AssistantChat] Failed to fetch sources:', e);
         }
         // Clear the ref after use
         lastUserMessageIdRef.current = null;
-      } else {
-        console.log('[AssistantChat] No user message ID available for fetching sources');
       }
 
-      // Sync finished message to conversation store
-      const extendedMessage: ExtendedMessage = {
-        ...messageWithSources,
-        createdAt: new Date(),
-      };
-      addMessage(extendedMessage);
+      // Update existing message in store with sources and metadata
+      // The useEffect has already added the message, so we need to update it
+      // Use the ref that was set when the message was added
+      const messageId = lastAssistantMessageIdRef.current;
+
+      console.log('[AssistantChat] Updating message in store via onFinish:', {
+        messageId,
+        fromRef: lastAssistantMessageIdRef.current,
+        hasSources: !!messageWithSources.sources,
+        sourcesCount: messageWithSources.sources?.length || 0,
+        hasMetadata: !!messageWithSources.metadata,
+        hasSourceKey: !!messageWithSources.metadata?.custom?.sourceKey,
+        sourceKey: messageWithSources.metadata?.custom?.sourceKey,
+      });
+
+      if (messageId) {
+        updateMessage(messageId, {
+          sources: messageWithSources.sources,
+          metadata: messageWithSources.metadata,
+        });
+        // Clear the ref after use
+        lastAssistantMessageIdRef.current = null;
+      } else {
+        console.error('[AssistantChat] Could not find message ID to update! Ref was not set.');
+      }
     },
     onError: (error) => {
       console.error('[AssistantChat] useChat onError called:', error);
@@ -185,6 +225,19 @@ function AssistantChatInner({
             (m) => m.id === msg.id
           );
           if (!existsInStore) {
+            console.log('[AssistantChat] useEffect adding message from aiMessages:', {
+              messageId: msg.id,
+              role: msg.role,
+              hasSources: !!(msg as any).sources,
+              hasMetadata: !!(msg as any).metadata,
+            });
+
+            // Track the last assistant message ID for updating with sources later
+            if (msg.role === 'assistant') {
+              lastAssistantMessageIdRef.current = msg.id;
+              console.log('[AssistantChat] Stored assistant message ID for later update:', msg.id);
+            }
+
             const extendedMessage: ExtendedMessage = {
               ...msg,
               createdAt: new Date(),
@@ -201,17 +254,14 @@ function AssistantChatInner({
    */
   const handleSubmit = useCallback(
     async (data: { text: string; files?: MessageAttachment[] }) => {
-      console.log('[AssistantChat] handleSubmit called with:', data);
       const { text, files } = data;
 
       if (!text.trim() && (!files || files.length === 0)) {
-        console.log('[AssistantChat] Skipping empty submission');
         return;
       }
 
       // Create conversation if none exists
       if (!currentConversation) {
-        console.log('[AssistantChat] Creating new conversation');
         createConversation(text.slice(0, 50));
       }
 
@@ -219,24 +269,20 @@ function AssistantChatInner({
       if (files && files.length > 0) {
         // TODO: Implement multi-modal file upload
         // For now, just send text
-        console.log('[AssistantChat] Files attached (not yet supported):', files.length);
         toast.info('File uploads coming soon!');
       }
 
       // Generate a unique ID for this user message to use as cache key
       const messageId = `user-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       lastUserMessageIdRef.current = messageId;
-      console.log('[AssistantChat] Generated message ID for caching:', messageId);
 
       // Submit to AI
-      console.log('[AssistantChat] Calling sendMessage with:', { role: 'user', content: text });
       try {
         await sendMessage({
           id: messageId,
           role: 'user',
           content: text,
         });
-        console.log('[AssistantChat] sendMessage() completed successfully');
       } catch (error) {
         console.error('[AssistantChat] sendMessage() failed:', error);
         toast.error('Failed to send message', {
@@ -248,7 +294,6 @@ function AssistantChatInner({
       }
 
       // Clear input using PromptInput controller
-      console.log('[AssistantChat] Clearing input');
       promptController.textInput.clear();
     },
     [currentConversation, createConversation, sendMessage, promptController]
@@ -331,12 +376,10 @@ function AssistantChatInner({
 
   /**
    * Convert AI messages to ExtendedMessage format, merging sources from map
+   * and metadata from ConversationStore
    */
   const extendedMessages: ExtendedMessage[] = useMemo(
     () => {
-      console.log('[AssistantChat] Building extended messages, map size:', messageSourcesMap.size);
-      console.log('[AssistantChat] Map keys:', Array.from(messageSourcesMap.keys()));
-
       return aiMessages.map((msg, index) => {
         // For assistant messages, find the preceding user message to get sources
         let sources: any[] | undefined;
@@ -347,20 +390,29 @@ function AssistantChatInner({
             if (aiMessages[i].role === 'user') {
               const userMessageId = aiMessages[i].id;
               sources = messageSourcesMap.get(userMessageId);
-              console.log('[AssistantChat] Assistant message at index', index, 'looking up sources via user message:', userMessageId, 'found:', sources?.length || 0);
               break;
             }
+          }
+        }
+
+        // Merge metadata from ConversationStore if message exists there
+        let storeMetadata: any = undefined;
+        if (currentConversation) {
+          const storeMessage = currentConversation.messages.find((m) => m.id === msg.id);
+          if (storeMessage?.metadata) {
+            storeMetadata = storeMessage.metadata;
           }
         }
 
         return {
           ...msg,
           ...(sources && { sources }),
+          ...(storeMetadata && { metadata: storeMetadata }),
           createdAt: new Date(),
         };
       });
     },
-    [aiMessages, messageSourcesMap]
+    [aiMessages, messageSourcesMap, currentConversation]
   );
 
   /**
@@ -375,11 +427,11 @@ function AssistantChatInner({
   }, [extendedMessages, examplePrompts]);
 
   return (
-    <div className={cn('h-full flex flex-col', className)} role="main" aria-label="AI Assistant Chat">
+    <div className={cn('flex-1 flex flex-col min-h-0', className)} role="main" aria-label="AI Assistant Chat">
       {/* Error Display */}
       {error && (
         <div
-          className="px-4 py-3 bg-destructive/10 border-b border-destructive/20 text-destructive text-sm"
+          className="flex-shrink-0 px-4 py-3 bg-destructive/10 border-b border-destructive/20 text-destructive text-sm"
           role="alert"
           aria-live="assertive"
         >
@@ -407,7 +459,7 @@ function AssistantChatInner({
       />
 
       {/* Chat Input */}
-      <div className="border-t">
+      <div className="flex-shrink-0 border-t">
         <ChatInput
           onSubmit={handleSubmit}
           isLoading={isLoading}

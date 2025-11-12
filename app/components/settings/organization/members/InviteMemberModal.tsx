@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { X, Mail, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+
+import { enhancedInviteMemberSchema, type EnhancedInviteMemberInput } from '@/lib/validations/api';
 
 import { Button } from '@/app/components/ui/button';
 import {
@@ -26,26 +27,22 @@ import {
 } from '@/app/components/ui/select';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Badge } from '@/app/components/ui/badge';
-import { DepartmentSelector } from '@/app/components/shared/DepartmentSelector';
+import { DepartmentSelector, type Department } from '@/app/components/shared/DepartmentSelector';
+import { FormDialog } from '@/app/components/ui/form-dialog';
+import {
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/app/components/ui/form';
 import type { UserRole } from '@/lib/types/database';
-
-interface Department {
-  id: string;
-  name: string;
-  slug: string;
-  parent_id: string | null;
-}
 
 interface InviteMemberModalProps {
   open: boolean;
   onClose: () => void;
   departments: Department[];
-}
-
-interface InviteFormData {
-  email: string;
-  role: UserRole;
-  customMessage: string;
 }
 
 interface InviteMemberResponse {
@@ -64,208 +61,229 @@ interface BulkInviteResponse {
 }
 
 export function InviteMemberModal({ open, onClose, departments }: InviteMemberModalProps) {
-  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const [showBulkInvite, setShowBulkInvite] = useState(false);
-  const queryClient = useQueryClient();
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    setValue,
-    reset,
-    formState: { errors },
-  } = useForm<InviteFormData>({
-    defaultValues: {
-      email: '',
-      role: 'reader',
-      customMessage: '',
-    },
-  });
+  const handleSubmit = async (data: EnhancedInviteMemberInput) => {
+    const response = await fetch('/api/organizations/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: data.email,
+        role: data.role,
+        department_ids: data.department_ids || [],
+        custom_message: data.custom_message || undefined,
+      }),
+    });
 
-  // Invite mutation
-  const inviteMutation = useMutation({
-    mutationFn: async (data: InviteFormData) => {
-      const response = await fetch('/api/organizations/members', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: data.email,
-          role: data.role,
-          department_ids: selectedDepartments,
-          custom_message: data.customMessage || undefined,
-        }),
-      });
-
-      if (!response.ok) {
-        let errorMessage = 'Failed to send invitation';
-        try {
-          const error: InviteMemberResponse = await response.json();
-          errorMessage = error.error?.message || error.message || errorMessage;
-        } catch {
-          // Fall back to generic message if JSON parsing fails
-        }
-        throw new Error(errorMessage);
+    if (!response.ok) {
+      let errorMessage = 'Failed to send invitation';
+      try {
+        const error: InviteMemberResponse = await response.json();
+        errorMessage = error.error?.message || error.message || errorMessage;
+      } catch {
+        // Fall back to generic message if JSON parsing fails
       }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['members'] });
-      toast.success('Invitation sent successfully');
-      reset();
-      setSelectedDepartments([]);
-      onClose();
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to send invitation');
-    },
-  });
-
-  const onSubmit = (data: InviteFormData) => {
-    inviteMutation.mutate(data);
+      throw new Error(errorMessage);
+    }
+    return response.json();
   };
 
-  const handleClose = () => {
-    reset();
-    setSelectedDepartments([]);
+  const handleCleanup = () => {
     setShowBulkInvite(false);
-    onClose();
+  };
+
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen) {
+      handleCleanup();
+      onClose();
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle>Invite Team Member</DialogTitle>
-          <DialogDescription>
-            Send an invitation to join your organization
-          </DialogDescription>
-        </DialogHeader>
-
-        {!showBulkInvite ? (
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            {/* Email */}
-            <div className="space-y-2">
-              <Label htmlFor="email">
-                Email Address <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="colleague@example.com"
-                {...register('email', {
-                  required: 'Email is required',
-                  pattern: {
-                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                    message: 'Invalid email address',
-                  },
-                })}
-              />
-              {errors.email && (
-                <p className="text-sm text-red-500">{errors.email.message}</p>
-              )}
-            </div>
-
-            {/* Role */}
-            <div className="space-y-2">
-              <Label htmlFor="role">
-                Role <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                value={watch('role')}
-                onValueChange={(value) => setValue('role', value as UserRole)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="reader">Reader - View only access</SelectItem>
-                  <SelectItem value="contributor">
-                    Contributor - Can create and edit content
-                  </SelectItem>
-                  <SelectItem value="admin">
-                    Admin - Can manage members and settings
-                  </SelectItem>
-                  <SelectItem value="owner">
-                    Owner - Full administrative access
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Departments */}
-            <div className="space-y-2">
-              <Label>Departments (Optional)</Label>
-              <DepartmentSelector
-                departments={departments}
-                value={selectedDepartments}
-                onChange={setSelectedDepartments}
-                placeholder="Select departments..."
-                multiple={true}
-              />
-              <p className="text-xs text-muted-foreground">
-                Assign the new member to specific departments
-              </p>
-            </div>
-
-            {/* Custom Message */}
-            <div className="space-y-2">
-              <Label htmlFor="customMessage">Custom Welcome Message (Optional)</Label>
-              <Textarea
-                id="customMessage"
-                placeholder="Add a personal message to the invitation..."
-                {...register('customMessage')}
-                rows={3}
-              />
-            </div>
-
-            {/* Preview */}
-            <div className="bg-muted p-4 rounded-md">
-              <div className="text-sm font-medium mb-2">Invitation Preview</div>
-              <div className="text-sm text-muted-foreground space-y-1">
-                <p>To: {watch('email') || 'colleague@example.com'}</p>
-                <p>Role: {watch('role')}</p>
-                {selectedDepartments.length > 0 && (
-                  <p>Departments: {departments
-                    .filter(d => selectedDepartments.includes(d.id))
-                    .map(d => d.name)
-                    .join(', ')}</p>
+    <>
+      {!showBulkInvite ? (
+        <FormDialog
+          open={open}
+          onOpenChange={handleOpenChange}
+          title="Invite Team Member"
+          description="Send an invitation to join your organization"
+          size="lg"
+          schema={enhancedInviteMemberSchema as any}
+          defaultValues={{
+            email: '',
+            role: 'reader',
+            department_ids: [],
+            custom_message: '',
+          }}
+          mutationFn={handleSubmit}
+          queryKey={['members']}
+          successMessage="Invitation sent successfully"
+          errorMessage="Failed to send invitation"
+          submitLabel="Send Invitation"
+          loadingLabel="Sending..."
+          onCleanup={handleCleanup}
+          onSuccess={() => {
+            toast.success('Invitation sent successfully');
+          }}
+          onError={(error: Error) => {
+            toast.error(error.message || 'Failed to send invitation');
+          }}
+          className="sm:max-w-[600px]"
+        >
+          {(form) => (
+            <>
+              {/* Email */}
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email Address *</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="colleague@example.com"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
+              />
+
+              {/* Role */}
+              <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Role *</FormLabel>
+                    <Select
+                      value={field.value}
+                      onValueChange={(value: UserRole) => field.onChange(value)}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="reader">Reader - View only access</SelectItem>
+                        <SelectItem value="contributor">
+                          Contributor - Can create and edit content
+                        </SelectItem>
+                        <SelectItem value="admin">
+                          Admin - Can manage members and settings
+                        </SelectItem>
+                        <SelectItem value="owner">
+                          Owner - Full administrative access
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Departments */}
+              <FormField
+                control={form.control}
+                name="department_ids"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Departments (Optional)</FormLabel>
+                    <FormControl>
+                      <DepartmentSelector
+                        departments={departments}
+                        value={field.value || []}
+                        onValueChange={(value) => field.onChange(value as string[])}
+                        placeholder="Select departments..."
+                        multiple={true}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Assign the new member to specific departments
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Custom Message */}
+              <FormField
+                control={form.control}
+                name="custom_message"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Custom Welcome Message (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Add a personal message to the invitation..."
+                        rows={3}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Preview */}
+              <div className="bg-muted p-4 rounded-md">
+                <div className="text-sm font-medium mb-2">Invitation Preview</div>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p>To: {form.watch('email') || 'colleague@example.com'}</p>
+                  <p>Role: {form.watch('role')}</p>
+                  {form.watch('department_ids')?.length > 0 && (
+                    <p>
+                      Departments:{' '}
+                      {departments
+                        .filter((d) => form.watch('department_ids')?.includes(d.id))
+                        .map((d) => d.name)
+                        .join(', ')}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowBulkInvite(true)}>
-                <Upload className="mr-2 h-4 w-4" />
-                Bulk Invite
-              </Button>
-              <Button type="button" variant="outline" onClick={handleClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={inviteMutation.isPending}>
-                {inviteMutation.isPending ? (
-                  'Sending...'
-                ) : (
-                  <>
-                    <Mail className="mr-2 h-4 w-4" />
-                    Send Invitation
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : (
-          <BulkInviteForm
-            onBack={() => setShowBulkInvite(false)}
-            onSuccess={() => {
-              queryClient.invalidateQueries({ queryKey: ['members'] });
-              handleClose();
-            }}
-            onClose={handleClose}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+              {/* Bulk Invite Button */}
+              <div className="flex justify-start">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowBulkInvite(true)}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Bulk Invite
+                </Button>
+              </div>
+            </>
+          )}
+        </FormDialog>
+      ) : (
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Invite Team Member</DialogTitle>
+              <DialogDescription>
+                Send an invitation to join your organization
+              </DialogDescription>
+            </DialogHeader>
+            <BulkInviteForm
+              onBack={() => setShowBulkInvite(false)}
+              onSuccess={() => {
+                handleCleanup();
+                onClose();
+              }}
+              onClose={() => {
+                handleCleanup();
+                onClose();
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
 

@@ -34,17 +34,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/app/components/ui/alert-dialog';
 import { useToast } from '@/app/components/ui/use-toast';
+import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 
 import { WebhookModal } from './WebhookModal';
 import { WebhookDeliveriesModal } from './WebhookDeliveriesModal';
@@ -352,25 +343,17 @@ export function WebhooksTab() {
       )}
 
       {/* Delete confirmation dialog */}
-      <AlertDialog open={!!webhookToDelete} onOpenChange={() => setWebhookToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Webhook</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this webhook? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-destructive text-destructive-foreground"
-            >
-              Delete Webhook
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmationDialog
+        open={!!webhookToDelete}
+        onOpenChange={(open) => !open && setWebhookToDelete(null)}
+        title="Delete Webhook"
+        description="Are you sure you want to delete this webhook? This action cannot be undone."
+        confirmText="Delete Webhook"
+        variant="destructive"
+        isLoading={deleteMutation.isPending}
+        onConfirm={confirmDelete}
+        useAlertDialog
+      />
     </>
   );
 }

@@ -102,6 +102,10 @@ export const POST = withRateLimit(
     return errors.internalError();
   }
 
+    // PERFORMANCE OPTIMIZATION: Invalidate stats cache when new content is created
+    const { CacheInvalidation } = await import('@/lib/services/cache');
+    await CacheInvalidation.invalidateContent(orgId);
+
     return successResponse(
       {
         recording,

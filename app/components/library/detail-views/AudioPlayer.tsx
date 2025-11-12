@@ -3,24 +3,20 @@
 import * as React from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import dynamic from 'next/dynamic';
 
 import { Card, CardContent } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
-
-// Dynamically import AudioPlayer to avoid SSR issues
-const H5AudioPlayer = dynamic(
-  () => import('react-h5-audio-player'),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center h-32">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-);
+import {
+  AudioPlayerProvider,
+  AudioPlayerButton,
+  AudioPlayerProgress,
+  AudioPlayerTime,
+  AudioPlayerDuration,
+  AudioPlayerSpeed,
+  useAudioPlayer,
+} from '@/app/components/ui/audio-player';
+import { Waveform } from '@/app/components/ui/waveform';
 
 interface Word {
   word: string;
@@ -45,60 +41,127 @@ interface AudioPlayerProps {
   duration?: number | null;
 }
 
-const AudioPlayer = React.forwardRef<HTMLAudioElement, AudioPlayerProps>(({
+// Component that loads audio and uses player context
+function AudioPlayerContent({
+  audioUrl,
+  transcript,
+}: {
+  audioUrl: string;
+  transcript?: Transcript | null;
+}) {
+  const player = useAudioPlayer();
+  const [highlightedWordIndex, setHighlightedWordIndex] = React.useState<number>(-1);
+
+  // Load audio on mount
+  React.useEffect(() => {
+    player.setActiveItem({
+      id: 'audio',
+      src: audioUrl,
+    });
+  }, [audioUrl, player]);
+
+  // Track current time for transcript highlighting
+  React.useEffect(() => {
+    if (!player.ref.current) return;
+
+    const interval = setInterval(() => {
+      if (player.ref.current && transcript?.words_json && Array.isArray(transcript.words_json)) {
+        const currentTime = player.ref.current.currentTime;
+        const words = transcript.words_json;
+        const currentWordIndex = words.findIndex(
+          (word) => currentTime >= word.start && currentTime <= word.end
+        );
+        setHighlightedWordIndex(currentWordIndex);
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [player.ref, transcript]);
+
+  const handleWordClick = (word: Word) => {
+    player.seek(word.start);
+    if (!player.isPlaying) {
+      player.play();
+    }
+  };
+
+  return (
+    <>
+      {/* Player Controls */}
+      <div className="flex items-center gap-4">
+        <AudioPlayerButton size="lg" />
+        <div className="flex-1 space-y-2">
+          <AudioPlayerProgress />
+          <div className="flex items-center justify-between text-xs">
+            <AudioPlayerTime />
+            <AudioPlayerDuration />
+          </div>
+        </div>
+        <AudioPlayerSpeed />
+      </div>
+
+      {/* Waveform Visualization */}
+      <div className="mt-4">
+        <Waveform
+          height={64}
+          barWidth={2}
+          barGap={1}
+          barRadius={1}
+          className="rounded-lg bg-muted/20 border border-border"
+        />
+      </div>
+
+      {/* Interactive Transcript */}
+      {transcript?.words_json && Array.isArray(transcript.words_json) && transcript.words_json.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-border">
+          <h3 className="text-sm font-semibold mb-3">Interactive Transcript</h3>
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            <p className="leading-relaxed whitespace-pre-wrap">
+              {transcript.words_json.map((word, index) => (
+                <React.Fragment key={index}>
+                  <span
+                    onClick={() => handleWordClick(word)}
+                    className={`
+                      cursor-pointer transition-colors duration-150
+                      ${
+                        index === highlightedWordIndex
+                          ? 'bg-primary text-primary-foreground font-semibold rounded px-1'
+                          : 'hover:bg-muted rounded px-1'
+                      }
+                    `}
+                    title={`${word.start.toFixed(1)}s - ${word.end.toFixed(1)}s`}
+                  >
+                    {word.word}
+                  </span>
+                  {' '}
+                </React.Fragment>
+              ))}
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">
+            Click on any word to jump to that point in the audio
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+// Inner component that has access to audio player context
+function AudioPlayerWithRef({
   audioUrl,
   downloadUrl,
   transcript,
   title,
-  duration
-}, ref) => {
-  const [currentTime, setCurrentTime] = React.useState(0);
-  const [highlightedWordIndex, setHighlightedWordIndex] = React.useState<number>(-1);
-  const internalRef = React.useRef<HTMLAudioElement | null>(null);
+  duration,
+  forwardedRef
+}: AudioPlayerProps & { forwardedRef: React.ForwardedRef<HTMLAudioElement | null> }) {
+  const player = useAudioPlayer();
 
-  // Sync transcript highlighting with audio playback
-  React.useEffect(() => {
-    if (!transcript?.words_json || !Array.isArray(transcript.words_json)) {
-      return;
-    }
-
-    const words = transcript.words_json;
-    const currentWordIndex = words.findIndex(
-      (word) => currentTime >= word.start && currentTime <= word.end
-    );
-
-    setHighlightedWordIndex(currentWordIndex);
-  }, [currentTime, transcript]);
-
-  const handleListen = (e: any) => {
-    if (e.target) {
-      setCurrentTime(e.target.currentTime);
-    }
-  };
-
-  const handleWordClick = (word: Word) => {
-    const audioElement = internalRef.current;
-    if (audioElement) {
-      audioElement.currentTime = word.start;
-      audioElement.play();
-    }
-  };
-
-  // Combine refs using callback ref to ensure immediate forwarding
-  const callbackRef = React.useCallback(
-    (node: HTMLAudioElement | null) => {
-      // Update internal ref
-      (internalRef as React.MutableRefObject<HTMLAudioElement | null>).current = node;
-
-      // Forward to parent ref
-      if (typeof ref === 'function') {
-        ref(node);
-      } else if (ref) {
-        ref.current = node;
-      }
-    },
-    [ref]
-  );
+  // Expose the audio element via the forwarded ref
+  React.useImperativeHandle(forwardedRef, () => {
+    return player.ref.current ?? null;
+  }, [player.ref]);
 
   const handleDownload = async () => {
     const urlToDownload = downloadUrl || audioUrl;
@@ -142,142 +205,45 @@ const AudioPlayer = React.forwardRef<HTMLAudioElement, AudioPlayerProps>(({
 
   return (
     <div className="space-y-4">
-      {/* Audio Player Card */}
-      <Card className="overflow-hidden">
-        <CardContent className="p-6 space-y-4">
-          {/* Header Info */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300">
-                Audio
-              </Badge>
-              {duration && (
-                <span className="text-sm text-muted-foreground">
-                  {formatDuration(duration)}
-                </span>
-              )}
+        {/* Audio Player Card */}
+        <Card className="overflow-hidden">
+          <CardContent className="p-6 space-y-4">
+            {/* Header Info */}
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300">
+                  Audio
+                </Badge>
+                {duration && (
+                  <span className="text-sm text-muted-foreground">
+                    {formatDuration(duration)}
+                  </span>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDownload}
+                disabled={!audioUrl}
+              >
+                <Download className="size-4" />
+                Download
+              </Button>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleDownload}
-              disabled={!audioUrl}
-            >
-              <Download className="size-4" />
-              Download
-            </Button>
-          </div>
 
-          {/* Audio Player */}
-          <div className="audio-player-wrapper">
-            <H5AudioPlayer
-              ref={callbackRef as any}
-              src={audioUrl}
-              autoPlay={false}
-              showJumpControls
-              customAdditionalControls={[]}
-              customVolumeControls={[]}
-              layout="horizontal-reverse"
-              onListen={handleListen}
-              className="rounded-lg"
-              style={{
-                backgroundColor: 'transparent',
-                boxShadow: 'none',
-              }}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Transcript with Word Highlighting */}
-      {transcript?.words_json && Array.isArray(transcript.words_json) && transcript.words_json.length > 0 && (
-        <Card>
-          <CardContent className="p-6">
-            <h3 className="text-sm font-semibold mb-4">Interactive Transcript</h3>
-            <div className="prose prose-sm dark:prose-invert max-w-none">
-              <p className="leading-relaxed whitespace-pre-wrap">
-                {transcript.words_json.map((word, index) => (
-                  <React.Fragment key={index}>
-                    <span
-                      onClick={() => handleWordClick(word)}
-                      className={`
-                        cursor-pointer transition-colors duration-150
-                        ${
-                          index === highlightedWordIndex
-                            ? 'bg-green-400 dark:bg-green-600 font-semibold text-foreground'
-                            : 'hover:bg-muted'
-                        }
-                      `}
-                      title={`${word.start.toFixed(1)}s - ${word.end.toFixed(1)}s`}
-                    >
-                      {word.word}
-                    </span>
-                    {' '}
-                  </React.Fragment>
-                ))}
-              </p>
-            </div>
-            <p className="text-xs text-muted-foreground mt-4">
-              Click on any word to jump to that point in the audio
-            </p>
+            {/* Audio Player with Waveform and Transcript */}
+            <AudioPlayerContent audioUrl={audioUrl} transcript={transcript} />
           </CardContent>
         </Card>
-      )}
+      </div>
+  );
+}
 
-      <style jsx global>{`
-        .rhap_container {
-          background: transparent !important;
-          box-shadow: none !important;
-          padding: 0 !important;
-        }
-
-        .rhap_main {
-          flex-direction: column !important;
-        }
-
-        .rhap_progress-section {
-          margin: 1rem 0 !important;
-        }
-
-        .rhap_progress-bar {
-          background-color: hsl(var(--muted)) !important;
-          height: 6px !important;
-          border-radius: 3px !important;
-        }
-
-        .rhap_progress-filled,
-        .rhap_progress-indicator {
-          background-color: hsl(var(--primary)) !important;
-        }
-
-        .rhap_progress-indicator {
-          width: 16px !important;
-          height: 16px !important;
-          top: -5px !important;
-        }
-
-        .rhap_time {
-          color: hsl(var(--muted-foreground)) !important;
-          font-size: 0.875rem !important;
-        }
-
-        .rhap_button-clear {
-          color: hsl(var(--foreground)) !important;
-        }
-
-        .rhap_button-clear:hover {
-          color: hsl(var(--primary)) !important;
-        }
-
-        .rhap_volume-bar {
-          background-color: hsl(var(--muted)) !important;
-        }
-
-        .rhap_volume-indicator {
-          background-color: hsl(var(--primary)) !important;
-        }
-      `}</style>
-    </div>
+const AudioPlayer = React.forwardRef<HTMLAudioElement | null, AudioPlayerProps>((props, ref) => {
+  return (
+    <AudioPlayerProvider>
+      <AudioPlayerWithRef {...props} forwardedRef={ref} />
+    </AudioPlayerProvider>
   );
 });
 

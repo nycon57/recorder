@@ -19,10 +19,16 @@ import { AssistantChat } from './components/AssistantChat';
 export default function AssistantPage() {
   return (
     <ConversationProvider>
-      <div className="h-[calc(100vh-4rem)] flex flex-col">
+      {/*
+        Fixed height calculation:
+        - Dashboard header: 64px (h-16)
+        - Using absolute positioning to escape main padding and fill viewport below header
+        - Total top offset: 64px (top-16 = 64px)
+      */}
+      <div className="absolute inset-0 top-16 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="border-b px-6 py-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <h1 className="text-2xl font-bold">AI Assistant</h1>
+        <div className="flex-shrink-0 border-b px-6 py-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <h1 className="text-2xl font-normal">AI Assistant</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Ask questions about your recordings with AI-powered search and reasoning
           </p>

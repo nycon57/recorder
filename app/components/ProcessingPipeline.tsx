@@ -20,6 +20,7 @@ interface Recording {
   id: string;
   title?: string | null;
   status: 'uploading' | 'uploaded' | 'transcribing' | 'transcribed' | 'doc_generating' | 'completed' | 'error';
+  content_type?: 'recording' | 'video' | 'audio' | 'document' | 'text' | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -50,6 +51,45 @@ export default function ProcessingPipeline({
   const [reprocessModalOpen, setReprocessModalOpen] = React.useState(false);
   const [reprocessStep, setReprocessStep] = React.useState<'transcribe' | 'document' | 'embeddings' | 'all'>('all');
 
+  // Content-type-aware pipeline configurations
+  const getPipelineConfig = () => {
+    const contentType = recording.content_type || 'recording';
+
+    switch (contentType) {
+      case 'video':
+        return {
+          step1: { id: 'extract', label: 'Extract Audio', inProgressLabel: 'Extracting audio...', failedLabel: 'Audio Extraction Failed' },
+          step2: { id: 'transcribe', label: 'Transcribed', inProgressLabel: 'Transcribing...', failedLabel: 'Transcription Failed' },
+          step3: { id: 'document', label: 'Document Generated', inProgressLabel: 'Generating document...', failedLabel: 'Document Generation Failed' },
+          step4: { id: 'embeddings', label: 'Ready to search', inProgressLabel: 'Creating embeddings...', failedLabel: 'Embedding Failed' },
+        };
+      case 'audio':
+        return {
+          step1: { id: 'transcribe', label: 'Transcribed', inProgressLabel: 'Transcribing audio...', failedLabel: 'Transcription Failed' },
+          step2: { id: 'document', label: 'Document Generated', inProgressLabel: 'Generating document...', failedLabel: 'Document Generation Failed' },
+          step3: { id: 'embeddings', label: 'Ready to search', inProgressLabel: 'Creating embeddings...', failedLabel: 'Embedding Failed' },
+        };
+      case 'document':
+        return {
+          step1: { id: 'extract_text', label: 'Text Extracted', inProgressLabel: 'Extracting text...', failedLabel: 'Text Extraction Failed' },
+          step2: { id: 'document', label: 'Summary Generated', inProgressLabel: 'Generating summary...', failedLabel: 'Summary Generation Failed' },
+          step3: { id: 'embeddings', label: 'Ready to search', inProgressLabel: 'Creating embeddings...', failedLabel: 'Embedding Failed' },
+        };
+      case 'text':
+        return {
+          step1: { id: 'process', label: 'Note Processed', inProgressLabel: 'Processing note...', failedLabel: 'Processing Failed' },
+          step2: { id: 'document', label: 'Summary Generated', inProgressLabel: 'Generating summary...', failedLabel: 'Summary Generation Failed' },
+          step3: { id: 'embeddings', label: 'Ready to search', inProgressLabel: 'Creating embeddings...', failedLabel: 'Embedding Failed' },
+        };
+      default: // 'recording'
+        return {
+          step1: { id: 'transcribe', label: 'Transcribed', inProgressLabel: 'Transcribing...', failedLabel: 'Transcription Failed' },
+          step2: { id: 'document', label: 'Document Generated', inProgressLabel: 'Generating document...', failedLabel: 'Document Generation Failed' },
+          step3: { id: 'embeddings', label: 'Ready to search', inProgressLabel: 'Creating embeddings...', failedLabel: 'Embedding Failed' },
+        };
+    }
+  };
+
   const getStepStatus = (): PipelineStep[] => {
     const steps: PipelineStep[] = [
       {
@@ -60,76 +100,105 @@ export default function ProcessingPipeline({
       },
     ];
 
-    // Transcription step
+    const config = getPipelineConfig();
+    const configSteps = Object.values(config);
+
+    // Step 1 (extract/transcribe/extract_text/process)
+    const step1 = configSteps[0];
     if (recording.status === 'error') {
       steps.push({
-        id: 'transcribe',
-        label: 'Transcription Failed',
+        id: step1.id,
+        label: step1.failedLabel,
         status: 'error',
       });
     } else if (hasTranscript || recording.status === 'completed') {
       steps.push({
-        id: 'transcribe',
-        label: 'Transcribed',
+        id: step1.id,
+        label: step1.label,
         status: 'completed',
         timestamp: recording.updated_at,
       });
     } else if (recording.status === 'transcribing') {
       steps.push({
-        id: 'transcribe',
-        label: 'Transcribing audio...',
+        id: step1.id,
+        label: step1.inProgressLabel,
         status: 'in_progress',
       });
     } else {
       steps.push({
-        id: 'transcribe',
-        label: 'Pending transcription',
+        id: step1.id,
+        label: step1.inProgressLabel.replace('...', ''),
         status: 'pending',
       });
     }
 
-    // Document generation step
-    if (recording.status === 'error' && hasTranscript) {
-      steps.push({
-        id: 'document',
-        label: 'Document Generation Failed',
-        status: 'error',
-      });
-    } else if (hasDocument || recording.status === 'completed') {
-      steps.push({
-        id: 'document',
-        label: 'Document Generated',
-        status: 'completed',
-        timestamp: recording.updated_at,
-      });
-    } else if (recording.status === 'doc_generating') {
-      steps.push({
-        id: 'document',
-        label: 'Generating document...',
-        status: 'in_progress',
-      });
-    } else if (hasTranscript) {
-      steps.push({
-        id: 'document',
-        label: 'Pending document',
-        status: 'pending',
-      });
+    // Step 2 (document/summary) - only if step 1 has content
+    if (configSteps.length > 1 && (hasTranscript || recording.status === 'completed' || recording.status === 'error')) {
+      const step2 = configSteps[1];
+      if (recording.status === 'error' && hasTranscript) {
+        steps.push({
+          id: step2.id,
+          label: step2.failedLabel,
+          status: 'error',
+        });
+      } else if (hasDocument || recording.status === 'completed') {
+        steps.push({
+          id: step2.id,
+          label: step2.label,
+          status: 'completed',
+          timestamp: recording.updated_at,
+        });
+      } else if (recording.status === 'doc_generating') {
+        steps.push({
+          id: step2.id,
+          label: step2.inProgressLabel,
+          status: 'in_progress',
+        });
+      } else if (hasTranscript) {
+        steps.push({
+          id: step2.id,
+          label: step2.inProgressLabel.replace('...', ''),
+          status: 'pending',
+        });
+      }
     }
 
-    // Embeddings step
-    if (recording.status === 'completed') {
-      steps.push({
-        id: 'embeddings',
-        label: 'Ready to search',
-        status: 'completed',
-        timestamp: recording.completed_at || recording.updated_at,
-      });
-    } else if (hasDocument) {
-      steps.push({
-        id: 'embeddings',
-        label: 'Preparing search...',
-        status: 'in_progress',
-      });
+    // Step 3 (embeddings) - only if step 2 has content
+    if (configSteps.length > 2 && (hasDocument || recording.status === 'completed')) {
+      const step3 = configSteps[2];
+      if (recording.status === 'completed') {
+        steps.push({
+          id: step3.id,
+          label: step3.label,
+          status: 'completed',
+          timestamp: recording.completed_at || recording.updated_at,
+        });
+      } else if (hasDocument) {
+        steps.push({
+          id: step3.id,
+          label: step3.inProgressLabel,
+          status: 'in_progress',
+        });
+      }
+    }
+
+    // Step 4 (embeddings for video with 4 steps)
+    if (configSteps.length > 3 && (hasDocument || recording.status === 'completed')) {
+      const step4 = configSteps[3];
+      if (recording.status === 'completed') {
+        steps.push({
+          id: step4.id,
+          label: step4.label,
+          status: 'completed',
+          timestamp: recording.completed_at || recording.updated_at,
+        });
+      } else if (hasDocument) {
+        steps.push({
+          id: step4.id,
+          label: step4.inProgressLabel,
+          status: 'in_progress',
+        });
+      }
     }
 
     return steps;
@@ -288,24 +357,40 @@ export default function ProcessingPipeline({
                     Reprocess
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem onClick={() => handleRetry('transcribe')}>
-                    Reprocess Transcription
-                  </DropdownMenuItem>
-                  {hasTranscript && (
-                    <DropdownMenuItem onClick={() => handleRetry('document')}>
-                      Reprocess Document
-                    </DropdownMenuItem>
-                  )}
-                  {hasDocument && (
-                    <DropdownMenuItem onClick={() => handleRetry('embeddings')}>
-                      Reprocess Embeddings
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleRetry('all')}>
-                    Reprocess All Steps
-                  </DropdownMenuItem>
+                <DropdownMenuContent align="end" className="w-56">
+                  {(() => {
+                    const contentType = recording.content_type || 'recording';
+                    const config = getPipelineConfig();
+
+                    // Get step labels based on content type
+                    const step1Label = contentType === 'video' ? 'Audio Extraction' :
+                                      contentType === 'document' ? 'Text Extraction' :
+                                      contentType === 'text' ? 'Note Processing' : 'Transcription';
+
+                    const step2Label = contentType === 'document' || contentType === 'text' ? 'Summary' : 'Document';
+
+                    return (
+                      <>
+                        <DropdownMenuItem onClick={() => handleRetry(Object.values(config)[0].id)}>
+                          Regenerate {step1Label}
+                        </DropdownMenuItem>
+                        {hasTranscript && (
+                          <DropdownMenuItem onClick={() => handleRetry('document')}>
+                            Regenerate {step2Label}
+                          </DropdownMenuItem>
+                        )}
+                        {hasDocument && (
+                          <DropdownMenuItem onClick={() => handleRetry('embeddings')}>
+                            Regenerate Embeddings
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleRetry('all')}>
+                          Reprocess Everything
+                        </DropdownMenuItem>
+                      </>
+                    );
+                  })()}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

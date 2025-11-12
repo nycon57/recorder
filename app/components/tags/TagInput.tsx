@@ -6,6 +6,7 @@ import debounce from 'lodash/debounce';
 
 import { cn } from '@/lib/utils';
 import { TAG_COLORS, getDefaultTagColor } from '@/lib/validations/tags';
+import { useToast } from '@/app/components/ui/use-toast';
 
 import { TagBadge } from './TagBadge';
 
@@ -44,6 +45,7 @@ export function TagInput({
   onCreateTag,
   onLoadTags,
 }: TagInputProps) {
+  const { toast } = useToast();
   const [inputValue, setInputValue] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<Tag[]>([]);
@@ -69,11 +71,14 @@ export function TagInput({
 
   // Filter suggestions based on input
   useEffect(() => {
+    // Ensure availableTags is always an array
+    const tags = Array.isArray(availableTags) ? availableTags : [];
+
     if (inputValue.trim()) {
       if (onLoadTags) {
         debouncedLoadTags(inputValue);
       } else {
-        const filtered = availableTags.filter(
+        const filtered = tags.filter(
           (tag) =>
             tag.name.toLowerCase().includes(inputValue.toLowerCase()) &&
             !value.some((selected) => selected.id === tag.id)
@@ -82,7 +87,7 @@ export function TagInput({
       }
     } else {
       setSuggestions(
-        availableTags.filter(
+        tags.filter(
           (tag) => !value.some((selected) => selected.id === tag.id)
         )
       );
@@ -155,6 +160,11 @@ export function TagInput({
       }
     } catch (error) {
       console.error('Error creating tag:', error);
+      toast({
+        title: 'Failed to create tag',
+        description: error instanceof Error ? error.message : 'An unexpected error occurred',
+        variant: 'destructive',
+      });
     } finally {
       setIsCreating(false);
     }
@@ -208,9 +218,9 @@ export function TagInput({
     <div className={cn('relative', className)}>
       <div
         className={cn(
-          'flex flex-wrap gap-1.5 min-h-[42px] p-2 border rounded-md bg-white',
-          disabled && 'bg-gray-50 cursor-not-allowed',
-          isOpen && 'ring-2 ring-blue-500 ring-offset-0'
+          'flex flex-wrap gap-1.5 min-h-[42px] p-2 border rounded-md bg-background',
+          disabled && 'bg-muted cursor-not-allowed',
+          isOpen && 'ring-2 ring-primary ring-offset-0'
         )}
         onClick={() => !disabled && inputRef.current?.focus()}
       >
@@ -245,9 +255,9 @@ export function TagInput({
               e.stopPropagation();
               onChange([]);
             }}
-            className="ml-auto p-1 hover:bg-gray-100 rounded"
+            className="ml-auto p-1 hover:bg-accent rounded"
           >
-            <X className="h-4 w-4 text-gray-400" />
+            <X className="h-4 w-4 text-muted-foreground" />
           </button>
         )}
       </div>
@@ -256,7 +266,7 @@ export function TagInput({
       {isOpen && (suggestions.length > 0 || showCreateOption) && (
         <div
           ref={dropdownRef}
-          className="absolute z-50 w-full mt-1 max-h-60 overflow-auto bg-white border rounded-md shadow-lg"
+          className="absolute z-50 w-full mt-1 max-h-60 overflow-auto bg-popover border rounded-md shadow-lg"
         >
           {showCreateOption && (
             <button
@@ -264,16 +274,16 @@ export function TagInput({
               onClick={handleCreateTag}
               disabled={isCreating}
               className={cn(
-                'flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-gray-50',
-                highlightedIndex === -1 && 'bg-gray-50'
+                'flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-accent',
+                highlightedIndex === -1 && 'bg-accent'
               )}
             >
-              <Plus className="h-4 w-4 text-gray-400" />
+              <Plus className="h-4 w-4 text-muted-foreground" />
               <span>
                 Create "<strong>{inputValue.trim()}</strong>"
               </span>
               {isCreating && (
-                <span className="ml-auto text-xs text-gray-400">Creating...</span>
+                <span className="ml-auto text-xs text-muted-foreground">Creating...</span>
               )}
             </button>
           )}
@@ -290,8 +300,8 @@ export function TagInput({
                   'flex items-center gap-2 w-full px-3 py-2 text-sm text-left',
                   isSelected
                     ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:bg-gray-50',
-                  highlightedIndex === index && 'bg-gray-50'
+                    : 'hover:bg-accent',
+                  highlightedIndex === index && 'bg-accent'
                 )}
                 onMouseEnter={() => setHighlightedIndex(index)}
               >

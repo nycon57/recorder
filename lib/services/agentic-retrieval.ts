@@ -28,6 +28,11 @@ export interface AgenticSearchOptions {
   enableReranking?: boolean;
   chunksPerQuery?: number;
   recordingIds?: string[];
+  contentTypes?: ('recording' | 'video' | 'audio' | 'document' | 'text')[];
+  tagIds?: string[];
+  tagFilterMode?: 'AND' | 'OR';
+  collectionId?: string;
+  favoritesOnly?: boolean;
   logResults?: boolean;
 }
 
@@ -48,6 +53,11 @@ export async function agenticSearch(
     enableReranking = isCohereConfigured(),
     chunksPerQuery = 15,
     recordingIds,
+    contentTypes,
+    tagIds,
+    tagFilterMode,
+    collectionId,
+    favoritesOnly,
     logResults = true,
   } = options;
 
@@ -99,9 +109,14 @@ export async function agenticSearch(
         let results = await vectorSearch(subQuery.text, {
           orgId,
           limit: chunksPerQuery,
-          threshold: 0.70,
+          threshold: 0.55, // Lowered from 0.70 - agentic search needs high recall for reasoning
           searchMode: 'standard',
           recordingIds,
+          contentTypes,
+          tagIds,
+          tagFilterMode,
+          collectionId,
+          favoritesOnly,
         });
 
         // Re-rank if enabled

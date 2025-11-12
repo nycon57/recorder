@@ -119,7 +119,7 @@ export default function AdminQuotasPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Quota Management</h1>
+          <h1 className="text-3xl font-normal">Quota Management</h1>
           <p className="text-muted-foreground">Monitor organization usage and limits</p>
         </div>
 

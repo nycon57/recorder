@@ -12,6 +12,9 @@ import type {
   StorageTier,
   StorageProvider,
 } from '@/lib/types/database';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger({ service: 'migrate-storage-tier' });
 
 /**
  * Handle storage tier migration job
@@ -24,10 +27,9 @@ export async function handleMigrateStorageTier(
 ): Promise<{ success: boolean; result?: any; error?: string }> {
   const { recordingId, orgId, fromProvider, fromTier, toTier, sourcePath, fileSize } = payload;
 
-  console.log(
-    `[migrate-storage-tier] Starting migration for ${recordingId}: ${fromTier} → ${toTier}`
-  );
-  console.log(`[migrate-storage-tier] Source: ${fromProvider}:${sourcePath}`);
+  logger.info('Starting storage tier migration', {
+    context: { recordingId, orgId, fromTier, toTier, fromProvider, sourcePath },
+  });
 
   const startTime = Date.now();
   const supabase = createClient();
@@ -72,7 +74,9 @@ export async function handleMigrateStorageTier(
 
     try {
       // 3. Perform migration using StorageManager
-      console.log(`[migrate-storage-tier] Migrating file...`);
+      logger.info('Migrating file', {
+        context: { recordingId, migrationId },
+      });
 
       const migrationResult = await storageManager.migrateToTier(
         fromProvider,
@@ -85,9 +89,13 @@ export async function handleMigrateStorageTier(
         throw new Error(migrationResult.error || 'Migration failed');
       }
 
-      console.log(
-        `[migrate-storage-tier] Migration successful: ${migrationResult.toProvider}:${migrationResult.toPath}`
-      );
+      logger.info('Migration successful', {
+        context: {
+          recordingId,
+          toProvider: migrationResult.toProvider,
+          toPath: migrationResult.toPath,
+        },
+      });
 
       // 4. Update recording with new tier and provider
       const updateData: any = {
@@ -125,10 +133,12 @@ export async function handleMigrateStorageTier(
         .eq('id', migrationId);
 
       const durationMs = Date.now() - startTime;
+      const fileSizeMB = fileSize / 1024 / 1024;
 
-      console.log(
-        `[migrate-storage-tier] Migration completed in ${durationMs}ms (${(fileSize / 1024 / 1024).toFixed(2)} MB)`
-      );
+      logger.info('Migration completed', {
+        context: { recordingId, migrationId },
+        data: { durationMs, fileSizeMB: parseFloat(fileSizeMB.toFixed(2)) },
+      });
 
       return {
         success: true,
@@ -157,7 +167,10 @@ export async function handleMigrateStorageTier(
       throw migrationError;
     }
   } catch (error) {
-    console.error('[migrate-storage-tier] Migration failed:', error);
+    logger.error('Migration failed', {
+      context: { recordingId, fromTier, toTier },
+      error: error as Error,
+    });
 
     // Clear migration scheduled flag on error
     await supabase
@@ -190,9 +203,10 @@ export async function batchMigrateTier(
   failed: number;
   errors: string[];
 }> {
-  console.log(
-    `[batch-migrate-tier] Starting batch migration for org ${orgId} (batch size: ${batchSize}, min age: ${minAgeDays} days)`
-  );
+  logger.info('Starting batch migration', {
+    context: { orgId },
+    data: { batchSize, minAgeDays },
+  });
 
   const supabase = createClient();
   const errors: string[] = [];
@@ -214,11 +228,16 @@ export async function batchMigrateTier(
     }
 
     if (!filesToMigrate || filesToMigrate.length === 0) {
-      console.log('[batch-migrate-tier] No files ready for migration');
+      logger.info('No files ready for migration', {
+        context: { orgId },
+      });
       return { success: true, migrated: 0, failed: 0, errors: [] };
     }
 
-    console.log(`[batch-migrate-tier] Found ${filesToMigrate.length} files ready for migration`);
+    logger.info('Found files ready for migration', {
+      context: { orgId },
+      data: { filesFound: filesToMigrate.length },
+    });
 
     // 2. Create migration jobs for each file
     const jobs = filesToMigrate.map((file: any) => ({
@@ -252,7 +271,10 @@ export async function batchMigrateTier(
 
     migratedCount = filesToMigrate.length;
 
-    console.log(`[batch-migrate-tier] Created ${migratedCount} migration jobs`);
+    logger.info('Created migration jobs', {
+      context: { orgId },
+      data: { jobsCreated: migratedCount },
+    });
 
     return {
       success: true,
@@ -261,7 +283,10 @@ export async function batchMigrateTier(
       errors,
     };
   } catch (error) {
-    console.error('[batch-migrate-tier] Batch migration failed:', error);
+    logger.error('Batch migration failed', {
+      context: { orgId },
+      error: error as Error,
+    });
     return {
       success: false,
       migrated: migratedCount,
@@ -336,7 +361,10 @@ export async function getMigrationStats(orgId: string): Promise<{
       estimatedSavings: savings?.[0] || null,
     };
   } catch (error) {
-    console.error('[migration-stats] Failed to get migration stats:', error);
+    logger.error('Failed to get migration stats', {
+      context: { orgId },
+      error: error as Error,
+    });
     throw error;
   }
 }

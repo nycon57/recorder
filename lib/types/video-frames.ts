@@ -81,6 +81,11 @@ export interface MultimodalSearchOptions {
   includeOcr?: boolean;
   dateFrom?: Date;
   dateTo?: Date;
+  contentTypes?: ('recording' | 'video' | 'audio' | 'document' | 'text')[];
+  tagIds?: string[];
+  tagFilterMode?: 'AND' | 'OR';
+  collectionId?: string;
+  favoritesOnly?: boolean;
 }
 
 /**

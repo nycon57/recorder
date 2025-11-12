@@ -1,19 +1,19 @@
 import {
-  RecordHero,
-  RecordFeatures,
+  ModernHero,
+  ModernFeatures,
+  ModernPricing,
+  ModernCTA,
   RecordTestimonials,
-  RecordPricing,
-  RecordCTA,
 } from '@/app/components/sections';
 
 export default function HomePage() {
   return (
     <>
-      <RecordHero />
-      <RecordFeatures />
+      <ModernHero />
+      <ModernFeatures />
       <RecordTestimonials />
-      <RecordPricing />
-      <RecordCTA />
+      <ModernPricing />
+      <ModernCTA />
     </>
   );
 }

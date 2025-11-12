@@ -30,17 +30,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/app/components/ui/alert-dialog';
 import { useToast } from '@/app/components/ui/use-toast';
+import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 
 import { GenerateApiKeyModal } from './GenerateApiKeyModal';
 import { ApiKeyDetailModal } from './ApiKeyDetailModal';
@@ -316,26 +307,17 @@ export function ApiKeysTab() {
       )}
 
       {/* Delete confirmation dialog */}
-      <AlertDialog open={!!keyToDelete} onOpenChange={() => setKeyToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Revoke API Key</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to revoke this API key? This action cannot be undone
-              and any applications using this key will immediately lose access.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-destructive text-destructive-foreground"
-            >
-              Revoke Key
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmationDialog
+        open={!!keyToDelete}
+        onOpenChange={(open) => !open && setKeyToDelete(null)}
+        title="Revoke API Key"
+        description="Are you sure you want to revoke this API key? This action cannot be undone and any applications using this key will immediately lose access."
+        confirmText="Revoke Key"
+        variant="destructive"
+        isLoading={deleteMutation.isPending}
+        onConfirm={confirmDelete}
+        useAlertDialog
+      />
     </>
   );
 }

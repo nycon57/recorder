@@ -2,7 +2,14 @@
 
 import { Loader2, Sparkles, Clock, FileText } from 'lucide-react';
 
-import { Card } from '@/app/components/ui/card';
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from '@/app/components/ui/empty';
 import { Progress } from '@/app/components/ui/progress';
 import { Badge } from '@/app/components/ui/badge';
 
@@ -16,6 +23,8 @@ import { Badge } from '@/app/components/ui/badge';
  * - Progress stages
  * - Estimated time remaining
  * - Helpful context about what's happening
+ *
+ * @refactored - Now uses @shadcn/empty as foundation
  */
 interface ProcessingEmptyStateProps {
   title?: string;
@@ -72,34 +81,36 @@ export function ProcessingEmptyState({
   };
 
   return (
-    <Card className="border-dashed border-2">
-      <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+    <Empty className="border-2 py-12">
+      <EmptyHeader>
         {/* Animated Icon */}
-        <div className={`inline-flex items-center justify-center rounded-full ${config.bgColor} p-6 mb-6 relative`}>
-          <Icon className={`size-12 ${config.color} ${stage === 'uploading' || stage === 'transcribing' ? 'animate-spin' : 'animate-pulse'}`} />
-
+        <EmptyMedia className={`relative ${config.bgColor} mb-6`}>
+          <div className="inline-flex items-center justify-center rounded-full p-6">
+            <Icon className={`size-12 ${config.color} ${stage === 'uploading' || stage === 'transcribing' ? 'animate-spin' : 'animate-pulse'}`} />
+          </div>
           {/* Pulse effect */}
           <div className={`absolute inset-0 rounded-full ${config.bgColor} animate-ping opacity-20`} />
-        </div>
+        </EmptyMedia>
 
-        {/* Heading */}
-        <h3 className="text-2xl font-bold mb-2">
+        <EmptyTitle className="text-2xl mb-2">
           {title}
-        </h3>
+        </EmptyTitle>
 
         {/* Stage Badge */}
-        <Badge variant="secondary" className="mb-4">
+        <Badge variant="secondary" className="mb-2">
           <span className={`w-2 h-2 rounded-full ${config.color} mr-2 animate-pulse`} />
           {config.label}
         </Badge>
 
-        <p className="text-muted-foreground mb-6 max-w-md">
+        <EmptyDescription className="mb-4 max-w-md">
           {config.description}
-        </p>
+        </EmptyDescription>
+      </EmptyHeader>
 
+      <EmptyContent className="max-w-lg">
         {/* Progress Bar */}
         {progress > 0 && (
-          <div className="w-full max-w-md mb-6">
+          <div className="w-full mb-6">
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="text-muted-foreground">Progress</span>
               <span className="font-semibold">{Math.round(progress)}%</span>
@@ -117,9 +128,9 @@ export function ProcessingEmptyState({
         )}
 
         {/* Processing Steps */}
-        <div className="w-full max-w-lg mt-8">
+        <div className="w-full mt-6">
           <div className="grid grid-cols-1 gap-3">
-            {Object.entries(STAGE_CONFIG).map(([key, stepConfig], index) => {
+            {Object.entries(STAGE_CONFIG).map(([key, stepConfig]) => {
               const StepIcon = stepConfig.icon;
               const isActive = key === stage;
               const isPast = Object.keys(STAGE_CONFIG).indexOf(key) < Object.keys(STAGE_CONFIG).indexOf(stage);
@@ -166,12 +177,12 @@ export function ProcessingEmptyState({
         </div>
 
         {/* Footer Note */}
-        <div className="mt-8 pt-8 border-t w-full max-w-md">
+        <div className="mt-8 pt-6 border-t w-full">
           <p className="text-xs text-muted-foreground">
             You can safely leave this page. We'll notify you when processing is complete.
           </p>
         </div>
-      </div>
-    </Card>
+      </EmptyContent>
+    </Empty>
   );
 }

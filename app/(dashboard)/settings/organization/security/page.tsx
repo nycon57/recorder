@@ -51,8 +51,9 @@ import {
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { useToast } from '@/app/components/ui/use-toast';
-import { DataTable, Column } from '@/app/components/shared/DataTable';
+import { SessionsTable } from '@/app/components/shared/SessionsTable';
 import { AuditLogEntry } from '@/app/components/shared/AuditLogEntry';
+import { ColumnDef } from '@tanstack/react-table';
 import { DateRangePicker } from '@/app/components/shared/DateRangePicker';
 import { UserAvatar } from '@/app/components/shared/UserAvatar';
 
@@ -286,52 +287,52 @@ export default function SecurityPage() {
   };
 
   // Session table columns
-  const sessionColumns: Column<UserSession>[] = [
+  const sessionColumns: ColumnDef<UserSession>[] = [
     {
-      key: 'user',
+      id: 'user',
       header: 'User',
-      accessor: (session) => (
+      cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <UserAvatar user={session.user!} size="sm" />
+          <UserAvatar user={row.original.user!} size="sm" />
           <div>
             <div className="font-medium text-sm">
-              {session.user?.name || 'Unknown User'}
+              {row.original.user?.name || 'Unknown User'}
             </div>
             <div className="text-xs text-muted-foreground">
-              {session.user?.email}
+              {row.original.user?.email}
             </div>
           </div>
         </div>
       ),
     },
     {
-      key: 'device',
+      id: 'device',
       header: 'Device',
-      accessor: (session) => (
+      cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          {session.device_type === 'mobile' ? (
+          {row.original.device_type === 'mobile' ? (
             <Smartphone className="h-4 w-4 text-muted-foreground" />
           ) : (
             <Monitor className="h-4 w-4 text-muted-foreground" />
           )}
           <div>
-            <div className="text-sm">{session.browser || 'Unknown'}</div>
-            <div className="text-xs text-muted-foreground">{session.os || 'Unknown OS'}</div>
+            <div className="text-sm">{row.original.browser || 'Unknown'}</div>
+            <div className="text-xs text-muted-foreground">{row.original.os || 'Unknown OS'}</div>
           </div>
         </div>
       ),
     },
     {
-      key: 'location',
+      id: 'location',
       header: 'Location',
-      accessor: (session) => (
+      cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <Globe className="h-4 w-4 text-muted-foreground" />
           <div>
-            <div className="text-sm">{session.ip_address || 'Unknown'}</div>
-            {session.location?.city && (
+            <div className="text-sm">{row.original.ip_address || 'Unknown'}</div>
+            {row.original.location?.city && (
               <div className="text-xs text-muted-foreground">
-                {session.location.city}, {session.location.country}
+                {row.original.location.city}, {row.original.location.country}
               </div>
             )}
           </div>
@@ -339,20 +340,21 @@ export default function SecurityPage() {
       ),
     },
     {
-      key: 'last_active',
+      id: 'last_active',
+      accessorKey: 'last_active_at',
       header: 'Last Active',
-      sortable: true,
-      accessor: (session) => (
+      enableSorting: true,
+      cell: ({ row }) => (
         <div className="text-sm">
-          {formatDistanceToNow(new Date(session.last_active_at), { addSuffix: true })}
+          {formatDistanceToNow(new Date(row.original.last_active_at), { addSuffix: true })}
         </div>
       ),
     },
     {
-      key: 'status',
+      id: 'status',
       header: 'Status',
-      accessor: (session) => (
-        session.isActive ? (
+      cell: ({ row }) => (
+        row.original.isActive ? (
           <Badge className="bg-green-100 text-green-700">Active</Badge>
         ) : (
           <Badge variant="secondary">Inactive</Badge>
@@ -360,17 +362,17 @@ export default function SecurityPage() {
       ),
     },
     {
-      key: 'actions',
+      id: 'actions',
       header: '',
-      accessor: (session) => (
+      cell: ({ row }) => (
         <Button
           size="sm"
           variant="ghost"
           onClick={(e) => {
             e.stopPropagation();
-            setSessionToRevoke(session);
+            setSessionToRevoke(row.original);
           }}
-          disabled={!session.isActive}
+          disabled={!row.original.isActive}
         >
           <X className="h-4 w-4" />
           Revoke
@@ -605,7 +607,7 @@ export default function SecurityPage() {
               </div>
 
               {/* Sessions table */}
-              <DataTable
+              <SessionsTable
                 columns={sessionColumns}
                 data={sessionData?.sessions || []}
                 isLoading={sessionLoading}

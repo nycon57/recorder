@@ -13,15 +13,26 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 
 import { generateEmbeddingWithFallback } from './embedding-fallback';
+import { expandShortQuery } from './query-preprocessor';
 
 type TranscriptChunk = Database['public']['Tables']['transcript_chunks']['Row'];
+
+// Embedding cache for common queries
+const embeddingCache = new Map<string, number[]>();
+const CACHE_MAX_SIZE = 100;
+
+// Environment-based configuration
+const DEFAULT_THRESHOLD = parseFloat(process.env.SEARCH_DEFAULT_THRESHOLD || '0.5');
+const ENABLE_HYBRID = process.env.SEARCH_ENABLE_HYBRID !== 'false';
+const ENABLE_QUERY_EXPANSION = process.env.SEARCH_ENABLE_QUERY_EXPANSION !== 'false';
 
 export interface SearchResult {
   id: string;
   recordingId: string;
   recordingTitle: string;
   chunkText: string;
-  similarity: number;
+  /** Similarity score 0-1. null when similarity calculation fails (indicates unknown relevance) */
+  similarity: number | null;
   metadata: {
     source: 'transcript' | 'document';
     transcriptId?: string;
@@ -33,6 +44,32 @@ export interface SearchResult {
     endChar?: number;
   };
   createdAt: string;
+}
+
+/**
+ * Calculate adaptive similarity threshold based on query characteristics
+ *
+ * Short, exploratory queries need lower thresholds for better recall.
+ * Long, specific queries can use higher thresholds for precision.
+ *
+ * @param query - The user's search query
+ * @returns Adjusted similarity threshold (based on DEFAULT_THRESHOLD)
+ */
+function getAdaptiveThreshold(query: string): number {
+  const wordCount = query.trim().split(/\s+/).length;
+
+  // Short queries (< 5 words) - exploratory, need high recall
+  if (wordCount < 5) {
+    return DEFAULT_THRESHOLD;
+  }
+
+  // Medium queries (5-10 words) - balanced approach
+  if (wordCount <= 10) {
+    return Math.min(DEFAULT_THRESHOLD + 0.05, 0.7);
+  }
+
+  // Long, specific queries - can be more precise
+  return Math.min(DEFAULT_THRESHOLD + 0.15, 0.7);
 }
 
 export interface SearchOptions {
@@ -61,6 +98,16 @@ export interface SearchOptions {
   chunksPerDocument?: number;
   /** Enable Cohere reranking for improved relevance (default: false) */
   rerank?: boolean;
+  /** Filter by content types */
+  contentTypes?: ('recording' | 'video' | 'audio' | 'document' | 'text')[];
+  /** Filter by tag IDs */
+  tagIds?: string[];
+  /** Tag filter mode: 'AND' requires all tags, 'OR' requires any tag (default: 'OR') */
+  tagFilterMode?: 'AND' | 'OR';
+  /** Filter by collection ID */
+  collectionId?: string;
+  /** Filter to only show favorited recordings */
+  favoritesOnly?: boolean;
 }
 
 /**
@@ -79,7 +126,7 @@ export async function vectorSearch(
   const {
     orgId,
     limit = 10,
-    threshold = 0.7,
+    threshold,
     recordingIds,
     source,
     dateFrom,
@@ -89,16 +136,54 @@ export async function vectorSearch(
     recencyDecayDays = 30,
     topDocuments,
     chunksPerDocument,
+    contentTypes,
+    tagIds,
+    tagFilterMode = 'OR',
+    collectionId,
+    favoritesOnly = false,
   } = options;
+
+  // Calculate adaptive threshold if not provided
+  const adaptiveThreshold = threshold ?? getAdaptiveThreshold(query);
+  const wordCount = query.trim().split(/\s+/).length;
+
+  // Expand short queries for better recall (if enabled)
+  let processedQuery = query;
+  if (ENABLE_QUERY_EXPANSION && wordCount <= 2) {
+    processedQuery = await expandShortQuery(query, orgId);
+    if (processedQuery !== query) {
+      console.log('[Vector Search] Query expanded:', {
+        original: query,
+        expanded: processedQuery,
+      });
+    }
+  }
+
+  console.log('[Vector Search] Using adaptive threshold:', {
+    query: processedQuery.substring(0, 50),
+    wordCount: wordCount,
+    threshold: adaptiveThreshold,
+  });
+
+  // For short queries, use hybrid search for better results (if enabled)
+  // Skip if already in a hybrid context (prevent infinite recursion)
+  const isHybridContext = (options as any).__isHybridContext === true;
+  if (ENABLE_HYBRID && wordCount < 5 && searchMode === 'standard' && !isHybridContext) {
+    console.log('[Vector Search] Using hybrid search for short query');
+    return await hybridSearch(processedQuery, {
+      ...options,
+      threshold: adaptiveThreshold,
+    });
+  }
 
   // Route to hierarchical search if requested
   if (searchMode === 'hierarchical') {
     const { hierarchicalSearch } = await import('./hierarchical-search');
-    const hierarchicalResults = await hierarchicalSearch(query, {
+    const hierarchicalResults = await hierarchicalSearch(processedQuery, {
       orgId,
       topDocuments: topDocuments || 5,
       chunksPerDocument: chunksPerDocument || 3,
-      threshold,
+      threshold: adaptiveThreshold,
     });
 
     // Fallback to standard search if no hierarchical results found
@@ -106,7 +191,7 @@ export async function vectorSearch(
     if (hierarchicalResults.length === 0) {
       console.log('[Vector Search] No hierarchical results found, falling back to standard search');
       // Recursively call with standard mode
-      return vectorSearch(query, {
+      return vectorSearch(processedQuery, {
         ...options,
         searchMode: 'standard',
       });
@@ -159,14 +244,14 @@ export async function vectorSearch(
 
   // Use recency-biased search if recencyWeight > 0
   if (recencyWeight > 0) {
-    const embedding = await generateQueryEmbedding(query);
+    const embedding = await generateQueryEmbedding(processedQuery);
     const embeddingString = `[${embedding.join(',')}]`;
 
     const { data, error } = await supabase.rpc('search_chunks_with_recency', {
       query_embedding: embeddingString,
       match_org_id: orgId,
       match_count: limit * 2, // Get more for filtering
-      match_threshold: threshold,
+      match_threshold: adaptiveThreshold,
       recency_weight: recencyWeight,
       recency_decay_days: recencyDecayDays,
     });
@@ -212,10 +297,37 @@ export async function vectorSearch(
   }
 
   // Standard flat search (original implementation)
-  const embedding = await generateQueryEmbedding(query);
+  const embedding = await generateQueryEmbedding(processedQuery);
   console.log('[Vector Search] Starting standard search for org:', orgId);
-  console.log('[Vector Search] Query:', query.substring(0, 100));
+  console.log('[Vector Search] Query:', processedQuery.substring(0, 100));
 
+  // For complex filters (tags, collections, favorites), we need to use raw SQL
+  // to ensure proper joins and performance at the database level
+  const needsComplexFilters = (tagIds && tagIds.length > 0) || collectionId || favoritesOnly;
+
+  if (needsComplexFilters) {
+    // Use raw SQL query for complex filtering with proper joins
+    const results = await executeComplexFilteredSearch(
+      embedding,
+      orgId,
+      {
+        recordingIds,
+        source,
+        dateFrom,
+        dateTo,
+        contentTypes,
+        tagIds,
+        tagFilterMode,
+        collectionId,
+        favoritesOnly,
+      },
+      limit * 2 // Get more for similarity filtering
+    );
+
+    return results.slice(0, limit);
+  }
+
+  // Simple query without complex joins
   let dbQuery = supabase
     .from('transcript_chunks')
     .select(
@@ -229,11 +341,14 @@ export async function vectorSearch(
       recordings!inner (
         title,
         created_at,
-        org_id
+        org_id,
+        content_type,
+        deleted_at
       )
     `
     )
     .eq('org_id', orgId)
+    .is('recordings.deleted_at', null) // Exclude trashed items
     .order('created_at', { ascending: false });
 
   // Apply filters
@@ -251,6 +366,11 @@ export async function vectorSearch(
 
   if (dateTo) {
     dbQuery = dbQuery.lte('created_at', dateTo.toISOString());
+  }
+
+  // Filter by content types
+  if (contentTypes && contentTypes.length > 0) {
+    dbQuery = dbQuery.in('recordings.content_type', contentTypes);
   }
 
   // Execute query
@@ -280,9 +400,41 @@ export async function vectorSearch(
   console.log('[Vector Search] ===========================');
 
   // Calculate similarity scores using pgvector
+  console.log('[Vector Search] Pre-filter stats:', {
+    candidatesFound: chunks.length,
+    threshold: adaptiveThreshold,
+    queryWordCount: processedQuery.split(/\s+/).length,
+  });
+
   console.log('[Vector Search] Calculating similarities...');
-  const results = await calculateSimilarities(chunks, embedding, threshold, orgId);
+  const results = await calculateSimilarities(chunks, embedding, adaptiveThreshold, orgId);
   console.log('[Vector Search] Similarity results:', results.length);
+
+  // Calculate statistics
+  const similarities = results.map(r => r.similarity).filter(s => s !== null);
+  const avgSimilarity = similarities.length > 0
+    ? similarities.reduce((a, b) => a + b, 0) / similarities.length
+    : 0;
+  const minSimilarity = Math.min(...similarities);
+  const maxSimilarity = Math.max(...similarities);
+
+  console.log('[Vector Search] Post-filter stats:', {
+    resultsReturned: results.length,
+    averageSimilarity: avgSimilarity.toFixed(3),
+    minSimilarity: minSimilarity.toFixed(3),
+    maxSimilarity: maxSimilarity.toFixed(3),
+    filteredOutCount: chunks.length - results.length,
+  });
+
+  // Alert on zero results
+  if (results.length === 0 && chunks.length > 0) {
+    console.warn('[Vector Search] ⚠️ All chunks filtered out!', {
+      threshold: adaptiveThreshold,
+      candidatesFound: chunks.length,
+      query: processedQuery.substring(0, 50),
+      suggestion: 'Consider lowering threshold or using hybrid search',
+    });
+  }
 
   // Sort by similarity (descending) and limit
   const sortedResults = results
@@ -294,16 +446,300 @@ export async function vectorSearch(
 }
 
 /**
+ * Get eligible recording IDs based on complex filters (tags, collections, favorites)
+ * Encapsulates tag (AND/OR), collection, and favorites filtering logic
+ *
+ * @returns Array of eligible recording IDs, or undefined if no filtering needed
+ */
+async function getEligibleRecordingIds(
+  supabase: ReturnType<typeof supabaseAdmin>,
+  orgId: string,
+  filters: {
+    recordingIds?: string[];
+    tagIds?: string[];
+    tagFilterMode?: 'AND' | 'OR';
+    collectionId?: string;
+    favoritesOnly?: boolean;
+  }
+): Promise<string[] | undefined> {
+  const { recordingIds, tagIds, tagFilterMode = 'OR', collectionId, favoritesOnly } = filters;
+
+  let eligibleRecordingIds = recordingIds ? [...recordingIds] : undefined;
+
+  // Filter by tags
+  if (tagIds && tagIds.length > 0) {
+    const { data: taggedRecordings, error: tagError } = await supabase
+      .from('recording_tags')
+      .select('recording_id')
+      .in('tag_id', tagIds)
+      .eq('org_id', orgId);
+
+    if (tagError) {
+      console.error('[Vector Search] Tag filter error:', tagError);
+      return [];
+    }
+
+    const taggedIds = taggedRecordings?.map(r => r.recording_id) || [];
+
+    if (tagFilterMode === 'AND') {
+      // For AND mode: count how many tags each recording has
+      const recordingTagCounts = taggedIds.reduce((acc, id) => {
+        acc[id] = (acc[id] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Only keep recordings that have ALL the specified tags
+      const fullyTaggedIds = Object.entries(recordingTagCounts)
+        .filter(([_, count]) => count === tagIds.length)
+        .map(([id]) => id);
+
+      eligibleRecordingIds = eligibleRecordingIds
+        ? eligibleRecordingIds.filter(id => fullyTaggedIds.includes(id))
+        : fullyTaggedIds;
+    } else {
+      // For OR mode: recording must have ANY of the tags
+      const uniqueTaggedIds = [...new Set(taggedIds)];
+      eligibleRecordingIds = eligibleRecordingIds
+        ? eligibleRecordingIds.filter(id => uniqueTaggedIds.includes(id))
+        : uniqueTaggedIds;
+    }
+
+    if (eligibleRecordingIds && eligibleRecordingIds.length === 0) {
+      return []; // No recordings match tag filter
+    }
+  }
+
+  // Filter by collection
+  if (collectionId) {
+    const { data: collectionItems, error: collectionError } = await supabase
+      .from('collection_items')
+      .select('item_id')
+      .eq('collection_id', collectionId)
+      .eq('org_id', orgId);
+
+    if (collectionError) {
+      console.error('[Vector Search] Collection filter error:', collectionError);
+      return [];
+    }
+
+    const collectionRecordingIds = collectionItems?.map(i => i.item_id) || [];
+
+    eligibleRecordingIds = eligibleRecordingIds
+      ? eligibleRecordingIds.filter(id => collectionRecordingIds.includes(id))
+      : collectionRecordingIds;
+
+    if (eligibleRecordingIds && eligibleRecordingIds.length === 0) {
+      return []; // No recordings in collection
+    }
+  }
+
+  // Filter by favorites
+  if (favoritesOnly) {
+    const { data: favorites, error: favoritesError } = await supabase
+      .from('favorites')
+      .select('recording_id')
+      .eq('org_id', orgId);
+
+    if (favoritesError) {
+      console.error('[Vector Search] Favorites filter error:', favoritesError);
+      return [];
+    }
+
+    const favoriteRecordingIds = favorites?.map(f => f.recording_id) || [];
+
+    eligibleRecordingIds = eligibleRecordingIds
+      ? eligibleRecordingIds.filter(id => favoriteRecordingIds.includes(id))
+      : favoriteRecordingIds;
+
+    if (eligibleRecordingIds && eligibleRecordingIds.length === 0) {
+      return []; // No favorite recordings
+    }
+  }
+
+  return eligibleRecordingIds;
+}
+
+/**
+ * Execute search with complex filters (tags, collections, favorites)
+ * Fetches eligible recording IDs first, then performs vector search
+ */
+async function executeComplexFilteredSearch(
+  queryEmbedding: number[],
+  orgId: string,
+  filters: {
+    recordingIds?: string[];
+    source?: 'transcript' | 'document';
+    dateFrom?: Date;
+    dateTo?: Date;
+    contentTypes?: string[];
+    tagIds?: string[];
+    tagFilterMode?: 'AND' | 'OR';
+    collectionId?: string;
+    favoritesOnly?: boolean;
+  },
+  limit: number
+): Promise<SearchResult[]> {
+  const supabase = supabaseAdmin;
+  const {
+    recordingIds,
+    source,
+    dateFrom,
+    dateTo,
+    contentTypes,
+    tagIds,
+    tagFilterMode = 'OR',
+    collectionId,
+    favoritesOnly,
+  } = filters;
+
+  // Step 1: Get eligible recording IDs based on complex filters
+  const eligibleRecordingIds = await getEligibleRecordingIds(supabase, orgId, {
+    recordingIds,
+    tagIds,
+    tagFilterMode,
+    collectionId,
+    favoritesOnly,
+  });
+
+  // Short-circuit if no eligible recordings found
+  if (eligibleRecordingIds !== undefined && eligibleRecordingIds.length === 0) {
+    return [];
+  }
+
+  // Step 2: Query chunks for eligible recordings
+  let dbQuery = supabase
+    .from('transcript_chunks')
+    .select(
+      `
+      id,
+      recording_id,
+      chunk_text,
+      metadata,
+      created_at,
+      org_id,
+      recordings!inner (
+        title,
+        created_at,
+        org_id,
+        content_type,
+        deleted_at
+      )
+    `
+    )
+    .eq('org_id', orgId)
+    .is('recordings.deleted_at', null); // Exclude trashed items
+
+  // Apply recording ID filter if we have one
+  if (eligibleRecordingIds && eligibleRecordingIds.length > 0) {
+    dbQuery = dbQuery.in('recording_id', eligibleRecordingIds);
+  }
+
+  // Apply remaining simple filters
+  if (source) {
+    dbQuery = dbQuery.eq('metadata->>source', source);
+  }
+
+  if (dateFrom) {
+    dbQuery = dbQuery.gte('created_at', dateFrom.toISOString());
+  }
+
+  if (dateTo) {
+    dbQuery = dbQuery.lte('created_at', dateTo.toISOString());
+  }
+
+  if (contentTypes && contentTypes.length > 0) {
+    dbQuery = dbQuery.in('recordings.content_type', contentTypes);
+  }
+
+  dbQuery = dbQuery.order('created_at', { ascending: false }).limit(limit);
+
+  const { data: chunks, error } = await dbQuery;
+
+  if (error) {
+    console.error('[Vector Search] Complex filter query error:', error);
+    return [];
+  }
+
+  if (!chunks || chunks.length === 0) {
+    return [];
+  }
+
+  // Create a Set of allowed chunk IDs from our filtered chunks
+  // This ensures we only return chunks that passed our filters (including deleted_at)
+  const allowedChunkIds = new Set(chunks.map((chunk: any) => chunk.id));
+
+  // Step 3: Calculate similarities
+  const embeddingString = `[${queryEmbedding.join(',')}]`;
+  const { data: matches, error: matchError } = await supabase.rpc('match_chunks', {
+    query_embedding: embeddingString,
+    match_threshold: 0.5, // Using lower threshold for complex filtered searches
+    match_count: chunks.length * 2, // Get more results for filtering
+    filter_org_id: orgId,
+  });
+
+  if (matchError) {
+    console.error('[Vector Search] Similarity calculation error:', matchError, matchError.stack);
+    // Return chunks with null similarity to indicate calculation failure
+    return chunks.map((chunk: any) => ({
+      id: chunk.id,
+      recordingId: chunk.recording_id,
+      recordingTitle: chunk.recordings?.title || 'Untitled',
+      chunkText: chunk.chunk_text,
+      similarity: null, // null indicates unknown relevance (calculation failed)
+      metadata: chunk.metadata || {},
+      createdAt: chunk.created_at,
+    }));
+  }
+
+  // Filter match_chunks results to only include chunks from our filtered set
+  // This ensures trashed recordings are excluded
+  return matches
+    .filter((match: any) => allowedChunkIds.has(match.id))
+    .map((match: any) => ({
+      id: match.id,
+      recordingId: match.recording_id,
+      recordingTitle: match.recording_title,
+      chunkText: match.chunk_text,
+      similarity: match.similarity,
+      metadata: match.metadata || {},
+      createdAt: match.created_at,
+    }))
+    .sort((a, b) => {
+      // Handle null similarities: push null values to the end
+      if (a.similarity === null && b.similarity === null) return 0;
+      if (a.similarity === null) return 1;
+      if (b.similarity === null) return -1;
+      return b.similarity - a.similarity;
+    })
+    .slice(0, limit);
+}
+
+/**
  * Generate embedding for search query using fallback strategy
  * Tries Google first, falls back to OpenAI if Google is overloaded
  */
 async function generateQueryEmbedding(query: string): Promise<number[]> {
+  // Check cache first
+  const cacheKey = `${query}:google`;
+  if (embeddingCache.has(cacheKey)) {
+    console.log('[Vector Search] Using cached embedding');
+    return embeddingCache.get(cacheKey)!;
+  }
+
   const { embedding, provider } = await generateEmbeddingWithFallback(
     query,
     'RETRIEVAL_QUERY'
   );
 
   console.log(`[Vector Search] Embedding generated using ${provider}`);
+
+  // Cache the embedding (with LRU eviction)
+  if (embeddingCache.size >= CACHE_MAX_SIZE) {
+    const firstKey = embeddingCache.keys().next().value;
+    embeddingCache.delete(firstKey);
+  }
+  embeddingCache.set(cacheKey, embedding);
+
   return embedding;
 }
 
@@ -319,13 +755,17 @@ async function calculateSimilarities(
   // Use admin client since API route already validates auth
   const supabase = supabaseAdmin;
 
+  // Create a Set of allowed chunk IDs from our filtered chunks
+  // This ensures we only return chunks that passed our filters (including deleted_at)
+  const allowedChunkIds = new Set(chunks.map((chunk) => chunk.id));
+
   // Use pgvector's cosine similarity operator
   const embeddingString = `[${queryEmbedding.join(',')}]`;
 
   const { data, error } = await supabase.rpc('match_chunks', {
     query_embedding: embeddingString,
     match_threshold: threshold,
-    match_count: chunks.length,
+    match_count: chunks.length * 2, // Get more results for filtering
     filter_org_id: orgId, // CRITICAL: Filter by org_id to ensure proper isolation
   });
 
@@ -345,15 +785,19 @@ async function calculateSimilarities(
       .filter((r) => r.similarity >= threshold);
   }
 
-  return data.map((match: any) => ({
-    id: match.id,
-    recordingId: match.recording_id,
-    recordingTitle: match.recording_title,
-    chunkText: match.chunk_text,
-    similarity: match.similarity,
-    metadata: match.metadata || {},
-    createdAt: match.created_at,
-  }));
+  // Filter match_chunks results to only include chunks from our filtered set
+  // This ensures trashed recordings are excluded
+  return data
+    .filter((match: any) => allowedChunkIds.has(match.id))
+    .map((match: any) => ({
+      id: match.id,
+      recordingId: match.recording_id,
+      recordingTitle: match.recording_title,
+      chunkText: match.chunk_text,
+      similarity: match.similarity,
+      metadata: match.metadata || {},
+      createdAt: match.created_at,
+    }));
 }
 
 /**
@@ -415,16 +859,19 @@ export async function hybridSearch(
   const { limit = 10 } = options;
 
   // Perform vector search
+  // IMPORTANT: Set __isHybridContext flag to prevent infinite recursion
   const vectorResults = await vectorSearch(query, {
     ...options,
+    searchMode: 'standard', // Explicitly set to prevent hybrid routing loop
     limit: limit * 2, // Get more results for reranking
-  });
+    __isHybridContext: true, // Internal flag to prevent re-entry
+  } as SearchOptions);
 
   // Perform keyword search
   const keywordResults = await keywordSearch(query, options);
 
   // Merge and rerank results
-  const mergedResults = mergeSearchResults(vectorResults, keywordResults);
+  const mergedResults = mergeSearchResults(vectorResults, keywordResults, query);
 
   return mergedResults.slice(0, limit);
 }
@@ -436,9 +883,36 @@ async function keywordSearch(
   query: string,
   options: SearchOptions
 ): Promise<SearchResult[]> {
-  const { orgId, limit = 10, recordingIds } = options;
+  const {
+    orgId,
+    limit = 10,
+    recordingIds,
+    source,
+    dateFrom,
+    dateTo,
+    contentTypes,
+    tagIds,
+    tagFilterMode = 'OR',
+    collectionId,
+    favoritesOnly = false,
+  } = options;
+
   // Use admin client since API route already validates auth
   const supabase = supabaseAdmin;
+
+  // Get eligible recording IDs based on complex filters
+  const eligibleRecordingIds = await getEligibleRecordingIds(supabase, orgId, {
+    recordingIds,
+    tagIds,
+    tagFilterMode,
+    collectionId,
+    favoritesOnly,
+  });
+
+  // Short-circuit if no eligible recordings found
+  if (eligibleRecordingIds !== undefined && eligibleRecordingIds.length === 0) {
+    return [];
+  }
 
   let dbQuery = supabase
     .from('transcript_chunks')
@@ -450,19 +924,38 @@ async function keywordSearch(
       metadata,
       created_at,
       recordings!inner (
-        title
+        title,
+        content_type,
+        deleted_at
       )
     `
     )
     .eq('org_id', orgId)
+    .is('recordings.deleted_at', null) // Exclude trashed items
     .textSearch('chunk_text', query, {
       type: 'websearch',
       config: 'english',
     })
     .limit(limit);
 
-  if (recordingIds && recordingIds.length > 0) {
-    dbQuery = dbQuery.in('recording_id', recordingIds);
+  if (eligibleRecordingIds && eligibleRecordingIds.length > 0) {
+    dbQuery = dbQuery.in('recording_id', eligibleRecordingIds);
+  }
+
+  if (source) {
+    dbQuery = dbQuery.eq('metadata->>source', source);
+  }
+
+  if (dateFrom) {
+    dbQuery = dbQuery.gte('created_at', dateFrom.toISOString());
+  }
+
+  if (dateTo) {
+    dbQuery = dbQuery.lte('created_at', dateTo.toISOString());
+  }
+
+  if (contentTypes && contentTypes.length > 0) {
+    dbQuery = dbQuery.in('recordings.content_type', contentTypes);
   }
 
   const { data: chunks, error } = await dbQuery;
@@ -487,9 +980,11 @@ async function keywordSearch(
  */
 function mergeSearchResults(
   vectorResults: SearchResult[],
-  keywordResults: SearchResult[]
+  keywordResults: SearchResult[],
+  query: string
 ): SearchResult[] {
   const resultMap = new Map<string, SearchResult>();
+  const queryTerms = query.toLowerCase().split(/\s+/);
 
   // Add vector results
   vectorResults.forEach((result) => {
@@ -507,8 +1002,32 @@ function mergeSearchResults(
     }
   });
 
+  // Apply keyword boosting: if title/text contains query terms, boost score
+  const boostedResults = Array.from(resultMap.values()).map((result) => {
+    let boost = 1.0;
+    const titleLower = result.recordingTitle.toLowerCase();
+    const textLower = result.chunkText.toLowerCase();
+
+    // Check if title or text contains any query terms
+    for (const term of queryTerms) {
+      if (titleLower.includes(term)) {
+        boost *= 1.3; // 30% boost for title match
+      }
+      if (textLower.includes(term)) {
+        boost *= 1.1; // 10% boost for text match
+      }
+    }
+
+    // Apply boost but cap at 1.0
+    if (boost > 1.0) {
+      result.similarity = Math.min(1.0, result.similarity * boost);
+    }
+
+    return result;
+  });
+
   // Convert back to array and sort by similarity
-  return Array.from(resultMap.values()).sort(
+  return boostedResults.sort(
     (a, b) => b.similarity - a.similarity
   );
 }

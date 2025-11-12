@@ -45,8 +45,8 @@ export function DeleteDepartmentModal({
   const [reassignTo, setReassignTo] = useState<string | null>(null);
 
   // Check if department has children
-  const hasChildren = department.children && department.children.length > 0;
-  const hasMembers = department.memberCount && department.memberCount > 0;
+  const hasChildren = Boolean(department.children && department.children.length > 0);
+  const hasMembers = Boolean(department.memberCount && department.memberCount > 0);
 
   // Build flat list of departments excluding the one being deleted and its descendants
   const getDescendantIds = (dept: Department): string[] => {

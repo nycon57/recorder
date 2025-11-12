@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from 'react';
-import { Trash2, Tag, Download, Share2, X, FolderPlus } from 'lucide-react';
+import { Trash2, Tag, Download, Share2, X, FolderPlus, RotateCcw } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
@@ -19,10 +19,13 @@ interface BulkActionsToolbarProps {
   selectedCount: number;
   onClearSelection: () => void;
   onDelete: () => Promise<void>;
+  onRestore?: () => Promise<void>;
+  onPermanentDelete?: () => void;
   onAddTags?: () => void;
   onDownload?: () => Promise<void>;
   onShare?: () => void;
   onAddToCollection?: () => void;
+  mode?: 'active' | 'trash';
   className?: string;
 }
 
@@ -48,15 +51,19 @@ export function BulkActionsToolbar({
   selectedCount,
   onClearSelection,
   onDelete,
+  onRestore,
+  onPermanentDelete,
   onAddTags,
   onDownload,
   onShare,
   onAddToCollection,
+  mode = 'active',
   className,
 }: BulkActionsToolbarProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const handleDelete = async () => {
     try {
@@ -80,6 +87,19 @@ export function BulkActionsToolbar({
       console.error('Download failed:', error);
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!onRestore) return;
+    try {
+      setIsRestoring(true);
+      await onRestore();
+      onClearSelection();
+    } catch (error) {
+      console.error('Restore failed:', error);
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -117,80 +137,112 @@ export function BulkActionsToolbar({
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {/* Delete */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowDeleteDialog(true)}
-            className="h-8 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </Button>
+          {mode === 'trash' ? (
+            <>
+              {/* Restore */}
+              {onRestore && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRestore}
+                  disabled={isRestoring}
+                  className="h-8 gap-2"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  {isRestoring ? 'Restoring...' : 'Restore'}
+                </Button>
+              )}
 
-          {/* Add Tags */}
-          {onAddTags && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onAddTags}
-              className="h-8 gap-2"
-            >
-              <Tag className="h-4 w-4" />
-              Add Tags
-            </Button>
-          )}
+              {/* Permanent Delete */}
+              {onPermanentDelete && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onPermanentDelete}
+                  className="h-8 gap-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Forever
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Move to Trash */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowDeleteDialog(true)}
+                className="h-8 gap-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+              >
+                <Trash2 className="h-4 w-4" />
+                Move to Trash
+              </Button>
 
-          {/* Add to Collection */}
-          {onAddToCollection && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onAddToCollection}
-              className="h-8 gap-2"
-            >
-              <FolderPlus className="h-4 w-4" />
-              Add to Collection
-            </Button>
-          )}
+              {/* Add Tags */}
+              {onAddTags && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onAddTags}
+                  className="h-8 gap-2"
+                >
+                  <Tag className="h-4 w-4" />
+                  Add Tags
+                </Button>
+              )}
 
-          {/* Download */}
-          {onDownload && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDownload}
-              disabled={isDownloading}
-              className="h-8 gap-2"
-            >
-              <Download className="h-4 w-4" />
-              {isDownloading ? 'Downloading...' : 'Download'}
-            </Button>
-          )}
+              {/* Add to Collection */}
+              {onAddToCollection && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onAddToCollection}
+                  className="h-8 gap-2"
+                >
+                  <FolderPlus className="h-4 w-4" />
+                  Add to Collection
+                </Button>
+              )}
 
-          {/* Share */}
-          {onShare && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onShare}
-              className="h-8 gap-2"
-            >
-              <Share2 className="h-4 w-4" />
-              Share
-            </Button>
+              {/* Download */}
+              {onDownload && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDownload}
+                  disabled={isDownloading}
+                  className="h-8 gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  {isDownloading ? 'Downloading...' : 'Download'}
+                </Button>
+              )}
+
+              {/* Share */}
+              {onShare && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onShare}
+                  className="h-8 gap-2"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Move to Trash Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete {selectedCount} {selectedCount === 1 ? 'item' : 'items'}?</DialogTitle>
+            <DialogTitle>Move {selectedCount} {selectedCount === 1 ? 'item' : 'items'} to Trash?</DialogTitle>
             <DialogDescription>
-              This action cannot be undone. This will permanently delete the selected items
-              and all associated data including transcripts, documents, and embeddings.
+              These items will be moved to trash. You can restore them later from the trash page.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -206,7 +258,7 @@ export function BulkActionsToolbar({
               onClick={handleDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? 'Deleting...' : 'Delete'}
+              {isDeleting ? 'Moving to Trash...' : 'Move to Trash'}
             </Button>
           </DialogFooter>
         </DialogContent>

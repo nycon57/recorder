@@ -17,7 +17,10 @@ import {
   FILE_SIZE_LIMIT_LABELS,
 } from '@/lib/types/content';
 import { generateStoragePath } from '@/lib/validations/library';
+import { createLogger } from '@/lib/utils/logger';
 import type { ContentType, FileType, JobType } from '@/lib/types/database';
+
+const logger = createLogger({ service: 'library-upload' });
 
 /**
  * POST /api/library/upload
@@ -73,16 +76,35 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const files = formData.getAll('files') as File[];
 
     if (!files || files.length === 0) {
+      logger.info('No files provided in upload request', {
+        context: { requestId, orgId, userId },
+      });
       return errors.badRequest('No files provided', undefined, requestId);
     }
 
     if (files.length > 10) {
+      logger.warn('Too many files in upload request', {
+        context: { requestId, orgId, userId },
+        data: { fileCount: files.length, maxFiles: 10 },
+      });
       return errors.badRequest(
         'Too many files. Maximum 10 files per request.',
         { maxFiles: 10 },
         requestId
       );
     }
+
+    // Log request start
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+    logger.info('Starting file upload request', {
+      context: { requestId, orgId, userId },
+      data: {
+        fileCount: files.length,
+        totalSizeBytes: totalSize,
+        totalSizeMB: parseFloat((totalSize / 1024 / 1024).toFixed(2)),
+        filenames: files.map(f => f.name),
+      },
+    });
 
     // Process each file
     const uploadResults = await Promise.all(
@@ -139,7 +161,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
             .single();
 
           if (dbError || !recording) {
-            console.error('[Library Upload] Database error:', dbError);
+            logger.error('Database record creation failed', {
+              context: { requestId, orgId, userId, filename: file.name },
+              error: dbError as Error,
+            });
             return {
               index,
               status: 'error' as const,
@@ -147,6 +172,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
               error: 'Failed to create database record',
             };
           }
+
+          logger.info('Database record created', {
+            context: { requestId, orgId, recordingId: recording.id },
+            data: { filename: sanitizedFilename, contentType, fileType, fileSizeBytes: file.size },
+          });
 
           // Generate storage path
           const storagePath = generateStoragePath(
@@ -166,7 +196,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
             });
 
           if (uploadError) {
-            console.error('[Library Upload] Storage error:', uploadError);
+            logger.error('Storage upload failed', {
+              context: { requestId, orgId, recordingId: recording.id, storagePath },
+              error: uploadError as Error,
+            });
 
             // Clean up database record
             await supabaseAdmin
@@ -210,20 +243,37 @@ export const POST = apiHandler(async (request: NextRequest) => {
             })
             .eq('id', recording.id);
 
+          logger.info('File uploaded to storage', {
+            context: { requestId, orgId, recordingId: recording.id },
+            data: { storagePath, fileSizeBytes: file.size },
+          });
+
           // Enqueue processing jobs based on content type
-          const jobTypes = getProcessingJobs(contentType);
+          const jobTypes = getProcessingJobs(contentType, fileType);
           const firstJobType = jobTypes[0];
 
           if (firstJobType) {
+            // Build job payload with correct path field based on job type
+            const jobPayload: any = {
+              recordingId: recording.id,
+              orgId,
+              contentType,
+              fileType,
+            };
+
+            // Add storage path with correct field name for each job type
+            if (firstJobType === 'extract_audio') {
+              jobPayload.videoPath = storagePath;
+            } else if (firstJobType === 'extract_text_pdf') {
+              jobPayload.pdfPath = storagePath;
+            } else if (firstJobType === 'extract_text_docx') {
+              jobPayload.docxPath = storagePath;
+            }
+
             await supabaseAdmin.from('jobs').insert({
               type: firstJobType as JobType,
               status: 'pending',
-              payload: {
-                recordingId: recording.id,
-                orgId,
-                contentType,
-                fileType,
-              },
+              payload: jobPayload,
               run_at: new Date().toISOString(),
             });
 
@@ -243,6 +293,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
               .from('recordings')
               .update({ status: newStatus })
               .eq('id', recording.id);
+
+            logger.info('Processing job enqueued', {
+              context: { requestId, orgId, recordingId: recording.id },
+              data: { jobType: firstJobType, newStatus },
+            });
           }
 
           // Generate signed URL for immediate access
@@ -261,7 +316,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
             uploadUrl: signedUrlData?.signedUrl,
           };
         } catch (error: any) {
-          console.error('[Library Upload] File processing error:', error);
+          logger.error('File processing error', {
+            context: { requestId, orgId, userId, filename: file.name, index },
+            error: error as Error,
+          });
           return {
             index,
             status: 'error' as const,
@@ -276,6 +334,16 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const successful = uploadResults.filter((r) => r.status === 'success').length;
     const failed = uploadResults.filter((r) => r.status === 'error').length;
 
+    logger.info('Upload request completed', {
+      context: { requestId, orgId, userId },
+      data: {
+        total: uploadResults.length,
+        successful,
+        failed,
+        successRate: parseFloat(((successful / uploadResults.length) * 100).toFixed(2)),
+      },
+    });
+
     return successResponse(
       {
         uploads: uploadResults,
@@ -289,7 +357,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
       successful > 0 ? 201 : 400
     );
   } catch (error: any) {
-    console.error('[Library Upload] Request error:', error);
+    logger.error('Upload request error', {
+      context: { requestId, orgId, userId },
+      error: error as Error,
+    });
     return errors.internalError(requestId);
   }
 });

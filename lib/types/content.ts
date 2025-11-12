@@ -5,6 +5,9 @@
 
 import type { ContentType, FileType } from './database';
 
+// Re-export types for convenience
+export type { ContentType, FileType };
+
 /**
  * Content type constants for use throughout the application
  */
@@ -291,7 +294,8 @@ export function requiresTextExtraction(contentType: ContentType): boolean {
  * Helper function to get processing jobs for content type
  */
 export function getProcessingJobs(
-  contentType: ContentType
+  contentType: ContentType,
+  fileType?: FileType
 ): Array<'transcribe' | 'extract_audio' | 'extract_text_pdf' | 'extract_text_docx' | 'process_text_note'> {
   switch (contentType) {
     case 'recording':
@@ -301,8 +305,14 @@ export function getProcessingJobs(
     case 'audio':
       return ['transcribe'];
     case 'document':
-      // Determine PDF vs DOCX based on file type in actual implementation
-      return ['extract_text_pdf']; // or 'extract_text_docx'
+      // Determine PDF vs DOCX based on file type
+      if (fileType === 'pdf') {
+        return ['extract_text_pdf'];
+      } else if (fileType === 'docx' || fileType === 'doc') {
+        return ['extract_text_docx'];
+      }
+      // Default to PDF if fileType not specified (backwards compatibility)
+      return ['extract_text_pdf'];
     case 'text':
       return ['process_text_note'];
     default:

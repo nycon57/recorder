@@ -12,6 +12,9 @@ import { indexRecordingFrames } from '@/lib/services/visual-indexing';
 import { extractFrameText } from '@/lib/services/ocr-service';
 import { createClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger({ service: 'extract-frames' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -53,10 +56,8 @@ export async function handleExtractFrames(
 
   const { recordingId, orgId, videoPath, videoUrl } = payload;
 
-  console.log('[Job: Extract Frames] Starting:', {
-    jobId: job.id,
-    recordingId,
-    orgId,
+  logger.info('Starting frame extraction', {
+    context: { recordingId, orgId, jobId: job.id },
   });
 
   const supabase = createClient();
@@ -76,7 +77,9 @@ export async function handleExtractFrames(
       localVideoPath = videoPath;
     } else if (videoUrl) {
       // Download video from Supabase Storage
-      console.log('[Job: Extract Frames] Downloading video from storage');
+      logger.info('Downloading video from storage', {
+        context: { recordingId, videoUrl },
+      });
       const { data: videoData, error: downloadError } = await supabase.storage
         .from('recordings')
         .download(videoUrl);
@@ -102,7 +105,10 @@ export async function handleExtractFrames(
       quality: parseInt(process.env.FRAME_QUALITY || '85'),
     });
 
-    console.log('[Job: Extract Frames] Extracted:', extraction.totalFrames);
+    logger.info('Frames extracted', {
+      context: { recordingId },
+      data: { totalFrames: extraction.totalFrames },
+    });
 
     // Step 2: Store frame metadata
     const frameRecords = extraction.frames.map((frame) => ({
@@ -128,13 +134,17 @@ export async function handleExtractFrames(
 
     // Step 3: Generate visual descriptions (Gemini Vision)
     if (process.env.ENABLE_FRAME_DESCRIPTIONS !== 'false') {
-      console.log('[Job: Extract Frames] Generating visual descriptions');
+      logger.info('Generating visual descriptions', {
+        context: { recordingId },
+      });
       await indexRecordingFrames(recordingId, orgId);
     }
 
     // Step 4: Extract OCR text (if enabled)
     if (process.env.ENABLE_OCR === 'true') {
-      console.log('[Job: Extract Frames] Extracting OCR text');
+      logger.info('Extracting OCR text', {
+        context: { recordingId },
+      });
       await performOCR(recordingId, orgId, extraction.frames);
     }
 
@@ -148,15 +158,18 @@ export async function handleExtractFrames(
       })
       .eq('id', recordingId);
 
-    console.log('[Job: Extract Frames] Complete:', {
-      recordingId,
-      framesProcessed: extraction.totalFrames,
+    logger.info('Frame extraction complete', {
+      context: { recordingId },
+      data: { framesProcessed: extraction.totalFrames },
     });
 
     // Cleanup temp video file if downloaded
     if (shouldCleanup) {
       await fs.unlink(localVideoPath).catch((err) => {
-        console.warn('[Job: Extract Frames] Failed to cleanup temp video:', err);
+        logger.warn('Failed to cleanup temp video', {
+          context: { recordingId, localVideoPath },
+          error: err as Error,
+        });
       });
     }
 
@@ -171,7 +184,10 @@ export async function handleExtractFrames(
     });
 
   } catch (error) {
-    console.error('[Job: Extract Frames] Error:', error);
+    logger.error('Frame extraction failed', {
+      context: { recordingId, orgId },
+      error: error as Error,
+    });
 
     await supabase
       .from('recordings')
@@ -192,7 +208,10 @@ async function performOCR(
 ): Promise<void> {
   const supabase = createClient();
 
-  console.log(`[OCR] Processing ${frames.length} frames for recording ${recordingId}`);
+  logger.info('Starting OCR processing', {
+    context: { recordingId, orgId },
+    data: { totalFrames: frames.length },
+  });
 
   // Get frames from database
   const { data: dbFrames, error: fetchError } = await supabase
@@ -203,7 +222,10 @@ async function performOCR(
     .order('frame_number');
 
   if (fetchError || !dbFrames) {
-    console.error('[OCR] Failed to fetch frames:', fetchError);
+    logger.error('Failed to fetch frames for OCR', {
+      context: { recordingId, orgId },
+      error: fetchError as Error,
+    });
     return;
   }
 
@@ -221,7 +243,9 @@ async function performOCR(
             .download(dbFrame.frame_url);
 
           if (!imageData) {
-            console.warn('[OCR] Frame not found:', dbFrame.id);
+            logger.warn('Frame not found for OCR', {
+              context: { frameId: dbFrame.id, recordingId },
+            });
             return;
           }
 
@@ -244,17 +268,26 @@ async function performOCR(
               })
               .eq('id', dbFrame.id);
 
-            console.log(`[OCR] Extracted text from frame ${dbFrame.frame_number}: ${ocrResult.text.substring(0, 50)}...`);
+            logger.info('OCR text extracted from frame', {
+              context: { frameId: dbFrame.id, frameNumber: dbFrame.frame_number, recordingId },
+              data: { textLength: ocrResult.text.length, confidence: ocrResult.confidence },
+            });
           }
 
           // Cleanup temp file
           await fs.unlink(tempPath).catch(() => {});
         } catch (error) {
-          console.error(`[OCR] Error processing frame ${dbFrame.id}:`, error);
+          logger.error('OCR processing failed for frame', {
+            context: { frameId: dbFrame.id, recordingId },
+            error: error as Error,
+          });
         }
       })
     );
   }
 
-  console.log(`[OCR] Complete for recording ${recordingId}`);
+  logger.info('OCR processing complete', {
+    context: { recordingId, orgId },
+    data: { totalFrames: dbFrames.length },
+  });
 }

@@ -58,7 +58,7 @@ export default function BillingSettingsPage() {
   return (
     <div className="max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Billing & Subscription</h1>
+        <h1 className="text-3xl font-normal mb-2">Billing & Subscription</h1>
         <p className="text-muted-foreground">
           Manage your subscription, billing information, and usage
         </p>

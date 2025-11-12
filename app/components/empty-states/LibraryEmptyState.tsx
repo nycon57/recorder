@@ -12,7 +12,14 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
-import { Card } from '@/app/components/ui/card';
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from '@/app/components/ui/empty';
 import UploadModal from '@/app/components/upload/UploadModal';
 
 /**
@@ -25,6 +32,8 @@ import UploadModal from '@/app/components/upload/UploadModal';
  * - Clear call-to-action buttons
  * - Multiple entry points (Record, Upload, Create Note)
  * - Helpful tips and supported formats
+ *
+ * @refactored - Now uses @shadcn/empty as foundation
  */
 interface LibraryEmptyStateProps {
   onUploadComplete?: () => void;
@@ -43,7 +52,6 @@ export function LibraryEmptyState({ onUploadComplete }: LibraryEmptyStateProps) 
   };
 
   const handleCreateNoteClick = () => {
-    // Navigate to create note or open modal
     router.push('/library?action=create-note');
   };
 
@@ -54,34 +62,34 @@ export function LibraryEmptyState({ onUploadComplete }: LibraryEmptyStateProps) 
 
   return (
     <>
-      <Card className="border-dashed border-2">
-        <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-          {/* Icon */}
-          <div className="relative mb-6">
+      <Empty className="border-2 py-16">
+        <EmptyHeader>
+          {/* Icon with sparkle decoration */}
+          <EmptyMedia className="relative mb-2">
             <div className="inline-flex items-center justify-center rounded-full bg-primary/10 p-6">
               <FolderOpen className="size-16 text-primary" />
             </div>
-            {/* Sparkle decoration */}
             <div className="absolute -top-2 -right-2">
               <Sparkles className="size-8 text-yellow-500 fill-yellow-500" />
             </div>
-          </div>
+          </EmptyMedia>
 
-          {/* Heading */}
-          <h3 className="text-3xl font-bold mb-3">
+          <EmptyTitle className="text-3xl mb-3">
             Your Knowledge Library Awaits
-          </h3>
+          </EmptyTitle>
 
-          <p className="text-muted-foreground text-lg mb-4 max-w-md">
+          <EmptyDescription className="text-lg mb-2 max-w-md">
             Start building your personal knowledge base with recordings, videos, audio, documents, and notes.
-          </p>
+          </EmptyDescription>
 
-          <p className="text-sm text-muted-foreground mb-8 max-w-lg">
+          <EmptyDescription className="text-sm mb-6 max-w-lg">
             Everything you create is automatically transcribed, searchable, and organized in one place.
-          </p>
+          </EmptyDescription>
+        </EmptyHeader>
 
+        <EmptyContent className="max-w-3xl">
           {/* Primary Actions */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-8">
+          <div className="flex flex-col sm:flex-row gap-3">
             <Button
               size="lg"
               onClick={handleRecordClick}
@@ -112,7 +120,7 @@ export function LibraryEmptyState({ onUploadComplete }: LibraryEmptyStateProps) 
           </div>
 
           {/* Features Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8 pt-8 border-t w-full max-w-3xl">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8 pt-8 border-t w-full">
             <div className="text-center space-y-2">
               <div className="inline-flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30 p-3 mb-2">
                 <Video className="size-6 text-blue-600 dark:text-blue-400" />
@@ -150,8 +158,8 @@ export function LibraryEmptyState({ onUploadComplete }: LibraryEmptyStateProps) 
               <strong>File size limits:</strong> Video (500MB), Audio (100MB), Documents (50MB), Text (1MB)
             </p>
           </div>
-        </div>
-      </Card>
+        </EmptyContent>
+      </Empty>
 
       {/* Upload Modal */}
       <UploadModal

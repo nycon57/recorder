@@ -4,7 +4,7 @@
  */
 
 // Organization - Members
-export { MemberTable } from './organization/members/MemberTable';
+export { MemberDataTable } from './organization/members/MemberDataTable';
 export { MemberFilters } from './organization/members/MemberFilters';
 export { MemberRowActions } from './organization/members/MemberRowActions';
 export { MemberDetailDrawer } from './organization/members/MemberDetailDrawer';

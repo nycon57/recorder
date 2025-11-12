@@ -16,8 +16,12 @@ export const GET = apiHandler(
     const supabase = await createClient();
     const { id } = await params;
 
+    // Check for includeDeleted flag (for trash view)
+    const url = new URL(request.url);
+    const includeDeleted = url.searchParams.get('includeDeleted') === 'true';
+
     // Fetch recording with related data
-    const { data: recording, error } = await supabase
+    let query = supabase
       .from('recordings')
       .select(
         `
@@ -27,8 +31,14 @@ export const GET = apiHandler(
     `
       )
       .eq('id', id)
-      .eq('org_id', orgId)
-      .single();
+      .eq('org_id', orgId);
+
+    // Filter out soft-deleted items unless explicitly requested
+    if (!includeDeleted) {
+      query = query.is('deleted_at', null);
+    }
+
+    const { data: recording, error } = await query.single();
 
     if (error || !recording) {
       return errors.notFound('Recording');
@@ -95,58 +105,128 @@ export const PUT = apiHandler(
       return errors.notFound('Recording');
     }
 
+    // PERFORMANCE OPTIMIZATION: Invalidate stats cache when content is updated
+    const { CacheInvalidation } = await import('@/lib/services/cache');
+    await CacheInvalidation.invalidateContent(orgId);
+
     return successResponse(recording);
   }
 );
 
-// DELETE /api/recordings/[id] - Delete a recording
+// DELETE /api/recordings/[id] - Delete a recording (soft delete by default)
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId } = await requireOrg();
-    // Use admin client to bypass RLS - auth already validated via requireOrg()
+    const { orgId, userId } = await requireOrg();
     const supabase = supabaseAdmin;
     const { id } = await params;
 
-    console.log('[DELETE Recording] Attempting to delete:', { id, orgId });
+    // Check for permanent delete flag in query params
+    const url = new URL(request.url);
+    const permanent = url.searchParams.get('permanent') === 'true';
+    const reason = url.searchParams.get('reason') || undefined;
+
+    console.log('[DELETE Recording] Attempting delete:', { id, orgId, permanent, reason });
 
     // Check if recording exists and belongs to org
     const { data: recording, error: fetchError } = await supabase
       .from('recordings')
-      .select('storage_path_raw, storage_path_processed')
+      .select('storage_path_raw, storage_path_processed, deleted_at')
       .eq('id', id)
       .eq('org_id', orgId)
       .single();
-
-    console.log('[DELETE Recording] Query result:', { recording, fetchError });
 
     if (!recording) {
       console.log('[DELETE Recording] Recording not found');
       return errors.notFound('Recording');
     }
 
-    // Delete storage files
-    const filesToDelete = [
-      recording.storage_path_raw,
-      recording.storage_path_processed,
-    ].filter(Boolean);
+    // Permanent delete (hard delete with CASCADE)
+    if (permanent) {
+      // Enforce that permanent deletions are only allowed on trashed items
+      if (!recording.deleted_at) {
+        console.log('[DELETE Recording] Permanent delete attempted on non-trashed item:', id);
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: 'Permanent deletion is only allowed for items in trash. Move to trash first.',
+              code: 'NOT_IN_TRASH',
+            },
+          }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      }
 
-    if (filesToDelete.length > 0) {
-      await supabase.storage.from('recordings').remove(filesToDelete);
+      console.log('[DELETE Recording] Performing permanent delete');
+
+      // Delete storage files
+      const filesToDelete = [
+        recording.storage_path_raw,
+        recording.storage_path_processed,
+      ].filter(Boolean);
+
+      if (filesToDelete.length > 0) {
+        await supabase.storage.from('recordings').remove(filesToDelete);
+      }
+
+      // Delete database record (cascades to transcripts, documents, chunks)
+      const { error } = await supabase
+        .from('recordings')
+        .delete()
+        .eq('id', id)
+        .eq('org_id', orgId);
+
+      if (error) {
+        console.error('[DELETE Recording] Error in permanent delete:', error);
+        return errors.internalError();
+      }
+
+      console.log('[DELETE Recording] Permanently deleted:', id);
+
+      // PERFORMANCE OPTIMIZATION: Invalidate stats cache
+      const { CacheInvalidation } = await import('@/lib/services/cache');
+      await CacheInvalidation.invalidateContent(orgId);
+
+      return successResponse({
+        success: true,
+        message: 'Recording permanently deleted',
+        permanent: true
+      });
     }
 
-    // Delete database record (cascades to transcripts, documents, chunks)
+    // Soft delete (default)
+    console.log('[DELETE Recording] Performing soft delete');
+
     const { error } = await supabase
       .from('recordings')
-      .delete()
+      .update({
+        deleted_at: new Date().toISOString(),
+        deleted_by: userId,
+        deletion_reason: reason,
+      })
       .eq('id', id)
       .eq('org_id', orgId);
 
     if (error) {
-      console.error('Error deleting recording:', error);
+      console.error('[DELETE Recording] Error in soft delete:', error);
       return errors.internalError();
     }
 
-    console.log('[DELETE Recording] Successfully deleted recording:', id);
-    return successResponse({ success: true, message: 'Recording deleted successfully' });
+    console.log('[DELETE Recording] Soft deleted:', id);
+
+    // PERFORMANCE OPTIMIZATION: Invalidate stats cache
+    const { CacheInvalidation } = await import('@/lib/services/cache');
+    await CacheInvalidation.invalidateContent(orgId);
+
+    return successResponse({
+      success: true,
+      message: 'Recording moved to trash',
+      permanent: false,
+      canRestore: true
+    });
   }
 );

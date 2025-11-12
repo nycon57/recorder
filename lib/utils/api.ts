@@ -4,6 +4,7 @@ import { auth } from '@clerk/nextjs/server';
 import type { ApiError, ApiSuccess } from '@/lib/validations/api';
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { UserCache } from '@/lib/services/cache';
 
 // Generate request ID for tracing
 export function generateRequestId(): string {
@@ -140,7 +141,27 @@ export async function requireOrg() {
     throw new Error('Organization context required');
   }
 
-  // Use admin client to bypass RLS for user lookup
+  // PERFORMANCE OPTIMIZATION: Check cache first to avoid an extra DB query
+  let cachedUser;
+  try {
+    cachedUser = await UserCache.get(user.userId);
+  } catch (error) {
+    // Log cache read error but continue to DB fallback
+    console.warn('[requireOrg] Cache read error:', error);
+  }
+
+  if (cachedUser) {
+    // Cache hit - return cached user data
+    return {
+      userId: cachedUser.id,
+      clerkUserId: cachedUser.clerkUserId,
+      orgId: cachedUser.orgId,
+      role: cachedUser.role,
+      clerkOrgId: user.orgId,
+    };
+  }
+
+  // Cache miss - fetch from database
   const supabase = supabaseAdmin;
 
   // Look up the user by clerk_id (users.clerk_id = Clerk user ID)
@@ -156,6 +177,21 @@ export async function requireOrg() {
   } else if (error) {
     console.error('[requireOrg] Error fetching user org:', error);
     throw new Error('User organization not found');
+  }
+
+  // Cache the user data for 5 minutes (best effort - don't fail request on cache errors)
+  try {
+    await UserCache.set(user.userId, {
+      id: userData!.id,
+      clerkUserId: user.userId,
+      orgId: userData!.org_id,
+      role: userData!.role,
+      email: userData!.email,
+      name: userData!.name,
+    });
+  } catch (error) {
+    // Log cache write error but don't fail the request
+    console.warn('[requireOrg] Cache write error:', error);
   }
 
   return {

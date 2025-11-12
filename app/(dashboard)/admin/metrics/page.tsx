@@ -111,7 +111,7 @@ export default function AdminMetricsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">System Metrics</h1>
+          <h1 className="text-3xl font-normal">System Metrics</h1>
           <p className="text-muted-foreground">Real-time performance monitoring</p>
         </div>
 

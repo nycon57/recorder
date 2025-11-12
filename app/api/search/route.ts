@@ -83,6 +83,11 @@ export const POST = withRateLimit(
     audioWeight,
     visualWeight,
     includeOcr,
+    contentTypes,
+    tagIds,
+    tagFilterMode,
+    collectionId,
+    favoritesOnly,
   } = body as SearchBody;
 
   // Handle multimodal search mode
@@ -105,6 +110,11 @@ export const POST = withRateLimit(
         includeOcr: includeOcr ?? true,
         dateFrom: dateFrom ? new Date(dateFrom) : undefined,
         dateTo: dateTo ? new Date(dateTo) : undefined,
+        contentTypes,
+        tagIds,
+        tagFilterMode,
+        collectionId,
+        favoritesOnly,
       });
 
       const latencyMs = Date.now() - startTime;
@@ -117,7 +127,7 @@ export const POST = withRateLimit(
         latencyMs,
         cacheHit: false,
         cacheLayer: 'none',
-        filters: { recordingIds, source, dateFrom, dateTo },
+        filters: { recordingIds, source, dateFrom, dateTo, contentTypes, tagIds, collectionId, favoritesOnly },
         orgId,
         userId,
       }).catch((error) => console.error('[Search API] Analytics tracking failed:', error));
@@ -147,6 +157,11 @@ export const POST = withRateLimit(
       enableReranking: rerank,
       chunksPerQuery: Math.ceil(limit * 1.5),
       recordingIds,
+      contentTypes,
+      tagIds,
+      tagFilterMode,
+      collectionId,
+      favoritesOnly,
       logResults: true,
     });
 
@@ -160,7 +175,7 @@ export const POST = withRateLimit(
       latencyMs,
       cacheHit: false,
       cacheLayer: 'none',
-      filters: { recordingIds, maxIterations, enableSelfReflection },
+      filters: { recordingIds, maxIterations, enableSelfReflection, contentTypes, tagIds, collectionId, favoritesOnly },
       orgId,
       userId,
     }).catch((error) => console.error('[Search API] Analytics tracking failed:', error));
@@ -195,6 +210,11 @@ export const POST = withRateLimit(
     source,
     dateFrom: dateFrom ? new Date(dateFrom) : undefined,
     dateTo: dateTo ? new Date(dateTo) : undefined,
+    contentTypes,
+    tagIds,
+    tagFilterMode,
+    collectionId,
+    favoritesOnly,
   };
 
   // Multi-layer cache with 5-minute TTL
@@ -208,6 +228,10 @@ export const POST = withRateLimit(
     limit,
     threshold,
     rerank,
+    contentTypes,
+    tagIds,
+    collectionId,
+    favoritesOnly,
   })}`;
 
   let cacheHit = false;
@@ -277,7 +301,7 @@ export const POST = withRateLimit(
     latencyMs,
     cacheHit,
     cacheLayer,
-    filters: { recordingIds, source, dateFrom, dateTo, rerank },
+    filters: { recordingIds, source, dateFrom, dateTo, rerank, contentTypes, tagIds, collectionId, favoritesOnly },
     orgId,
     userId,
   }).catch((error) => console.error('[Search API] Analytics tracking failed:', error));

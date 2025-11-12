@@ -14,6 +14,9 @@ import {
   type SimilarityConfig,
 } from '@/lib/services/similarity-detector';
 import type { StorageProvider } from '@/lib/types/database';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger({ service: 'detect-similarity' });
 
 /**
  * Job payload for single recording similarity detection
@@ -48,7 +51,9 @@ export async function handleDetectSimilarity(
 }> {
   const { recordingId, orgId, storagePath, storageProvider, config } = payload;
 
-  console.log(`[DetectSimilarity] Processing recording ${recordingId}`);
+  logger.info('Starting similarity detection', {
+    context: { recordingId, orgId, storagePath, storageProvider },
+  });
 
   try {
     // 1. Calculate perceptual hash
@@ -91,9 +96,10 @@ export async function handleDetectSimilarity(
       }
     }
 
-    console.log(
-      `[DetectSimilarity] Completed: ${matches.length} similar recordings found for ${recordingId}`
-    );
+    logger.info('Similarity detection complete', {
+      context: { recordingId, orgId },
+      data: { matchesFound: matches.length },
+    });
 
     return {
       success: true,
@@ -101,7 +107,10 @@ export async function handleDetectSimilarity(
       matchesFound: matches.length,
     };
   } catch (error) {
-    console.error('[DetectSimilarity] Error:', error);
+    logger.error('Similarity detection failed', {
+      context: { recordingId, orgId },
+      error: error as Error,
+    });
     return {
       success: false,
       processed: false,
@@ -124,21 +133,28 @@ export async function handleBatchDetectSimilarity(
 }> {
   const { orgId, batchSize = 50, config } = payload;
 
-  console.log(`[BatchDetectSimilarity] Starting batch processing for org ${orgId}`);
+  logger.info('Starting batch similarity detection', {
+    context: { orgId },
+    data: { batchSize },
+  });
 
   try {
     const result = await batchProcessSimilarity(orgId, batchSize);
 
-    console.log(
-      `[BatchDetectSimilarity] Processed ${result.processed} recordings, found ${result.matches} similar pairs`
-    );
+    logger.info('Batch similarity detection complete', {
+      context: { orgId },
+      data: { processed: result.processed, matches: result.matches },
+    });
 
     return {
       success: true,
       ...result,
     };
   } catch (error) {
-    console.error('[BatchDetectSimilarity] Error:', error);
+    logger.error('Batch similarity detection failed', {
+      context: { orgId },
+      error: error as Error,
+    });
     return {
       success: false,
       processed: 0,
@@ -162,7 +178,9 @@ export async function scheduleSimilarityForAll(
 }> {
   const supabase = createClient();
 
-  console.log('[ScheduleSimilarity] Starting organization-wide similarity detection');
+  logger.info('Starting organization-wide similarity detection', {
+    context: { batchSizePerOrg },
+  });
 
   try {
     // Get all active organizations
@@ -201,19 +219,27 @@ export async function scheduleSimilarityForAll(
           errors.push(...result.errors.map((e) => `${org.name}: ${e}`));
         }
 
-        console.log(
-          `[ScheduleSimilarity] ${org.name}: ${result.processed} processed, ${result.matches} matches found`
-        );
+        logger.info('Organization processing complete', {
+          context: { orgId: org.id, orgName: org.name },
+          data: { processed: result.processed, matches: result.matches },
+        });
       } catch (error) {
         const errorMsg = `${org.name}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         errors.push(errorMsg);
-        console.error('[ScheduleSimilarity]', errorMsg);
+        logger.error('Organization processing failed', {
+          context: { orgId: org.id, orgName: org.name },
+          error: error as Error,
+        });
       }
     }
 
-    console.log(
-      `[ScheduleSimilarity] Completed: ${organizations.length} orgs, ${totalProcessed} recordings, ${totalMatches} similarity pairs found`
-    );
+    logger.info('Organization-wide similarity detection complete', {
+      data: {
+        organizations: organizations.length,
+        totalProcessed,
+        totalMatches,
+      },
+    });
 
     return {
       success: true,
@@ -223,7 +249,9 @@ export async function scheduleSimilarityForAll(
       errors,
     };
   } catch (error) {
-    console.error('[ScheduleSimilarity] Fatal error:', error);
+    logger.error('Organization-wide similarity detection failed', {
+      error: error as Error,
+    });
     return {
       success: false,
       organizations: 0,
@@ -316,7 +344,10 @@ export async function getSimilarityAnalytics(orgId: string): Promise<{
       },
     };
   } catch (error) {
-    console.error('[SimilarityAnalytics] Error:', error);
+    logger.error('Failed to get similarity analytics', {
+      context: { orgId },
+      error: error as Error,
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get analytics',

@@ -8,7 +8,7 @@ import {
   parseBody,
   parseSearchParams,
 } from '@/lib/utils/api';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/admin';
 import {
   createTagSchema,
   listTagsQuerySchema,
@@ -31,6 +31,35 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
   const query = parseSearchParams<ListTagsQueryInput>(request, listTagsQuerySchema);
   const supabase = await createClient();
+
+  // PERFORMANCE OPTIMIZATION: Check cache for simple tag list requests
+  // Only cache when no search/sort filters and includeUsageCount is true
+  const isCacheable = !query.search && query.sort === 'name_asc' && query.includeUsageCount;
+
+  if (isCacheable) {
+    const { TagsCache, CacheControlHeaders, generateETag } = await import('@/lib/services/cache');
+    const cachedTags = await TagsCache.get(orgId);
+
+    if (cachedTags) {
+      // Apply pagination to cached results
+      const paginatedTags = cachedTags.slice(query.offset, query.offset + query.limit);
+
+      const response = successResponse({
+        tags: paginatedTags,
+        pagination: {
+          limit: query.limit,
+          offset: query.offset,
+          total: cachedTags.length,
+        },
+      });
+
+      response.headers.set('Cache-Control', CacheControlHeaders.metadata);
+      response.headers.set('ETag', generateETag(paginatedTags));
+      response.headers.set('X-Cache', 'HIT');
+
+      return response;
+    }
+  }
 
   let tagsQuery = supabase
     .from('tags')
@@ -106,7 +135,14 @@ export const GET = apiHandler(async (request: NextRequest) => {
     }
   }
 
-  return successResponse({
+  // PERFORMANCE OPTIMIZATION: Cache simple tag list responses
+  if (isCacheable && tagsWithCounts.length > 0) {
+    const { TagsCache } = await import('@/lib/services/cache');
+    await TagsCache.set(orgId, tagsWithCounts);
+  }
+
+  const { CacheControlHeaders, generateETag } = await import('@/lib/services/cache');
+  const response = successResponse({
     tags: tagsWithCounts,
     pagination: {
       limit: query.limit,
@@ -114,6 +150,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
       total: tags?.length || 0, // This is approximate, for exact count we'd need a separate query
     },
   });
+
+  response.headers.set('Cache-Control', CacheControlHeaders.metadata);
+  response.headers.set('ETag', generateETag(tagsWithCounts));
+  response.headers.set('X-Cache', isCacheable ? 'MISS' : 'BYPASS');
+
+  return response;
 });
 
 /**
@@ -165,6 +207,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
     throw new Error('Failed to create tag');
   }
+
+  // PERFORMANCE OPTIMIZATION: Invalidate tags cache
+  const { CacheInvalidation } = await import('@/lib/services/cache');
+  await CacheInvalidation.invalidateTags(orgId);
 
   return successResponse(newTag, undefined, 201);
 });

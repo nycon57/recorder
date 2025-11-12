@@ -167,22 +167,53 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
    */
   const updateMessage = useCallback(
     (messageId: string, updates: Partial<ExtendedMessage>) => {
-      setState((prev) => ({
-        ...prev,
-        conversations: prev.conversations.map((c) => {
-          const containsMessage = c.messages.some((m) => m.id === messageId);
-          if (containsMessage) {
-            return {
-              ...c,
-              messages: c.messages.map((m) =>
-                m.id === messageId ? { ...m, ...updates } : m
-              ),
-              updatedAt: new Date(),
-            };
-          }
-          return c;
-        }),
-      }));
+      console.log('[ConversationStore] updateMessage called:', {
+        messageId,
+        updates,
+        hasMetadata: !!updates.metadata,
+        hasSourceKey: !!(updates.metadata as any)?.custom?.sourceKey,
+      });
+
+      setState((prev) => {
+        const newState = {
+          ...prev,
+          conversations: prev.conversations.map((c) => {
+            const containsMessage = c.messages.some((m) => m.id === messageId);
+            if (containsMessage) {
+              const updatedMessages = c.messages.map((m) => {
+                if (m.id === messageId) {
+                  const updatedMessage = { ...m, ...updates };
+                  console.log('[ConversationStore] Message updated:', {
+                    messageId,
+                    before: {
+                      hasSources: !!m.sources,
+                      hasMetadata: !!m.metadata,
+                      hasSourceKey: !!(m.metadata as any)?.custom?.sourceKey,
+                    },
+                    after: {
+                      hasSources: !!updatedMessage.sources,
+                      hasMetadata: !!updatedMessage.metadata,
+                      hasSourceKey: !!(updatedMessage.metadata as any)?.custom?.sourceKey,
+                      sourceKey: (updatedMessage.metadata as any)?.custom?.sourceKey,
+                    },
+                  });
+                  return updatedMessage;
+                }
+                return m;
+              });
+
+              return {
+                ...c,
+                messages: updatedMessages,
+                updatedAt: new Date(),
+              };
+            }
+            return c;
+          }),
+        };
+
+        return newState;
+      });
     },
     []
   );

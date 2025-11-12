@@ -16,6 +16,7 @@ import {
   MultimodalSearchResult,
   MultimodalSearchMode,
 } from '@/lib/types/video-frames';
+import { vectorSearch } from './vector-search-google';
 
 /**
  * Check if visual search is enabled
@@ -84,6 +85,7 @@ export async function visualSearch(
     FROM video_frames vf
     INNER JOIN recordings r ON vf.recording_id = r.id
     WHERE vf.org_id = $2
+      AND r.deleted_at IS NULL
       AND vf.visual_embedding IS NOT NULL
       AND 1 - (vf.visual_embedding <=> $1::vector) >= $3
   `;
@@ -201,6 +203,11 @@ export async function multimodalSearch(
     includeOcr = true,
     dateFrom,
     dateTo,
+    contentTypes,
+    tagIds,
+    tagFilterMode,
+    collectionId,
+    favoritesOnly,
   } = options;
 
   // Validate weights sum to 1
@@ -222,6 +229,11 @@ export async function multimodalSearch(
     recordingIds,
     dateFrom,
     dateTo,
+    contentTypes,
+    tagIds,
+    tagFilterMode,
+    collectionId,
+    favoritesOnly,
   });
 
   let visualResults: VisualSearchResult[] = [];
@@ -290,70 +302,52 @@ async function searchTranscriptChunks(
     recordingIds?: string[];
     dateFrom?: Date;
     dateTo?: Date;
+    contentTypes?: ('recording' | 'video' | 'audio' | 'document' | 'text')[];
+    tagIds?: string[];
+    tagFilterMode?: 'AND' | 'OR';
+    collectionId?: string;
+    favoritesOnly?: boolean;
   }
 ) {
-  const { orgId, limit, threshold, recordingIds, dateFrom, dateTo } = options;
-
-  const queryEmbedding = await generateEmbedding(query);
-
-  let sql = `
-    SELECT
-      tc.id,
-      tc.recording_id,
-      tc.chunk_text,
-      tc.start_time_sec,
-      tc.end_time_sec,
-      tc.metadata,
-      1 - (tc.embedding <=> $1::vector) as similarity
-    FROM transcript_chunks tc
-    INNER JOIN recordings r ON tc.recording_id = r.id
-    WHERE tc.org_id = $2
-      AND tc.embedding IS NOT NULL
-      AND 1 - (tc.embedding <=> $1::vector) >= $3
-  `;
-
-  const params: any[] = [
-    `[${queryEmbedding.join(',')}]`,
+  const {
     orgId,
+    limit,
     threshold,
-  ];
-  let paramIndex = 4;
+    recordingIds,
+    dateFrom,
+    dateTo,
+    contentTypes,
+    tagIds,
+    tagFilterMode,
+    collectionId,
+    favoritesOnly,
+  } = options;
 
-  if (recordingIds && recordingIds.length > 0) {
-    sql += ` AND tc.recording_id = ANY($${paramIndex}::uuid[])`;
-    params.push(recordingIds);
-    paramIndex++;
-  }
-
-  if (dateFrom) {
-    sql += ` AND r.created_at >= $${paramIndex}`;
-    params.push(dateFrom.toISOString());
-    paramIndex++;
-  }
-
-  if (dateTo) {
-    sql += ` AND r.created_at <= $${paramIndex}`;
-    params.push(dateTo.toISOString());
-    paramIndex++;
-  }
-
-  sql += `
-    ORDER BY similarity DESC
-    LIMIT $${paramIndex}
-  `;
-  params.push(limit);
-
-  const { data, error } = await supabaseAdmin.rpc('exec_sql' as any, {
-    sql,
-    params,
+  // Use vectorSearch for consistent filtering logic
+  const results = await vectorSearch(query, {
+    orgId,
+    limit,
+    threshold,
+    recordingIds,
+    dateFrom,
+    dateTo,
+    contentTypes,
+    tagIds,
+    tagFilterMode,
+    collectionId,
+    favoritesOnly,
   });
 
-  if (error) {
-    console.error('[searchTranscriptChunks] Error:', error);
-    throw new Error(`Transcript search failed: ${error.message}`);
-  }
-
-  return data || [];
+  // Map to multimodal format
+  return results.map((result) => ({
+    id: result.id,
+    recording_id: result.recordingId,
+    chunk_text: result.chunkText,
+    start_time_sec: result.metadata.startTime,
+    end_time_sec: result.metadata.endTime,
+    metadata: result.metadata,
+    similarity: result.similarity,
+  }));
 }
 
 /**

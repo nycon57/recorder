@@ -1,6 +1,6 @@
 'use client';
 
-import { SignedIn, SignedOut, SignInButton, SignUpButton } from '@clerk/nextjs';
+import { SignedIn, SignedOut } from '@clerk/nextjs';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
@@ -79,29 +79,27 @@ export default function Navbar() {
             {/* Desktop Auth Buttons */}
             <div className="hidden items-center gap-3 lg:flex">
               <SignedOut>
-                <SignInButton mode="modal">
-                  <button
-                    className={cn(
-                      'rounded-lg border border-border px-4 py-2',
-                      'text-body-sm-medium text-foreground',
-                      'transition-all hover:border-border/80 hover:bg-muted',
-                    )}
-                  >
-                    Sign In
-                  </button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button
-                    className={cn(
-                      'rounded-lg bg-primary px-4 py-2',
-                      'text-body-sm-medium text-primary-foreground',
-                      'transition-all hover:bg-primary/90',
-                      'shadow-sm hover:shadow-md',
-                    )}
-                  >
-                    Get Started
-                  </button>
-                </SignUpButton>
+                <Link
+                  href="/sign-in"
+                  className={cn(
+                    'rounded-lg border border-border px-4 py-2',
+                    'text-body-sm-medium text-foreground',
+                    'transition-all hover:border-border/80 hover:bg-muted',
+                  )}
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className={cn(
+                    'rounded-lg bg-primary px-4 py-2',
+                    'text-body-sm-medium text-primary-foreground',
+                    'transition-all hover:bg-primary/90',
+                    'shadow-sm hover:shadow-md',
+                  )}
+                >
+                  Get Started
+                </Link>
               </SignedOut>
               <SignedIn>
                 <Link
@@ -188,31 +186,29 @@ export default function Navbar() {
             {/* Mobile Auth Buttons */}
             <div className="flex flex-col gap-3 pt-4">
               <SignedOut>
-                <SignInButton mode="modal">
-                  <button
-                    className={cn(
-                      'w-full rounded-lg border border-border py-3',
-                      'text-body-md-medium text-foreground',
-                      'transition-all hover:border-border/80 hover:bg-muted',
-                    )}
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Sign In
-                  </button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button
-                    className={cn(
-                      'w-full rounded-lg bg-primary py-3',
-                      'text-body-md-medium text-primary-foreground',
-                      'transition-all hover:bg-primary/90',
-                      'shadow-sm hover:shadow-md',
-                    )}
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Get Started
-                  </button>
-                </SignUpButton>
+                <Link
+                  href="/sign-in"
+                  className={cn(
+                    'w-full rounded-lg border border-border py-3 text-center',
+                    'text-body-md-medium text-foreground',
+                    'transition-all hover:border-border/80 hover:bg-muted',
+                  )}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className={cn(
+                    'w-full rounded-lg bg-primary py-3 text-center',
+                    'text-body-md-medium text-primary-foreground',
+                    'transition-all hover:bg-primary/90',
+                    'shadow-sm hover:shadow-md',
+                  )}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Get Started
+                </Link>
               </SignedOut>
               <SignedIn>
                 <Link

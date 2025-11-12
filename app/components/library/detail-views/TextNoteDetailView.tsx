@@ -2,16 +2,31 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, AlertCircle, RotateCcw, Trash2 } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/components/ui/tabs';
+import { Alert, AlertTitle, AlertDescription } from '@/app/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/app/components/ui/alert-dialog';
+import { toast } from '@/app/components/ui/use-toast';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
 import TextNoteViewer from './TextNoteViewer';
 
 import MetadataSidebar from '../shared/MetadataSidebar';
 import AIDocumentPanel from '../shared/AIDocumentPanel';
 import ShareControls from '../shared/ShareControls';
+import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
+import InlineEditableField from '../shared/InlineEditableField';
+
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
 import type { Tag } from '@/lib/types/database';
@@ -52,6 +67,7 @@ interface Recording {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  deleted_at: string | null;
   content_type: ContentType | null;
   file_type: FileType | null;
   original_filename: string | null;
@@ -72,9 +88,12 @@ export default function TextNoteDetailView({
   initialTags,
 }: TextNoteDetailViewProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = React.useState('note');
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
   const [tags, setTags] = React.useState<Tag[]>(initialTags);
+  const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
+
+  const isTrashed = !!recording.deleted_at;
 
   const handleContentUpdate = (newContent: string) => {
     // This will be handled by the TextNoteViewer component
@@ -95,72 +114,213 @@ export default function TextNoteDetailView({
     URL.revokeObjectURL(url);
   };
 
+  // Keyboard shortcuts (no playback controls for text notes)
+  useKeyboardShortcuts({
+    onDownload: handleDownload,
+    onEdit: () => setIsEditModalOpen(true),
+    onShowShortcuts: () => setShowKeyboardShortcuts((prev) => !prev),
+  });
+
+  const handleRestore = async () => {
+    try {
+      const response = await fetch(`/api/recordings/${recording.id}/restore`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        toast({ description: 'Item restored successfully' });
+        router.refresh();
+      } else {
+        toast({
+          variant: 'destructive',
+          description: 'Failed to restore item',
+        });
+      }
+    } catch (error) {
+      console.error('Restore failed:', error);
+      toast({
+        variant: 'destructive',
+        description: 'Failed to restore item',
+      });
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    try {
+      const response = await fetch(`/api/recordings/${recording.id}?permanent=true`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        toast({ description: 'Item permanently deleted' });
+        router.push('/library?status=trash');
+      } else {
+        toast({
+          variant: 'destructive',
+          description: 'Failed to delete item',
+        });
+      }
+    } catch (error) {
+      console.error('Delete failed:', error);
+      toast({
+        variant: 'destructive',
+        description: 'Failed to delete item',
+      });
+    }
+  };
+
+  const handleUpdateTitle = async (newTitle: string) => {
+    try {
+      const response = await fetch(`/api/recordings/${recording.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update title');
+      }
+
+      toast({ description: 'Title updated successfully' });
+      router.refresh();
+    } catch (error) {
+      console.error('Update title failed:', error);
+      throw error;
+    }
+  };
+
+  const handleUpdateDescription = async (newDescription: string) => {
+    try {
+      const response = await fetch(`/api/recordings/${recording.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: newDescription }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update description');
+      }
+
+      toast({ description: 'Description updated successfully' });
+      router.refresh();
+    } catch (error) {
+      console.error('Update description failed:', error);
+      throw error;
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b bg-card">
+      <div className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4 flex-wrap">
             <Button variant="ghost" size="icon" onClick={() => router.back()}>
               <ArrowLeft className="size-5" />
             </Button>
 
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold truncate">
-                {recording.title || 'Untitled Note'}
-              </h1>
-              {recording.description && (
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                  {recording.description}
-                </p>
+            <div className="flex-1 min-w-0 space-y-1">
+              {!isTrashed ? (
+                <>
+                  <InlineEditableField
+                    value={recording.title || ''}
+                    onSave={handleUpdateTitle}
+                    placeholder="Untitled Note"
+                    displayAs="title"
+                    maxLength={200}
+                    required
+                  />
+                  <InlineEditableField
+                    value={recording.description || ''}
+                    onSave={handleUpdateDescription}
+                    placeholder="Add a description..."
+                    type="textarea"
+                    displayAs="description"
+                    maxLength={500}
+                  />
+                </>
+              ) : (
+                <>
+                  <h1 className="text-2xl font-bold truncate">
+                    {recording.title || 'Untitled Note'}
+                  </h1>
+                  {recording.description && (
+                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                      {recording.description}
+                    </p>
+                  )}
+                </>
               )}
             </div>
 
-            <ShareControls recordingId={recording.id} />
+            {!isTrashed && <ShareControls recordingId={recording.id} />}
+
+            {isTrashed && (
+              <div className="flex items-center gap-2">
+                <Button onClick={handleRestore} variant="outline">
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Restore Item
+                </Button>
+                <Button
+                  onClick={() => setShowPermanentDeleteDialog(true)}
+                  variant="destructive"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Forever
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-6">
+        {/* Trash Warning Banner */}
+        {isTrashed && recording.deleted_at && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>This item is in the trash</AlertTitle>
+            <AlertDescription>
+              This content was moved to trash on {formatDate(recording.deleted_at)}.
+              You can restore it or permanently delete it.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Tabs */}
+          <div className="lg:col-span-2 space-y-6" style={isTrashed ? { opacity: 0.7 } : undefined}>
+            {/* Text Note Viewer - Always Visible */}
             {transcript?.text ? (
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="w-full justify-start">
-                  <TabsTrigger value="note">Note</TabsTrigger>
-                  <TabsTrigger value="ai-summary" disabled={!document}>
-                    AI Summary
-                  </TabsTrigger>
-                </TabsList>
+              <>
+                <TextNoteViewer
+                  recordingId={recording.id}
+                  content={transcript.text}
+                  title={recording.title}
+                  fileType={recording.file_type as 'txt' | 'md' | null}
+                  onContentUpdate={handleContentUpdate}
+                />
 
-                {/* Note Tab */}
-                <TabsContent value="note" className="mt-4">
-                  <TextNoteViewer
-                    recordingId={recording.id}
-                    content={transcript.text}
-                    title={recording.title}
-                    fileType={recording.file_type as 'txt' | 'md' | null}
-                    onContentUpdate={handleContentUpdate}
-                  />
-                </TabsContent>
-
-                {/* AI Summary Tab */}
-                <TabsContent value="ai-summary" className="mt-4">
-                  {document ? (
+                {/* AI Insights - Optional Enhancement (no tabs, just show below) */}
+                {document && (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium text-muted-foreground">AI Insights</h3>
                     <AIDocumentPanel
                       document={document}
                       recordingId={recording.id}
                     />
-                  ) : (
-                    <div className="text-center py-12 text-muted-foreground">
-                      No AI summary generated yet
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-24 text-muted-foreground">
                 <p>No content available</p>
@@ -197,6 +357,45 @@ export default function TextNoteDetailView({
         recording={recording}
         initialTags={tags}
         onTagsChange={setTags}
+      />
+
+      {/* Permanent Delete Confirmation Dialog */}
+      <AlertDialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently Delete?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
+              </p>
+              <p className="font-semibold text-destructive">
+                This action cannot be undone. All associated data will be permanently removed:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Original file</li>
+                <li>Transcripts and documents</li>
+                <li>Search embeddings</li>
+                <li>All metadata</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handlePermanentDelete}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Delete Forever
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Keyboard Shortcuts Dialog */}
+      <KeyboardShortcutsDialog
+        open={showKeyboardShortcuts}
+        onOpenChange={setShowKeyboardShortcuts}
+        contentType={recording.content_type}
       />
     </div>
   );

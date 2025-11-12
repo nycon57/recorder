@@ -11,7 +11,10 @@ import * as os from 'os';
 import * as fs from 'fs/promises';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { VideoCompressor } from '@/lib/services/video-compressor';
+import { createLogger } from '@/lib/utils/logger';
 import type { CompressVideoJobPayload, CompressionStats } from '@/lib/types/database';
+
+const logger = createLogger({ service: 'compress-video' });
 
 /**
  * Compress video job handler
@@ -24,16 +27,16 @@ export async function handleCompressVideo(
 ): Promise<{ success: boolean; result?: any; error?: string }> {
   const { recordingId, orgId, inputPath, outputPath, profile, contentType } = jobPayload;
 
-  console.log('[compress-video] Starting compression job');
-  console.log(`[compress-video] Recording: ${recordingId}`);
-  console.log(`[compress-video] Profile: ${profile}`);
+  logger.info('Starting compression job', {
+    context: { recordingId, orgId, profile, inputPath, outputPath },
+  });
 
   let tempInputPath: string | null = null;
   let tempOutputPath: string | null = null;
 
   try {
     // 1. Download file from Supabase Storage
-    console.log('[compress-video] Downloading from storage...');
+    logger.info('Downloading from storage', { context: { inputPath } });
     const { data: fileData, error: downloadError } = await supabaseAdmin.storage
       .from('recordings')
       .download(inputPath);
@@ -47,7 +50,9 @@ export async function handleCompressVideo(
     const buffer = Buffer.from(await fileData.arrayBuffer());
     await fs.writeFile(tempInputPath, buffer);
 
-    console.log(`[compress-video] Downloaded ${buffer.length} bytes to ${tempInputPath}`);
+    logger.info('Video downloaded to temp file', {
+      context: { tempInputPath, sizeBytes: buffer.length },
+    });
 
     // 3. Set up output temporary file
     tempOutputPath = path.join(
@@ -67,7 +72,9 @@ export async function handleCompressVideo(
     }
 
     // 5. Compress video
-    console.log('[compress-video] Starting compression...');
+    logger.info('Starting video compression', {
+      context: { tempInputPath, tempOutputPath, profile },
+    });
     const compressionResult = await VideoCompressor.compressVideo({
       inputPath: tempInputPath,
       outputPath: tempOutputPath,
@@ -82,9 +89,10 @@ export async function handleCompressVideo(
       onProgress: (progress) => {
         // Log progress every 10%
         if (Math.floor(progress.percent) % 10 === 0) {
-          console.log(
-            `[compress-video] Progress: ${Math.floor(progress.percent)}% @ ${progress.fps} fps (${progress.speed})`
-          );
+          logger.info('Compression progress', {
+            context: { recordingId },
+            data: { percent: Math.floor(progress.percent), fps: progress.fps, speed: progress.speed },
+          });
         }
       },
       validateQuality: true,
@@ -97,7 +105,10 @@ export async function handleCompressVideo(
 
     // 6. If compression was skipped (file already optimal), mark as complete
     if (compressionResult.warning) {
-      console.log(`[compress-video] ${compressionResult.warning}`);
+      logger.info('Compression skipped', {
+        context: { recordingId },
+        data: { reason: compressionResult.warning },
+      });
 
       await supabaseAdmin
         .from('recordings')
@@ -125,7 +136,7 @@ export async function handleCompressVideo(
     }
 
     // 7. Upload compressed file to storage
-    console.log('[compress-video] Uploading compressed file...');
+    logger.info('Uploading compressed file', { context: { outputPath } });
     const compressedBuffer = await fs.readFile(tempOutputPath);
 
     const { error: uploadError } = await supabaseAdmin.storage
@@ -140,9 +151,9 @@ export async function handleCompressVideo(
       throw new Error(`Failed to upload compressed file: ${uploadError.message}`);
     }
 
-    console.log(
-      `[compress-video] Uploaded ${compressedBuffer.length} bytes to ${outputPath}`
-    );
+    logger.info('Compressed file uploaded', {
+      context: { outputPath, sizeBytes: compressedBuffer.length },
+    });
 
     // 8. Update recording with compression stats
     await supabaseAdmin
@@ -159,12 +170,15 @@ export async function handleCompressVideo(
     const savingsMB = savingsBytes / 1024 / 1024;
     const savingsPercent = ((savingsBytes / stats.original_size) * 100).toFixed(2);
 
-    console.log('[compress-video] Compression complete');
-    console.log(`[compress-video] Saved: ${savingsMB.toFixed(2)}MB (${savingsPercent}%)`);
-    console.log(`[compress-video] Ratio: ${stats.compression_ratio.toFixed(2)}x`);
-    if (stats.quality_score?.vmaf) {
-      console.log(`[compress-video] Quality (VMAF): ${stats.quality_score.vmaf.toFixed(2)}`);
-    }
+    logger.info('Compression complete', {
+      context: { recordingId },
+      data: {
+        savingsMB: parseFloat(savingsMB.toFixed(2)),
+        savingsPercent: parseFloat(savingsPercent),
+        compressionRatio: parseFloat(stats.compression_ratio.toFixed(2)),
+        vmaf: stats.quality_score?.vmaf ? parseFloat(stats.quality_score.vmaf.toFixed(2)) : undefined,
+      },
+    });
 
     return {
       success: true,
@@ -176,7 +190,10 @@ export async function handleCompressVideo(
       },
     };
   } catch (error) {
-    console.error('[compress-video] Compression job failed:', error);
+    logger.error('Compression job failed', {
+      context: { recordingId, inputPath },
+      error: error as Error,
+    });
 
     // Update recording with error
     await supabaseAdmin
@@ -194,12 +211,18 @@ export async function handleCompressVideo(
     // Cleanup temporary files
     if (tempInputPath) {
       await fs.unlink(tempInputPath).catch((err) => {
-        console.warn(`[compress-video] Failed to delete temp input: ${err.message}`);
+        logger.warn('Failed to delete temp input file', {
+          context: { tempInputPath },
+          error: err as Error,
+        });
       });
     }
     if (tempOutputPath) {
       await fs.unlink(tempOutputPath).catch((err) => {
-        console.warn(`[compress-video] Failed to delete temp output: ${err.message}`);
+        logger.warn('Failed to delete temp output file', {
+          context: { tempOutputPath },
+          error: err as Error,
+        });
       });
     }
   }

@@ -62,9 +62,9 @@ export function NavMain() {
       <SidebarGroupContent>
         <SidebarMenu>
           {navItems.map((item) => {
-            // Handle Library route - also active for /library/[id]
+            // Determine active state based on pathname
             const isActive = item.url === '/library'
-              ? pathname === item.url || pathname.startsWith('/library/')
+              ? pathname === '/library' || pathname.startsWith('/library/')
               : pathname === item.url
 
             return (

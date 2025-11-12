@@ -37,11 +37,31 @@ function Review() {
   // Create video URL from blob
   useEffect(() => {
     if (recordingBlob) {
+      console.log('[Review] Creating blob URL for recording, size:', recordingBlob.size);
+
+      // Check for empty blob
+      if (recordingBlob.size === 0) {
+        console.error('[Review] Recording blob is empty (0 bytes)');
+        toast.error('Recording failed', {
+          description: 'The recording is empty. Please try recording again.',
+        });
+        // Clear the empty recording
+        clearRecording();
+        return;
+      }
+
       const url = URL.createObjectURL(recordingBlob);
       setVideoUrl(url);
-      return () => URL.revokeObjectURL(url);
+      return () => {
+        console.log('[Review] Revoking blob URL:', url);
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      // Clear video URL when blob is cleared
+      console.log('[Review] Recording blob cleared, clearing video URL');
+      setVideoUrl('');
     }
-  }, [recordingBlob]);
+  }, [recordingBlob, clearRecording]);
 
   // Warn user about unsaved recording
   useEffect(() => {
@@ -203,6 +223,17 @@ function Placeholder() {
     if (videoElement && cameraStream) {
       console.log('[Placeholder] ✅ Setting camera srcObject');
       videoElement.srcObject = cameraStream;
+
+      // Handle stream errors gracefully
+      videoElement.onerror = (e) => {
+        console.warn('[Placeholder] Video element error (likely stream closed):', e);
+        if (videoElement.srcObject) {
+          videoElement.srcObject = null;
+        }
+      };
+    } else if (videoElement && !cameraStream) {
+      // Clear srcObject when stream is removed
+      videoElement.srcObject = null;
     }
   }, [cameraStream, layout]);
 
@@ -302,6 +333,17 @@ export function VideoStreams() {
     if (videoElement && cameraStream) {
       console.log('[VideoStreams] ✅ Setting main camera srcObject');
       videoElement.srcObject = cameraStream;
+
+      // Handle stream errors gracefully (e.g., when stream is closed after recording stops)
+      videoElement.onerror = (e) => {
+        console.warn('[VideoStreams] Video element error (likely stream closed):', e);
+        if (videoElement.srcObject) {
+          videoElement.srcObject = null;
+        }
+      };
+    } else if (videoElement && !cameraStream) {
+      // Clear srcObject when stream is removed
+      videoElement.srcObject = null;
     }
   }, [cameraStream, layout]);
 

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Filter, X, Check } from 'lucide-react';
+import { Tag, X, Check } from 'lucide-react';
 import {
   Popover,
   PopoverContent,
@@ -77,7 +77,7 @@ export function TagFilter({
               selectedTags.length > 0 && 'border-blue-500'
             )}
           >
-            <Filter className="mr-2 h-4 w-4" />
+            <Tag className="mr-2 h-4 w-4" />
             Tags
             {selectedTags.length > 0 && (
               <Badge variant="secondary" className="ml-2">
@@ -228,7 +228,7 @@ export function TagFilterCompact({
           size="sm"
           className={cn('h-8', className)}
         >
-          <Filter className="h-4 w-4" />
+          <Tag className="h-4 w-4" />
           {selectedTags.length > 0 && (
             <span className="ml-1">{selectedTags.length}</span>
           )}

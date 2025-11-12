@@ -8,6 +8,8 @@ import {
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { ContentType } from '@/lib/types/database';
+import { withDeduplication } from '@/lib/middleware/request-dedup';
+import { CacheControlHeaders, generateETag } from '@/lib/services/cache';
 
 /**
  * GET /api/library
@@ -17,12 +19,14 @@ import { ContentType } from '@/lib/types/database';
  * - limit: Number of items to return (default: 50, max: 100)
  * - offset: Pagination offset (default: 0)
  * - content_type: Filter by content type (recording, video, audio, document, text)
- * - status: Filter by processing status
+ * - status: Filter by processing status (pending, transcribing, completed, etc.)
+ * - view: Filter by deletion status - 'active' (default), 'trash', or 'all'
  * - search: Search query for title, description, or filename
  */
-export const GET = apiHandler(async (request: NextRequest) => {
-  const { orgId, userId } = await requireOrg();
-  const supabase = supabaseAdmin;
+export const GET = withDeduplication(
+  apiHandler(async (request: NextRequest) => {
+    const { orgId, userId } = await requireOrg();
+    const supabase = supabaseAdmin;
 
   console.log('[API /api/library] Request from orgId:', orgId, 'userId:', userId);
 
@@ -32,19 +36,32 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const offset = parseInt(url.searchParams.get('offset') || '0');
   const contentTypeFilter = url.searchParams.get('content_type') as ContentType | null;
   const statusFilter = url.searchParams.get('status');
+  const viewFilter = url.searchParams.get('view') || 'active'; // Default to 'active' view
   const searchQuery = url.searchParams.get('search');
 
-  console.log('[API /api/library] Query params:', { limit, offset, contentTypeFilter, statusFilter, searchQuery });
+  // Validate view parameter
+  if (!['active', 'trash', 'all'].includes(viewFilter)) {
+    return errors.badRequest('Invalid view parameter. Must be "active", "trash", or "all".');
+  }
+
+  console.log('[API /api/library] Query params:', { limit, offset, contentTypeFilter, statusFilter, viewFilter, searchQuery });
 
   // Build query
   let query = supabase
     .from('recordings')
     .select('*', { count: 'exact' })
     .eq('org_id', orgId)
-    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
-  // Apply filters
+  // Apply view filter (deletion status)
+  if (viewFilter === 'active') {
+    query = query.is('deleted_at', null);
+  } else if (viewFilter === 'trash') {
+    query = query.not('deleted_at', 'is', null);
+  }
+  // If viewFilter === 'all', no filter on deleted_at
+
+  // Apply other filters
   if (contentTypeFilter) {
     query = query.eq('content_type', contentTypeFilter);
   }
@@ -73,18 +90,38 @@ export const GET = apiHandler(async (request: NextRequest) => {
     return errors.internalError();
   }
 
-  return successResponse({
-    data: items || [],
-    pagination: {
-      total: count || 0,
-      limit,
-      offset,
-      hasMore: (count || 0) > offset + limit,
+    const responseData = {
+      data: items || [],
+      pagination: {
+        total: count || 0,
+        limit,
+        offset,
+        hasMore: (count || 0) > offset + limit,
+      },
+      filters: {
+        content_type: contentTypeFilter,
+        status: statusFilter,
+        view: viewFilter,
+        search: searchQuery,
+      },
+    };
+
+    const response = successResponse(responseData);
+
+    // Add cache headers for client-side caching
+    response.headers.set('Cache-Control', CacheControlHeaders.content);
+    response.headers.set('ETag', generateETag(responseData));
+
+    return response;
+  }),
+  {
+    // Deduplicate by org + query params
+    keyGenerator: async (req: NextRequest) => {
+      const { requireOrg } = await import('@/lib/utils/api');
+      const { orgId } = await requireOrg();
+      const url = new URL(req.url);
+      return `library:${orgId}:${url.searchParams.toString()}`;
     },
-    filters: {
-      content_type: contentTypeFilter,
-      status: statusFilter,
-      search: searchQuery,
-    },
-  });
-});
+    skip: (req: NextRequest) => req.method !== 'GET',
+  }
+);

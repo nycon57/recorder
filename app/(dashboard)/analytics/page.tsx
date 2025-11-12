@@ -151,7 +151,7 @@ export default function AnalyticsPage() {
             <Sparkles className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">My Analytics</h1>
+            <h1 className="text-3xl font-normal tracking-tight">My Analytics</h1>
             <p className="text-muted-foreground">Insights into your search and recording activity</p>
           </div>
         </div>

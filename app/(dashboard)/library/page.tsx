@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Loader2, Grid3x3, List, Search, SlidersHorizontal, FileX2, Settings, Upload, Download, FolderOpen, Plus } from 'lucide-react';
+import { Loader2, Grid3x3, List, Search, SlidersHorizontal, FileX2, Settings, Upload, Download, FolderOpen, Plus, Trash2, RotateCcw } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Checkbox } from '@/app/components/ui/checkbox';
+import { Badge } from '@/app/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -16,13 +17,23 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/app/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/app/components/ui/alert-dialog';
 import { ContentGridSkeleton, ContentListSkeleton } from '@/app/components/skeletons/ContentCardSkeleton';
 import { LibraryEmptyState } from '@/app/components/empty-states/LibraryEmptyState';
 import { BulkActionsToolbar } from '@/app/components/library/BulkActionsToolbar';
 import { BulkTagModal } from '@/app/components/library/BulkTagModal';
 import { TagFilter } from '@/app/components/tags/TagFilter';
 import { TagManager } from '@/app/components/tags/TagManager';
-import { AdvancedFilters, FilterState } from '@/app/components/filters/AdvancedFilters';
+import { AdvancedFilters, FilterState, StatusFilter } from '@/app/components/filters/AdvancedFilters';
 import { FilterChips } from '@/app/components/filters/FilterChips';
 import { CollectionTree, Collection } from '@/app/components/collections/CollectionTree';
 import { CollectionBreadcrumb } from '@/app/components/collections/CollectionBreadcrumb';
@@ -32,6 +43,7 @@ import { FavoriteButton } from '@/app/components/favorites/FavoriteButton';
 import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/KeyboardShortcutsProvider';
 import { useToast } from '@/app/components/ui/use-toast';
 import UploadModal from '@/app/components/upload/UploadModal';
+import UploadWizard from '@/app/components/recorder/UploadWizard';
 import ExportModal from '@/app/components/library/ExportModal';
 import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/app/hooks/useKeyboardShortcuts';
 
@@ -47,10 +59,8 @@ import {
   PaginationPrevious,
 } from '@/app/components/ui/pagination';
 
-type ContentTypeFilter = 'all' | 'recording' | 'video' | 'audio' | 'document' | 'text';
 type SortOption = 'recent' | 'oldest' | 'name-asc' | 'name-desc' | 'size-asc' | 'size-desc' | 'duration-asc' | 'duration-desc';
 type ViewMode = 'grid' | 'list';
-type QuickFilter = 'all' | 'today' | 'week' | 'month';
 
 const ITEMS_PER_PAGE = 25;
 
@@ -58,14 +68,16 @@ const ITEMS_PER_PAGE = 25;
  * Enhanced Library Page Component
  * Unified content library with Phase 8 features
  *
- * New Features:
- * - Advanced filters (AdvancedFilters component)
+ * Features:
+ * - Advanced filters with content type, favorites, transcript, document filtering
  * - Collections tree sidebar
  * - Favorites integration
  * - Enhanced bulk actions with collections
  * - Keyboard shortcuts
  * - Filter persistence in URL
- * - Collection filtering
+ * - Tag filtering with AND/OR modes
+ * - Grid and list view modes
+ * - Pagination for list view
  */
 function LibraryPageContent() {
   const router = useRouter();
@@ -79,17 +91,16 @@ function LibraryPageContent() {
   const [error, setError] = useState<string | null>(null);
 
   // Filter/view state
-  const [contentType, setContentType] = useState<ContentTypeFilter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
 
   // Advanced filters state
   const [advancedFilters, setAdvancedFilters] = useState<FilterState>({
     contentTypes: [],
-    statuses: [],
-    dateRange: { from: null, to: null },
+    statuses: [], // Still needed for FilterState interface compatibility
+    statusFilter: 'active', // Default to active items
+    dateRange: { from: null, to: null }, // Still needed for FilterState interface compatibility
     favoritesOnly: false,
     hasTranscript: null,
     hasDocument: null,
@@ -100,9 +111,16 @@ function LibraryPageContent() {
   const [showTagModal, setShowTagModal] = useState(false);
   const [showTagManager, setShowTagManager] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showUploadWizard, setShowUploadWizard] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showCollectionManager, setShowCollectionManager] = useState(false);
   const [showCollectionPicker, setShowCollectionPicker] = useState(false);
+
+  // Delete confirmation state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
 
   // Tag filter state
   const [availableTags, setAvailableTags] = useState<any[]>([]);
@@ -112,7 +130,7 @@ function LibraryPageContent() {
   // Collections state
   const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
-  const [showCollectionSidebar, setShowCollectionSidebar] = useState(true);
+  const [showCollectionSidebar, setShowCollectionSidebar] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -132,12 +150,10 @@ function LibraryPageContent() {
     }
 
     // Load filters from URL params
-    const typeParam = searchParams.get('type') as ContentTypeFilter;
     const collectionParam = searchParams.get('collection');
     const favoritesParam = searchParams.get('favorites');
     const searchParam = searchParams.get('q');
 
-    if (typeParam) setContentType(typeParam);
     if (collectionParam) setSelectedCollectionId(collectionParam);
     if (favoritesParam === 'true') setAdvancedFilters(prev => ({ ...prev, favoritesOnly: true }));
     if (searchParam) setSearchQuery(searchParam);
@@ -155,30 +171,29 @@ function LibraryPageContent() {
   // Update URL params when filters change
   useEffect(() => {
     const params = new URLSearchParams();
-    if (contentType !== 'all') params.set('type', contentType);
     if (selectedCollectionId) params.set('collection', selectedCollectionId);
     if (advancedFilters.favoritesOnly) params.set('favorites', 'true');
     if (searchQuery) params.set('q', searchQuery);
 
     const newUrl = params.toString() ? `?${params.toString()}` : '/library';
     router.replace(newUrl, { scroll: false });
-  }, [contentType, selectedCollectionId, advancedFilters.favoritesOnly, searchQuery]);
+  }, [selectedCollectionId, advancedFilters.favoritesOnly, searchQuery]);
 
   // Fetch content items, tags, and collections
   useEffect(() => {
     fetchItems();
     fetchTags();
     fetchCollections();
-  }, []);
+  }, [advancedFilters.statusFilter]);
+
+  // Clear selection when changing status filter
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [advancedFilters.statusFilter]);
 
   // ✅ Compute filtered and sorted items during render (no Effect needed)
   const filteredItems = useMemo(() => {
     let filtered = [...items];
-
-    // Filter by content type (from tabs)
-    if (contentType !== 'all') {
-      filtered = filtered.filter(item => item.content_type === contentType);
-    }
 
     // Filter by advanced filters content types
     if (advancedFilters.contentTypes.length > 0) {
@@ -187,55 +202,10 @@ function LibraryPageContent() {
       );
     }
 
-    // Filter by status
-    if (advancedFilters.statuses.length > 0) {
-      filtered = filtered.filter(item =>
-        advancedFilters.statuses.includes(item.status as any)
-      );
-    }
-
-    // Filter by date range
-    if (advancedFilters.dateRange.from || advancedFilters.dateRange.to) {
-      filtered = filtered.filter(item => {
-        const createdAt = new Date(item.created_at);
-        if (advancedFilters.dateRange.from && createdAt < advancedFilters.dateRange.from) {
-          return false;
-        }
-        if (advancedFilters.dateRange.to && createdAt > advancedFilters.dateRange.to) {
-          return false;
-        }
-        return true;
-      });
-    }
-
     // Filter by favorites
     if (advancedFilters.favoritesOnly) {
       filtered = filtered.filter(item => (item as any).is_favorite === true);
     }
-
-    // Quick filter by date
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    filtered = filtered.filter(item => {
-      const createdAt = new Date(item.created_at);
-      switch (quickFilter) {
-        case 'today':
-          return createdAt >= today;
-        case 'week': {
-          const weekAgo = new Date(today);
-          weekAgo.setDate(weekAgo.getDate() - 7);
-          return createdAt >= weekAgo;
-        }
-        case 'month': {
-          const monthAgo = new Date(today);
-          monthAgo.setMonth(monthAgo.getMonth() - 1);
-          return createdAt >= monthAgo;
-        }
-        default:
-          return true;
-      }
-    });
 
     // Filter by selected collection
     if (selectedCollectionId) {
@@ -303,12 +273,12 @@ function LibraryPageContent() {
     }
 
     return filtered;
-  }, [items, contentType, sortBy, searchQuery, quickFilter, selectedTagIds, tagFilterMode, advancedFilters, selectedCollectionId]);
+  }, [items, sortBy, searchQuery, selectedTagIds, tagFilterMode, advancedFilters, selectedCollectionId]);
 
   // ✅ Separate Effect for pagination reset (legitimate side effect)
   useEffect(() => {
     setCurrentPage(1);
-  }, [contentType, sortBy, searchQuery, quickFilter, selectedTagIds, tagFilterMode, advancedFilters, selectedCollectionId]);
+  }, [sortBy, searchQuery, selectedTagIds, tagFilterMode, advancedFilters, selectedCollectionId]);
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
@@ -381,7 +351,7 @@ function LibraryPageContent() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/library?limit=100');
+      const response = await fetch(`/api/library?limit=100&view=${advancedFilters.statusFilter}`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch library items');
@@ -398,27 +368,38 @@ function LibraryPageContent() {
   }
 
   // Action handlers
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
+  const handleDelete = (id: string) => {
+    setItemToDelete(id);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
 
     try {
-      const response = await fetch(`/api/recordings/${id}`, {
+      const response = await fetch(`/api/recordings/${itemToDelete}`, {
         method: 'DELETE',
       });
 
-      if (!response.ok) throw new Error('Failed to delete');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to delete');
+      }
 
-      setItems(prev => prev.filter(item => item.id !== id));
+      setItems(prev => prev.filter(item => item.id !== itemToDelete));
       toast({
-        description: 'Item deleted successfully',
+        description: 'Item moved to trash. You can restore it from the trash page.',
       });
     } catch (err) {
       console.error('Delete failed:', err);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to delete item',
+        description: err instanceof Error ? err.message : 'Failed to delete item',
       });
+    } finally {
+      setShowDeleteDialog(false);
+      setItemToDelete(null);
     }
   };
 
@@ -448,9 +429,11 @@ function LibraryPageContent() {
   }, []);
 
   // Bulk action handlers
-  const handleBulkDelete = async () => {
-    if (!confirm(`Are you sure you want to delete ${selectedIds.length} items?`)) return;
+  const handleBulkDelete = () => {
+    setShowBulkDeleteDialog(true);
+  };
 
+  const confirmBulkDelete = async () => {
     try {
       const promises = selectedIds.map(id =>
         fetch(`/api/recordings/${id}`, { method: 'DELETE' })
@@ -465,8 +448,85 @@ function LibraryPageContent() {
 
       if (successCount > 0) {
         toast({
-          title: 'Items deleted',
-          description: `Successfully deleted ${successCount} ${successCount === 1 ? 'item' : 'items'}${failCount > 0 ? `, ${failCount} failed` : ''}`,
+          title: 'Items moved to trash',
+          description: `Successfully moved ${successCount} ${successCount === 1 ? 'item' : 'items'} to trash${failCount > 0 ? `, ${failCount} failed` : ''}. You can restore them from the trash page.`,
+        });
+      }
+
+      if (failCount > 0 && successCount === 0) {
+        toast({
+          title: 'Move to trash failed',
+          description: 'Failed to move selected items to trash',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Bulk delete failed:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete items',
+        variant: 'destructive',
+      });
+    } finally {
+      setShowBulkDeleteDialog(false);
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    try {
+      const promises = selectedIds.map(id =>
+        fetch(`/api/recordings/${id}/restore`, { method: 'POST' })
+      );
+
+      const results = await Promise.allSettled(promises);
+      const successCount = results.filter(r => r.status === 'fulfilled').length;
+      const failCount = results.filter(r => r.status === 'rejected').length;
+
+      // Remove restored items from current view
+      setItems(prev => prev.filter(item => !selectedIds.includes(item.id)));
+      setSelectedIds([]);
+
+      if (successCount > 0) {
+        toast({
+          title: 'Items restored',
+          description: `Successfully restored ${successCount} ${successCount === 1 ? 'item' : 'items'}${failCount > 0 ? `, ${failCount} failed` : ''}.`,
+        });
+      }
+
+      if (failCount > 0 && successCount === 0) {
+        toast({
+          title: 'Restore failed',
+          description: 'Failed to restore selected items',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Bulk restore failed:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to restore items',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const confirmBulkPermanentDelete = async () => {
+    try {
+      const promises = selectedIds.map(id =>
+        fetch(`/api/recordings/${id}?permanent=true`, { method: 'DELETE' })
+      );
+
+      const results = await Promise.allSettled(promises);
+      const successCount = results.filter(r => r.status === 'fulfilled').length;
+      const failCount = results.filter(r => r.status === 'rejected').length;
+
+      setItems(prev => prev.filter(item => !selectedIds.includes(item.id)));
+      setSelectedIds([]);
+
+      if (successCount > 0) {
+        toast({
+          title: 'Items permanently deleted',
+          description: `Permanently deleted ${successCount} ${successCount === 1 ? 'item' : 'items'}${failCount > 0 ? `, ${failCount} failed` : ''}. This action cannot be undone.`,
         });
       }
 
@@ -478,12 +538,14 @@ function LibraryPageContent() {
         });
       }
     } catch (error) {
-      console.error('Bulk delete failed:', error);
+      console.error('Bulk permanent delete failed:', error);
       toast({
         title: 'Error',
-        description: 'Failed to delete items',
+        description: 'Failed to permanently delete items',
         variant: 'destructive',
       });
+    } finally {
+      setShowPermanentDeleteDialog(false);
     }
   };
 
@@ -527,10 +589,6 @@ function LibraryPageContent() {
 
     if (key === 'contentTypes' && value) {
       newFilters.contentTypes = newFilters.contentTypes.filter(t => t !== value);
-    } else if (key === 'statuses' && value) {
-      newFilters.statuses = newFilters.statuses.filter(s => s !== value);
-    } else if (key === 'dateRange') {
-      newFilters.dateRange = { from: null, to: null };
     } else if (key === 'favoritesOnly') {
       newFilters.favoritesOnly = false;
     } else if (key === 'hasTranscript') {
@@ -554,7 +612,6 @@ function LibraryPageContent() {
     setSelectedTagIds([]);
     setSelectedCollectionId(null);
     setSearchQuery('');
-    setQuickFilter('all');
   };
 
   // Collection handlers
@@ -599,79 +656,135 @@ function LibraryPageContent() {
     },
   ]);
 
-  // Get counts for each content type
-  const counts = useMemo(() => ({
-    all: items.length,
-    recording: items.filter(i => i.content_type === 'recording').length,
-    video: items.filter(i => i.content_type === 'video').length,
-    audio: items.filter(i => i.content_type === 'audio').length,
-    document: items.filter(i => i.content_type === 'document').length,
-    text: items.filter(i => i.content_type === 'text').length,
-  }), [items]);
-
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Collections Sidebar */}
-      {showCollectionSidebar && (
-        <aside className="w-64 border-r bg-muted/10 p-4 overflow-y-auto">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm flex items-center gap-2">
-                <FolderOpen className="h-4 w-4" />
-                Collections
-              </h3>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => setShowCollectionManager(true)}
-                title="New collection"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
+      {/* Collections Sidebar - Desktop only, Sheet on mobile */}
+      {/* Desktop Sidebar */}
+      <AnimatePresence initial={false}>
+        {showCollectionSidebar && (
+          <motion.aside
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 256, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30, opacity: { duration: 0.2 } }}
+            className="hidden lg:block border-r bg-muted/10 overflow-hidden"
+          >
+            <div className="w-64 p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <FolderOpen className="h-4 w-4" />
+                  Collections
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setShowCollectionManager(true)}
+                  title="New collection"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
 
+              <CollectionTree
+                collections={collections}
+                selectedId={selectedCollectionId}
+                onSelect={handleCollectionSelect}
+                onCreateChild={(parentId) => {
+                  setShowCollectionManager(true);
+                }}
+              />
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
+      {/* Mobile Sheet */}
+      <Sheet open={showCollectionSidebar} onOpenChange={setShowCollectionSidebar}>
+        <SheetContent side="left" className="lg:hidden w-[280px] p-4" hideOverlay={true}>
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" />
+              Collections
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCollectionManager(true)}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Collection
+            </Button>
             <CollectionTree
               collections={collections}
               selectedId={selectedCollectionId}
-              onSelect={handleCollectionSelect}
+              onSelect={(collection) => {
+                handleCollectionSelect(collection);
+                setShowCollectionSidebar(false); // Auto-close on mobile after selection
+              }}
               onCreateChild={(parentId) => {
                 setShowCollectionManager(true);
               }}
             />
           </div>
-        </aside>
-      )}
+        </SheetContent>
+      </Sheet>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="container mx-auto p-6 space-y-6">
+      <motion.div
+        layout
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="flex-1 overflow-y-auto"
+      >
+        <div className="container mx-auto p-6 sm:p-8 space-y-6 sm:space-y-8">
           {/* Header */}
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight">Library</h1>
-                <p className="text-muted-foreground mt-1">
+          <div className="flex flex-col gap-6">
+            {/* Title/Description and Action Buttons Row */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5">
+              {/* Left: Title and description */}
+              <div className="space-y-2">
+                <h1 className="text-2xl sm:text-3xl font-normal tracking-tight">Library</h1>
+                <p className="text-sm sm:text-base text-muted-foreground">
                   All your recordings, videos, audio, documents, and notes in one place
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Right: Action buttons */}
+              <div className="flex flex-col sm:flex-row gap-3 sm:flex-shrink-0">
                 <Button
                   variant="outline"
                   onClick={() => setShowCollectionSidebar(!showCollectionSidebar)}
+                  className="w-full sm:w-auto justify-start sm:justify-center min-h-[44px]"
                 >
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  {showCollectionSidebar ? 'Hide' : 'Show'} Collections
+                  <FolderOpen className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">{showCollectionSidebar ? 'Hide' : 'Show'} Collections</span>
+                  <span className="sm:hidden">Collections</span>
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setShowTagManager(true)}
+                  className="w-full sm:w-auto justify-start sm:justify-center min-h-[44px]"
                 >
-                  <Settings className="mr-2 h-4 w-4" />
-                  Manage Tags
+                  <Settings className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">Manage Tags</span>
+                  <span className="sm:hidden">Tags</span>
                 </Button>
-                <Button onClick={() => setShowUploadModal(true)}>
-                  <Upload className="mr-2 h-4 w-4" />
+                <Button
+                  onClick={() => setShowUploadModal(true)}
+                  className="w-full sm:w-auto justify-start sm:justify-center min-h-[44px]"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
                   Upload
+                </Button>
+                <Button
+                  onClick={() => setShowUploadWizard(true)}
+                  variant="outline"
+                  className="w-full sm:w-auto justify-start sm:justify-center min-h-[44px]"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Test New Upload
                 </Button>
               </div>
             </div>
@@ -685,104 +798,43 @@ function LibraryPageContent() {
               />
             )}
 
-            {/* Filters and controls */}
+            {/* Filters and controls - Mobile stacked, Desktop single line */}
             <div className="flex flex-col gap-4">
-              {/* Content type tabs */}
-              <Tabs value={contentType} onValueChange={(v) => setContentType(v as ContentTypeFilter)}>
-                <TabsList>
-                  <TabsTrigger value="all">
-                    All {counts.all > 0 && `(${counts.all})`}
-                  </TabsTrigger>
-                  <TabsTrigger value="recording">
-                    Recordings {counts.recording > 0 && `(${counts.recording})`}
-                  </TabsTrigger>
-                  <TabsTrigger value="video">
-                    Videos {counts.video > 0 && `(${counts.video})`}
-                  </TabsTrigger>
-                  <TabsTrigger value="audio">
-                    Audio {counts.audio > 0 && `(${counts.audio})`}
-                  </TabsTrigger>
-                  <TabsTrigger value="document">
-                    Documents {counts.document > 0 && `(${counts.document})`}
-                  </TabsTrigger>
-                  <TabsTrigger value="text">
-                    Notes {counts.text > 0 && `(${counts.text})`}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+              {/* Mobile/Tablet: Stacked layout */}
+              <div className="flex flex-col gap-4 lg:hidden">
+                {/* Row 1: Select all checkbox */}
+                {filteredItems.length > 0 && (
+                  <div className="flex items-center gap-2 min-h-[44px]">
+                    <Checkbox
+                      checked={selectedIds.length === filteredItems.length && filteredItems.length > 0}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Select all items"
+                      className="min-h-[44px] min-w-[44px]"
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      Select all
+                    </span>
+                  </div>
+                )}
 
-              {/* Quick filters */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground mr-2">Quick filter:</span>
-                <Button
-                  variant={quickFilter === 'all' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setQuickFilter('all')}
-                >
-                  All Time
-                </Button>
-                <Button
-                  variant={quickFilter === 'today' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setQuickFilter('today')}
-                >
-                  Today
-                </Button>
-                <Button
-                  variant={quickFilter === 'week' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setQuickFilter('week')}
-                >
-                  This Week
-                </Button>
-                <Button
-                  variant={quickFilter === 'month' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setQuickFilter('month')}
-                >
-                  This Month
-                </Button>
-              </div>
-
-              {/* Search and controls row */}
-              <div className="flex items-center gap-2 justify-between">
-                {/* Left side: Select all checkbox */}
-                <div className="flex items-center gap-3">
-                  {filteredItems.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={selectedIds.length === filteredItems.length && filteredItems.length > 0}
-                        onCheckedChange={handleSelectAll}
-                        aria-label="Select all items"
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        Select all
-                      </span>
-                    </div>
-                  )}
+                {/* Row 2: Search */}
+                <div className="relative w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    ref={searchInputRef}
+                    placeholder="Search library..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 w-full min-h-[44px]"
+                  />
                 </div>
 
-                {/* Right side: Search, filters, sort, and view controls */}
-                <div className="flex items-center gap-2">
-                  {/* Search */}
-                  <div className="relative w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      ref={searchInputRef}
-                      placeholder="Search library..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9"
-                    />
-                  </div>
-
-                  {/* Advanced Filters */}
+                {/* Row 3: Filters */}
+                <div className="flex flex-col xs:flex-row gap-2">
                   <AdvancedFilters
                     filters={advancedFilters}
                     onFiltersChange={setAdvancedFilters}
                   />
-
-                  {/* Tag Filter */}
                   <TagFilter
                     tags={availableTags}
                     selectedTags={selectedTagIds}
@@ -791,11 +843,13 @@ function LibraryPageContent() {
                     onFilterModeChange={setTagFilterMode}
                     showCounts={true}
                   />
+                </div>
 
-                  {/* Sort */}
+                {/* Row 4: Sort and View */}
+                <div className="flex flex-col xs:flex-row gap-2">
                   <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-                    <SelectTrigger className="w-[180px]">
-                      <SlidersHorizontal className="mr-2 h-4 w-4" />
+                    <SelectTrigger className="w-full xs:w-[180px] min-h-[44px]">
+                      <SlidersHorizontal className="h-4 w-4 mr-2" />
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -810,26 +864,123 @@ function LibraryPageContent() {
                     </SelectContent>
                   </Select>
 
-                  {/* View toggle */}
-                  <div className="flex items-center border rounded-md">
+                  <div className="flex items-center border rounded-md min-h-[44px]">
                     <Button
                       variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
                       size="sm"
                       onClick={() => setViewMode('grid')}
-                      className="rounded-r-none"
+                      className="rounded-r-none flex-1 xs:flex-none min-h-[44px]"
                     >
                       <Grid3x3 className="h-4 w-4" />
-                      <span className="sr-only">Grid view</span>
+                      <span className="ml-2 xs:hidden">Grid</span>
+                      <span className="sr-only xs:not-sr-only hidden">Grid view</span>
                     </Button>
                     <Button
                       variant={viewMode === 'list' ? 'secondary' : 'ghost'}
                       size="sm"
                       onClick={() => setViewMode('list')}
-                      className="rounded-l-none"
+                      className="rounded-l-none flex-1 xs:flex-none min-h-[44px]"
                     >
                       <List className="h-4 w-4" />
-                      <span className="sr-only">List view</span>
+                      <span className="ml-2 xs:hidden">List</span>
+                      <span className="sr-only xs:not-sr-only hidden">List view</span>
                     </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Desktop: Single line layout */}
+              <div className="hidden lg:flex items-center gap-6 justify-between">
+                {/* Group 1: Select all checkbox */}
+                <div className="flex items-center">
+                  {filteredItems.length > 0 && (
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        checked={selectedIds.length === filteredItems.length && filteredItems.length > 0}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all items"
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        Select all
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Groups 2 & 3: Search, filters, sort, and view controls */}
+                <div className="flex items-center gap-5">
+                  {/* Group 2: Search and filters */}
+                  <div className="flex items-center gap-4">
+                    {/* Search */}
+                    <div className="relative w-72">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        ref={searchInputRef}
+                        placeholder="Search library..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+
+                    {/* Advanced Filters */}
+                    <AdvancedFilters
+                      filters={advancedFilters}
+                      onFiltersChange={setAdvancedFilters}
+                    />
+
+                    {/* Tag Filter */}
+                    <TagFilter
+                      tags={availableTags}
+                      selectedTags={selectedTagIds}
+                      onSelectionChange={setSelectedTagIds}
+                      filterMode={tagFilterMode}
+                      onFilterModeChange={setTagFilterMode}
+                      showCounts={true}
+                    />
+                  </div>
+
+                  {/* Group 3: Sort and view toggle (with visual separator) */}
+                  <div className="flex items-center gap-4 border-l pl-6 ml-1">
+                    {/* Sort */}
+                    <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                      <SelectTrigger className="w-[180px]">
+                        <SlidersHorizontal className="mr-2 h-4 w-4" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="recent">Most Recent</SelectItem>
+                        <SelectItem value="oldest">Oldest First</SelectItem>
+                        <SelectItem value="name-asc">Name A-Z</SelectItem>
+                        <SelectItem value="name-desc">Name Z-A</SelectItem>
+                        <SelectItem value="size-asc">Size (Smallest)</SelectItem>
+                        <SelectItem value="size-desc">Size (Largest)</SelectItem>
+                        <SelectItem value="duration-asc">Duration (Shortest)</SelectItem>
+                        <SelectItem value="duration-desc">Duration (Longest)</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {/* View toggle */}
+                    <div className="flex items-center border rounded-md">
+                      <Button
+                        variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        onClick={() => setViewMode('grid')}
+                        className="rounded-r-none"
+                      >
+                        <Grid3x3 className="h-4 w-4" />
+                        <span className="sr-only">Grid view</span>
+                      </Button>
+                      <Button
+                        variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        onClick={() => setViewMode('list')}
+                        className="rounded-l-none"
+                      >
+                        <List className="h-4 w-4" />
+                        <span className="sr-only">List view</span>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -851,61 +1002,63 @@ function LibraryPageContent() {
               <ContentListSkeleton count={8} />
             )
           ) : error ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
               <FileX2 className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Error Loading Library</h3>
-              <p className="text-sm text-muted-foreground mb-4">{error}</p>
-              <Button onClick={() => fetchItems()} variant="outline">
+              <h3 className="text-base sm:text-lg font-semibold mb-2">Error Loading Library</h3>
+              <p className="text-sm text-muted-foreground mb-4 max-w-md">{error}</p>
+              <Button onClick={() => fetchItems()} variant="outline" className="min-h-[44px]">
                 Try Again
               </Button>
             </div>
           ) : filteredItems.length === 0 ? (
-            items.length === 0 && !searchQuery && contentType === 'all' ? (
+            items.length === 0 && !searchQuery && advancedFilters.contentTypes.length === 0 ? (
               <LibraryEmptyState onUploadComplete={() => fetchItems()} />
             ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <FileX2 className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">
-                  {searchQuery ? 'No items found' : `No ${contentType} items yet`}
-                </h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {searchQuery
-                    ? 'Try adjusting your search or filters'
-                    : `Upload or create ${contentType} content to see it here`}
+              <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                <FileX2 className="h-12 w-12 text-muted-foreground mb-6" />
+                <h3 className="text-base sm:text-lg font-semibold mb-3">No items found</h3>
+                <p className="text-sm text-muted-foreground mb-6 max-w-md">
+                  Try adjusting your search or filters
                 </p>
-                <div className="flex gap-3">
+                <div className="flex flex-col xs:flex-row gap-3 w-full xs:w-auto">
                   {searchQuery && (
-                    <Button onClick={() => setSearchQuery('')} variant="outline">
+                    <Button
+                      onClick={() => setSearchQuery('')}
+                      variant="outline"
+                      className="min-h-[44px] w-full xs:w-auto"
+                    >
                       Clear Search
                     </Button>
                   )}
-                  {contentType !== 'all' && (
-                    <Button onClick={() => setContentType('all')} variant="outline">
-                      View All Content
-                    </Button>
-                  )}
-                  <Button onClick={handleClearAllFilters} variant="outline">
+                  <Button
+                    onClick={handleClearAllFilters}
+                    variant="outline"
+                    className="min-h-[44px] w-full xs:w-auto"
+                  >
                     Clear All Filters
                   </Button>
                 </div>
               </div>
             )
           ) : viewMode === 'list' ? (
-            <div className="space-y-4">
-              <LibraryTable
-                items={paginatedItems}
-                selectedIds={selectedIds}
-                onSelect={handleSelect}
-                onSelectAll={handleSelectAll}
-                onDelete={handleDelete}
-                onShare={handleShare}
-                onDownload={handleDownload}
-              />
+            <div className="space-y-6">
+              {/* Table wrapper with horizontal scroll on mobile */}
+              <div className="rounded-md border overflow-x-auto">
+                <LibraryTable
+                  items={paginatedItems}
+                  selectedIds={selectedIds}
+                  onSelect={handleSelect}
+                  onSelectAll={handleSelectAll}
+                  onDelete={handleDelete}
+                  onShare={handleShare}
+                  onDownload={handleDownload}
+                />
+              </div>
 
-              {/* Pagination */}
+              {/* Pagination - responsive */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
+                <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between pt-2">
+                  <p className="text-sm text-muted-foreground text-center sm:text-left">
                     Showing {startIndex + 1} to {Math.min(endIndex, filteredItems.length)} of {filteredItems.length} items
                   </p>
                   <Pagination>
@@ -918,8 +1071,9 @@ function LibraryPageContent() {
                         />
                       </PaginationItem>
 
+                      {/* Show fewer page numbers on mobile */}
                       {getPageNumbers().map((page, index) => (
-                        <PaginationItem key={`page-${index}`}>
+                        <PaginationItem key={`page-${index}`} className="hidden xs:inline-flex">
                           {page === 'ellipsis' ? (
                             <PaginationEllipsis />
                           ) : (
@@ -934,6 +1088,13 @@ function LibraryPageContent() {
                         </PaginationItem>
                       ))}
 
+                      {/* Current page indicator on mobile */}
+                      <PaginationItem className="xs:hidden">
+                        <span className="px-4 text-sm">
+                          {currentPage} / {totalPages}
+                        </span>
+                      </PaginationItem>
+
                       <PaginationItem>
                         <PaginationNext
                           onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
@@ -947,7 +1108,8 @@ function LibraryPageContent() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            // Grid view - responsive: 1 col mobile, 2 col tablet, 3 col desktop (max)
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 auto-rows-fr w-full">
               {filteredItems.map((item) => (
                 <SelectableContentCard
                   key={item.id}
@@ -962,16 +1124,19 @@ function LibraryPageContent() {
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* Bulk Actions Toolbar */}
       <BulkActionsToolbar
         selectedCount={selectedIds.length}
         onClearSelection={handleClearSelection}
-        onDelete={handleBulkDelete}
-        onAddTags={() => setShowTagModal(true)}
+        onDelete={confirmBulkDelete}
+        onRestore={advancedFilters.statusFilter === 'trash' ? handleBulkRestore : undefined}
+        onPermanentDelete={advancedFilters.statusFilter === 'trash' ? () => setShowPermanentDeleteDialog(true) : undefined}
+        onAddTags={advancedFilters.statusFilter !== 'trash' ? () => setShowTagModal(true) : undefined}
         onDownload={handleBulkDownload}
-        onAddToCollection={handleBulkAddToCollection}
+        onAddToCollection={advancedFilters.statusFilter !== 'trash' ? handleBulkAddToCollection : undefined}
+        mode={advancedFilters.statusFilter === 'trash' ? 'trash' : 'active'}
       />
 
       {/* Modals */}
@@ -1040,12 +1205,75 @@ function LibraryPageContent() {
         }}
       />
 
+      <UploadWizard
+        open={showUploadWizard}
+        onClose={() => {
+          fetchItems();
+          setShowUploadWizard(false);
+        }}
+      />
+
       <ExportModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         selectedItems={selectedIds}
         totalItems={items.length}
       />
+
+      {/* Delete Confirmation Dialogs */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move to Trash?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This item will be moved to trash. You can restore it later from the trash page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Move to Trash
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move {selectedIds.length} items to Trash?</AlertDialogTitle>
+            <AlertDialogDescription>
+              These items will be moved to trash. You can restore them later from the trash page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Move to Trash
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently Delete {selectedIds.length} items?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <div className="font-semibold text-destructive">This action cannot be undone!</div>
+                <div>These items will be permanently deleted from the system and cannot be recovered.</div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkPermanentDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete Forever
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

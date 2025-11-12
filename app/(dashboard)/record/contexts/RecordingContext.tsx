@@ -106,6 +106,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const recordingStartTimeRef = useRef<number | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasWarned25Min = useRef(false);
+  const isStoppingRef = useRef(false);
 
   // Picture-in-Picture
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
@@ -126,15 +127,32 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     }
   }, [screenshareStream]);
 
-  // Auto-request camera on mount if layout includes camera
+  // Auto-request camera and microphone on mount
   useEffect(() => {
-    const requestInitialCamera = async () => {
-      console.log('[RecordingContext] Auto-request camera check:', {
+    const requestInitialMedia = async () => {
+      console.log('[RecordingContext] Auto-request media check:', {
         layout,
         cameraEnabled,
+        microphoneEnabled,
         hasCameraStream: !!cameraStream,
+        hasMicrophoneStream: !!microphoneStream,
       });
 
+      // Request microphone if enabled and not already present
+      if (microphoneEnabled && !microphoneStream) {
+        console.log('[RecordingContext] Requesting initial microphone...');
+        try {
+          const micStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+          console.log('[RecordingContext] Initial microphone obtained:', micStream.id);
+          setMicrophoneStream(micStream);
+        } catch (error) {
+          console.error('[RecordingContext] Failed to get initial microphone stream:', error);
+        }
+      }
+
+      // Request camera if layout includes it and not already present
       if (layout !== 'screenOnly' && cameraEnabled && !cameraStream) {
         console.log('[RecordingContext] Requesting initial camera...');
         try {
@@ -149,7 +167,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    requestInitialCamera();
+    requestInitialMedia();
   }, []); // Only run on mount
 
   // Monitor layout changes and request camera if needed (but NOT screenshare - that's user-initiated only)
@@ -314,6 +332,23 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
 
   // This is called by the main record button - just opens PiP, doesn't start recording
   const startRecording = async () => {
+    // Ensure microphone is requested if enabled and not present
+    if (microphoneEnabled && !microphoneStreamRef.current) {
+      console.log('[RecordingContext] Requesting microphone before recording...');
+      try {
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        setMicrophoneStream(micStream);
+        // Give state time to update
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error('[RecordingContext] Failed to get microphone:', error);
+        toast.error('Microphone access required', {
+          description: 'Please allow microphone access to record audio.',
+        });
+        return;
+      }
+    }
+
     // If no streams available, request them first
     if (!cameraStreamRef.current && !screenshareStreamRef.current) {
       const success = await requestMediaStreams();
@@ -414,6 +449,25 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         isEntireScreenShared // Skip camera overlay when entire screen is shared
       );
 
+      // Validate composed stream
+      const videoTracks = composedStream.getVideoTracks();
+      const audioTracks = composedStream.getAudioTracks();
+      console.log('[RecordingContext] Composed stream validation:', {
+        hasVideoTracks: videoTracks.length > 0,
+        hasAudioTracks: audioTracks.length > 0,
+        videoTrackStates: videoTracks.map(t => ({ id: t.id, readyState: t.readyState, enabled: t.enabled })),
+        audioTrackStates: audioTracks.map(t => ({ id: t.id, readyState: t.readyState, enabled: t.enabled })),
+      });
+
+      if (videoTracks.length === 0) {
+        console.error('[RecordingContext] ❌ Composed stream has no video tracks!');
+        toast.error('Recording failed to start', {
+          description: 'No video source available. Please try again.',
+        });
+        setIsRecording(false);
+        return;
+      }
+
       const mediaRecorder = new MediaRecorder(composedStream, {
         mimeType: 'video/webm; codecs=vp9',
         videoBitsPerSecond: 8e6,
@@ -422,12 +476,53 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       const chunks: Blob[] = [];
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.push(event.data);
+        console.log('[RecordingContext] ondataavailable fired, data size:', event.data.size);
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+          console.log('[RecordingContext] Chunk added, total chunks:', chunks.length, 'total size:', chunks.reduce((sum, chunk) => sum + chunk.size, 0));
+        } else {
+          console.warn('[RecordingContext] ondataavailable fired but data is empty');
+        }
+      };
+
+      mediaRecorder.onerror = (event) => {
+        console.error('[RecordingContext] MediaRecorder error:', event);
+        toast.error('Recording error occurred', {
+          description: 'An error occurred during recording. Please try again.',
+        });
+        stopRecording();
       };
 
       mediaRecorder.onstop = () => {
-        composedStream.getVideoTracks().forEach((track) => track.stop());
+        console.log('[RecordingContext] MediaRecorder onstop callback triggered');
+
+        // Safely stop composed stream tracks
+        // IMPORTANT: Only stop tracks that are NOT from the original source streams
+        // (camera, microphone, screenshare) so they can be reused for future recordings
+        try {
+          composedStream.getTracks().forEach((track) => {
+            if (track.readyState !== 'ended') {
+              // Check if this track is a generated track (from MediaStreamTrackGenerator)
+              // or a source track (from camera/microphone)
+              const isSourceTrack =
+                microphoneStreamRef.current?.getTracks().some(t => t.id === track.id) ||
+                cameraStreamRef.current?.getTracks().some(t => t.id === track.id) ||
+                screenshareStreamRef.current?.getTracks().some(t => t.id === track.id);
+
+              if (!isSourceTrack) {
+                console.log('[RecordingContext] Stopping generated track:', track.kind, track.id);
+                track.stop();
+              } else {
+                console.log('[RecordingContext] Preserving source track for reuse:', track.kind, track.id);
+              }
+            }
+          });
+        } catch (error) {
+          console.warn('[RecordingContext] Error stopping tracks:', error);
+        }
+
         const blob = new Blob(chunks, { type: 'video/webm' });
+        console.log('[RecordingContext] Recording blob created, size:', blob.size);
 
         // Check file size limit
         if (blob.size > RECORDING_LIMITS.MAX_FILE_SIZE_BYTES) {
@@ -446,16 +541,45 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           recordingTimerRef.current = null;
         }
         recordingStartTimeRef.current = null;
+
+        // Clear refs
+        mediaRecorderRef.current = null;
+        isStoppingRef.current = false;
+
+        console.log('[RecordingContext] Recording stopped successfully');
       };
 
+      console.log('[RecordingContext] Starting MediaRecorder...');
       mediaRecorder.start();
+      console.log('[RecordingContext] MediaRecorder started, state:', mediaRecorder.state);
       mediaRecorderRef.current = mediaRecorder;
     });
   };
 
   const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
-    mediaRecorderRef.current = null;
+    console.log('[RecordingContext] stopRecording called, mediaRecorder exists:', !!mediaRecorderRef.current);
+    console.log('[RecordingContext] mediaRecorder state:', mediaRecorderRef.current?.state);
+    console.log('[RecordingContext] isStoppingRef:', isStoppingRef.current);
+
+    // Prevent recursive calls
+    if (isStoppingRef.current) {
+      console.log('[RecordingContext] Already stopping, ignoring duplicate call');
+      return;
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      isStoppingRef.current = true;
+      console.log('[RecordingContext] Stopping mediaRecorder...');
+
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (error) {
+        console.error('[RecordingContext] Error stopping mediaRecorder:', error);
+        isStoppingRef.current = false;
+      }
+    } else {
+      console.warn('[RecordingContext] Cannot stop - mediaRecorder is null or already inactive');
+    }
   };
 
   const pauseRecording = () => {

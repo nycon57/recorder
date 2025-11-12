@@ -4,7 +4,14 @@ import { Search, FileSearch, Lightbulb, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/app/components/ui/button';
-import { Card } from '@/app/components/ui/card';
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from '@/app/components/ui/empty';
 
 /**
  * SearchNoResultsState Component
@@ -15,6 +22,8 @@ import { Card } from '@/app/components/ui/card';
  * - Helpful suggestions to refine search
  * - Quick actions to browse library
  * - Tips for better search results
+ *
+ * @refactored - Now uses @shadcn/empty as foundation
  */
 interface SearchNoResultsStateProps {
   query: string;
@@ -25,24 +34,24 @@ export function SearchNoResultsState({ query, onClearSearch }: SearchNoResultsSt
   const router = useRouter();
 
   return (
-    <Card className="border-dashed border-2">
-      <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-        {/* Icon */}
-        <div className="inline-flex items-center justify-center rounded-full bg-muted p-6 mb-6">
+    <Empty className="border-2 py-12">
+      <EmptyHeader>
+        <EmptyMedia variant="icon" className="mb-6">
           <FileSearch className="size-12 text-muted-foreground" />
-        </div>
+        </EmptyMedia>
 
-        {/* Heading */}
-        <h3 className="text-2xl font-bold mb-2">
+        <EmptyTitle className="text-2xl mb-2">
           No results found for "{query}"
-        </h3>
+        </EmptyTitle>
 
-        <p className="text-muted-foreground mb-8 max-w-md">
+        <EmptyDescription className="mb-6 max-w-md">
           We couldn't find any content matching your search. Try adjusting your query or browse your library.
-        </p>
+        </EmptyDescription>
+      </EmptyHeader>
 
+      <EmptyContent className="max-w-lg">
         {/* Search Tips */}
-        <div className="w-full max-w-lg mb-8">
+        <div className="w-full mb-6">
           <div className="flex items-start gap-3 p-4 bg-primary/5 rounded-lg border border-primary/10">
             <Lightbulb className="size-5 text-primary flex-shrink-0 mt-0.5" />
             <div className="text-left space-y-2">
@@ -77,8 +86,8 @@ export function SearchNoResultsState({ query, onClearSearch }: SearchNoResultsSt
             </Button>
           )}
         </div>
-      </div>
-    </Card>
+      </EmptyContent>
+    </Empty>
   );
 }
 
@@ -91,6 +100,8 @@ export function SearchNoResultsState({ query, onClearSearch }: SearchNoResultsSt
  * - Welcoming message
  * - Quick tips on using search
  * - Examples of search queries
+ *
+ * @refactored - Now uses @shadcn/empty as foundation
  */
 export function SearchInitialState() {
   const router = useRouter();
@@ -103,24 +114,26 @@ export function SearchInitialState() {
   ];
 
   return (
-    <Card className="border-dashed border-2">
-      <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-        {/* Icon */}
-        <div className="inline-flex items-center justify-center rounded-full bg-primary/10 p-6 mb-6">
-          <Search className="size-12 text-primary" />
-        </div>
+    <Empty className="border-2 py-12">
+      <EmptyHeader>
+        <EmptyMedia className="mb-6">
+          <div className="inline-flex items-center justify-center rounded-full bg-primary/10 p-6">
+            <Search className="size-12 text-primary" />
+          </div>
+        </EmptyMedia>
 
-        {/* Heading */}
-        <h3 className="text-2xl font-bold mb-2">
+        <EmptyTitle className="text-2xl mb-2">
           Powerful AI Search
-        </h3>
+        </EmptyTitle>
 
-        <p className="text-muted-foreground mb-8 max-w-md">
+        <EmptyDescription className="mb-6 max-w-md">
           Search across all your recordings, transcripts, and documents using semantic AI search.
-        </p>
+        </EmptyDescription>
+      </EmptyHeader>
 
+      <EmptyContent className="max-w-2xl">
         {/* Features */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-6">
           <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg text-left">
             <div className="inline-flex items-center justify-center rounded-md bg-blue-100 dark:bg-blue-900/30 p-2 flex-shrink-0">
               <Search className="size-4 text-blue-600 dark:text-blue-400" />
@@ -147,7 +160,7 @@ export function SearchInitialState() {
         </div>
 
         {/* Example Queries */}
-        <div className="w-full max-w-lg">
+        <div className="w-full max-w-lg mb-6">
           <p className="text-sm font-medium mb-3">Try searching for:</p>
           <div className="flex flex-wrap gap-2 justify-center">
             {exampleQueries.map((query) => (
@@ -166,7 +179,7 @@ export function SearchInitialState() {
         </div>
 
         {/* Browse Library CTA */}
-        <div className="mt-8 pt-8 border-t w-full max-w-md">
+        <div className="pt-6 border-t w-full max-w-md">
           <Button
             variant="outline"
             onClick={() => router.push('/library')}
@@ -176,7 +189,7 @@ export function SearchInitialState() {
             <ArrowRight className="size-4" />
           </Button>
         </div>
-      </div>
-    </Card>
+      </EmptyContent>
+    </Empty>
   );
 }

@@ -177,7 +177,7 @@ export default function AdminJobsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Job Queue</h1>
+          <h1 className="text-3xl font-normal">Job Queue</h1>
           <p className="text-muted-foreground">Monitor and manage background jobs</p>
         </div>
 

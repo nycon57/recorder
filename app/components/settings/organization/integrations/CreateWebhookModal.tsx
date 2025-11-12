@@ -1,24 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Plus, Trash2, AlertCircle, Lock } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { ChevronDown, AlertCircle, Lock } from 'lucide-react';
 
 import { createWebhookSchema, type CreateWebhookInput } from '@/lib/validations/api';
 
+import { FormDialog } from '@/app/components/ui/form-dialog';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/components/ui/dialog';
+  DynamicFieldArray,
+  type KeyValuePair,
+  keyValuePairsToObject,
+} from '@/app/components/ui/dynamic-field-array';
 import {
-  Form,
   FormControl,
   FormDescription,
   FormField,
@@ -92,92 +85,57 @@ const AVAILABLE_EVENTS = [
 ];
 
 export function CreateWebhookModal({ open, onOpenChange }: CreateWebhookModalProps) {
-  const queryClient = useQueryClient();
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [customHeaders, setCustomHeaders] = useState<{ key: string; value: string }[]>([
+  const [customHeaders, setCustomHeaders] = useState<KeyValuePair[]>([
     { key: '', value: '' },
   ]);
 
-  const form = useForm<CreateWebhookInput>({
-    resolver: zodResolver(createWebhookSchema),
-    defaultValues: {
-      name: '',
-      description: '',
-      url: '',
-      events: [],
-      headers: {},
-      retry_enabled: true,
-      max_retries: 3,
-      timeout_ms: 5000,
-    },
-  });
-
-  const createWebhookMutation = useMutation({
-    mutationFn: async (data: CreateWebhookInput) => {
-      const response = await fetch('/api/organizations/webhooks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) throw new Error('Failed to create webhook');
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['webhooks'] });
-      toast.success('Webhook created successfully');
-      handleClose();
-    },
-    onError: () => {
-      toast.error('Failed to create webhook');
-    },
-  });
-
-  const handleSubmit = (data: CreateWebhookInput) => {
+  const handleSubmit = async (data: CreateWebhookInput) => {
     // Convert custom headers array to object
-    const headers: Record<string, string> = {};
-    customHeaders.forEach((header) => {
-      if (header.key && header.value) {
-        headers[header.key] = header.value;
-      }
-    });
-    data.headers = headers;
+    data.headers = keyValuePairsToObject(customHeaders);
 
-    createWebhookMutation.mutate(data);
+    const response = await fetch('/api/organizations/webhooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create webhook');
+    return response.json();
   };
 
-  const handleClose = () => {
-    form.reset();
+  const handleCleanup = () => {
     setCustomHeaders([{ key: '', value: '' }]);
     setShowAdvanced(false);
-    onOpenChange(false);
-  };
-
-  const addHeader = () => {
-    setCustomHeaders([...customHeaders, { key: '', value: '' }]);
-  };
-
-  const removeHeader = (index: number) => {
-    setCustomHeaders(customHeaders.filter((_, i) => i !== index));
-  };
-
-  const updateHeader = (index: number, field: 'key' | 'value', value: string) => {
-    const updated = [...customHeaders];
-    updated[index][field] = value;
-    setCustomHeaders(updated);
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Create Webhook</DialogTitle>
-          <DialogDescription>
-            Configure a webhook endpoint to receive real-time notifications about events in your organization.
-          </DialogDescription>
-        </DialogHeader>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Create Webhook"
+      description="Configure a webhook endpoint to receive real-time notifications about events in your organization."
+      size="2xl"
+      schema={createWebhookSchema as any}
+      defaultValues={{
+        name: '',
+        description: '',
+        url: '',
+        events: [],
+        headers: {},
+        retry_enabled: true,
+        max_retries: 3,
+        timeout_ms: 5000,
+      }}
+      mutationFn={handleSubmit}
+      queryKey={['webhooks']}
+      successMessage="Webhook created successfully"
+      errorMessage="Failed to create webhook"
+      submitLabel="Create Webhook"
+      loadingLabel="Creating..."
+      onCleanup={handleCleanup}
+    >
+      {(form) => (
+        <>
             <FormField
               control={form.control}
               name="name"
@@ -264,10 +222,10 @@ export function CreateWebhookModal({ open, onOpenChange }: CreateWebhookModalPro
                           checked={field.value?.includes(event.value)}
                           onCheckedChange={(checked) => {
                             if (checked) {
-                              field.onChange([...field.value, event.value]);
+                              field.onChange([...field.value, event.value as any]);
                             } else {
                               field.onChange(
-                                field.value?.filter((v) => v !== event.value)
+                                field.value?.filter((v) => v !== event.value as any)
                               );
                             }
                           }}
@@ -286,49 +244,18 @@ export function CreateWebhookModal({ open, onOpenChange }: CreateWebhookModalPro
               )}
             />
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Custom Headers</label>
-                <p className="text-xs text-gray-500">
-                  Add custom headers for authentication or identification
-                </p>
-                <div className="space-y-2">
-                  {customHeaders.map((header, index) => (
-                    <div key={index} className="flex gap-2">
-                      <Input
-                        placeholder="Header name (e.g., X-API-Key)"
-                        value={header.key}
-                        onChange={(e) => updateHeader(index, 'key', e.target.value)}
-                      />
-                      <Input
-                        placeholder="Header value"
-                        type="password"
-                        value={header.value}
-                        onChange={(e) => updateHeader(index, 'value', e.target.value)}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeHeader(index)}
-                        disabled={customHeaders.length === 1}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addHeader}
-                    className="mt-2"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Header
-                  </Button>
-                </div>
-              </div>
+            <DynamicFieldArray
+              value={customHeaders}
+              onChange={setCustomHeaders}
+              type="key-value"
+              label="Custom Headers"
+              description="Add custom headers for authentication or identification"
+              keyPlaceholder="Header name (e.g., X-API-Key)"
+              valuePlaceholder="Header value"
+              valueFieldType="password"
+              addButtonLabel="Add Header"
+              minItems={1}
+            />
 
               <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
                 <CollapsibleTrigger asChild>
@@ -417,19 +344,8 @@ export function CreateWebhookModal({ open, onOpenChange }: CreateWebhookModalPro
                   />
                 </CollapsibleContent>
               </Collapsible>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={handleClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={createWebhookMutation.isLoading}>
-                {createWebhookMutation.isLoading ? 'Creating...' : 'Create Webhook'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+          </>
+        )}
+    </FormDialog>
   );
 }

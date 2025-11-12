@@ -10,16 +10,7 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Separator } from '@/app/components/ui/separator';
 import { useToast } from '@/app/components/ui/use-toast';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/app/components/ui/alert-dialog';
+import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 
 export function DangerZone() {
   const { user } = useUser();
@@ -29,7 +20,6 @@ export function DangerZone() {
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDeactivateDialog, setShowDeactivateDialog] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleExportData = async () => {
@@ -96,15 +86,6 @@ export function DangerZone() {
   };
 
   const handleDeleteAccount = async () => {
-    if (deleteConfirmation !== user?.primaryEmailAddress?.emailAddress) {
-      toast({
-        title: 'Confirmation Required',
-        description: 'Please type your email address to confirm deletion.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     setIsDeleting(true);
     try {
       // Note: In production, this would delete from Supabase first, then Clerk
@@ -230,72 +211,37 @@ export function DangerZone() {
       </div>
 
       {/* Deactivate Dialog */}
-      <AlertDialog open={showDeactivateDialog} onOpenChange={setShowDeactivateDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Deactivate Account?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Your account will be temporarily disabled. You can reactivate it at any time by signing in again.
-              Your data will be preserved during deactivation.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeactivateAccount}
-              className="bg-amber-600 text-white hover:bg-amber-700"
-            >
-              Deactivate Account
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmationDialog
+        open={showDeactivateDialog}
+        onOpenChange={setShowDeactivateDialog}
+        title="Deactivate Account?"
+        description="Your account will be temporarily disabled. You can reactivate it at any time by signing in again. Your data will be preserved during deactivation."
+        confirmText="Deactivate Account"
+        variant="default"
+        onConfirm={handleDeactivateAccount}
+        useAlertDialog
+      />
 
       {/* Delete Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">
-              Delete Account Permanently?
-            </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-4">
-              <p>
-                This action is <strong>irreversible</strong>. All your data will be permanently deleted:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>All recordings and transcripts</li>
-                <li>All generated documents</li>
-                <li>All settings and preferences</li>
-                <li>All shared links</li>
-              </ul>
-              <div className="space-y-2 pt-4">
-                <Label htmlFor="delete-confirm">
-                  Type <strong>{user?.primaryEmailAddress?.emailAddress}</strong> to confirm:
-                </Label>
-                <Input
-                  id="delete-confirm"
-                  value={deleteConfirmation}
-                  onChange={(e) => setDeleteConfirmation(e.target.value)}
-                  placeholder="Enter your email address"
-                />
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteAccount}
-              disabled={
-                isDeleting ||
-                deleteConfirmation !== user?.primaryEmailAddress?.emailAddress
-              }
-            >
-              {isDeleting ? 'Deleting...' : 'Delete Account Permanently'}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title="Delete Account Permanently?"
+        description="This action is irreversible. All your data will be permanently deleted."
+        confirmText="Delete Account Permanently"
+        variant="destructive"
+        requireTypedConfirmation={user?.primaryEmailAddress?.emailAddress || ''}
+        warnings={[
+          {
+            title: 'All data will be lost',
+            message: 'This includes: all recordings and transcripts, all generated documents, all settings and preferences, and all shared links.',
+            variant: 'destructive',
+          },
+        ]}
+        isLoading={isDeleting}
+        onConfirm={handleDeleteAccount}
+        useAlertDialog
+      />
     </div>
   );
 }

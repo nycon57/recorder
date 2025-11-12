@@ -9,6 +9,9 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 import { ConnectorRegistry } from '@/lib/connectors/registry';
 import { ConnectorType, type SyncOptions } from '@/lib/connectors/base';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger({ service: 'sync-connector' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -28,7 +31,9 @@ export async function syncConnector(job: Job): Promise<void> {
   const payload = job.payload as unknown as SyncConnectorPayload;
   const { connectorId, orgId, syncType = 'scheduled', fullSync, since, limit } = payload;
 
-  console.log(`[Sync-Connector] Starting sync for connector ${connectorId} (${syncType})`);
+  logger.info('Starting connector sync', {
+    context: { connectorId, orgId, syncType },
+  });
 
   const supabase = createAdminClient();
   const syncStartTime = Date.now();
@@ -48,7 +53,9 @@ export async function syncConnector(job: Job): Promise<void> {
 
     // Check if connector is active
     if (!connectorConfig.is_active) {
-      console.log(`[Sync-Connector] Connector ${connectorId} is inactive, skipping sync`);
+      logger.info('Connector inactive, skipping sync', {
+        context: { connectorId },
+      });
       return;
     }
 
@@ -67,7 +74,9 @@ export async function syncConnector(job: Job): Promise<void> {
     const credentials = connectorConfig.credentials as any;
     const settings = connectorConfig.settings as any;
 
-    console.log(`[Sync-Connector] Creating ${connectorType} connector instance`);
+    logger.info('Creating connector instance', {
+      context: { connectorType, connectorId },
+    });
 
     const connector = ConnectorRegistry.create(connectorType, credentials, settings);
 
@@ -77,7 +86,9 @@ export async function syncConnector(job: Job): Promise<void> {
       throw new Error(`Connection test failed: ${testResult.message}`);
     }
 
-    console.log(`[Sync-Connector] Connection test passed, starting sync`);
+    logger.info('Connection test passed, starting sync', {
+      context: { connectorId },
+    });
 
     // Build sync options
     const syncOptions: SyncOptions = {
@@ -92,9 +103,14 @@ export async function syncConnector(job: Job): Promise<void> {
     // Execute sync
     const syncResult = await connector.sync(syncOptions);
 
-    console.log(
-      `[Sync-Connector] Sync completed: ${syncResult.filesProcessed} processed, ${syncResult.filesUpdated} updated, ${syncResult.filesFailed} failed`
-    );
+    logger.info('Sync completed', {
+      context: { connectorId },
+      data: {
+        filesProcessed: syncResult.filesProcessed,
+        filesUpdated: syncResult.filesUpdated,
+        filesFailed: syncResult.filesFailed,
+      },
+    });
 
     // Update connector with last sync timestamp
     await supabase
@@ -109,9 +125,13 @@ export async function syncConnector(job: Job): Promise<void> {
 
     // Log sync results (connector_sync_logs table will be created in Phase 5 migration)
     const syncDuration = Date.now() - syncStartTime;
-    console.log(
-      `[Sync-Connector] Sync stats - Duration: ${syncDuration}ms, Status: ${syncResult.success ? 'success' : 'partial'}`
-    );
+    logger.info('Sync stats', {
+      context: { connectorId },
+      data: {
+        durationMs: syncDuration,
+        status: syncResult.success ? 'success' : 'partial',
+      },
+    });
 
     // TODO: Once connector_sync_logs table is created, insert sync log here
     // await supabase.from('connector_sync_logs').insert({ ... });
@@ -126,9 +146,10 @@ export async function syncConnector(job: Job): Promise<void> {
       .limit(100);
 
     if (!docsError && pendingDocs && pendingDocs.length > 0) {
-      console.log(
-        `[Sync-Connector] Enqueuing ${pendingDocs.length} document processing jobs`
-      );
+      logger.info('Enqueuing document processing jobs', {
+        context: { connectorId },
+        data: { count: pendingDocs.length },
+      });
 
       // Enqueue process_imported_doc jobs for each pending document
       const jobInserts = pendingDocs.map((doc) => ({
@@ -149,9 +170,10 @@ export async function syncConnector(job: Job): Promise<void> {
         await supabase.from('jobs').insert(batch);
       }
 
-      console.log(
-        `[Sync-Connector] Enqueued ${pendingDocs.length} processing jobs for connector ${connectorId}`
-      );
+      logger.info('Processing jobs enqueued', {
+        context: { connectorId },
+        data: { count: pendingDocs.length },
+      });
     }
 
     // Create event for notifications
@@ -168,9 +190,14 @@ export async function syncConnector(job: Job): Promise<void> {
       },
     });
 
-    console.log(`[Sync-Connector] Sync job completed for connector ${connectorId}`);
+    logger.info('Sync job completed', {
+      context: { connectorId },
+    });
   } catch (error) {
-    console.error(`[Sync-Connector] Error:`, error);
+    logger.error('Sync job failed', {
+      context: { connectorId, orgId },
+      error: error as Error,
+    });
 
     // Update connector status to error
     await supabase
@@ -185,9 +212,13 @@ export async function syncConnector(job: Job): Promise<void> {
 
     // Log sync failure
     const syncDuration = Date.now() - syncStartTime;
-    console.log(
-      `[Sync-Connector] Sync failed - Duration: ${syncDuration}ms, Error: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
+    logger.error('Sync failed', {
+      context: { connectorId },
+      data: {
+        durationMs: syncDuration,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      },
+    });
 
     // TODO: Once connector_sync_logs table is created, insert failed sync log here
     // await supabase.from('connector_sync_logs').insert({ ... });

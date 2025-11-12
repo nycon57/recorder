@@ -24,6 +24,13 @@ export default function UploadModal({ blob, onClose }: UploadModalProps) {
       setUploadStatus('creating');
       setError(null);
 
+      console.log('[UploadModal] Starting upload', {
+        blobSize: blob.size,
+        blobSizeMB: parseFloat((blob.size / 1024 / 1024).toFixed(2)),
+        blobType: blob.type,
+        title: title || 'untitled',
+      });
+
       // Step 1: Create recording entry and get upload URL
       const createResponse = await fetch('/api/recordings', {
         method: 'POST',
@@ -35,6 +42,12 @@ export default function UploadModal({ blob, onClose }: UploadModalProps) {
       });
 
       if (!createResponse.ok) {
+        const errorData = await createResponse.json().catch(() => ({}));
+        console.error('[UploadModal] Recording creation failed', {
+          status: createResponse.status,
+          statusText: createResponse.statusText,
+          error: errorData,
+        });
         throw new Error('Failed to create recording');
       }
 
@@ -42,8 +55,17 @@ export default function UploadModal({ blob, onClose }: UploadModalProps) {
       const { recording, uploadUrl, token } = data;
       setRecordingId(recording.id);
 
+      console.log('[UploadModal] Recording created', {
+        recordingId: recording.id,
+        uploadUrl: uploadUrl ? 'received' : 'missing',
+      });
+
       // Step 2: Upload the blob to Supabase Storage
       setUploadStatus('uploading');
+      console.log('[UploadModal] Starting storage upload', {
+        recordingId: recording.id,
+        uploadUrl: uploadUrl.substring(0, 50) + '...',
+      });
 
       const uploadResponse = await fetch(uploadUrl, {
         method: 'PUT',
@@ -55,13 +77,27 @@ export default function UploadModal({ blob, onClose }: UploadModalProps) {
       });
 
       if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text().catch(() => 'unknown error');
+        console.error('[UploadModal] Storage upload failed', {
+          recordingId: recording.id,
+          status: uploadResponse.status,
+          statusText: uploadResponse.statusText,
+          error: errorText,
+        });
         throw new Error('Failed to upload video');
       }
 
       setUploadProgress(100);
+      console.log('[UploadModal] Storage upload complete', {
+        recordingId: recording.id,
+        blobSize: blob.size,
+      });
 
       // Step 3: Finalize the recording
       setUploadStatus('finalizing');
+      console.log('[UploadModal] Starting finalization', {
+        recordingId: recording.id,
+      });
 
       // Calculate SHA-256 hash of the blob (simplified for now)
       const sha256 = 'placeholder-hash'; // TODO: Implement actual hash calculation
@@ -81,17 +117,36 @@ export default function UploadModal({ blob, onClose }: UploadModalProps) {
       );
 
       if (!finalizeResponse.ok) {
+        const errorData = await finalizeResponse.json().catch(() => ({}));
+        console.error('[UploadModal] Finalization failed', {
+          recordingId: recording.id,
+          status: finalizeResponse.status,
+          statusText: finalizeResponse.statusText,
+          error: errorData,
+        });
         throw new Error('Failed to finalize recording');
       }
 
+      console.log('[UploadModal] Finalization complete', {
+        recordingId: recording.id,
+      });
+
       setUploadStatus('complete');
+      console.log('[UploadModal] Upload complete, redirecting', {
+        recordingId: recording.id,
+      });
 
       // Redirect to recording page after a short delay
       setTimeout(() => {
         router.push(`/library/${recording.id}`);
       }, 1500);
     } catch (err: any) {
-      console.error('Upload error:', err);
+      console.error('[UploadModal] Upload error', {
+        error: err,
+        message: err.message,
+        stack: err.stack,
+        recordingId: recordingId || 'unknown',
+      });
       setError(err.message || 'An error occurred during upload');
       setUploadStatus('error');
     }

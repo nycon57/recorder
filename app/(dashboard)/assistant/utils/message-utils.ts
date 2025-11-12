@@ -384,17 +384,27 @@ export function getMessageColor(message: ExtendedMessage): {
 /**
  * Parse citations from message text and convert to markdown links
  * Converts patterns like "[1]", "[2, 3]", "[1, 2, 3]" to clickable markdown links
+ * with highlight query parameters for in-document navigation
  */
 export function parseCitationsToMarkdown(
   text: string,
-  sources: SourceCitation[]
+  sources: SourceCitation[],
+  sourceKey?: string
 ): string {
   if (!sources || sources.length === 0) return text;
 
-  // Create a map of citation numbers to source URLs
+  // Create a map of citation numbers to source URLs with highlight params
   const citationMap = new Map<number, string>();
   sources.forEach((source, index) => {
-    citationMap.set(index + 1, source.url);
+    let url = source.url;
+
+    // Add highlight query parameters if available
+    if (sourceKey && source.metadata?.chunkId) {
+      const separator = url.includes('?') ? '&' : '?';
+      url = `${url}${separator}sourceKey=${encodeURIComponent(sourceKey)}&highlight=${encodeURIComponent(source.metadata.chunkId)}`;
+    }
+
+    citationMap.set(index + 1, url);
   });
 
   // Replace citation patterns:

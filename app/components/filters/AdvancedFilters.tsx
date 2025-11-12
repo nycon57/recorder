@@ -1,18 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { Filter, X, Calendar, FileType, Star, Clock } from 'lucide-react';
+import { Filter, Star, Video, FileVideo, FileAudio, FileText, StickyNote, CheckCircle2, Trash2, Archive } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Label } from '@/app/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/app/components/ui/select';
 import {
   Popover,
   PopoverContent,
@@ -20,13 +13,15 @@ import {
 } from '@/app/components/ui/popover';
 import { Switch } from '@/app/components/ui/switch';
 import { Separator } from '@/app/components/ui/separator';
-import { DateRangePicker } from './DateRangePicker';
 import { cn } from '@/lib/utils';
 import type { ContentType, RecordingStatus } from '@/lib/types/database';
+
+export type StatusFilter = 'active' | 'trash' | 'all';
 
 export interface FilterState {
   contentTypes: ContentType[];
   statuses: RecordingStatus[];
+  statusFilter: StatusFilter; // New: replaces the tabs
   dateRange: { from: Date | null; to: Date | null };
   favoritesOnly: boolean;
   hasTranscript: boolean | null;
@@ -40,19 +35,17 @@ interface AdvancedFiltersProps {
 }
 
 const CONTENT_TYPES: { value: ContentType; label: string; icon: React.ReactNode }[] = [
-  { value: 'recording', label: 'Recordings', icon: <FileType className="size-4" /> },
-  { value: 'video', label: 'Videos', icon: <FileType className="size-4" /> },
-  { value: 'audio', label: 'Audio', icon: <FileType className="size-4" /> },
-  { value: 'document', label: 'Documents', icon: <FileType className="size-4" /> },
-  { value: 'text', label: 'Notes', icon: <FileType className="size-4" /> },
+  { value: 'recording', label: 'Recordings', icon: <Video className="size-4" /> },
+  { value: 'video', label: 'Videos', icon: <FileVideo className="size-4" /> },
+  { value: 'audio', label: 'Audio', icon: <FileAudio className="size-4" /> },
+  { value: 'document', label: 'Documents', icon: <FileText className="size-4" /> },
+  { value: 'text', label: 'Notes', icon: <StickyNote className="size-4" /> },
 ];
 
-const STATUSES: { value: RecordingStatus; label: string }[] = [
-  { value: 'completed', label: 'Completed' },
-  { value: 'transcribing', label: 'Transcribing' },
-  { value: 'doc_generating', label: 'Generating' },
-  { value: 'uploading', label: 'Uploading' },
-  { value: 'error', label: 'Error' },
+const STATUS_OPTIONS: { value: StatusFilter; label: string; icon: React.ReactNode }[] = [
+  { value: 'active', label: 'Active', icon: <CheckCircle2 className="size-4" /> },
+  { value: 'trash', label: 'Trash', icon: <Trash2 className="size-4" /> },
+  { value: 'all', label: 'All', icon: <Archive className="size-4" /> },
 ];
 
 /**
@@ -61,10 +54,9 @@ const STATUSES: { value: RecordingStatus; label: string }[] = [
  *
  * Features:
  * - Content type filter
- * - Status filter
- * - Date range picker
  * - Favorites toggle
- * - Processing status filters
+ * - Has transcript filter
+ * - Has document filter
  * - Active filter count
  * - Clear all filters
  *
@@ -88,17 +80,11 @@ export function AdvancedFilters({
     onFiltersChange({ ...filters, contentTypes: updated });
   };
 
-  const toggleStatus = (status: RecordingStatus) => {
-    const updated = filters.statuses.includes(status)
-      ? filters.statuses.filter((s) => s !== status)
-      : [...filters.statuses, status];
-    onFiltersChange({ ...filters, statuses: updated });
-  };
-
   const clearAll = () => {
     onFiltersChange({
       contentTypes: [],
       statuses: [],
+      statusFilter: 'active', // Reset to default
       dateRange: { from: null, to: null },
       favoritesOnly: false,
       hasTranscript: null,
@@ -108,8 +94,7 @@ export function AdvancedFilters({
 
   const activeFilterCount =
     filters.contentTypes.length +
-    filters.statuses.length +
-    (filters.dateRange.from || filters.dateRange.to ? 1 : 0) +
+    (filters.statusFilter !== 'active' ? 1 : 0) + // Count if not default
     (filters.favoritesOnly ? 1 : 0) +
     (filters.hasTranscript !== null ? 1 : 0) +
     (filters.hasDocument !== null ? 1 : 0);
@@ -153,6 +138,34 @@ export function AdvancedFilters({
 
             <Separator />
 
+            {/* Status */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground">
+                Status
+              </Label>
+              <div className="space-y-1">
+                {STATUS_OPTIONS.map((status) => (
+                  <button
+                    key={status.value}
+                    type="button"
+                    onClick={() => onFiltersChange({ ...filters, statusFilter: status.value })}
+                    className={cn(
+                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-accent transition-colors',
+                      filters.statusFilter === status.value && 'bg-accent'
+                    )}
+                  >
+                    {status.icon}
+                    <span className="flex-1 text-left">{status.label}</span>
+                    {filters.statusFilter === status.value && (
+                      <div className="size-2 rounded-full bg-primary" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
             {/* Content Type */}
             <div className="space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">
@@ -177,53 +190,6 @@ export function AdvancedFilters({
                   </button>
                 ))}
               </div>
-            </div>
-
-            <Separator />
-
-            {/* Status */}
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">
-                Status
-              </Label>
-              <div className="space-y-1">
-                {STATUSES.map((status) => (
-                  <button
-                    key={status.value}
-                    type="button"
-                    onClick={() => toggleStatus(status.value)}
-                    className={cn(
-                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-accent transition-colors',
-                      filters.statuses.includes(status.value) && 'bg-accent'
-                    )}
-                  >
-                    <span className="flex-1 text-left">{status.label}</span>
-                    {filters.statuses.includes(status.value) && (
-                      <div className="size-2 rounded-full bg-primary" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Date Range */}
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-                <Calendar className="size-3.5" />
-                Date Range
-              </Label>
-              <DateRangePicker
-                from={filters.dateRange.from}
-                to={filters.dateRange.to}
-                onSelect={(range) =>
-                  onFiltersChange({
-                    ...filters,
-                    dateRange: { from: range?.from || null, to: range?.to || null },
-                  })
-                }
-              />
             </div>
 
             <Separator />

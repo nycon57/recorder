@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { X } from 'lucide-react';
-import { format } from 'date-fns';
 
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -49,32 +48,6 @@ export function FilterChips({
       onRemove: () => onRemoveFilter('contentTypes', type),
     });
   });
-
-  // Statuses
-  filters.statuses.forEach((status) => {
-    chips.push({
-      key: `status-${status}`,
-      label: `Status: ${status}`,
-      onRemove: () => onRemoveFilter('statuses', status),
-    });
-  });
-
-  // Date range
-  if (filters.dateRange.from || filters.dateRange.to) {
-    let label = 'Date: ';
-    if (filters.dateRange.from && filters.dateRange.to) {
-      label += `${format(filters.dateRange.from, 'MMM d')} - ${format(filters.dateRange.to, 'MMM d, yyyy')}`;
-    } else if (filters.dateRange.from) {
-      label += `From ${format(filters.dateRange.from, 'MMM d, yyyy')}`;
-    } else if (filters.dateRange.to) {
-      label += `Until ${format(filters.dateRange.to, 'MMM d, yyyy')}`;
-    }
-    chips.push({
-      key: 'dateRange',
-      label,
-      onRemove: () => onRemoveFilter('dateRange'),
-    });
-  }
 
   // Favorites
   if (filters.favoritesOnly) {

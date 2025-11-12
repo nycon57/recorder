@@ -13,6 +13,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
+import Link from 'next/link';
 import { Bot, Copy, Check, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '@clerk/nextjs';
@@ -146,28 +147,26 @@ export function MessageItem({
   const hasReasoning = messageHasReasoning(message);
   const hasToolCalls = messageHasToolCalls(message);
 
-  // Debug logging
-  if (message.role === 'assistant') {
-    console.log('[MessageItem] Rendering assistant message:', {
-      messageId: message.id,
-      hasSourcesField: 'sources' in message,
-      sourcesCount: sources.length,
-      hasSources,
-      messageTextLength: messageText.length,
-    });
-  }
+  // Extract sourceKey from message metadata for building highlight URLs
+  const sourceKey = message.metadata?.custom?.sourceKey as string | undefined;
 
-  // Parse citations in message text to make them clickable
-  const messageTextWithCitations = parseCitationsToMarkdown(messageText, sources);
+  // Debug: Log message metadata to verify data flow
+  React.useEffect(() => {
+    if (isAssistant && hasSources) {
+      console.log('[MessageItem] Rendering with message:', {
+        messageId: message.id,
+        hasSources: !!message.sources,
+        hasMetadata: !!message.metadata,
+        hasCustom: !!message.metadata?.custom,
+        sourceKeyFromMetadata: message.metadata?.custom?.sourceKey,
+        sourceKeyExtracted: sourceKey,
+        sourcesCount: sources.length,
+      });
+    }
+  }, [isAssistant, hasSources, message, sourceKey, sources]);
 
-  // Debug logging for parsed citations
-  if (message.role === 'assistant' && sources.length > 0) {
-    console.log('[MessageItem] Citation parsing:', {
-      originalText: messageText.substring(0, 200),
-      parsedText: messageTextWithCitations.substring(0, 200),
-      hasMarkdownLinks: messageTextWithCitations.includes('](/library/'),
-    });
-  }
+  // Parse citations in message text to make them clickable with highlight parameters
+  const messageTextWithCitations = parseCitationsToMarkdown(messageText, sources, sourceKey);
 
   /**
    * Handle copy
@@ -188,22 +187,24 @@ export function MessageItem({
   const messageContent = (
     <Message
       from={message.role}
-      className={cn('py-3', className)}
+      className={cn('py-2', className)}
       role="article"
       aria-label={`${isUser ? 'User' : 'Assistant'} message${message.createdAt ? ` from ${formatMessageTimestamp(message.createdAt, 'long')}` : ''}`}
     >
-      {/* Avatar - show for user on left */}
-      {isUser && (
+      {/* AI Avatar on left side */}
+      {isAssistant && (
         <MessageAvatar
-          src={user?.imageUrl || '/user-avatar.png'}
-          name={user?.fullName || user?.firstName || 'You'}
-          className="bg-muted"
+          src="/bot-avatar.png"
+          name=""
+          className="bg-primary/10"
           aria-hidden="true"
-        />
+        >
+          <Bot className="h-5 w-5 text-primary" />
+        </MessageAvatar>
       )}
 
       {/* Message Content Container */}
-      <div className={cn('flex-1 space-y-3')}>
+      <div className={cn('space-y-3', isAssistant && 'flex-1', isUser && 'flex flex-col items-end')}>
         {/* Tool Calls */}
         {isAssistant && hasToolCalls && message.toolInvocations && (
           <div className="space-y-2">
@@ -264,44 +265,94 @@ export function MessageItem({
           <Sources>
             <SourcesTrigger count={sources.length} />
             <SourcesContent role="list" aria-label="Source citations">
-              {sources.map((source, idx) => (
-                <div
-                  key={source.id || idx}
-                  role="listitem"
-                  className="rounded-lg border border-border bg-background p-3 hover:bg-accent/50 transition-colors"
-                >
-                  <Source
-                    href={source.url}
-                    title={source.title}
-                    aria-label={`Source ${idx + 1}: ${source.title}${source.relevanceScore ? `, ${(source.relevanceScore * 100).toFixed(0)}% relevance` : ''}`}
+              {sources.map((source, idx) => {
+                // Build URL with highlight parameters if available
+                const chunkId = source.metadata?.chunkId as string | undefined;
+                const sourceUrl = sourceKey && chunkId
+                  ? `${source.url}?sourceKey=${encodeURIComponent(sourceKey)}&highlight=${encodeURIComponent(chunkId)}`
+                  : source.url;
+
+                // Debug: Log URL construction for first source
+                if (idx === 0) {
+                  console.log('[MessageItem] URL construction:', {
+                    baseUrl: source.url,
+                    sourceKey,
+                    chunkId,
+                    finalUrl: sourceUrl,
+                  });
+                }
+
+                // Check if URL is internal (starts with /)
+                const isInternalLink = sourceUrl.startsWith('/');
+
+                return (
+                  <div
+                    key={source.id || idx}
+                    role="listitem"
+                    className="rounded-lg border border-border bg-background p-3 hover:bg-accent/50 transition-colors"
                   >
-                    <div className="flex items-start gap-3">
-                      <ExternalLink className="h-4 w-4 mt-0.5 shrink-0 text-primary" aria-hidden="true" />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm mb-1 truncate">{source.title}</div>
-                        {source.snippet && (
-                          <div className="text-xs text-muted-foreground line-clamp-2">
-                            {source.snippet}
+                    {isInternalLink ? (
+                      // Use Next.js Link for internal navigation
+                      <Link
+                        href={sourceUrl}
+                        className="flex items-center gap-2"
+                        aria-label={`Source ${idx + 1}: ${source.title}${source.relevanceScore ? `, ${(source.relevanceScore * 100).toFixed(0)}% relevance` : ''}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <ExternalLink className="h-4 w-4 mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm mb-1 truncate">{source.title}</div>
+                            {source.snippet && (
+                              <div className="text-xs text-muted-foreground line-clamp-2">
+                                {source.snippet}
+                              </div>
+                            )}
+                            {source.relevanceScore && (
+                              <div className="flex items-center gap-2 mt-2">
+                                <Badge variant="secondary" className="text-xs">
+                                  Relevance: {(source.relevanceScore * 100).toFixed(0)}%
+                                </Badge>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {source.relevanceScore && (
-                          <div className="flex items-center gap-2 mt-2">
-                            <Badge variant="secondary" className="text-xs">
-                              Relevance: {(source.relevanceScore * 100).toFixed(0)}%
-                            </Badge>
+                        </div>
+                      </Link>
+                    ) : (
+                      // Use regular anchor for external links
+                      <Source
+                        href={sourceUrl}
+                        title={source.title}
+                        aria-label={`Source ${idx + 1}: ${source.title}${source.relevanceScore ? `, ${(source.relevanceScore * 100).toFixed(0)}% relevance` : ''}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <ExternalLink className="h-4 w-4 mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm mb-1 truncate">{source.title}</div>
+                            {source.snippet && (
+                              <div className="text-xs text-muted-foreground line-clamp-2">
+                                {source.snippet}
+                              </div>
+                            )}
+                            {source.relevanceScore && (
+                              <div className="flex items-center gap-2 mt-2">
+                                <Badge variant="secondary" className="text-xs">
+                                  Relevance: {(source.relevanceScore * 100).toFixed(0)}%
+                                </Badge>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  </Source>
-                </div>
-              ))}
+                        </div>
+                      </Source>
+                    )}
+                  </div>
+                );
+              })}
             </SourcesContent>
           </Sources>
         )}
 
         {/* Main Message Content */}
-        <div className={cn('flex flex-col', isUser && 'max-w-[80%]', isAssistant && 'max-w-[80%]')}>
+        <div className={cn('flex flex-col')}>
           <MessageContent
             variant={isUser ? 'contained' : 'flat'}
             className={cn(
@@ -317,7 +368,7 @@ export function MessageItem({
           </MessageContent>
 
           {/* Timestamp and Actions Row */}
-          <div className="flex items-center gap-2 mt-2 px-1">
+          <div className={cn('flex items-center gap-2 mt-2 px-1', isUser && 'justify-end')}>
             {/* Timestamp */}
             {message.createdAt && (
               <div className="text-xs opacity-60">
@@ -334,27 +385,37 @@ export function MessageItem({
                 onClick={handleCopy}
                 aria-label={copied ? 'Message copied' : 'Copy message to clipboard'}
               >
-                <AnimatePresence mode="wait">
-                  {copied ? (
-                    <motion.div
-                      key="check"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      exit={{ scale: 0 }}
-                    >
-                      <Check className="h-3 w-3 text-green-500" aria-hidden="true" />
-                    </motion.div>
+                {prefersReducedMotion ? (
+                  // Static icons for reduced motion
+                  copied ? (
+                    <Check className="h-3 w-3 text-green-500" aria-hidden="true" />
                   ) : (
-                    <motion.div
-                      key="copy"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      exit={{ scale: 0 }}
-                    >
-                      <Copy className="h-3 w-3" aria-hidden="true" />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                    <Copy className="h-3 w-3" aria-hidden="true" />
+                  )
+                ) : (
+                  // Animated icons for normal motion
+                  <AnimatePresence mode="wait">
+                    {copied ? (
+                      <motion.div
+                        key="check"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                      >
+                        <Check className="h-3 w-3 text-green-500" aria-hidden="true" />
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="copy"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                      >
+                        <Copy className="h-3 w-3" aria-hidden="true" />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                )}
               </Button>
             )}
           </div>
@@ -384,36 +445,31 @@ export function MessageItem({
         )}
       </div>
 
-      {/* AI Avatar on right side */}
-      {isAssistant && (
+      {/* User Avatar on right side */}
+      {isUser && (
         <MessageAvatar
-          src="/bot-avatar.png"
-          name=""
-          className="bg-primary/10"
+          src={user?.imageUrl || '/user-avatar.png'}
+          name={user?.fullName || user?.firstName || 'You'}
+          className="bg-muted"
           aria-hidden="true"
-        >
-          <Bot className="h-5 w-5 text-primary" />
-        </MessageAvatar>
+        />
       )}
     </Message>
   );
 
-  if (!animate) {
+  if (!animate || prefersReducedMotion) {
     return messageContent;
   }
 
-  // Use simplified animations for reduced motion preference
-  const variants = prefersReducedMotion
-    ? { hidden: { opacity: 0 }, visible: { opacity: 1 }, exit: { opacity: 0 } }
-    : messageVariants;
-
+  // Only animate completed messages, not streaming ones
+  // Streaming messages are identified by being the last assistant message
+  // and having incomplete/streaming state
   return (
     <motion.div
-      variants={variants}
+      variants={messageVariants}
       initial="hidden"
       animate="visible"
       exit="exit"
-      layout
     >
       {messageContent}
     </motion.div>

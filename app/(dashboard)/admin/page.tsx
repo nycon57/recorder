@@ -97,7 +97,7 @@ export default function AdminDashboard() {
             <Shield className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold">System Dashboard</h1>
+            <h1 className="text-3xl font-normal">System Dashboard</h1>
             <p className="text-muted-foreground">Platform-wide monitoring and metrics</p>
           </div>
         </div>

@@ -81,7 +81,7 @@ export async function retrieveContext(
   } = options || {};
 
   // Preprocess query to extract topic from meta-questions
-  const preprocessed = preprocessQuery(query);
+  const preprocessed = await preprocessQuery(query, orgId);
   const searchQuery = preprocessed.processedQuery;
 
   if (preprocessed.wasTransformed) {

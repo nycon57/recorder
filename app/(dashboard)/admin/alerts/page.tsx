@@ -130,7 +130,7 @@ export default function AdminAlertsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">System Alerts</h1>
+          <h1 className="text-3xl font-normal">System Alerts</h1>
           <p className="text-muted-foreground">Monitor critical system incidents</p>
         </div>
 

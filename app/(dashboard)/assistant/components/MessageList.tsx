@@ -97,7 +97,7 @@ export function MessageList({
   return (
     <div className={cn('flex-1 overflow-hidden', className)} role="region" aria-label="Chat messages">
       <Conversation className="h-full">
-        <ConversationContent className="space-y-4">
+        <ConversationContent className="space-y-2 md:space-y-3">
           {/* Empty State */}
           {isEmpty && (
             <ConversationEmptyState
@@ -144,14 +144,18 @@ export function MessageList({
           {/* Messages */}
           {!isEmpty && (
             <AnimatePresence mode="popLayout">
-              {messages.map((message) => (
-                <MessageItem
-                  key={message.id}
-                  message={message}
-                  {...messageItemProps}
-                  animate={true}
-                />
-              ))}
+              {messages.map((message, index) => {
+                // Disable animation for the last message if still loading (streaming)
+                const isStreamingMessage = isLoading && index === messages.length - 1 && message.role === 'assistant';
+                return (
+                  <MessageItem
+                    key={message.id}
+                    message={message}
+                    {...messageItemProps}
+                    animate={!isStreamingMessage}
+                  />
+                );
+              })}
             </AnimatePresence>
           )}
 

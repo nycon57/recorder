@@ -38,7 +38,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
-import AudioPlayer from '@/app/(dashboard)/library/[id]/components/AudioPlayer';
+import AudioPlayer from '@/app/components/library/detail-views/AudioPlayer';
 import PDFDocumentViewer from '@/app/(dashboard)/library/[id]/components/PDFDocumentViewer';
 import TextNoteViewer from '@/app/(dashboard)/library/[id]/components/TextNoteViewer';
 import type { Tag, ContentType, FileType } from '@/lib/types/database';

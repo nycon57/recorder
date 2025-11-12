@@ -70,6 +70,23 @@ export const GET = apiHandler(async (request: NextRequest) => {
     const params = parseSearchParams(request, dashboardStatsQuerySchema);
     const { period, includeStorage, includeBreakdown } = params;
 
+    // PERFORMANCE OPTIMIZATION: Check cache first
+    // Dashboard stats are expensive to compute, cache for 1 minute
+    const { StatsCache, CacheControlHeaders, generateETag } = await import('@/lib/services/cache');
+    const cachedStats = await StatsCache.get(orgId, period);
+
+    if (cachedStats) {
+      // Cache hit - return cached stats with cache headers
+      const etag = generateETag(cachedStats);
+      const response = successResponse(cachedStats, requestId);
+
+      response.headers.set('Cache-Control', CacheControlHeaders.stats);
+      response.headers.set('ETag', etag);
+      response.headers.set('X-Cache', 'HIT');
+
+      return response;
+    }
+
     // Get total items count
     const { count: totalItems, error: countError } = await supabaseAdmin
       .from('recordings')
@@ -198,7 +215,18 @@ export const GET = apiHandler(async (request: NextRequest) => {
       stats.statusBreakdown = statusBreakdown;
     }
 
-    return successResponse(stats, requestId);
+    // PERFORMANCE OPTIMIZATION: Cache the computed stats
+    await StatsCache.set(orgId, stats, period);
+
+    // Add cache headers to response
+    const etag = generateETag(stats);
+    const response = successResponse(stats, requestId);
+
+    response.headers.set('Cache-Control', CacheControlHeaders.stats);
+    response.headers.set('ETag', etag);
+    response.headers.set('X-Cache', 'MISS');
+
+    return response;
   } catch (error: any) {
     console.error('[Dashboard Stats] Request error:', error);
 

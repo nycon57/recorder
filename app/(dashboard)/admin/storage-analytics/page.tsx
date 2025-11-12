@@ -19,7 +19,7 @@ export default function StorageAnalyticsPage() {
     <div className="container mx-auto py-8 space-y-8">
       {/* Page Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Storage Analytics</h1>
+        <h1 className="text-3xl font-normal tracking-tight">Storage Analytics</h1>
         <p className="text-muted-foreground">
           Platform-wide storage metrics, optimization effectiveness, and cost tracking
         </p>

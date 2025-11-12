@@ -12,9 +12,11 @@ import {
   Teleprompter,
   PiPWindow,
 } from '@/app/components/recorder';
+import { LiveWaveform } from '@/app/components/ui/live-waveform';
+import { Card, CardContent } from '@/app/components/ui/card';
 
 export default function RecorderInterface() {
-  const { showTeleprompter, setShowTeleprompter, recordingBlob } = useRecording();
+  const { showTeleprompter, setShowTeleprompter, recordingBlob, isRecording, microphoneEnabled } = useRecording();
   const isReviewing = !!recordingBlob;
 
   return (
@@ -25,6 +27,37 @@ export default function RecorderInterface() {
         <div className="w-full max-w-5xl mb-4">
           <VideoStreams />
         </div>
+
+        {/* Live Audio Waveform Visualization */}
+        {microphoneEnabled && (isRecording || isReviewing) && (
+          <Card className="w-full max-w-5xl mb-4">
+            <CardContent className="p-6">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-foreground">
+                    {isRecording ? 'Recording Audio' : 'Recording Preview'}
+                  </h3>
+                  {isRecording && (
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
+                      <span className="text-xs text-muted-foreground">Live</span>
+                    </div>
+                  )}
+                </div>
+                <LiveWaveform
+                  active={isRecording}
+                  height={80}
+                  barWidth={3}
+                  barGap={2}
+                  barRadius={2}
+                  sensitivity={1.5}
+                  mode="static"
+                  className="rounded-lg bg-muted/30 border border-border"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </main>
 
       {/* Footer - Always visible */}

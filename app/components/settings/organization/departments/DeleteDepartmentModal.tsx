@@ -1,20 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/components/ui/dialog';
-import { Button } from '@/app/components/ui/button';
-import { Alert, AlertDescription, AlertTitle } from '@/app/components/ui/alert';
+import { ConfirmationDialog, type ConfirmationWarning } from '@/app/components/ui/confirmation-dialog';
 
 interface Department {
   id: string;
@@ -53,14 +43,6 @@ export function DeleteDepartmentModal({
   departments,
 }: DeleteDepartmentModalProps) {
   const queryClient = useQueryClient();
-  const [confirmText, setConfirmText] = useState('');
-
-  // Reset confirm text when modal state changes
-  React.useEffect(() => {
-    if (!open) {
-      setConfirmText('');
-    }
-  }, [open]);
 
   const deleteMutation = useMutation({
     mutationFn: deleteDepartment,
@@ -81,78 +63,40 @@ export function DeleteDepartmentModal({
   const hasMembers = department.memberCount && department.memberCount > 0;
   const hasContent = hasChildren || hasMembers;
 
-  const handleDelete = () => {
-    if (hasContent && confirmText !== department.name) {
-      toast.error('Please type the department name to confirm');
-      return;
-    }
+  // Build warnings array
+  const warnings: ConfirmationWarning[] = [];
+  if (hasChildren) {
+    warnings.push({
+      title: 'Warning',
+      message: `This department has ${department.children?.length} child department(s). All child departments will also be deleted.`,
+      variant: 'destructive',
+    });
+  }
+  if (hasMembers) {
+    warnings.push({
+      title: 'Warning',
+      message: `This department has ${department.memberCount} member(s). Members will be removed from this department.`,
+      variant: 'destructive',
+    });
+  }
+
+  const handleConfirm = () => {
     deleteMutation.mutate(department.id);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Delete Department</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete <strong>{department.name}</strong>?
-            This action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-
-        {hasContent && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Warning</AlertTitle>
-            <AlertDescription>
-              {hasChildren && (
-                <div className="mb-2">
-                  This department has {department.children?.length} child department(s).
-                  All child departments will also be deleted.
-                </div>
-              )}
-              {hasMembers && (
-                <div>
-                  This department has {department.memberCount} member(s).
-                  Members will be removed from this department.
-                </div>
-              )}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {hasContent && (
-          <div className="space-y-2">
-            <label htmlFor="confirm-delete" className="text-sm font-medium">
-              Type <strong>{department.name}</strong> to confirm deletion:
-            </label>
-            <input
-              id="confirm-delete"
-              type="text"
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
-              placeholder={department.name}
-            />
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={deleteMutation.isPending}>
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={
-              deleteMutation.isPending || (hasContent && confirmText !== department.name)
-            }
-          >
-            {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Delete Department
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ConfirmationDialog
+      open={open}
+      onOpenChange={onClose}
+      title="Delete Department"
+      description={`Are you sure you want to delete ${department.name}? This action cannot be undone.`}
+      confirmText="Delete Department"
+      cancelText="Cancel"
+      variant="destructive"
+      requireTypedConfirmation={hasContent ? department.name : false}
+      warnings={warnings}
+      isLoading={deleteMutation.isPending}
+      onConfirm={handleConfirm}
+    />
   );
 }

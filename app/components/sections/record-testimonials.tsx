@@ -69,7 +69,7 @@ export default function RecordTestimonials({
             {tagline}
           </span>
 
-          <h2 className="text-foreground text-heading-1 mt-4 tracking-tight lg:text-[52px]">
+          <h2 className="text-foreground text-heading-1 mt-4">
             {title}
           </h2>
           <p className="text-body-md sm:text-body-lg mx-auto mt-4 max-w-2xl text-muted-foreground">

@@ -95,6 +95,45 @@ async function getContentItem(id: string, clerkOrgId: string) {
 }
 
 /**
+ * Fetch sources for highlighting from cache
+ */
+async function getHighlightSources(sourceKey: string) {
+  try {
+    console.log('[Library Detail] Fetching from:', `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/chat?sourcesKey=${sourceKey}`);
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/chat?sourcesKey=${sourceKey}`,
+      { cache: 'no-store' }
+    );
+
+    console.log('[Library Detail] Fetch response:', {
+      status: response.status,
+      ok: response.ok,
+      statusText: response.statusText,
+    });
+
+    if (!response.ok) {
+      console.error('[Library Detail] Fetch failed:', {
+        status: response.status,
+        statusText: response.statusText,
+      });
+      return null;
+    }
+
+    const { sources } = await response.json();
+    console.log('[Library Detail] Parsed JSON:', {
+      hasSources: !!sources,
+      sourcesCount: sources?.length || 0,
+    });
+
+    return sources || null;
+  } catch (error) {
+    console.error('[Library Detail] Failed to fetch highlight sources:', error);
+    return null;
+  }
+}
+
+/**
  * Library Item Detail Page
  * Displays detailed view of content item with type-specific renderers
  * Routes to appropriate component based on content_type:
@@ -102,11 +141,17 @@ async function getContentItem(id: string, clerkOrgId: string) {
  * - audio -> AudioDetailView
  * - document -> DocumentDetailView
  * - text -> TextNoteDetailView
+ *
+ * Supports citation highlighting via URL parameters:
+ * - ?sourceKey={key} - Retrieves all cited chunks
+ * - &highlight={chunkId} - Specifies which chunk to scroll to
  */
 export default async function LibraryItemDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ sourceKey?: string; highlight?: string }>;
 }) {
   const { userId, orgId } = await auth();
 
@@ -115,7 +160,18 @@ export default async function LibraryItemDetailPage({
   }
 
   const { id } = await params;
+  const { sourceKey, highlight } = await searchParams;
+
+  console.log('[Library Detail Page] URL params:', {
+    id,
+    sourceKey,
+    highlight,
+  });
+
   const item = await getContentItem(id, orgId);
+
+  // Pass sourceKey and highlight to components for client-side fetching
+  // (Server-side fetch has issues with Next.js routing/caching)
 
   if (!item) {
     notFound();
@@ -158,6 +214,8 @@ export default async function LibraryItemDetailPage({
           transcript={transcript}
           document={document}
           initialTags={tags}
+          sourceKey={sourceKey}
+          initialHighlightId={highlight}
         />
       );
 
@@ -168,6 +226,8 @@ export default async function LibraryItemDetailPage({
           transcript={transcript}
           document={document}
           initialTags={tags}
+          sourceKey={sourceKey}
+          initialHighlightId={highlight}
         />
       );
 
@@ -178,6 +238,8 @@ export default async function LibraryItemDetailPage({
           transcript={transcript}
           document={document}
           initialTags={tags}
+          sourceKey={sourceKey}
+          initialHighlightId={highlight}
         />
       );
 
@@ -188,6 +250,8 @@ export default async function LibraryItemDetailPage({
           transcript={transcript}
           document={document}
           initialTags={tags}
+          sourceKey={sourceKey}
+          initialHighlightId={highlight}
         />
       );
 
@@ -199,6 +263,8 @@ export default async function LibraryItemDetailPage({
           transcript={transcript}
           document={document}
           initialTags={tags}
+          highlightSources={highlightSources}
+          initialHighlightId={highlight}
         />
       );
   }

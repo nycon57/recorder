@@ -13,6 +13,12 @@ export const updateRecordingSchema = z.object({
   metadata: z.record(z.any()).optional(),
 });
 
+// Schema for EditRecordingModal (stricter - title required)
+export const editRecordingFormSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(255, 'Title must be less than 255 characters'),
+  description: z.string().max(2000, 'Description must be less than 2000 characters').optional(),
+});
+
 export const finalizeRecordingSchema = z.object({
   recordingId: z.string().uuid(),
   storagePath: z.string(),
@@ -81,6 +87,13 @@ export const inviteMemberSchema = z.object({
 export const updateMemberRoleSchema = z.object({
   userId: z.string(),
   role: z.enum(['owner', 'admin', 'contributor', 'reader']),
+});
+
+// Schema for EditRoleModal form (just the role field)
+export const editRoleFormSchema = z.object({
+  role: z.enum(['owner', 'admin', 'contributor', 'reader'], {
+    errorMap: () => ({ message: 'Please select a valid role' }),
+  }),
 });
 
 // Webhook validation schemas
@@ -176,6 +189,12 @@ export const multimodalSearchSchema = z.object({
     .optional()
     .default('vector'),
   rerank: z.boolean().optional().default(false),
+  // Additional filter parameters from search UI
+  contentTypes: z.array(z.enum(['recording', 'video', 'audio', 'document', 'text'])).optional(),
+  tagIds: z.array(z.string().uuid()).max(20).optional(),
+  tagFilterMode: z.enum(['AND', 'OR']).optional().default('OR'),
+  collectionId: z.string().uuid().optional(),
+  favoritesOnly: z.boolean().optional().default(false),
   // Multimodal options
   includeVisual: z.boolean().optional().default(true),
   audioWeight: z.coerce.number().min(0).max(1).optional().default(0.7),
@@ -629,8 +648,8 @@ export type UpdateOrgFeaturesInput = z.infer<typeof updateOrgFeaturesSchema>;
  */
 export const enhancedInviteMemberSchema = z.object({
   email: z.string().email('Invalid email address'),
-  role: z.enum(['admin', 'contributor', 'reader'], {
-    errorMap: () => ({ message: 'Role must be admin, contributor, or reader' }),
+  role: z.enum(['owner', 'admin', 'contributor', 'reader'], {
+    errorMap: () => ({ message: 'Role must be owner, admin, contributor, or reader' }),
   }),
   department_ids: z.array(z.string().uuid()).optional().default([]),
   custom_message: z.string().max(500).optional(),
@@ -646,7 +665,7 @@ export const bulkInviteMemberSchema = z.object({
     .array(
       z.object({
         email: z.string().email(),
-        role: z.enum(['admin', 'contributor', 'reader']),
+        role: z.enum(['owner', 'admin', 'contributor', 'reader']),
         department_ids: z.array(z.string().uuid()).optional().default([]),
         custom_message: z.string().max(500).optional(),
       })

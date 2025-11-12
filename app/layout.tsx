@@ -1,9 +1,8 @@
-import { ClerkProvider } from '@clerk/nextjs';
 import type { Metadata } from 'next';
 import { ThemeProvider } from 'next-themes';
 
 import { Toaster } from '@/app/components/ui/sonner';
-import { clerkAppearance } from '@/lib/clerk/appearance';
+import { ClerkProviderWrapper } from '@/app/components/providers/clerk-provider-wrapper';
 import { QueryProvider } from '@/lib/providers/query-provider';
 
 import './globals.css';
@@ -21,7 +20,6 @@ export const metadata: Metadata = {
     'Record your screen and camera, automatically transcribe and generate documentation with AI.',
   keywords: 'screen recording, transcription, AI documentation, knowledge management',
   authors: [{ name: 'Record Team' }],
-  manifest: '/manifest.json',
   icons: {
     icon: '/icon.svg',
   },
@@ -55,9 +53,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider appearance={clerkAppearance}>
-      <html lang="en" suppressHydrationWarning>
-        <body suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet" />
+        <link rel="manifest" href="/manifest.json" />
+      </head>
+      <body suppressHydrationWarning>
+        <ClerkProviderWrapper>
           <QueryProvider>
             <ThemeProvider
               attribute="class"
@@ -69,8 +73,8 @@ export default function RootLayout({
               <Toaster />
             </ThemeProvider>
           </QueryProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProviderWrapper>
+      </body>
+    </html>
   );
 }

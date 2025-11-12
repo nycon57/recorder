@@ -16,7 +16,7 @@ export default function StorageRecommendationsPage() {
     <div className="container mx-auto py-8 space-y-8">
       {/* Page Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Storage Recommendations</h1>
+        <h1 className="text-3xl font-normal tracking-tight">Storage Recommendations</h1>
         <p className="text-muted-foreground">
           AI-powered optimization suggestions to reduce costs and improve performance
         </p>

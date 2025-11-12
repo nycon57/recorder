@@ -135,7 +135,7 @@ export function LibraryTable({
             <TableHead className="w-12">
               <Checkbox
                 checked={allSelected}
-                indeterminate={someSelected}
+                indeterminate={someSelected ? true : undefined}
                 onCheckedChange={onSelectAll}
                 aria-label="Select all items"
               />
@@ -166,7 +166,8 @@ export function LibraryTable({
                 data-state={selectedIds.includes(item.id) ? 'selected' : undefined}
                 className={cn(
                   'cursor-pointer',
-                  selectedIds.includes(item.id) && 'bg-muted/50'
+                  selectedIds.includes(item.id) && 'bg-muted/50',
+                  item.deleted_at && 'opacity-60'
                 )}
               >
                 <TableCell onClick={(e) => e.stopPropagation()}>
@@ -215,9 +216,16 @@ export function LibraryTable({
                 </TableCell>
 
                 <TableCell>
-                  <Badge variant={getStatusColor(item.status) as any}>
-                    {item.status}
-                  </Badge>
+                  {item.deleted_at ? (
+                    <Badge variant="secondary" className="bg-destructive/10 text-destructive border-destructive/20">
+                      <Trash2 className="w-3 h-3 mr-1" />
+                      Trashed
+                    </Badge>
+                  ) : (
+                    <Badge variant={getStatusColor(item.status) as any}>
+                      {item.status}
+                    </Badge>
+                  )}
                 </TableCell>
 
                 <TableCell className="text-right text-sm text-muted-foreground">
@@ -293,7 +301,7 @@ export function LibraryTable({
                             className="text-destructive focus:text-destructive"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
+                            Move to Trash
                           </DropdownMenuItem>
                         </>
                       )}

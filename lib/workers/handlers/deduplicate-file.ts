@@ -13,6 +13,9 @@ import {
 } from '@/lib/services/deduplication-service';
 import { StorageManager } from '@/lib/services/storage-manager';
 import type { StorageProvider } from '@/lib/types/database';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger({ service: 'deduplicate-file' });
 
 /**
  * Job payload for single file deduplication
@@ -45,7 +48,9 @@ export async function handleDeduplicateFile(
 }> {
   const { recordingId, orgId, storagePath, storageProvider } = payload;
 
-  console.log(`[DeduplicateFile] Processing recording ${recordingId}`);
+  logger.info('Starting file deduplication', {
+    context: { recordingId, orgId, storagePath, storageProvider },
+  });
 
   try {
     // 1. Download file from storage
@@ -86,9 +91,14 @@ export async function handleDeduplicateFile(
       throw new Error(result.error);
     }
 
-    console.log(
-      `[DeduplicateFile] Completed: ${result.isDuplicate ? 'Duplicate found' : 'Unique file'}, saved ${(result.spaceSaved / 1024 / 1024).toFixed(2)} MB`
-    );
+    const spaceSavedMB = result.spaceSaved / 1024 / 1024;
+    logger.info('Deduplication complete', {
+      context: { recordingId, orgId },
+      data: {
+        isDuplicate: result.isDuplicate,
+        spaceSavedMB: parseFloat(spaceSavedMB.toFixed(2)),
+      },
+    });
 
     return {
       success: true,
@@ -96,7 +106,10 @@ export async function handleDeduplicateFile(
       spaceSaved: result.spaceSaved,
     };
   } catch (error) {
-    console.error('[DeduplicateFile] Error:', error);
+    logger.error('Deduplication failed', {
+      context: { recordingId, orgId },
+      error: error as Error,
+    });
     return {
       success: false,
       isDuplicate: false,
@@ -120,21 +133,33 @@ export async function handleBatchDeduplicate(
 }> {
   const { orgId, batchSize = 100 } = payload;
 
-  console.log(`[BatchDeduplicate] Starting batch deduplication for org ${orgId}`);
+  logger.info('Starting batch deduplication', {
+    context: { orgId },
+    data: { batchSize },
+  });
 
   try {
     const result = await batchDeduplicateOrganization(orgId, batchSize);
 
-    console.log(
-      `[BatchDeduplicate] Processed ${result.processed} files, found ${result.duplicatesFound} duplicates, saved ${(result.spaceSaved / 1024 / 1024).toFixed(2)} MB`
-    );
+    const spaceSavedMB = result.spaceSaved / 1024 / 1024;
+    logger.info('Batch deduplication complete', {
+      context: { orgId },
+      data: {
+        processed: result.processed,
+        duplicatesFound: result.duplicatesFound,
+        spaceSavedMB: parseFloat(spaceSavedMB.toFixed(2)),
+      },
+    });
 
     return {
       success: true,
       ...result,
     };
   } catch (error) {
-    console.error('[BatchDeduplicate] Error:', error);
+    logger.error('Batch deduplication failed', {
+      context: { orgId },
+      error: error as Error,
+    });
     return {
       success: false,
       processed: 0,
@@ -160,7 +185,9 @@ export async function scheduleDeduplicationForAll(
 }> {
   const supabase = createClient();
 
-  console.log('[ScheduleDeduplication] Starting organization-wide deduplication');
+  logger.info('Starting organization-wide deduplication', {
+    context: { batchSizePerOrg },
+  });
 
   try {
     // Get all active organizations
@@ -202,19 +229,34 @@ export async function scheduleDeduplicationForAll(
           errors.push(...result.errors.map((e) => `${org.name}: ${e}`));
         }
 
-        console.log(
-          `[ScheduleDeduplication] ${org.name}: ${result.processed} processed, ${result.duplicatesFound} duplicates, ${(result.spaceSaved / 1024 / 1024).toFixed(2)} MB saved`
-        );
+        const spaceSavedMB = result.spaceSaved / 1024 / 1024;
+        logger.info('Organization processing complete', {
+          context: { orgId: org.id, orgName: org.name },
+          data: {
+            processed: result.processed,
+            duplicatesFound: result.duplicatesFound,
+            spaceSavedMB: parseFloat(spaceSavedMB.toFixed(2)),
+          },
+        });
       } catch (error) {
         const errorMsg = `${org.name}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         errors.push(errorMsg);
-        console.error('[ScheduleDeduplication]', errorMsg);
+        logger.error('Organization processing failed', {
+          context: { orgId: org.id, orgName: org.name },
+          error: error as Error,
+        });
       }
     }
 
-    console.log(
-      `[ScheduleDeduplication] Completed: ${organizations.length} orgs, ${totalProcessed} files, ${totalDuplicates} duplicates, ${(totalSpaceSaved / 1024 / 1024).toFixed(2)} MB saved`
-    );
+    const totalSpaceSavedMB = totalSpaceSaved / 1024 / 1024;
+    logger.info('Organization-wide deduplication complete', {
+      data: {
+        organizations: organizations.length,
+        totalProcessed,
+        totalDuplicates,
+        totalSpaceSavedMB: parseFloat(totalSpaceSavedMB.toFixed(2)),
+      },
+    });
 
     return {
       success: true,
@@ -225,7 +267,9 @@ export async function scheduleDeduplicationForAll(
       errors,
     };
   } catch (error) {
-    console.error('[ScheduleDeduplication] Fatal error:', error);
+    logger.error('Organization-wide deduplication failed', {
+      error: error as Error,
+    });
     return {
       success: false,
       organizations: 0,
@@ -271,7 +315,10 @@ export async function getDeduplicationAnalytics(orgId: string): Promise<{
       },
     };
   } catch (error) {
-    console.error('[DeduplicationAnalytics] Error:', error);
+    logger.error('Failed to get deduplication analytics', {
+      context: { orgId },
+      error: error as Error,
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get analytics',

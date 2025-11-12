@@ -130,11 +130,9 @@ export function ChatInput({
    */
   const handleSubmit = useCallback(
     async (message: PromptInputMessage) => {
-      console.log('[ChatInput] handleSubmit called with message:', message);
       const messageText = message.text || '';
 
       if (!messageText.trim() && !message.files?.length) {
-        console.log('[ChatInput] Skipping empty message');
         return;
       }
 
@@ -155,17 +153,10 @@ export function ChatInput({
         preview: file.mediaType?.startsWith('image/') ? file.url : undefined,
       }));
 
-      console.log('[ChatInput] Calling onSubmit with:', {
-        text: messageText.trim(),
-        filesCount: attachments?.length || 0,
-      });
-
       await onSubmit({
         text: messageText.trim(),
         files: attachments,
       });
-
-      console.log('[ChatInput] onSubmit completed');
     },
     [onSubmit]
   );
@@ -199,60 +190,57 @@ export function ChatInput({
           aria-describedby="input-helper-text"
         />
 
-        {/* Footer with controls and helper text */}
-        <PromptInputFooter className="flex-col items-stretch gap-2">
-          {/* Top row: Tools and Submit */}
-          <div className="flex items-center justify-between">
-            {/* Left side tools */}
-            <PromptInputTools>
-              {/* Attach Files Button */}
-              {showAttachments && (
-                <PromptInputAttachFiles asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={isLoading}
-                    title="Attach files"
-                    aria-label="Attach files (Ctrl+U)"
-                  >
-                    <Paperclip className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                </PromptInputAttachFiles>
-              )}
-
-              {/* Voice Input Button */}
-              {showSpeechToText && (
-                <PromptInputSpeechButton
-                  textareaRef={textareaRef}
+        {/* Footer with controls and helper text inline */}
+        <PromptInputFooter className="flex items-center justify-between">
+          {/* Left side tools */}
+          <PromptInputTools className="flex items-center gap-1">
+            {/* Attach Files Button */}
+            {showAttachments && (
+              <PromptInputAttachFiles asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
                   disabled={isLoading}
-                  title="Voice input"
-                  aria-label="Voice input (Ctrl+M)"
-                />
-              )}
-            </PromptInputTools>
+                  title="Attach files"
+                  aria-label="Attach files (Ctrl+U)"
+                >
+                  <Paperclip className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </PromptInputAttachFiles>
+            )}
 
-            {/* Submit Button */}
-            <PromptInputSubmit
-              status={isLoading ? 'submitted' : undefined}
-              disabled={isLoading}
-              title="Send message (Enter)"
-              aria-label="Send message (Enter)"
-            />
-          </div>
+            {/* Voice Input Button */}
+            {showSpeechToText && (
+              <PromptInputSpeechButton
+                textareaRef={textareaRef}
+                disabled={isLoading}
+                title="Voice input"
+                aria-label="Voice input (Ctrl+M)"
+              />
+            )}
 
-          {/* Bottom row: Helper text */}
-          <div
-            id="input-helper-text"
-            className="text-[11px] text-muted-foreground"
-            role="status"
-            aria-live="polite"
-          >
-            <kbd className="rounded bg-muted px-1 py-0.5 text-[10px]" aria-label="Enter key">Enter</kbd> to send
-            <span className="mx-1" aria-hidden="true">·</span>
-            <kbd className="rounded bg-muted px-1 py-0.5 text-[10px]" aria-label="Shift key">Shift</kbd> +{' '}
-            <kbd className="rounded bg-muted px-1 py-0.5 text-[10px]" aria-label="Enter key">Enter</kbd> for new line
-          </div>
+            {/* Helper text inline with buttons */}
+            <div
+              id="input-helper-text"
+              className="ml-2 text-[11px] text-muted-foreground whitespace-nowrap hidden sm:block"
+              role="status"
+              aria-live="polite"
+            >
+              <kbd className="rounded bg-muted px-1 py-0.5 text-[10px]" aria-label="Enter key">Enter</kbd> to send
+              <span className="mx-1" aria-hidden="true">·</span>
+              <kbd className="rounded bg-muted px-1 py-0.5 text-[10px]" aria-label="Shift key">Shift</kbd> +{' '}
+              <kbd className="rounded bg-muted px-1 py-0.5 text-[10px]" aria-label="Enter key">Enter</kbd> for new line
+            </div>
+          </PromptInputTools>
+
+          {/* Submit Button */}
+          <PromptInputSubmit
+            status={isLoading ? 'submitted' : undefined}
+            disabled={isLoading}
+            title="Send message (Enter)"
+            aria-label="Send message (Enter)"
+          />
         </PromptInputFooter>
       </PromptInput>
     </div>

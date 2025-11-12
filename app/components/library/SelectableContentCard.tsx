@@ -59,7 +59,7 @@ export function SelectableContentCard({
   return (
     <div
       className={cn(
-        'relative group/selectable',
+        'relative group/selectable h-full',
         'transition-all duration-200',
         selected && 'ring-2 ring-primary ring-offset-2 rounded-lg'
       )}

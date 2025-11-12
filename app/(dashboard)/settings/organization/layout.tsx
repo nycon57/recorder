@@ -133,7 +133,7 @@ export default function OrganizationSettingsLayout({
   return (
     <div className="container max-w-7xl py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Organization Settings</h1>
+        <h1 className="text-3xl font-normal mb-2">Organization Settings</h1>
         <p className="text-muted-foreground">
           Manage your organization, team, and preferences
         </p>

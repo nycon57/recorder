@@ -110,7 +110,7 @@ export async function hierarchicalSearch(
     orgId,
     topDocuments = 5,
     chunksPerDocument = 3,
-    threshold = 0.7,
+    threshold = 0.5, // Lowered from 0.7 - hierarchical search benefits from broader recall
   } = options;
 
   console.log(

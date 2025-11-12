@@ -11,7 +11,10 @@ import * as os from 'os';
 import * as fs from 'fs/promises';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { VideoCompressor } from '@/lib/services/video-compressor';
+import { createLogger } from '@/lib/utils/logger';
 import type { CompressAudioJobPayload } from '@/lib/types/database';
+
+const logger = createLogger({ service: 'compress-audio' });
 
 /**
  * Compress audio job handler
@@ -24,16 +27,16 @@ export async function handleCompressAudio(
 ): Promise<{ success: boolean; result?: any; error?: string }> {
   const { recordingId, orgId, inputPath, outputPath, profile } = jobPayload;
 
-  console.log('[compress-audio] Starting compression job');
-  console.log(`[compress-audio] Recording: ${recordingId}`);
-  console.log(`[compress-audio] Profile: ${profile}`);
+  logger.info('Starting audio compression job', {
+    context: { recordingId, orgId, profile, inputPath, outputPath },
+  });
 
   let tempInputPath: string | null = null;
   let tempOutputPath: string | null = null;
 
   try {
     // 1. Download file from Supabase Storage
-    console.log('[compress-audio] Downloading from storage...');
+    logger.info('Downloading from storage', { context: { inputPath } });
     const { data: fileData, error: downloadError } = await supabaseAdmin.storage
       .from('recordings')
       .download(inputPath);
@@ -51,7 +54,9 @@ export async function handleCompressAudio(
     const buffer = Buffer.from(await fileData.arrayBuffer());
     await fs.writeFile(tempInputPath, buffer);
 
-    console.log(`[compress-audio] Downloaded ${buffer.length} bytes to ${tempInputPath}`);
+    logger.info('Audio downloaded to temp file', {
+      context: { tempInputPath, sizeBytes: buffer.length },
+    });
 
     // 3. Set up output temporary file
     tempOutputPath = path.join(
@@ -71,7 +76,9 @@ export async function handleCompressAudio(
     }
 
     // 5. Compress audio
-    console.log('[compress-audio] Starting compression...');
+    logger.info('Starting audio compression', {
+      context: { tempInputPath, tempOutputPath, profile },
+    });
     const compressionResult = await VideoCompressor.compressAudio({
       inputPath: tempInputPath,
       outputPath: tempOutputPath,
@@ -85,7 +92,10 @@ export async function handleCompressAudio(
       },
       onProgress: (progress) => {
         if (Math.floor(progress.percent) % 20 === 0) {
-          console.log(`[compress-audio] Progress: ${Math.floor(progress.percent)}%`);
+          logger.info('Compression progress', {
+            context: { recordingId },
+            data: { percent: Math.floor(progress.percent) },
+          });
         }
       },
     });
@@ -96,7 +106,10 @@ export async function handleCompressAudio(
 
     // 6. If compression was skipped
     if (compressionResult.warning) {
-      console.log(`[compress-audio] ${compressionResult.warning}`);
+      logger.info('Compression skipped', {
+        context: { recordingId },
+        data: { reason: compressionResult.warning },
+      });
 
       await supabaseAdmin
         .from('recordings')
@@ -125,7 +138,7 @@ export async function handleCompressAudio(
     }
 
     // 7. Upload compressed file
-    console.log('[compress-audio] Uploading compressed file...');
+    logger.info('Uploading compressed file', { context: { outputPath } });
     const compressedBuffer = await fs.readFile(tempOutputPath);
 
     const { error: uploadError } = await supabaseAdmin.storage
@@ -140,9 +153,9 @@ export async function handleCompressAudio(
       throw new Error(`Failed to upload compressed file: ${uploadError.message}`);
     }
 
-    console.log(
-      `[compress-audio] Uploaded ${compressedBuffer.length} bytes to ${outputPath}`
-    );
+    logger.info('Compressed file uploaded', {
+      context: { outputPath, sizeBytes: compressedBuffer.length },
+    });
 
     // 8. Update recording with compression stats
     await supabaseAdmin
@@ -159,9 +172,14 @@ export async function handleCompressAudio(
     const savingsMB = savingsBytes / 1024 / 1024;
     const savingsPercent = ((savingsBytes / stats.original_size) * 100).toFixed(2);
 
-    console.log('[compress-audio] Compression complete');
-    console.log(`[compress-audio] Saved: ${savingsMB.toFixed(2)}MB (${savingsPercent}%)`);
-    console.log(`[compress-audio] Ratio: ${stats.compression_ratio.toFixed(2)}x`);
+    logger.info('Compression complete', {
+      context: { recordingId },
+      data: {
+        savingsMB: parseFloat(savingsMB.toFixed(2)),
+        savingsPercent: parseFloat(savingsPercent),
+        compressionRatio: parseFloat(stats.compression_ratio.toFixed(2)),
+      },
+    });
 
     return {
       success: true,
@@ -173,7 +191,10 @@ export async function handleCompressAudio(
       },
     };
   } catch (error) {
-    console.error('[compress-audio] Compression job failed:', error);
+    logger.error('Compression job failed', {
+      context: { recordingId, inputPath },
+      error: error as Error,
+    });
 
     // Update recording with error
     await supabaseAdmin
@@ -191,12 +212,18 @@ export async function handleCompressAudio(
     // Cleanup temporary files
     if (tempInputPath) {
       await fs.unlink(tempInputPath).catch((err) => {
-        console.warn(`[compress-audio] Failed to delete temp input: ${err.message}`);
+        logger.warn('Failed to delete temp input file', {
+          context: { tempInputPath },
+          error: err as Error,
+        });
       });
     }
     if (tempOutputPath) {
       await fs.unlink(tempOutputPath).catch((err) => {
-        console.warn(`[compress-audio] Failed to delete temp output: ${err.message}`);
+        logger.warn('Failed to delete temp output file', {
+          context: { tempOutputPath },
+          error: err as Error,
+        });
       });
     }
   }
