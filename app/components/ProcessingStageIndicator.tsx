@@ -2,16 +2,19 @@
 
 import * as React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Loader2, Clock, AlertCircle, Sparkles } from 'lucide-react';
+import { Check, Loader2, Clock, AlertCircle } from 'lucide-react';
 
 import { cn } from '@/lib/utils/cn';
 import { Progress } from '@/app/components/ui/progress';
+import { getStageConfig, type ProcessingStageConfig } from '@/lib/constants/processing-messages';
 
 export interface ProcessingStage {
   id: string;
   label: string;
   status: 'completed' | 'in_progress' | 'pending' | 'error';
   progress?: number; // 0-100
+  benefit?: string; // User benefit text
+  sublabel?: string; // Additional context
 }
 
 interface ProcessingStageIndicatorProps {
@@ -19,8 +22,10 @@ interface ProcessingStageIndicatorProps {
   progress: number;
   stages: ProcessingStage[];
   elapsedTime?: number; // in seconds
-  estimatedTimeRemaining?: number; // in seconds
+  estimatedTimeRemaining?: number; // in seconds (DEPRECATED - not shown per user preference)
   className?: string;
+  /** Use simplified 3-step view (recommended for non-technical users) */
+  simplified?: boolean;
 }
 
 export default function ProcessingStageIndicator({
@@ -28,8 +33,9 @@ export default function ProcessingStageIndicator({
   progress,
   stages,
   elapsedTime,
-  estimatedTimeRemaining,
+  estimatedTimeRemaining, // DEPRECATED - not shown per user preference
   className,
+  simplified = false,
 }: ProcessingStageIndicatorProps) {
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
@@ -40,7 +46,13 @@ export default function ProcessingStageIndicator({
     return `${remainingSeconds}s`;
   };
 
-  // Get stage-specific colors
+  // Get stage configuration from centralized config
+  const getStageColorConfig = (stage: ProcessingStage): ProcessingStageConfig['color'] | undefined => {
+    const config = getStageConfig(stage.id);
+    return config?.color;
+  };
+
+  // Get stage-specific colors (with fallback to original logic)
   const getStageColor = (stage: ProcessingStage) => {
     if (stage.status === 'completed') {
       return 'text-green-600 dark:text-green-500';
@@ -52,17 +64,14 @@ export default function ProcessingStageIndicator({
       return 'text-muted-foreground';
     }
 
-    // Active stage colors
-    switch (stage.id) {
-      case 'transcribe':
-        return 'text-blue-600 dark:text-blue-500';
-      case 'document':
-        return 'text-purple-600 dark:text-purple-500';
-      case 'embeddings':
-        return 'text-amber-600 dark:text-amber-500';
-      default:
-        return 'text-blue-600 dark:text-blue-500';
+    // Use color config from centralized messages
+    const colorConfig = getStageColorConfig(stage);
+    if (colorConfig) {
+      return colorConfig.icon;
     }
+
+    // Fallback to original colors
+    return 'text-blue-600 dark:text-blue-500';
   };
 
   const getStatusIcon = (stage: ProcessingStage) => {
@@ -114,72 +123,68 @@ export default function ProcessingStageIndicator({
       return 'bg-muted';
     }
 
-    // Active stage background colors
-    switch (stage.id) {
-      case 'transcribe':
-        return 'bg-blue-600 dark:bg-blue-500';
-      case 'document':
-        return 'bg-purple-600 dark:bg-purple-500';
-      case 'embeddings':
-        return 'bg-amber-600 dark:bg-amber-500';
-      default:
-        return 'bg-blue-600 dark:bg-blue-500';
+    // Use color config from centralized messages
+    const colorConfig = getStageColorConfig(stage);
+    if (colorConfig) {
+      return colorConfig.bg;
     }
+
+    // Fallback
+    return 'bg-blue-600 dark:bg-blue-500';
   };
 
   const getProgressBarColor = (stage: ProcessingStage) => {
-    switch (stage.id) {
-      case 'transcribe':
-        return 'bg-blue-100 dark:bg-blue-950';
-      case 'document':
-        return 'bg-purple-100 dark:bg-purple-950';
-      case 'embeddings':
-        return 'bg-amber-100 dark:bg-amber-950';
-      default:
-        return 'bg-blue-100 dark:bg-blue-950';
+    // Use lighter background for progress bars
+    const colorConfig = getStageColorConfig(stage);
+    if (colorConfig) {
+      // Extract color name from config (e.g., "blue" from "text-blue-600")
+      const match = colorConfig.bg.match(/(blue|purple|indigo|violet|green|amber)-/);
+      if (match) {
+        const color = match[1];
+        return `bg-${color}-100 dark:bg-${color}-950`;
+      }
     }
+
+    return 'bg-blue-100 dark:bg-blue-950';
   };
 
   const getProgressIndicatorColor = (stage: ProcessingStage) => {
-    switch (stage.id) {
-      case 'transcribe':
-        return '[&>div]:bg-blue-600 dark:[&>div]:bg-blue-500';
-      case 'document':
-        return '[&>div]:bg-purple-600 dark:[&>div]:bg-purple-500';
-      case 'embeddings':
-        return '[&>div]:bg-amber-600 dark:[&>div]:bg-amber-500';
-      default:
-        return '[&>div]:bg-blue-600 dark:[&>div]:bg-blue-500';
+    // Use indicator color from config
+    const colorConfig = getStageColorConfig(stage);
+    if (colorConfig) {
+      const match = colorConfig.bg.match(/(blue|purple|indigo|violet|green|amber)-/);
+      if (match) {
+        const color = match[1];
+        return `[&>div]:bg-${color}-600 dark:[&>div]:bg-${color}-500`;
+      }
     }
+
+    return '[&>div]:bg-blue-600 dark:[&>div]:bg-blue-500';
   };
 
   const currentStageIndex = stages.findIndex((stage) => stage.id === currentStep);
 
+  // Get emoji icon from config if available
+  const getEmojiIcon = (stage: ProcessingStage): string | undefined => {
+    const config = getStageConfig(stage.id);
+    return config?.icon;
+  };
+
   return (
     <div className={cn('space-y-6', className)} role="region" aria-label="Processing stages">
-      {/* Time Display */}
-      {(elapsedTime !== undefined || estimatedTimeRemaining !== undefined) && (
+      {/* Time Display - Only Elapsed Time (per user preference) */}
+      {elapsedTime !== undefined && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between text-sm"
+          className="flex items-center justify-center text-sm"
         >
-          {elapsedTime !== undefined && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Clock className="size-4" aria-hidden="true" />
-              <span>
-                Elapsed: <span className="font-medium text-foreground">{formatTime(elapsedTime)}</span>
-              </span>
-            </div>
-          )}
-          {estimatedTimeRemaining !== undefined && estimatedTimeRemaining > 0 && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Sparkles className="size-4" aria-hidden="true" />
-              <span>
-                Remaining: ~<span className="font-medium text-foreground">{formatTime(estimatedTimeRemaining)}</span>
-              </span>
-            </div>
-          )}
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Clock className="size-4" aria-hidden="true" />
+            <span>
+              Elapsed time: <span className="font-medium text-foreground">{formatTime(elapsedTime)}</span>
+            </span>
+          </div>
         </motion.div>
       )}
 

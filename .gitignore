@@ -76,10 +76,11 @@ yarn-error.log*
 
 # Documentation
 *.md
+/Documentation
 
 # Directories
 /__tests__
 /__mocks__
 /supabase/migrations
-*.md
 components.json
+CLAUDE.md
