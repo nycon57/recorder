@@ -33,7 +33,7 @@ import UploadModal from '@/app/components/upload/UploadModal';
  * - Multiple entry points (Record, Upload, Create Note)
  * - Helpful tips and supported formats
  *
- * @refactored - Now uses @shadcn/empty as foundation
+ * @refactored - Now uses @/app/components/ui/empty as foundation
  */
 interface LibraryEmptyStateProps {
   onUploadComplete?: () => void;

@@ -215,9 +215,14 @@ export function MemberDataTable({
       },
       cell: ({ row }) => {
         if (row.original.last_active_at) {
+          // VALIDATION: Ensure date is valid before formatting
+          const date = new Date(row.original.last_active_at);
+          if (isNaN(date.getTime())) {
+            return <span className="text-sm text-muted-foreground">Invalid date</span>;
+          }
           return (
             <span className="text-sm">
-              {formatDistanceToNow(new Date(row.original.last_active_at), {
+              {formatDistanceToNow(date, {
                 addSuffix: true,
               })}
             </span>

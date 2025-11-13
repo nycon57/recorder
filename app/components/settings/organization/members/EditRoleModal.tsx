@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { toast } from 'sonner';
 
 import { editRoleFormSchema } from '@/lib/validations/api';
 
@@ -70,7 +69,7 @@ export function EditRoleModal({ member, open, onClose, onSuccess }: EditRoleModa
       title="Edit Member Role"
       description={`Change the role for ${member.name || member.email}`}
       size="md"
-      schema={editRoleFormSchema as any}
+      schema={editRoleFormSchema}
       defaultValues={{
         role: member.role,
       }}
@@ -79,13 +78,7 @@ export function EditRoleModal({ member, open, onClose, onSuccess }: EditRoleModa
       errorMessage="Failed to update role"
       submitLabel="Update Role"
       loadingLabel="Updating..."
-      onSuccess={() => {
-        toast.success('Member role updated successfully');
-        onSuccess();
-      }}
-      onError={(error: Error) => {
-        toast.error(error.message || 'Failed to update role');
-      }}
+      onSuccess={onSuccess}
       className="sm:max-w-[500px]"
     >
       {(form) => (

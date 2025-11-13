@@ -177,7 +177,7 @@ function LibraryPageContent() {
 
     const newUrl = params.toString() ? `?${params.toString()}` : '/library';
     router.replace(newUrl, { scroll: false });
-  }, [selectedCollectionId, advancedFilters.favoritesOnly, searchQuery]);
+  }, [selectedCollectionId, advancedFilters.favoritesOnly, searchQuery, router]);
 
   // Fetch content items, tags, and collections
   useEffect(() => {

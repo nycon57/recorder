@@ -464,6 +464,14 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         toast.error('Recording failed to start', {
           description: 'No video source available. Please try again.',
         });
+
+        // CRITICAL: Clear recording timer to prevent duration incrementing after abort
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = undefined;
+        }
+        recordingStartTimeRef.current = null;
+        setRecordingDuration(0);
         setIsRecording(false);
         return;
       }

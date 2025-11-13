@@ -120,53 +120,7 @@ function SearchPageContent() {
     fetchCollections();
   }, []);
 
-  // Debounced search function
-  const debouncedSearch = useCallback(
-    debounce((searchQuery: string, searchFilters: FilterState) => {
-      if (searchQuery.trim()) {
-        handleSearch(undefined, searchQuery, searchFilters);
-      }
-    }, 500),
-    [searchMode, sourceFilter, sortBy]
-  );
-
-  // Auto-search on query or filter changes
-  useEffect(() => {
-    if (query.trim()) {
-      debouncedSearch(query, filters);
-    }
-
-    // Cleanup debounce on unmount
-    return () => {
-      debouncedSearch.cancel();
-    };
-  }, [query, filters, debouncedSearch]);
-
-  async function fetchTags() {
-    try {
-      const response = await fetch('/api/tags?includeUsageCount=true&limit=100');
-      if (!response.ok) throw new Error('Failed to fetch tags');
-
-      const data = await response.json();
-      setAvailableTags(data.data.tags || []);
-    } catch (error) {
-      console.error('Error fetching tags:', error);
-    }
-  }
-
-  async function fetchCollections() {
-    try {
-      const response = await fetch('/api/collections');
-      if (!response.ok) throw new Error('Failed to fetch collections');
-
-      const data = await response.json();
-      setCollections(data.data?.collections || []);
-    } catch (error) {
-      console.error('Error fetching collections:', error);
-    }
-  }
-
-  const handleSearch = async (e?: React.FormEvent, overrideQuery?: string, overrideFilters?: FilterState) => {
+  const handleSearch = useCallback(async (e?: React.FormEvent, overrideQuery?: string, overrideFilters?: FilterState) => {
     e?.preventDefault();
 
     // Use override values if provided, otherwise use state
@@ -224,7 +178,53 @@ function SearchPageContent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [query, filters, searchMode, sourceFilter, sortBy]);
+
+  // Debounced search function
+  const debouncedSearch = useCallback(
+    debounce((searchQuery: string, searchFilters: FilterState) => {
+      if (searchQuery.trim()) {
+        handleSearch(undefined, searchQuery, searchFilters);
+      }
+    }, 500),
+    [handleSearch]
+  );
+
+  // Auto-search on query or filter changes
+  useEffect(() => {
+    if (query.trim()) {
+      debouncedSearch(query, filters);
+    }
+
+    // Cleanup debounce on unmount
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [query, filters, debouncedSearch]);
+
+  async function fetchTags() {
+    try {
+      const response = await fetch('/api/tags?includeUsageCount=true&limit=100');
+      if (!response.ok) throw new Error('Failed to fetch tags');
+
+      const data = await response.json();
+      setAvailableTags(data.data.tags || []);
+    } catch (error) {
+      console.error('Error fetching tags:', error);
+    }
+  }
+
+  async function fetchCollections() {
+    try {
+      const response = await fetch('/api/collections');
+      if (!response.ok) throw new Error('Failed to fetch collections');
+
+      const data = await response.json();
+      setCollections(data.data?.collections || []);
+    } catch (error) {
+      console.error('Error fetching collections:', error);
+    }
+  }
 
   const sortResults = (results: SearchResult[], sortBy: 'relevance' | 'date' | 'name') => {
     const sorted = [...results];

@@ -1,15 +1,23 @@
 'use client';
 
 import { SignUp } from '@clerk/nextjs';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Video, Sparkles, ArrowLeft, Check } from 'lucide-react';
 import Link from 'next/link';
 
 /**
  * Sign Up Page
  * Modern two-column layout with branded left side and hero right side
+ *
+ * ACCESSIBILITY:
+ * - Respects user's reduced motion preference (prefers-reduced-motion)
+ * - All animations are conditionally disabled when shouldReduceMotion is true
+ * - Ensures WCAG 2.1 compliance for motion-triggered vestibular disorders
  */
 export default function SignUpPage() {
+  // Accessibility: Detect if user prefers reduced motion
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Left Column - Sign Up Form */}
@@ -37,9 +45,9 @@ export default function SignUpPage() {
         {/* Centered Form Container */}
         <div className="flex flex-1 items-center justify-center">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: shouldReduceMotion ? 1 : 0, y: shouldReduceMotion ? 0 : 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.5 }}
             className="w-full max-w-md"
           >
             <div className="mb-8 text-center">
@@ -82,9 +90,9 @@ export default function SignUpPage() {
         {/* Content */}
         <div className="relative flex flex-col items-center justify-center p-12 text-center">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: shouldReduceMotion ? 1 : 0, scale: shouldReduceMotion ? 1 : 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.7, delay: 0.2 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.7, delay: shouldReduceMotion ? 0 : 0.2 }}
             className="space-y-6"
           >
             {/* Icon Badge */}
@@ -114,9 +122,9 @@ export default function SignUpPage() {
               ].map((benefit, index) => (
                 <motion.div
                   key={index}
-                  initial={{ opacity: 0, x: -20 }}
+                  initial={{ opacity: shouldReduceMotion ? 1 : 0, x: shouldReduceMotion ? 0 : -20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5, delay: 0.4 + index * 0.1 }}
+                  transition={{ duration: shouldReduceMotion ? 0 : 0.5, delay: shouldReduceMotion ? 0 : 0.4 + index * 0.1 }}
                   className="flex items-start gap-3"
                 >
                   <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center mt-0.5">
@@ -132,9 +140,9 @@ export default function SignUpPage() {
 
             {/* Trust Indicators */}
             <motion.div
-              initial={{ opacity: 0 }}
+              initial={{ opacity: shouldReduceMotion ? 1 : 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.5, delay: 1 }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.5, delay: shouldReduceMotion ? 0 : 1 }}
               className="pt-6 border-t border-border/50"
             >
               <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground">

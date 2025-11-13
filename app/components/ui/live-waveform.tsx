@@ -64,6 +64,7 @@ export const LiveWaveform = ({
   const needsRedrawRef = useRef(true)
   const gradientCacheRef = useRef<CanvasGradient | null>(null)
   const lastWidthRef = useRef(0)
+  const fadeFrameRef = useRef<number | null>(null)
 
   const heightStyle = typeof height === "number" ? `${height}px` : height
 
@@ -212,16 +213,25 @@ export const LiveWaveform = ({
               )
             }
             needsRedrawRef.current = true
-            requestAnimationFrame(fadeToIdle)
+            fadeFrameRef.current = requestAnimationFrame(fadeToIdle)
           } else {
             if (mode === "static") {
               staticBarsRef.current = []
             } else {
               historyRef.current = []
             }
+            fadeFrameRef.current = null
           }
         }
         fadeToIdle()
+      }
+
+      // Cleanup fade animation on unmount or state change
+      return () => {
+        if (fadeFrameRef.current !== null) {
+          cancelAnimationFrame(fadeFrameRef.current)
+          fadeFrameRef.current = null
+        }
       }
     }
   }, [processing, active, barWidth, barGap, mode])

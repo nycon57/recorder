@@ -291,19 +291,22 @@ export default function SecurityPage() {
     {
       id: 'user',
       header: 'User',
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <UserAvatar user={row.original.user!} size="sm" />
-          <div>
-            <div className="font-medium text-sm">
-              {row.original.user?.name || 'Unknown User'}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {row.original.user?.email}
+      cell: ({ row }) => {
+        const user = row.original.user || { name: 'Unknown User', email: '', avatar_url: null };
+        return (
+          <div className="flex items-center gap-2">
+            <UserAvatar user={user} size="sm" />
+            <div>
+              <div className="font-medium text-sm">
+                {user.name || 'Unknown User'}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {user.email}
+              </div>
             </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       id: 'device',

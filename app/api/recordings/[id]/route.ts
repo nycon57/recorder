@@ -163,29 +163,55 @@ export const DELETE = apiHandler(
 
       console.log('[DELETE Recording] Performing permanent delete');
 
-      // Delete storage files
+      // CRITICAL: Delete database record FIRST (cascades to transcripts, documents, chunks)
+      // This ensures we never leave orphaned DB rows if storage deletion fails
+      const { error: dbError } = await supabase
+        .from('recordings')
+        .delete()
+        .eq('id', id)
+        .eq('org_id', orgId);
+
+      if (dbError) {
+        console.error('[DELETE Recording] Error deleting database record:', dbError);
+        return errors.internalError();
+      }
+
+      console.log('[DELETE Recording] Database record deleted:', id);
+
+      // Only after successful DB deletion, remove storage files
       const filesToDelete = [
         recording.storage_path_raw,
         recording.storage_path_processed,
       ].filter(Boolean);
 
       if (filesToDelete.length > 0) {
-        await supabase.storage.from('recordings').remove(filesToDelete);
+        try {
+          const { error: storageError } = await supabase.storage
+            .from('recordings')
+            .remove(filesToDelete);
+
+          if (storageError) {
+            // Log but don't fail the request - storage can be cleaned up later
+            console.error(
+              '[DELETE Recording] Error deleting storage files (DB record already deleted):',
+              storageError,
+              { recordingId: id, files: filesToDelete }
+            );
+            // TODO: Consider enqueueing a cleanup job for retry
+          } else {
+            console.log('[DELETE Recording] Storage files deleted:', filesToDelete);
+          }
+        } catch (err) {
+          // Log but don't fail - DB record is already deleted
+          console.error(
+            '[DELETE Recording] Exception deleting storage files:',
+            err,
+            { recordingId: id, files: filesToDelete }
+          );
+        }
       }
 
-      // Delete database record (cascades to transcripts, documents, chunks)
-      const { error } = await supabase
-        .from('recordings')
-        .delete()
-        .eq('id', id)
-        .eq('org_id', orgId);
-
-      if (error) {
-        console.error('[DELETE Recording] Error in permanent delete:', error);
-        return errors.internalError();
-      }
-
-      console.log('[DELETE Recording] Permanently deleted:', id);
+      console.log('[DELETE Recording] Permanently deleted (complete):', id);
 
       // PERFORMANCE OPTIMIZATION: Invalidate stats cache
       const { CacheInvalidation } = await import('@/lib/services/cache');

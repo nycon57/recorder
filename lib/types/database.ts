@@ -278,6 +278,31 @@ export interface RecordingTag {
   created_at: string;
 }
 
+/**
+ * Comment on a recording with optional timestamp for video/audio
+ */
+export interface Comment {
+  id: string;
+  recording_id: string;
+  user_id: string;
+  org_id: string;
+  parent_id: string | null;
+  text: string;
+  timestamp_sec: number | null;
+  edited: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+/**
+ * Comment with user details (from get_comments_with_users function)
+ */
+export interface CommentWithUser extends Omit<Comment, 'org_id' | 'deleted_at'> {
+  user_name: string;
+  user_email: string;
+}
+
 export interface Database {
   public: {
     Tables: {

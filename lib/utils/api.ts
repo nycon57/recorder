@@ -142,9 +142,11 @@ export async function requireOrg() {
   }
 
   // PERFORMANCE OPTIMIZATION: Check cache first to avoid an extra DB query
+  // MULTI-TENANT: Include orgId in cache key for proper isolation
+  const cacheKey = `${user.userId}:${user.orgId}`;
   let cachedUser;
   try {
-    cachedUser = await UserCache.get(user.userId);
+    cachedUser = await UserCache.get(cacheKey);
   } catch (error) {
     // Log cache read error but continue to DB fallback
     console.warn('[requireOrg] Cache read error:', error);
@@ -180,8 +182,9 @@ export async function requireOrg() {
   }
 
   // Cache the user data for 5 minutes (best effort - don't fail request on cache errors)
+  // MULTI-TENANT: Use composite cache key with orgId for isolation
   try {
-    await UserCache.set(user.userId, {
+    await UserCache.set(cacheKey, {
       id: userData!.id,
       clerkUserId: user.userId,
       orgId: userData!.org_id,

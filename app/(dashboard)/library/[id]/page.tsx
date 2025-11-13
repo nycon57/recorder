@@ -263,7 +263,7 @@ export default async function LibraryItemDetailPage({
           transcript={transcript}
           document={document}
           initialTags={tags}
-          highlightSources={highlightSources}
+          sourceKey={sourceKey}
           initialHighlightId={highlight}
         />
       );

@@ -1,6 +1,9 @@
 // Learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
 
+// Add OpenAI shims for Node environment (required for tests)
+import 'openai/shims/node';
+
 // Mock environment variables for tests
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';

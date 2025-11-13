@@ -162,11 +162,16 @@ export function HighlightableContent({
    * Returns array of {start, end, highlightId} for each match
    */
   const findMatches = React.useMemo(() => {
-    console.log('[HighlightableContent] Finding matches:', {
-      highlightsEnabled,
-      highlightsCount: highlights.length,
-      contentLength: content.length,
-    });
+    // Debug flag - set to true only for development debugging
+    const DEBUG_HIGHLIGHTS = false;
+
+    if (DEBUG_HIGHLIGHTS) {
+      console.log('[HighlightableContent] Finding matches:', {
+        highlightsEnabled,
+        highlightsCount: highlights.length,
+        contentLength: content.length,
+      });
+    }
 
     if (!highlightsEnabled || highlights.length === 0) {
       return [];
@@ -178,22 +183,26 @@ export function HighlightableContent({
       // Normalize search text (strip formatting and normalize whitespace)
       const normalizedSearchText = stripFormatting(highlight.text);
 
-      console.log('[HighlightableContent] Searching for highlight:', {
-        highlightId: highlight.id,
-        searchTextPreview: normalizedSearchText.substring(0, 100),
-        searchTextLength: normalizedSearchText.length,
-        originalPreview: highlight.text.substring(0, 100),
-      });
+      if (DEBUG_HIGHLIGHTS) {
+        console.log('[HighlightableContent] Searching for highlight:', {
+          highlightId: highlight.id,
+          searchTextPreview: normalizedSearchText.substring(0, 100),
+          searchTextLength: normalizedSearchText.length,
+          originalPreview: highlight.text.substring(0, 100),
+        });
+      }
 
       // Find in original content
       const match = findInOriginal(content, normalizedSearchText);
 
-      console.log('[HighlightableContent] Search result:', {
-        highlightId: highlight.id,
-        found: match !== null,
-        start: match?.start,
-        end: match?.end,
-      });
+      if (DEBUG_HIGHLIGHTS) {
+        console.log('[HighlightableContent] Search result:', {
+          highlightId: highlight.id,
+          found: match !== null,
+          start: match?.start,
+          end: match?.end,
+        });
+      }
 
       if (match) {
         matches.push({
@@ -207,14 +216,16 @@ export function HighlightableContent({
     // Sort by start position
     matches.sort((a, b) => a.start - b.start);
 
-    console.log('[HighlightableContent] Final matches:', {
-      matchCount: matches.length,
-      matches: matches.map((m) => ({
-        highlightId: m.highlightId,
-        start: m.start,
-        end: m.end,
-      })),
-    });
+    if (DEBUG_HIGHLIGHTS) {
+      console.log('[HighlightableContent] Final matches:', {
+        matchCount: matches.length,
+        matches: matches.map((m) => ({
+          highlightId: m.highlightId,
+          start: m.start,
+          end: m.end,
+        })),
+      });
+    }
 
     return matches;
   }, [content, highlights, highlightsEnabled]);

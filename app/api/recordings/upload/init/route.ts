@@ -104,8 +104,9 @@ export const POST = withRateLimit(
         );
       }
 
-      // Check quota
-      const quotaCheck = await QuotaManager.checkQuota(orgId, 'recording');
+      // SECURITY: Atomically check and consume quota to prevent race conditions
+      // This prevents multiple concurrent requests from exceeding quota limits
+      const quotaCheck = await QuotaManager.checkAndConsumeQuota(orgId, 'recording');
       if (!quotaCheck.allowed) {
         logger.warn('Quota exceeded', {
           context: { requestId, orgId },
@@ -118,6 +119,9 @@ export const POST = withRateLimit(
           message: quotaCheck.message,
         });
       }
+
+      // Quota has been consumed - track this for potential rollback
+      let quotaConsumed = true;
 
       // Sanitize filename (prevent path traversal)
       const sanitizedFilename = filename
@@ -151,11 +155,22 @@ export const POST = withRateLimit(
           context: { requestId, orgId, userId },
           error: dbError as Error,
         });
+
+        // Rollback consumed quota since DB insert failed
+        try {
+          await QuotaManager.releaseQuota(orgId, 'recording');
+          logger.info('Rolled back quota after DB insert failure', {
+            context: { requestId, orgId },
+          });
+        } catch (rollbackError) {
+          logger.error('Failed to rollback quota', {
+            context: { requestId, orgId },
+            error: rollbackError as Error,
+          });
+        }
+
         return errors.internalError(requestId);
       }
-
-      // Consume quota AFTER successful DB insert to prevent quota leak
-      await QuotaManager.consumeQuota(orgId, 'recording');
 
       logger.info('Recording created', {
         context: { requestId, orgId, recordingId: recording.id },
@@ -179,6 +194,20 @@ export const POST = withRateLimit(
           context: { requestId, recordingId: recording.id },
           error: fileUploadError as Error,
         });
+
+        // CRITICAL: Rollback consumed quota before cleanup
+        try {
+          await QuotaManager.releaseQuota(orgId, 'recording');
+          logger.info('Rolled back quota after upload URL generation failure', {
+            context: { requestId, orgId, recordingId: recording.id },
+          });
+        } catch (rollbackError) {
+          logger.error('Failed to rollback quota', {
+            context: { requestId, orgId, recordingId: recording.id },
+            error: rollbackError as Error,
+          });
+          // Continue with cleanup even if rollback fails
+        }
 
         // Cleanup: delete the recording
         await supabase.from('recordings').delete().eq('id', recording.id);

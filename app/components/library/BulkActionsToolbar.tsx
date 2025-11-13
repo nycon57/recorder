@@ -61,9 +61,11 @@ export function BulkActionsToolbar({
   className,
 }: BulkActionsToolbarProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
 
   const handleDelete = async () => {
     try {
@@ -100,6 +102,20 @@ export function BulkActionsToolbar({
       console.error('Restore failed:', error);
     } finally {
       setIsRestoring(false);
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!onPermanentDelete) return;
+    try {
+      setIsPermanentlyDeleting(true);
+      onPermanentDelete();
+      setShowPermanentDeleteDialog(false);
+      onClearSelection();
+    } catch (error) {
+      console.error('Permanent delete failed:', error);
+    } finally {
+      setIsPermanentlyDeleting(false);
     }
   };
 
@@ -153,12 +169,12 @@ export function BulkActionsToolbar({
                 </Button>
               )}
 
-              {/* Permanent Delete */}
+              {/* Permanent Delete - REQUIRES CONFIRMATION */}
               {onPermanentDelete && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={onPermanentDelete}
+                  onClick={() => setShowPermanentDeleteDialog(true)}
                   className="h-8 gap-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -259,6 +275,36 @@ export function BulkActionsToolbar({
               disabled={isDeleting}
             >
               {isDeleting ? 'Moving to Trash...' : 'Move to Trash'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permanent Delete Confirmation Dialog - DESTRUCTIVE ACTION */}
+      <Dialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600">
+              Permanently Delete {selectedCount} {selectedCount === 1 ? 'item' : 'items'}?
+            </DialogTitle>
+            <DialogDescription className="text-red-600">
+              ⚠️ This action cannot be undone. These items will be permanently deleted and cannot be restored.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowPermanentDeleteDialog(false)}
+              disabled={isPermanentlyDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handlePermanentDelete}
+              disabled={isPermanentlyDeleting}
+            >
+              {isPermanentlyDeleting ? 'Deleting Forever...' : 'Delete Forever'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -54,22 +54,42 @@ interface MigrationResult {
 
 /**
  * Recursively find files matching pattern
+ *
+ * IMPROVEMENT: Added comprehensive error handling for file system operations
+ * - Wraps file system operations in try-catch blocks
+ * - Logs errors with file path context for debugging
+ * - Continues gracefully when individual files/directories fail
+ * - Prevents entire migration from failing due to single file system errors
  */
 function findFiles(dir: string, pattern: RegExp, files: string[] = []): string[] {
-  const entries = readdirSync(dir);
+  try {
+    const entries = readdirSync(dir);
 
-  for (const entry of entries) {
-    const fullPath = join(dir, entry);
-    const stat = statSync(fullPath);
+    for (const entry of entries) {
+      const fullPath = join(dir, entry);
 
-    if (stat.isDirectory()) {
-      // Skip node_modules, .next, .git
-      if (!['node_modules', '.next', '.git', 'dist', 'build'].includes(entry)) {
-        findFiles(fullPath, pattern, files);
+      try {
+        const stat = statSync(fullPath);
+
+        if (stat.isDirectory()) {
+          // Skip node_modules, .next, .git, and other build/dependency directories
+          if (!['node_modules', '.next', '.git', 'dist', 'build'].includes(entry)) {
+            findFiles(fullPath, pattern, files);
+          }
+        } else if (pattern.test(fullPath)) {
+          files.push(fullPath);
+        }
+      } catch (fileError) {
+        // Handle individual file/directory errors gracefully
+        // This prevents permission errors or broken symlinks from breaking the entire scan
+        log.warn(`Skipping file ${fullPath}: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
+        continue;
       }
-    } else if (pattern.test(fullPath)) {
-      files.push(fullPath);
     }
+  } catch (dirError) {
+    // Handle directory read errors
+    // This can happen with permission issues or when directory is deleted during scan
+    log.error(`Cannot read directory ${dir}: ${dirError instanceof Error ? dirError.message : String(dirError)}`);
   }
 
   return files;
@@ -197,16 +217,71 @@ export {
   log,
 };
 
-// CLI execution - Node ESM pattern for detecting direct invocation
-const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
+/**
+ * Helper function to validate migration rules
+ */
+function validateRule(rule: any, source: string): rule is MigrationRule {
+  if (!rule.name || typeof rule.name !== 'string') {
+    log.warn(`Invalid rule from ${source}: missing or invalid 'name' property`);
+    return false;
+  }
+  if (!rule.description || typeof rule.description !== 'string') {
+    log.warn(`Invalid rule from ${source}: missing or invalid 'description' property`);
+    return false;
+  }
+  if (!rule.filePattern || !(rule.filePattern instanceof RegExp)) {
+    log.warn(`Invalid rule from ${source}: missing or invalid 'filePattern' property`);
+    return false;
+  }
+  if (!rule.transform || typeof rule.transform !== 'function') {
+    log.warn(`Invalid rule from ${source}: missing or invalid 'transform' function`);
+    return false;
+  }
+  return true;
+}
 
-if (isMainModule) {
+/**
+ * Helper function to load rules from a file
+ */
+async function loadRulesFromFile(filePath: string): Promise<MigrationRule[]> {
+  try {
+    // Attempt to dynamically import the rules file
+    const module = await import(filePath);
+    const loadedRules = module.default || module.rules || [];
+
+    // Validate each rule
+    const validRules = loadedRules.filter((rule: any) =>
+      validateRule(rule, filePath)
+    );
+
+    if (validRules.length > 0) {
+      log.success(`Loaded ${validRules.length} rule(s) from ${filePath}`);
+    }
+
+    return validRules;
+  } catch (error) {
+    // File doesn't exist or has errors - this is expected for migrations not yet implemented
+    if ((error as any)?.code === 'ERR_MODULE_NOT_FOUND' ||
+        (error as any)?.code === 'MODULE_NOT_FOUND') {
+      log.info(`No rules file found at ${filePath} (migration not yet implemented)`);
+    } else {
+      log.warn(`Error loading rules from ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return [];
+  }
+}
+
+/**
+ * Main CLI execution function
+ * IMPROVEMENT: Wrapped in async function to support dynamic imports
+ */
+async function main() {
   const migrationName = process.argv[2];
   const dryRun = process.argv.includes('--dry-run');
 
   if (!migrationName) {
     log.error('Usage: npx tsx scripts/migrate-components.ts <migration-name>');
-    log.info('Available migrations: empty-states, ai-chat, all');
+    log.info('Available migrations: empty-states, ai-chat, recording-ui, all');
     process.exit(1);
   }
 
@@ -214,21 +289,39 @@ if (isMainModule) {
   log.info(`Migration: ${migrationName}`);
   log.info(`Mode: ${dryRun ? 'DRY RUN' : 'APPLY'}`);
 
-  // Load migration rules (to be implemented in separate files)
+  /**
+   * IMPROVEMENT: Implement migration rules loading system
+   * - Attempts to load migration rules from separate rule files
+   * - Falls back gracefully if rule files don't exist yet
+   * - Validates rules before use to ensure they have required properties
+   * - Provides clear error messages for missing or invalid rules
+   */
   const rules: MigrationRule[] = [];
 
+  // Load rules based on migration name
   if (migrationName === 'empty-states' || migrationName === 'all') {
-    // Load empty-states rules
     log.info('Loading empty-states migration rules...');
+    const emptyStatesRules = await loadRulesFromFile('./migrations/empty-states-rules.ts');
+    rules.push(...emptyStatesRules);
   }
 
   if (migrationName === 'ai-chat' || migrationName === 'all') {
-    // Load ai-chat rules
     log.info('Loading ai-chat migration rules...');
+    const aiChatRules = await loadRulesFromFile('./migrations/ai-chat-rules.ts');
+    rules.push(...aiChatRules);
   }
 
+  if (migrationName === 'recording-ui' || migrationName === 'all') {
+    log.info('Loading recording-ui migration rules...');
+    const recordingRules = await loadRulesFromFile('./migrations/recording-ui-rules.ts');
+    rules.push(...recordingRules);
+  }
+
+  // Check if any rules were loaded
   if (rules.length === 0) {
-    log.error('No migration rules found for: ' + migrationName);
+    log.error(`No migration rules found for: ${migrationName}`);
+    log.info('Available migrations: empty-states, ai-chat, recording-ui, all');
+    log.info('To create a new migration, add a rules file to scripts/migrations/');
     process.exit(1);
   }
 
@@ -240,4 +333,14 @@ if (isMainModule) {
   }
 
   log.success('Migration complete!');
+}
+
+// CLI execution - Node ESM pattern for detecting direct invocation
+const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isMainModule) {
+  main().catch((error) => {
+    log.error(`Fatal error: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  });
 }

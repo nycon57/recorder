@@ -25,6 +25,7 @@ import AIDocumentPanel from '../shared/AIDocumentPanel';
 import ShareControls from '../shared/ShareControls';
 import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
 import InlineEditableField from '../shared/InlineEditableField';
+import InlineTagsEditor from '../shared/InlineTagsEditor';
 
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
@@ -209,6 +210,57 @@ export default function TextNoteDetailView({
     }
   };
 
+  const handleAddTag = async (tagName: string): Promise<Tag> => {
+    try {
+      const createResponse = await fetch('/api/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: tagName }),
+      });
+
+      if (!createResponse.ok) {
+        throw new Error('Failed to create tag');
+      }
+
+      const { tag: newTag } = await createResponse.json();
+
+      const applyResponse = await fetch(`/api/tags/${newTag.id}/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recording_ids: [recording.id] }),
+      });
+
+      if (!applyResponse.ok) {
+        throw new Error('Failed to apply tag');
+      }
+
+      toast({ description: 'Tag added successfully' });
+      return newTag;
+    } catch (error) {
+      console.error('Add tag failed:', error);
+      throw error;
+    }
+  };
+
+  const handleRemoveTag = async (tagId: string): Promise<void> => {
+    try {
+      const response = await fetch(`/api/tags/${tagId}/remove`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recording_ids: [recording.id] }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to remove tag');
+      }
+
+      toast({ description: 'Tag removed successfully' });
+    } catch (error) {
+      console.error('Remove tag failed:', error);
+      throw error;
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -246,6 +298,16 @@ export default function TextNoteDetailView({
                     displayAs="description"
                     maxLength={500}
                   />
+
+                  {/* Inline Tags Editor */}
+                  <div className="mt-3">
+                    <InlineTagsEditor
+                      tags={tags}
+                      onTagsChange={setTags}
+                      onAddTag={handleAddTag}
+                      onRemoveTag={handleRemoveTag}
+                    />
+                  </div>
                 </>
               ) : (
                 <>

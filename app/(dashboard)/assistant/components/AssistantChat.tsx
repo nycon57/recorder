@@ -129,6 +129,10 @@ function AssistantChatInner({
         message: message,
       });
 
+      // Capture the assistant message ID immediately (synchronously)
+      const assistantMessageId = message.id;
+      lastAssistantMessageIdRef.current = assistantMessageId;
+
       // Use the stored user message ID to fetch sources
       const cacheKey = lastUserMessageIdRef.current;
 
@@ -171,13 +175,9 @@ function AssistantChatInner({
       }
 
       // Update existing message in store with sources and metadata
-      // The useEffect has already added the message, so we need to update it
-      // Use the ref that was set when the message was added
-      const messageId = lastAssistantMessageIdRef.current;
-
+      // Use the assistantMessageId we captured synchronously at the start
       console.log('[AssistantChat] Updating message in store via onFinish:', {
-        messageId,
-        fromRef: lastAssistantMessageIdRef.current,
+        assistantMessageId,
         hasSources: !!messageWithSources.sources,
         sourcesCount: messageWithSources.sources?.length || 0,
         hasMetadata: !!messageWithSources.metadata,
@@ -185,16 +185,13 @@ function AssistantChatInner({
         sourceKey: messageWithSources.metadata?.custom?.sourceKey,
       });
 
-      if (messageId) {
-        updateMessage(messageId, {
-          sources: messageWithSources.sources,
-          metadata: messageWithSources.metadata,
-        });
-        // Clear the ref after use
-        lastAssistantMessageIdRef.current = null;
-      } else {
-        console.error('[AssistantChat] Could not find message ID to update! Ref was not set.');
-      }
+      updateMessage(assistantMessageId, {
+        sources: messageWithSources.sources,
+        metadata: messageWithSources.metadata,
+      });
+
+      // Clear the ref after use
+      lastAssistantMessageIdRef.current = null;
     },
     onError: (error) => {
       console.error('[AssistantChat] useChat onError called:', error);
@@ -231,12 +228,6 @@ function AssistantChatInner({
               hasSources: !!(msg as any).sources,
               hasMetadata: !!(msg as any).metadata,
             });
-
-            // Track the last assistant message ID for updating with sources later
-            if (msg.role === 'assistant') {
-              lastAssistantMessageIdRef.current = msg.id;
-              console.log('[AssistantChat] Stored assistant message ID for later update:', msg.id);
-            }
 
             const extendedMessage: ExtendedMessage = {
               ...msg,

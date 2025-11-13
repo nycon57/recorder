@@ -23,10 +23,9 @@ import { CacheControlHeaders, generateETag } from '@/lib/services/cache';
  * - view: Filter by deletion status - 'active' (default), 'trash', or 'all'
  * - search: Search query for title, description, or filename
  */
-export const GET = withDeduplication(
-  apiHandler(async (request: NextRequest) => {
-    const { orgId, userId } = await requireOrg();
-    const supabase = supabaseAdmin;
+const libraryHandler = async (request: NextRequest) => {
+  const { orgId, userId } = await requireOrg();
+  const supabase = supabaseAdmin;
 
   console.log('[API /api/library] Request from orgId:', orgId, 'userId:', userId);
 
@@ -106,18 +105,21 @@ export const GET = withDeduplication(
       },
     };
 
-    const response = successResponse(responseData);
+  const response = successResponse(responseData);
 
-    // Add cache headers for client-side caching
-    response.headers.set('Cache-Control', CacheControlHeaders.content);
-    response.headers.set('ETag', generateETag(responseData));
+  // Add cache headers for client-side caching
+  response.headers.set('Cache-Control', CacheControlHeaders.content);
+  response.headers.set('ETag', generateETag(responseData));
 
-    return response;
-  }),
+  return response;
+};
+
+export const GET = withDeduplication(
+  apiHandler(libraryHandler),
   {
     // Deduplicate by org + query params
+    // Note: keyGenerator is called before the handler, so we need to authenticate here
     keyGenerator: async (req: NextRequest) => {
-      const { requireOrg } = await import('@/lib/utils/api');
       const { orgId } = await requireOrg();
       const url = new URL(req.url);
       return `library:${orgId}:${url.searchParams.toString()}`;

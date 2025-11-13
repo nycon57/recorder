@@ -418,6 +418,47 @@ export const AudioScrubber = ({
     handleScrub(e.clientX)
   }
 
+  /**
+   * ACCESSIBILITY: Keyboard handler for arrow key navigation
+   * - Left Arrow: Seek backward 5 seconds
+   * - Right Arrow: Seek forward 5 seconds
+   * - Home: Jump to start
+   * - End: Jump to end
+   * Meets WCAG 2.1 Success Criterion 2.1.1 (Keyboard Accessible)
+   */
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!onSeek || duration <= 0) return
+
+      const SEEK_STEP = 5 // seconds
+      let newTime = currentTime
+
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault()
+          newTime = Math.max(0, currentTime - SEEK_STEP)
+          break
+        case "ArrowRight":
+          e.preventDefault()
+          newTime = Math.min(duration, currentTime + SEEK_STEP)
+          break
+        case "Home":
+          e.preventDefault()
+          newTime = 0
+          break
+        case "End":
+          e.preventDefault()
+          newTime = duration
+          break
+        default:
+          return // Don't call onSeek for other keys
+      }
+
+      onSeek(newTime)
+    },
+    [currentTime, duration, onSeek]
+  )
+
   useEffect(() => {
     if (!isDragging) return
 
@@ -442,12 +483,14 @@ export const AudioScrubber = ({
 
   return (
     <div
-      aria-label="Audio waveform scrubber"
+      aria-label="Audio waveform scrubber. Use arrow keys to seek, Home for start, End for end."
       aria-valuemax={duration}
       aria-valuemin={0}
       aria-valuenow={currentTime}
+      aria-valuetext={`${Math.floor(currentTime)} of ${Math.floor(duration)} seconds`}
       className={cn("relative cursor-pointer select-none", className)}
       onMouseDown={handleMouseDown}
+      onKeyDown={handleKeyDown}
       ref={containerRef}
       role="slider"
       style={{ height: heightStyle }}
@@ -911,7 +954,9 @@ export const LiveMicrophoneWaveform = ({
       if (scrubSourceRef.current) {
         try {
           scrubSourceRef.current.stop()
-        } catch {}
+        } catch (err) {
+          console.error('[Waveform] Error stopping scrubSourceRef:', err)
+        }
       }
 
       const source = audioContextRef.current.createBufferSource()
@@ -954,7 +999,9 @@ export const LiveMicrophoneWaveform = ({
       if (sourceNodeRef.current) {
         try {
           sourceNodeRef.current.stop()
-        } catch {}
+        } catch (err) {
+          console.error('[Waveform] Error stopping sourceNodeRef:', err)
+        }
       }
 
       const source = audioContextRef.current.createBufferSource()
@@ -1179,6 +1226,79 @@ export const LiveMicrophoneWaveform = ({
     dragStartOffsetRef.current = dragOffset
   }
 
+  /**
+   * ACCESSIBILITY: Keyboard handler for scrubbing through recorded audio
+   * - Left Arrow: Scrub backward
+   * - Right Arrow: Scrub forward
+   * - Home: Jump to start
+   * - End: Jump to end
+   * Meets WCAG 2.1 Success Criterion 2.1.1 (Keyboard Accessible)
+   */
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (active || historyRef.current.length === 0) return
+
+      const step = barWidth + barGap
+      const maxBars = historyRef.current.length
+      const viewWidth = containerRef.current?.getBoundingClientRect().width || 0
+      const viewBars = Math.floor(viewWidth / step)
+      const maxOffset = Math.max(0, (maxBars - viewBars) * step)
+
+      let newOffset = dragOffset
+      const SEEK_BARS = 10 // Number of bars to skip per keypress
+
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault()
+          newOffset = Math.max(0, dragOffset - SEEK_BARS * step)
+          break
+        case "ArrowRight":
+          e.preventDefault()
+          newOffset = Math.min(maxOffset, dragOffset + SEEK_BARS * step)
+          break
+        case "Home":
+          e.preventDefault()
+          newOffset = 0
+          break
+        case "End":
+          e.preventDefault()
+          newOffset = maxOffset
+          break
+        default:
+          return
+      }
+
+      setDragOffset?.(newOffset)
+
+      // Play audio at new position if audio playback is enabled
+      if (enableAudioPlayback && audioBufferRef.current) {
+        const offsetBars = Math.floor(newOffset / step)
+        const rightmostBarIndex = Math.max(
+          0,
+          Math.min(maxBars - 1, maxBars - 1 - offsetBars)
+        )
+        const audioPosition =
+          (rightmostBarIndex / maxBars) * audioBufferRef.current.duration
+        playFromPosition(
+          Math.max(
+            0,
+            Math.min(audioBufferRef.current.duration - 0.1, audioPosition)
+          )
+        )
+      }
+    },
+    [
+      active,
+      historyRef,
+      barWidth,
+      barGap,
+      dragOffset,
+      setDragOffset,
+      enableAudioPlayback,
+      playFromPosition,
+    ]
+  )
+
   useEffect(() => {
     if (!isDragging) return
 
@@ -1249,7 +1369,9 @@ export const LiveMicrophoneWaveform = ({
       if (scrubSourceRef.current) {
         try {
           scrubSourceRef.current.stop()
-        } catch {}
+        } catch (err) {
+          console.error('[Waveform] Error stopping scrubSourceRef:', err)
+        }
       }
     }
 
@@ -1280,11 +1402,12 @@ export const LiveMicrophoneWaveform = ({
         className
       )}
       onMouseDown={handleMouseDown}
+      onKeyDown={handleKeyDown}
       ref={containerRef}
       role={!active && historyRef.current.length > 0 ? "slider" : undefined}
       aria-label={
         !active && historyRef.current.length > 0
-          ? "Drag to scrub through recording"
+          ? "Recording playback scrubber. Use arrow keys to navigate, Home for start, End for end."
           : undefined
       }
       aria-valuenow={
@@ -1582,6 +1705,47 @@ export const RecordingWaveform = ({
     handleScrub(e.clientX)
   }
 
+  /**
+   * ACCESSIBILITY: Keyboard handler for scrubbing through recording
+   * - Left Arrow: Scrub backward 5%
+   * - Right Arrow: Scrub forward 5%
+   * - Home: Jump to start
+   * - End: Jump to end
+   * Meets WCAG 2.1 Success Criterion 2.1.1 (Keyboard Accessible)
+   */
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (recording || !isRecordingComplete) return
+
+      const POSITION_STEP = 0.05 // 5% per keypress
+      let newPosition = viewPosition
+
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault()
+          newPosition = Math.max(0, viewPosition - POSITION_STEP)
+          break
+        case "ArrowRight":
+          e.preventDefault()
+          newPosition = Math.min(1, viewPosition + POSITION_STEP)
+          break
+        case "Home":
+          e.preventDefault()
+          newPosition = 0
+          break
+        case "End":
+          e.preventDefault()
+          newPosition = 1
+          break
+        default:
+          return
+      }
+
+      setViewPosition(newPosition)
+    },
+    [recording, isRecordingComplete, viewPosition]
+  )
+
   useEffect(() => {
     if (!isDragging) return
 
@@ -1606,7 +1770,7 @@ export const RecordingWaveform = ({
     <div
       aria-label={
         isRecordingComplete && !recording
-          ? "Drag to scrub through recording"
+          ? "Recording scrubber. Use arrow keys to navigate, Home for start, End for end."
           : undefined
       }
       aria-valuenow={
@@ -1620,6 +1784,7 @@ export const RecordingWaveform = ({
         className
       )}
       onMouseDown={handleMouseDown}
+      onKeyDown={handleKeyDown}
       ref={containerRef}
       role={isRecordingComplete && !recording ? "slider" : undefined}
       style={{ height: heightStyle }}

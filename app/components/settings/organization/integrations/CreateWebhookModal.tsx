@@ -115,7 +115,7 @@ export function CreateWebhookModal({ open, onOpenChange }: CreateWebhookModalPro
       title="Create Webhook"
       description="Configure a webhook endpoint to receive real-time notifications about events in your organization."
       size="2xl"
-      schema={createWebhookSchema as any}
+      schema={createWebhookSchema}
       defaultValues={{
         name: '',
         description: '',
@@ -222,10 +222,11 @@ export function CreateWebhookModal({ open, onOpenChange }: CreateWebhookModalPro
                           checked={field.value?.includes(event.value)}
                           onCheckedChange={(checked) => {
                             if (checked) {
-                              field.onChange([...field.value, event.value as any]);
+                              // TYPE SAFETY: No cast needed - event.value is string
+                              field.onChange([...field.value, event.value]);
                             } else {
                               field.onChange(
-                                field.value?.filter((v) => v !== event.value as any)
+                                field.value?.filter((v) => v !== event.value)
                               );
                             }
                           }}

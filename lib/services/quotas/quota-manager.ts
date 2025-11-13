@@ -364,6 +364,76 @@ export class QuotaManager {
   }
 
   /**
+   * Release/rollback consumed quota (e.g., when operation fails after quota was consumed)
+   * WARNING: This should only be used in error recovery paths
+   */
+  static async releaseQuota(
+    orgId: string,
+    quotaType: QuotaType,
+    amount: number = 1
+  ): Promise<boolean> {
+    const supabase = await createClient();
+
+    try {
+      // Determine which column to decrement based on quota type
+      let column: string;
+      switch (quotaType) {
+        case 'search':
+          column = 'searches_used';
+          break;
+        case 'recording':
+          column = 'recordings_used';
+          break;
+        case 'ai':
+          column = 'ai_requests_used';
+          break;
+        case 'connector':
+          column = 'connectors_used';
+          break;
+        case 'storage':
+          // Storage uses different logic (absolute value, not counter)
+          console.warn('[QuotaManager] Storage quota cannot be released via this method');
+          return false;
+        default:
+          console.error('[QuotaManager] Unknown quota type for release:', quotaType);
+          return false;
+      }
+
+      // Decrement the usage counter (prevent negative values)
+      const { error } = await supabase.rpc('release_quota', {
+        p_org_id: orgId,
+        p_column: column,
+        p_amount: amount,
+      });
+
+      if (error) {
+        // If RPC doesn't exist, fall back to direct update
+        console.warn('[QuotaManager] RPC release_quota not found, using direct update');
+        const { error: updateError } = await supabase
+          .from('org_quotas')
+          .update({
+            [column]: supabase.raw(`GREATEST(0, ${column} - ${amount})`),
+          })
+          .eq('org_id', orgId);
+
+        if (updateError) {
+          console.error('[QuotaManager] Failed to release quota:', updateError);
+          return false;
+        }
+      }
+
+      // Clear cache after release to ensure fresh data
+      this.clearCache(orgId);
+
+      console.log(`[QuotaManager] Released ${amount} ${quotaType} quota for org ${orgId}`);
+      return true;
+    } catch (error) {
+      console.error('[QuotaManager] Unexpected error releasing quota:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get current quota status for org (uses cache)
    */
   static async getQuotaStatus(orgId: string): Promise<OrgQuota | null> {

@@ -25,8 +25,9 @@ const redis = new Redis({
  */
 export const CacheKeys = {
   // Library cache keys
+  // SECURITY: Use SHA-256 instead of MD5 for cache key generation
   libraryListing: (orgId: string, filters: any) =>
-    `library:${orgId}:${crypto.createHash('md5').update(JSON.stringify(filters)).digest('hex')}`,
+    `library:${orgId}:${crypto.createHash('sha256').update(JSON.stringify(filters)).digest('hex')}`,
 
   libraryItem: (orgId: string, itemId: string) =>
     `library:item:${orgId}:${itemId}`,
@@ -39,8 +40,9 @@ export const CacheKeys = {
     `dashboard:recent:${orgId}:${limit}`,
 
   // Search cache keys
+  // SECURITY: Use SHA-256 instead of MD5 for cache key generation
   searchResults: (orgId: string, query: string, type: string) =>
-    `search:${orgId}:${type}:${crypto.createHash('md5').update(query).digest('hex')}`,
+    `search:${orgId}:${type}:${crypto.createHash('sha256').update(query).digest('hex')}`,
 
   // User/Org cache keys
   orgSettings: (orgId: string) =>

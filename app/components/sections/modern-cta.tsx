@@ -26,6 +26,7 @@ export type ModernCTAProps = {
   secondaryLabel?: string;
   showStats?: boolean;
   showAvatars?: boolean;
+  promoText?: string | null;
 };
 
 export default function ModernCTA({
@@ -35,6 +36,7 @@ export default function ModernCTA({
   secondaryLabel = "Book a Demo",
   showStats = true,
   showAvatars = true,
+  promoText = "Limited Time: Get 2 Months Free on Annual Plans",
 }: ModernCTAProps) {
   return (
     <section className="relative py-24 lg:py-32 overflow-hidden">
@@ -76,17 +78,20 @@ export default function ModernCTA({
           <div className="grid lg:grid-cols-[1.2fr_1fr] gap-12 items-center">
             {/* Left Column - Text & CTA */}
             <div>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5 }}
-              >
-                <span className="inline-flex h-10 items-center justify-center gap-2 rounded-full border-2 border-primary bg-primary/10 px-5 text-sm font-semibold text-primary backdrop-blur-sm mb-6">
-                  <Sparkles className="h-4 w-4" />
-                  Limited Time: Get 2 Months Free on Annual Plans
-                </span>
-              </motion.div>
+              {/* CONFIGURABLE: Promotional badge (pass promoText or null to hide) */}
+              {promoText && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <span className="inline-flex h-10 items-center justify-center gap-2 rounded-full border-2 border-primary bg-primary/10 px-5 text-sm font-semibold text-primary backdrop-blur-sm mb-6">
+                    <Sparkles className="h-4 w-4" />
+                    {promoText}
+                  </span>
+                </motion.div>
+              )}
 
               <motion.h2
                 initial={{ opacity: 0, y: 20 }}

@@ -196,7 +196,8 @@ export class FrameCache {
    */
   async cacheQueryResult(query: string, orgId: string, result: any): Promise<void> {
     try {
-      const key = `query:${orgId}:${crypto.createHash('md5').update(query).digest('hex')}`;
+      // SECURITY: Use SHA-256 instead of MD5 for cache key generation
+      const key = `query:${orgId}:${crypto.createHash('sha256').update(query).digest('hex')}`;
       await this.redis.setex(key, this.TTL_QUERY, JSON.stringify(result));
     } catch (error) {
       console.error('[Cache] Error caching query result:', error);
@@ -208,7 +209,8 @@ export class FrameCache {
    */
   async getCachedQueryResult(query: string, orgId: string): Promise<any | null> {
     try {
-      const key = `query:${orgId}:${crypto.createHash('md5').update(query).digest('hex')}`;
+      // SECURITY: Use SHA-256 instead of MD5 for cache key generation
+      const key = `query:${orgId}:${crypto.createHash('sha256').update(query).digest('hex')}`;
       const cached = await this.redis.get(key);
       return cached ? JSON.parse(cached) : null;
     } catch (error) {

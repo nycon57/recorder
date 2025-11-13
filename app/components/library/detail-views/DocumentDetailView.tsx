@@ -28,6 +28,7 @@ import AIDocumentPanel from '../shared/AIDocumentPanel';
 import ShareControls from '../shared/ShareControls';
 import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
 import InlineEditableField from '../shared/InlineEditableField';
+import InlineTagsEditor from '../shared/InlineTagsEditor';
 import { HighlightToolbar } from '../shared/HighlightToolbar';
 import { HighlightableContent, type Highlight } from '../shared/HighlightableContent';
 
@@ -158,6 +159,7 @@ export default function DocumentDetailView({
   const [currentHighlightIndex, setCurrentHighlightIndex] = React.useState(0);
   const [highlightsEnabled, setHighlightsEnabled] = React.useState(true);
   const [showHighlightToolbar, setShowHighlightToolbar] = React.useState(false);
+  const [matchedHighlightsCount, setMatchedHighlightsCount] = React.useState(0);
   const highlightRefsMapRef = React.useRef<Map<string, HTMLElement>>(new Map());
 
   const isTrashed = !!recording.deleted_at;
@@ -232,7 +234,7 @@ export default function DocumentDetailView({
 
   // Scroll to current highlight when it changes
   React.useEffect(() => {
-    if (highlights.length === 0 || !highlightsEnabled) {
+    if (matchedHighlightsCount === 0 || !highlightsEnabled) {
       return;
     }
 
@@ -248,7 +250,7 @@ export default function DocumentDetailView({
         block: 'center',
       });
     }
-  }, [currentHighlightIndex, highlights, highlightsEnabled]);
+  }, [currentHighlightIndex, highlights, highlightsEnabled, matchedHighlightsCount]);
 
   // Highlight navigation handlers
   const handlePreviousHighlight = React.useCallback(() => {
@@ -256,8 +258,8 @@ export default function DocumentDetailView({
   }, []);
 
   const handleNextHighlight = React.useCallback(() => {
-    setCurrentHighlightIndex((prev) => Math.min(highlights.length - 1, prev + 1));
-  }, [highlights.length]);
+    setCurrentHighlightIndex((prev) => Math.min(matchedHighlightsCount - 1, prev + 1));
+  }, [matchedHighlightsCount]);
 
   const handleToggleHighlights = React.useCallback(() => {
     setHighlightsEnabled((prev) => !prev);
@@ -398,6 +400,57 @@ export default function DocumentDetailView({
     }
   };
 
+  const handleAddTag = async (tagName: string): Promise<Tag> => {
+    try {
+      const createResponse = await fetch('/api/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: tagName }),
+      });
+
+      if (!createResponse.ok) {
+        throw new Error('Failed to create tag');
+      }
+
+      const { tag: newTag } = await createResponse.json();
+
+      const applyResponse = await fetch(`/api/tags/${newTag.id}/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recording_ids: [recording.id] }),
+      });
+
+      if (!applyResponse.ok) {
+        throw new Error('Failed to apply tag');
+      }
+
+      toast({ description: 'Tag added successfully' });
+      return newTag;
+    } catch (error) {
+      console.error('Add tag failed:', error);
+      throw error;
+    }
+  };
+
+  const handleRemoveTag = async (tagId: string): Promise<void> => {
+    try {
+      const response = await fetch(`/api/tags/${tagId}/remove`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recording_ids: [recording.id] }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to remove tag');
+      }
+
+      toast({ description: 'Tag removed successfully' });
+    } catch (error) {
+      console.error('Remove tag failed:', error);
+      throw error;
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -435,6 +488,16 @@ export default function DocumentDetailView({
                     displayAs="description"
                     maxLength={500}
                   />
+
+                  {/* Inline Tags Editor */}
+                  <div className="mt-3">
+                    <InlineTagsEditor
+                      tags={tags}
+                      onTagsChange={setTags}
+                      onAddTag={handleAddTag}
+                      onRemoveTag={handleRemoveTag}
+                    />
+                  </div>
                 </>
               ) : (
                 <>
@@ -540,9 +603,9 @@ export default function DocumentDetailView({
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-base">
                           Text Content
-                          {highlights.length > 0 && (
+                          {matchedHighlightsCount > 0 && (
                             <span className="ml-2 text-xs font-normal text-muted-foreground">
-                              ({highlights.length} citation{highlights.length > 1 ? 's' : ''})
+                              ({matchedHighlightsCount} citation{matchedHighlightsCount > 1 ? 's' : ''})
                             </span>
                           )}
                         </CardTitle>
@@ -561,6 +624,7 @@ export default function DocumentDetailView({
                             highlightsEnabled={highlightsEnabled}
                             onHighlightRefs={(refs) => {
                               highlightRefsMapRef.current = refs;
+                              setMatchedHighlightsCount(refs.size);
                             }}
                           />
                         ) : (
@@ -712,9 +776,9 @@ export default function DocumentDetailView({
       />
 
       {/* Highlight Toolbar */}
-      {showHighlightToolbar && highlights.length > 0 && (
+      {showHighlightToolbar && matchedHighlightsCount > 0 && (
         <HighlightToolbar
-          totalHighlights={highlights.length}
+          totalHighlights={matchedHighlightsCount}
           currentIndex={currentHighlightIndex}
           highlightsEnabled={highlightsEnabled}
           onPrevious={handlePreviousHighlight}

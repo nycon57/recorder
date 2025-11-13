@@ -127,7 +127,7 @@ export const POST = withRateLimit(
         latencyMs,
         cacheHit: false,
         cacheLayer: 'none',
-        filters: { recordingIds, source, dateFrom, dateTo, contentTypes, tagIds, collectionId, favoritesOnly },
+        filters: { recordingIds, source, dateFrom, dateTo, contentTypes, tagIds, tagFilterMode, collectionId, favoritesOnly },
         orgId,
         userId,
       }).catch((error) => console.error('[Search API] Analytics tracking failed:', error));
@@ -175,7 +175,7 @@ export const POST = withRateLimit(
       latencyMs,
       cacheHit: false,
       cacheLayer: 'none',
-      filters: { recordingIds, maxIterations, enableSelfReflection, contentTypes, tagIds, collectionId, favoritesOnly },
+      filters: { recordingIds, maxIterations, enableSelfReflection, contentTypes, tagIds, tagFilterMode, collectionId, favoritesOnly },
       orgId,
       userId,
     }).catch((error) => console.error('[Search API] Analytics tracking failed:', error));
@@ -301,7 +301,7 @@ export const POST = withRateLimit(
     latencyMs,
     cacheHit,
     cacheLayer,
-    filters: { recordingIds, source, dateFrom, dateTo, rerank, contentTypes, tagIds, collectionId, favoritesOnly },
+    filters: { recordingIds, source, dateFrom, dateTo, rerank, contentTypes, tagIds, tagFilterMode, collectionId, favoritesOnly },
     orgId,
     userId,
   }).catch((error) => console.error('[Search API] Analytics tracking failed:', error));

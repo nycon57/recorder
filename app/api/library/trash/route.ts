@@ -28,10 +28,14 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
   const supabase = supabaseAdmin;
 
-  // Parse query params
+  // Parse query params with validation
   const url = new URL(request.url);
-  const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
-  const offset = parseInt(url.searchParams.get('offset') || '0');
+  const limitParam = parseInt(url.searchParams.get('limit') || '50');
+  const offsetParam = parseInt(url.searchParams.get('offset') || '0');
+
+  // Guard against negative values and enforce upper bounds
+  const limit = Math.min(Math.max(1, isNaN(limitParam) ? 50 : limitParam), 100);
+  const offset = Math.max(0, isNaN(offsetParam) ? 0 : offsetParam);
   const contentTypeFilter = url.searchParams.get('content_type') as ContentType | null;
 
   // Build query for deleted items only

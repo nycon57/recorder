@@ -30,12 +30,6 @@ interface TableStats {
   n_live_tup: number;
 }
 
-interface MissingIndexCheck {
-  table_name: string;
-  column_names: string[];
-  reason: string;
-}
-
 async function checkExistingIndexes(): Promise<IndexInfo[]> {
   console.log('\n📊 Checking existing indexes...\n');
 
@@ -324,17 +318,29 @@ async function generateOptimizationReport() {
   console.log('\n\nRLS Policies:');
   console.log('-'.repeat(80));
 
+  interface RLSPolicy {
+    schemaname: string;
+    tablename: string;
+    policyname: string;
+    permissive: string;
+    roles: string[] | null;
+    cmd: string;
+    qual: string | null;
+    with_check: string | null;
+  }
+
   const policiesByTable = policies.reduce((acc, policy) => {
     if (!acc[policy.tablename]) acc[policy.tablename] = [];
     acc[policy.tablename].push(policy);
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {} as Record<string, RLSPolicy[]>);
 
   Object.entries(policiesByTable).forEach(([table, tablePolicies]) => {
     console.log(`\n${table}: (${tablePolicies.length} policies)`);
     tablePolicies.forEach(policy => {
       console.log(`  - ${policy.policyname} (${policy.cmd})`);
-      console.log(`    Roles: ${policy.roles.join(', ')}`);
+      const roles = Array.isArray(policy.roles) ? policy.roles.join(', ') : 'public';
+      console.log(`    Roles: ${roles}`);
       if (policy.qual) {
         console.log(`    Using: ${policy.qual}`);
       }

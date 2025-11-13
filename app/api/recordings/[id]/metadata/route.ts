@@ -267,10 +267,19 @@ export const POST = apiHandler(async (
         newStatus = 'transcribing';
       }
 
-      await supabase
+      const { error: statusUpdateError } = await supabase
         .from('recordings')
         .update({ status: newStatus })
         .eq('id', recordingId);
+
+      if (statusUpdateError) {
+        console.error('[Metadata Route] Failed to update recording status:', {
+          recordingId,
+          attemptedStatus: newStatus,
+          error: statusUpdateError,
+        });
+        // Non-blocking: Continue even if status update fails
+      }
     }
 
     // Create event for notifications

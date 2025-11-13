@@ -354,6 +354,33 @@ export default function MetadataCollectionStep({
               onChange={handleThumbnailChange}
             />
           </div>
+
+          {/*
+            ACCESSIBILITY: Action buttons are inside <form> for proper keyboard navigation
+            - Submit button uses type="submit" for Enter key support
+            - Back button uses type="button" to prevent form submission
+            - Both buttons are keyboard-accessible with proper focus management
+            - Meets WCAG 2.1 Success Criterion 2.1.1 (Keyboard Accessible)
+          */}
+          <div className="flex justify-between pt-4">
+            <Button variant="outline" onClick={onBack} type="button">
+              Back
+            </Button>
+            <Button
+              type="submit"
+              disabled={!form.formState.isValid || form.formState.isSubmitting}
+              className="min-w-[120px]"
+            >
+              {form.formState.isSubmitting ? (
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Processing...</span>
+                </div>
+              ) : (
+                'Next'
+              )}
+            </Button>
+          </div>
         </form>
       </Form>
 
@@ -366,27 +393,6 @@ export default function MetadataCollectionStep({
           </div>
         </Card>
       )}
-
-      {/* Actions */}
-      <div className="flex justify-between pt-4">
-        <Button variant="outline" onClick={onBack} type="button">
-          Back
-        </Button>
-        <Button
-          onClick={form.handleSubmit(onSubmit)}
-          disabled={!form.formState.isValid || form.formState.isSubmitting}
-          className="min-w-[120px]"
-        >
-          {form.formState.isSubmitting ? (
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>Processing...</span>
-            </div>
-          ) : (
-            'Next'
-          )}
-        </Button>
-      </div>
     </div>
   );
 }

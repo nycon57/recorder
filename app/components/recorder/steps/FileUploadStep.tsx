@@ -85,8 +85,12 @@ export default function FileUploadStep({
       const newUrl = URL.createObjectURL(file);
       setAudioObjectUrl(newUrl);
     }
+  }, [file, videoObjectUrl, audioObjectUrl]); // Re-run when file changes
 
-    // Cleanup on unmount or file change
+  /**
+   * Cleanup object URLs on unmount
+   */
+  useEffect(() => {
     return () => {
       if (videoObjectUrl) {
         URL.revokeObjectURL(videoObjectUrl);
@@ -95,7 +99,7 @@ export default function FileUploadStep({
         URL.revokeObjectURL(audioObjectUrl);
       }
     };
-  }, [file]); // Re-run when file changes
+  }, [videoObjectUrl, audioObjectUrl]);
 
   /**
    * Extract thumbnail from video file

@@ -294,7 +294,7 @@ export default function ModernPricing({
                           "text-sm mt-1",
                           plan.popular ? "text-white/80" : "text-muted-foreground"
                         )}>
-                          Billed ${typeof price === 'number' ? price * 12 : price} annually
+                          Billed ${price * 12} annually
                         </p>
                       )}
                     </motion.div>

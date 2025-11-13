@@ -98,9 +98,10 @@ function Scene({
   const targetColor1Ref = useRef(new THREE.Color(colors[0]))
   const targetColor2Ref = useRef(new THREE.Color(colors[1]))
   const animSpeedRef = useRef(0.1)
-  const perlinNoiseTexture = useTexture(
-    "https://storage.googleapis.com/eleven-public-cdn/images/perlin-noise.png"
-  )
+  // RELIABILITY: Use local asset instead of CDN to prevent external dependency failures
+  // NOTE: Download texture from CDN and place in /public/textures/ before deploying:
+  // wget https://storage.googleapis.com/eleven-public-cdn/images/perlin-noise.png -O public/textures/perlin-noise.png
+  const perlinNoiseTexture = useTexture("/textures/perlin-noise.png")
 
   const agentRef = useRef<AgentState>(agentState)
   const modeRef = useRef<"auto" | "manual">(volumeMode)

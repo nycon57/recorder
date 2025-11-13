@@ -65,15 +65,15 @@ export function assignVariant(userId: string, orgId: string): SearchVariant {
 export function getExperimentConfig(variant: SearchVariant): ExperimentConfig {
   switch (variant) {
     case 'control':
-      // Old behavior: fixed 0.7 threshold, no adaptive logic
+      // Production default behavior: fixed 0.5 threshold, no adaptive logic
       return {
         variant: 'control',
-        threshold: 0.7,
+        threshold: 0.5,
         useHybrid: false,
         useAgentic: false,
         maxChunks: 10,
         description:
-          'Control group: Fixed 0.7 threshold, vector search only, no retry logic',
+          'Control group: Fixed 0.5 threshold (production default), vector search only, no retry logic',
       };
 
     case 'lower_threshold':

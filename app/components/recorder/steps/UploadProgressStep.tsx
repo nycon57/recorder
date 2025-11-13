@@ -93,6 +93,7 @@ export default function UploadProgressStep({
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const handleSSEMessageRef = useRef<((message: SSEMessage) => void) | null>(null);
+  const progressRef = useRef<number>(0);
 
   /**
    * Update stage status
@@ -152,6 +153,7 @@ export default function UploadProgressStep({
       // Update overall progress if provided
       if (progress !== undefined) {
         setOverallProgress(progress);
+        progressRef.current = progress;
       }
     } else if (message.type === 'complete') {
       // Mark all stages as completed
@@ -165,6 +167,7 @@ export default function UploadProgressStep({
 
       setIsComplete(true);
       setOverallProgress(100);
+      progressRef.current = 100;
       setConnectionStatus('disconnected');
 
       // Auto-redirect after 3 seconds
@@ -242,9 +245,9 @@ export default function UploadProgressStep({
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
       setElapsedTime(elapsed);
 
-      // Estimate remaining time based on progress
-      if (overallProgress > 0 && overallProgress < 100) {
-        const estimatedTotal = (elapsed / overallProgress) * 100;
+      // Estimate remaining time based on progress (use ref to avoid recreating interval)
+      if (progressRef.current > 0 && progressRef.current < 100) {
+        const estimatedTotal = (elapsed / progressRef.current) * 100;
         const remaining = Math.max(0, Math.ceil(estimatedTotal - elapsed));
         setEstimatedTimeRemaining(remaining);
       }
@@ -255,7 +258,7 @@ export default function UploadProgressStep({
         clearInterval(timerRef.current);
       }
     };
-  }, [overallProgress]);
+  }, []); // Empty deps - timer runs once and uses ref for current progress
 
   /**
    * Cleanup redirect timeout on unmount

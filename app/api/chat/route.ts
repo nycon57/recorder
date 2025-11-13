@@ -151,6 +151,10 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  // Declare variables in outer scope so they're accessible in error handler
+  let queryId: string | undefined;
+  let requestStartTime: number | undefined;
+
   try {
     const { orgId, userId } = await requireOrg();
     console.log('[Chat API] Request from user:', { orgId, userId });
@@ -165,8 +169,8 @@ export async function POST(req: Request) {
     } = body;
 
     // Initialize monitoring if enabled
-    const queryId = nanoid();
-    const requestStartTime = Date.now();
+    queryId = nanoid();
+    requestStartTime = Date.now();
 
     // Get the last user message for RAG
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
@@ -948,13 +952,18 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
     console.error('[Chat API] Error:', error);
 
     // Complete monitoring on error if it was initialized
-    // Note: These variables may not be defined if error occurred early
-    if (ENABLE_SEARCH_MONITORING && typeof queryId !== 'undefined' && typeof requestStartTime !== 'undefined') {
-      searchMonitor.endSearch(queryId, {
-        success: false,
-        sourcesFound: 0,
-        totalTimeMs: Date.now() - requestStartTime,
-      });
+    // Guard against undefined values and monitoring failures
+    if (ENABLE_SEARCH_MONITORING && queryId != null && requestStartTime != null) {
+      try {
+        searchMonitor.endSearch(queryId, {
+          success: false,
+          sourcesFound: 0,
+          totalTimeMs: Date.now() - requestStartTime,
+        });
+      } catch (monitoringError) {
+        // Log but don't throw - monitoring failures shouldn't affect error response
+        console.error('[Chat API] Failed to complete monitoring:', monitoringError);
+      }
     }
     return new Response(
       JSON.stringify({

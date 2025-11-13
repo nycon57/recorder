@@ -75,9 +75,13 @@ export default function ContactPage() {
 
       reset(); // Reset form on success
     } catch (error) {
-      console.error('Contact form error:', error);
+      // SECURITY: Only log error message, not the full error object which may contain form data
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorCode = error instanceof Error && 'code' in error ? (error as any).code : undefined;
+      console.error('Contact form error:', { message: errorMessage, code: errorCode });
+
       toast.error('Failed to send message', {
-        description: error instanceof Error ? error.message : 'Please try again later',
+        description: errorMessage || 'Please try again later',
       });
     } finally {
       setIsSubmitting(false);

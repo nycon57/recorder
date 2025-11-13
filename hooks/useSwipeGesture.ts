@@ -37,16 +37,16 @@ interface TouchPosition {
  * useSwipeGesture - Detect horizontal swipe gestures on mobile
  *
  * Provides touch-based navigation for tabs and content.
- * Returns a ref to attach to the swipeable element.
+ * Returns an object with a ref to attach to the swipeable element and isSwiping state.
  *
  * @example
- * const swipeRef = useSwipeGesture({
+ * const { ref } = useSwipeGesture({
  *   onSwipeLeft: () => setActiveTab(nextTab),
  *   onSwipeRight: () => setActiveTab(prevTab),
  *   threshold: 75,
  * });
  *
- * return <div ref={swipeRef}>Swipeable content</div>;
+ * return <div ref={ref}>Swipeable content</div>;
  */
 export function useSwipeGesture({
   onSwipeLeft,
@@ -59,6 +59,16 @@ export function useSwipeGesture({
   const touchEnd = useRef<TouchPosition | null>(null);
   const elementRef = useRef<HTMLElement | null>(null);
   const [isSwiping, setIsSwiping] = useState(false);
+
+  // Store callbacks in refs to avoid re-adding listeners on every callback change
+  const onSwipeLeftRef = useRef(onSwipeLeft);
+  const onSwipeRightRef = useRef(onSwipeRight);
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onSwipeLeftRef.current = onSwipeLeft;
+    onSwipeRightRef.current = onSwipeRight;
+  }, [onSwipeLeft, onSwipeRight]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -116,12 +126,12 @@ export function useSwipeGesture({
       const withinDuration = duration < maxDuration;
 
       if (isHorizontalSwipe && meetsThreshold && withinDuration) {
-        if (deltaX > 0 && onSwipeRight) {
+        if (deltaX > 0 && onSwipeRightRef.current) {
           // Swipe right (previous)
-          onSwipeRight();
-        } else if (deltaX < 0 && onSwipeLeft) {
+          onSwipeRightRef.current();
+        } else if (deltaX < 0 && onSwipeLeftRef.current) {
           // Swipe left (next)
-          onSwipeLeft();
+          onSwipeLeftRef.current();
         }
       }
 
@@ -149,7 +159,7 @@ export function useSwipeGesture({
       element.removeEventListener('touchend', handleTouchEnd);
       element.removeEventListener('touchcancel', handleTouchCancel);
     };
-  }, [enabled, onSwipeLeft, onSwipeRight, threshold, maxDuration]);
+  }, [enabled, threshold, maxDuration]);
 
   return { ref: elementRef, isSwiping };
 }
