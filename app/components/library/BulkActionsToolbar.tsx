@@ -106,14 +106,25 @@ export function BulkActionsToolbar({
   };
 
   const handlePermanentDelete = async () => {
-    if (!onPermanentDelete) return;
+    console.log('[BulkActionsToolbar] handlePermanentDelete called');
+    console.log('[BulkActionsToolbar] Selected count:', selectedCount);
+    console.log('[BulkActionsToolbar] onPermanentDelete exists:', !!onPermanentDelete);
+
+    if (!onPermanentDelete) {
+      console.log('[BulkActionsToolbar] No onPermanentDelete callback provided');
+      return;
+    }
+
     try {
       setIsPermanentlyDeleting(true);
-      onPermanentDelete();
+      console.log('[BulkActionsToolbar] Calling onPermanentDelete callback');
+      await onPermanentDelete();
+      console.log('[BulkActionsToolbar] Callback completed, closing dialog');
       setShowPermanentDeleteDialog(false);
+      console.log('[BulkActionsToolbar] Clearing selection');
       onClearSelection();
     } catch (error) {
-      console.error('Permanent delete failed:', error);
+      console.error('[BulkActionsToolbar] Permanent delete failed:', error);
     } finally {
       setIsPermanentlyDeleting(false);
     }

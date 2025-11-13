@@ -125,7 +125,13 @@ export const DELETE = apiHandler(
     const permanent = url.searchParams.get('permanent') === 'true';
     const reason = url.searchParams.get('reason') || undefined;
 
-    console.log('[DELETE Recording] Attempting delete:', { id, orgId, permanent, reason });
+    console.log('[DELETE Recording API] Request received');
+    console.log('[DELETE Recording API] ID:', id);
+    console.log('[DELETE Recording API] OrgID:', orgId);
+    console.log('[DELETE Recording API] UserID:', userId);
+    console.log('[DELETE Recording API] URL:', url.toString());
+    console.log('[DELETE Recording API] Permanent flag:', permanent);
+    console.log('[DELETE Recording API] Reason:', reason);
 
     // Check if recording exists and belongs to org
     const { data: recording, error: fetchError } = await supabase

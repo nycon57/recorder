@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { X } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/app/components/ui/dialog';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Button } from '@/app/components/ui/button';
@@ -385,69 +385,96 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
   }, [resetWizard, onClose]);
 
   /**
-   * Get step indicator
+   * Get step indicator - Clean, minimal stepper
    */
   const getStepIndicator = () => {
     const steps = [
-      { label: 'Upload', shortLabel: 'Upload File' },
-      { label: 'Details', shortLabel: 'Add Details' },
-      { label: 'Processing', shortLabel: 'Processing' },
+      {
+        label: 'Upload',
+        description: 'Select your file'
+      },
+      {
+        label: 'Details',
+        description: 'Add information'
+      },
+      {
+        label: 'Processing',
+        description: 'Finalizing upload'
+      },
     ];
     const stepIndex = ['file_upload', 'metadata', 'progress'].indexOf(currentStep);
 
     return (
-      <div className="flex items-center justify-between max-w-md mx-auto mb-8">
-        {steps.map((step, index) => (
-          <div key={step.label} className="flex items-center flex-1">
-            <div className="flex flex-col items-center flex-1">
-              {/* Step Circle */}
-              <div
-                className={cn(
-                  'flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold transition-all duration-200',
-                  index === stepIndex
-                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25 scale-110'
-                    : index < stepIndex
-                    ? 'bg-primary/20 text-primary border-2 border-primary'
-                    : 'bg-muted text-muted-foreground border-2 border-muted'
-                )}
-              >
-                {index < stepIndex ? (
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  <span>{index + 1}</span>
+      <div className="w-full max-w-2xl mx-auto mb-8 px-4">
+        <div className="flex items-center justify-center gap-0">
+          {steps.map((step, index) => {
+            const isActive = index === stepIndex;
+            const isCompleted = index < stepIndex;
+            const isPending = index > stepIndex;
+
+            return (
+              <div key={step.label} className="flex items-center">
+                {/* Step Container */}
+                <div className="flex flex-col items-center w-32">
+                  {/* Step Circle */}
+                  <div
+                    className={cn(
+                      'flex items-center justify-center w-8 h-8 rounded-full border-2 transition-colors',
+                      isCompleted && 'bg-green-600 border-green-600 dark:bg-green-500 dark:border-green-500',
+                      isActive && 'bg-[#2fb861] border-[#2fb861] dark:bg-[#56d283] dark:border-[#56d283]',
+                      isPending && 'bg-transparent border-gray-300 dark:border-gray-700'
+                    )}
+                  >
+                    {isCompleted ? (
+                      <Check className="w-4 h-4 text-white" />
+                    ) : (
+                      <span
+                        className={cn(
+                          'text-sm font-medium',
+                          isActive && 'text-white',
+                          isPending && 'text-gray-400 dark:text-gray-600'
+                        )}
+                      >
+                        {index + 1}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Step Label */}
+                  <div className="mt-2 text-center w-full px-2">
+                    <div
+                      className={cn(
+                        'text-sm font-medium',
+                        isCompleted && 'text-green-600 dark:text-green-400',
+                        isActive && 'text-[#2fb861] dark:text-[#56d283]',
+                        isPending && 'text-gray-500 dark:text-gray-400'
+                      )}
+                    >
+                      {step.label}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5 hidden sm:block">
+                      {step.description}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connector Line */}
+                {index < steps.length - 1 && (
+                  <div className="w-16 -mt-6 sm:w-20">
+                    <div
+                      className={cn(
+                        'h-0.5 w-full',
+                        index < stepIndex
+                          ? 'bg-green-600 dark:bg-green-500'
+                          : 'bg-gray-200 dark:bg-gray-800'
+                      )}
+                    />
+                  </div>
                 )}
               </div>
-              {/* Step Label */}
-              <div
-                className={cn(
-                  'mt-2 text-xs font-medium transition-colors',
-                  index === stepIndex
-                    ? 'text-foreground'
-                    : index < stepIndex
-                    ? 'text-primary'
-                    : 'text-muted-foreground'
-                )}
-              >
-                {step.label}
-              </div>
-            </div>
-            {/* Connector Line */}
-            {index < steps.length - 1 && (
-              <div className="flex-1 px-2 pb-6">
-                <div
-                  className={cn(
-                    'h-0.5 w-full transition-all duration-300',
-                    index < stepIndex
-                      ? 'bg-primary'
-                      : 'bg-muted'
-                  )}
-                />
-              </div>
-            )}
-          </div>
-        ))}
+            );
+          })}
+        </div>
       </div>
     );
   };

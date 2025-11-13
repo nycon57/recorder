@@ -511,14 +511,24 @@ function LibraryPageContent() {
   };
 
   const confirmBulkPermanentDelete = async () => {
-    try {
-      const promises = selectedIds.map(id =>
-        fetch(`/api/recordings/${id}?permanent=true`, { method: 'DELETE' })
-      );
+    console.log('[Library Page] confirmBulkPermanentDelete called');
+    console.log('[Library Page] Selected IDs:', selectedIds);
+    console.log('[Library Page] Number of items to delete:', selectedIds.length);
 
+    try {
+      const promises = selectedIds.map(id => {
+        const url = `/api/recordings/${id}?permanent=true`;
+        console.log(`[Library Page] Deleting item ${id} with URL: ${url}`);
+        return fetch(url, { method: 'DELETE' });
+      });
+
+      console.log('[Library Page] Waiting for all delete requests...');
       const results = await Promise.allSettled(promises);
+
+      console.log('[Library Page] Delete results:', results);
       const successCount = results.filter(r => r.status === 'fulfilled').length;
       const failCount = results.filter(r => r.status === 'rejected').length;
+      console.log(`[Library Page] Success: ${successCount}, Failed: ${failCount}`);
 
       setItems(prev => prev.filter(item => !selectedIds.includes(item.id)));
       setSelectedIds([]);
@@ -1132,7 +1142,7 @@ function LibraryPageContent() {
         onClearSelection={handleClearSelection}
         onDelete={confirmBulkDelete}
         onRestore={advancedFilters.statusFilter === 'trash' ? handleBulkRestore : undefined}
-        onPermanentDelete={advancedFilters.statusFilter === 'trash' ? () => setShowPermanentDeleteDialog(true) : undefined}
+        onPermanentDelete={advancedFilters.statusFilter === 'trash' ? confirmBulkPermanentDelete : undefined}
         onAddTags={advancedFilters.statusFilter !== 'trash' ? () => setShowTagModal(true) : undefined}
         onDownload={handleBulkDownload}
         onAddToCollection={advancedFilters.statusFilter !== 'trash' ? handleBulkAddToCollection : undefined}

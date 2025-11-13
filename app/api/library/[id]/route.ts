@@ -350,8 +350,8 @@ export const DELETE = apiHandler(
           requestId
         );
       } else {
-        // Soft delete - use regular client
-        const supabase = await createClient();
+        // Soft delete - use admin client to bypass RLS
+        const supabase = supabaseAdmin;
 
         console.log(`[Library Item Delete] Performing soft delete for ${id}`);
 

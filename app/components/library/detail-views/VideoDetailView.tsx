@@ -120,6 +120,7 @@ export default function VideoDetailView({
   const [videoDuration, setVideoDuration] = React.useState<number | null>(
     recording.duration_sec
   );
+  const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
   const videoPlayerRef = React.useRef<HTMLVideoElement | null>(null);
@@ -276,6 +277,30 @@ export default function VideoDetailView({
       toast({
         variant: 'destructive',
         description: 'Failed to restore item',
+      });
+    }
+  };
+
+  const handleMoveToTrash = async () => {
+    try {
+      const response = await fetch(`/api/recordings/${recording.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        toast({ description: 'Item moved to trash' });
+        router.push('/library');
+      } else {
+        toast({
+          variant: 'destructive',
+          description: 'Failed to move item to trash',
+        });
+      }
+    } catch (error) {
+      console.error('Move to trash failed:', error);
+      toast({
+        variant: 'destructive',
+        description: 'Failed to move item to trash',
       });
     }
   };
@@ -459,7 +484,18 @@ export default function VideoDetailView({
               )}
             </div>
 
-            {!isTrashed && <ShareControls recordingId={recording.id} />}
+            {!isTrashed && (
+              <div className="flex items-center gap-2">
+                <ShareControls recordingId={recording.id} />
+                <Button
+                  onClick={() => setShowMoveToTrashDialog(true)}
+                  variant="ghost"
+                  size="icon"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
 
             {isTrashed && (
               <div className="flex items-center gap-2">
@@ -627,17 +663,39 @@ export default function VideoDetailView({
         recordingTitle={recording.title || undefined}
       />
 
+      {/* Move to Trash Confirmation Dialog */}
+      <AlertDialog open={showMoveToTrashDialog} onOpenChange={setShowMoveToTrashDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move to Trash?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to move &quot;{recording.title || 'this item'}&quot; to trash?
+              You can restore it later from the trash page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleMoveToTrash}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Move to Trash
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Permanent Delete Confirmation Dialog */}
       <AlertDialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Permanently Delete?</AlertDialogTitle>
+            <AlertDialogTitle className="text-destructive">Permanently Delete?</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <p>
                 Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
               </p>
               <p className="font-semibold text-destructive">
-                This action cannot be undone. All associated data will be permanently removed:
+                ⚠️ This action cannot be undone. All associated data will be permanently removed:
               </p>
               <ul className="list-disc list-inside space-y-1 text-sm">
                 <li>Original file</li>

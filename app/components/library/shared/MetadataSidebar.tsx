@@ -51,6 +51,7 @@ interface MetadataSidebarProps {
   createdAt: string;
   completedAt?: string | null;
   originalFilename?: string | null;
+  deletedAt?: string | null;
   tags?: Tag[];
   onEdit?: () => void;
   onDelete?: () => void;
@@ -69,6 +70,7 @@ export default function MetadataSidebar({
   createdAt,
   completedAt,
   originalFilename,
+  deletedAt,
   tags = [],
   onEdit,
   onDelete,
@@ -79,6 +81,8 @@ export default function MetadataSidebar({
   const router = useRouter();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+
+  const isTrashed = !!deletedAt;
 
   const formatDuration = (seconds: number | null | undefined) => {
     if (seconds == null) return 'N/A';
@@ -166,7 +170,12 @@ export default function MetadataSidebar({
       if (onDelete) {
         onDelete();
       } else {
-        const response = await fetch(`/api/library/${recordingId}`, {
+        // Use permanent=true query param for trashed items
+        const url = isTrashed
+          ? `/api/library/${recordingId}?permanent=true`
+          : `/api/library/${recordingId}`;
+
+        const response = await fetch(url, {
           method: 'DELETE',
         });
 
@@ -199,13 +208,21 @@ export default function MetadataSidebar({
           throw new Error(errorMessage);
         }
 
-        toast.success('Content deleted successfully');
-        router.push('/library');
+        if (isTrashed) {
+          // Permanent delete - redirect to library
+          toast.success('Content permanently deleted');
+          router.push('/library');
+        } else {
+          // Soft delete - refresh to show trashed state
+          toast.success('Content moved to trash');
+          router.refresh();
+        }
       }
     } catch (error) {
       console.error('Delete failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete content';
       toast.error(errorMessage);
+    } finally {
       setIsDeleting(false);
     }
   };
@@ -393,7 +410,7 @@ export default function MetadataSidebar({
               ) : (
                 <Trash2 className="size-4" />
               )}
-              Delete
+              {isTrashed ? 'Delete Forever' : 'Move to Trash'}
             </Button>
           </CardContent>
         </Card>
@@ -406,11 +423,26 @@ export default function MetadataSidebar({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Content?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this content? This action cannot be
-              undone and will permanently delete all associated data including
-              transcripts, documents, and embeddings.
+            <AlertDialogTitle className={isTrashed ? 'text-destructive' : ''}>
+              {isTrashed ? 'Permanently Delete?' : 'Move to Trash?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription className={isTrashed ? 'space-y-2' : ''}>
+              {isTrashed ? (
+                <>
+                  <p>Are you sure you want to permanently delete this content?</p>
+                  <p className="font-semibold text-destructive">
+                    ⚠️ This action cannot be undone. All associated data will be permanently removed:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-sm">
+                    <li>Original file</li>
+                    <li>Transcripts and documents</li>
+                    <li>Search embeddings</li>
+                    <li>All metadata</li>
+                  </ul>
+                </>
+              ) : (
+                'Are you sure you want to move this content to trash? You can restore it later from the trash page.'
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -419,7 +451,7 @@ export default function MetadataSidebar({
               onClick={handleDelete}
               className={cn(buttonVariants({ variant: 'destructive' }))}
             >
-              Delete
+              {isTrashed ? 'Delete Forever' : 'Move to Trash'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
