@@ -152,3 +152,8 @@ components.json
 # SENSITIVE: Project instructions
 CLAUDE.md
 .claude.md
+
+# BFG Repo-Cleaner reports
+.bfg-report/
+..bfg-report/
+*.bfg-report/
