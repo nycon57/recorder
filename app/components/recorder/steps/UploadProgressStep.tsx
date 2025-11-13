@@ -9,6 +9,13 @@ import ProcessingStageIndicator, {
   type ProcessingStage,
 } from '@/app/components/ProcessingStageIndicator';
 import { cn } from '@/lib/utils';
+import {
+  JOB_TYPE_TO_STAGE,
+  SIMPLIFIED_STAGES,
+  DETAILED_TO_SIMPLIFIED,
+  getStageConfig,
+  STATUS_MESSAGES,
+} from '@/lib/constants/processing-messages';
 
 interface UploadProgressStepProps {
   recordingId: string;
@@ -30,33 +37,6 @@ interface SSEMessage {
 }
 
 /**
- * Job type to stage mapping
- */
-const JOB_TYPE_TO_STAGE: Record<string, string> = {
-  extract_audio: 'extract_audio',
-  transcribe: 'transcribe',
-  doc_generate: 'document',
-  generate_embeddings: 'embeddings',
-  extract_text_pdf: 'extract_text',
-  extract_text_docx: 'extract_text',
-  process_text_note: 'process_text',
-};
-
-/**
- * Stage labels
- */
-const STAGE_LABELS: Record<string, string> = {
-  upload: 'Uploading file',
-  extract_audio: 'Extracting audio',
-  transcribe: 'Transcribing content',
-  extract_text: 'Extracting text',
-  process_text: 'Processing text',
-  document: 'Generating document',
-  embeddings: 'Creating embeddings',
-  complete: 'Complete',
-};
-
-/**
  * Step 3: Upload Progress with Real-Time Updates
  *
  * Features:
@@ -73,15 +53,25 @@ export default function UploadProgressStep({
   onCancel,
 }: UploadProgressStepProps) {
   const router = useRouter();
+
+  // Initialize with simplified 3-step view
+  const uploadConfig = SIMPLIFIED_STAGES[0]; // Uploading
   const [stages, setStages] = useState<ProcessingStage[]>([
-    { id: 'upload', label: 'Uploading file', status: 'completed', progress: 100 },
+    {
+      id: uploadConfig.id,
+      label: uploadConfig.label,
+      benefit: uploadConfig.benefit,
+      sublabel: uploadConfig.sublabel,
+      status: 'completed',
+      progress: 100,
+    },
   ]);
   const [currentStep, setCurrentStep] = useState('upload');
   const [overallProgress, setOverallProgress] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number | undefined>(
     undefined
-  );
+  ); // DEPRECATED - not shown
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<
@@ -96,12 +86,15 @@ export default function UploadProgressStep({
   const progressRef = useRef<number>(0);
 
   /**
-   * Update stage status
+   * Update stage status with user-friendly messaging
    */
   const updateStage = useCallback(
     (stageId: string, updates: Partial<ProcessingStage>) => {
       setStages((prev) => {
         const existingIndex = prev.findIndex((s) => s.id === stageId);
+
+        // Get user-friendly config from centralized messages
+        const stageConfig = getStageConfig(stageId);
 
         if (existingIndex >= 0) {
           // Update existing stage
@@ -109,16 +102,17 @@ export default function UploadProgressStep({
           updated[existingIndex] = { ...updated[existingIndex], ...updates };
           return updated;
         } else {
-          // Add new stage
-          return [
-            ...prev,
-            {
-              id: stageId,
-              label: STAGE_LABELS[stageId] || stageId,
-              status: 'pending',
-              ...updates,
-            } as ProcessingStage,
-          ];
+          // Add new stage with user-friendly messaging
+          const newStage: ProcessingStage = {
+            id: stageId,
+            label: stageConfig?.label || stageId,
+            benefit: stageConfig?.benefit,
+            sublabel: stageConfig?.sublabel,
+            status: 'pending',
+            ...updates,
+          };
+
+          return [...prev, newStage];
         }
       });
     },
@@ -140,11 +134,12 @@ export default function UploadProgressStep({
       if (step) {
         // Map job type to stage ID
         const stageId = JOB_TYPE_TO_STAGE[step] || step;
+        const stageConfig = getStageConfig(stageId);
 
         updateStage(stageId, {
           status: 'in_progress',
           progress: progress || 50,
-          label: msg || STAGE_LABELS[stageId] || step,
+          label: msg || stageConfig?.label || step,
         });
 
         setCurrentStep(stageId);
@@ -298,7 +293,7 @@ export default function UploadProgressStep({
           <div className="flex items-center space-x-3">
             <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
             <p className="text-sm text-blue-700 dark:text-blue-300">
-              Connecting to processing server...
+              {STATUS_MESSAGES.connecting}
             </p>
           </div>
         </Card>
@@ -322,11 +317,10 @@ export default function UploadProgressStep({
             <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-base font-semibold text-green-900 dark:text-green-100">
-                Processing Complete!
+                {STATUS_MESSAGES.complete.title}
               </p>
               <p className="mt-1 text-sm text-green-700 dark:text-green-300">
-                Your content is ready and has been added to your library. Redirecting in 3
-                seconds...
+                {STATUS_MESSAGES.complete.description}. Redirecting in 3 seconds...
               </p>
             </div>
           </div>
@@ -339,7 +333,9 @@ export default function UploadProgressStep({
           <div className="flex items-start space-x-3">
             <XCircle className="w-6 h-6 text-destructive flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="text-base font-semibold text-destructive">Processing Failed</p>
+              <p className="text-base font-semibold text-destructive">
+                {STATUS_MESSAGES.error.title}
+              </p>
               <p className="mt-1 text-sm text-destructive/80">{error}</p>
             </div>
           </div>
@@ -353,11 +349,10 @@ export default function UploadProgressStep({
             <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-sm text-amber-900 dark:text-amber-100 font-medium">
-                Taking longer than expected
+                {STATUS_MESSAGES.longRunning.title}
               </p>
               <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                Large files may take several minutes to process. You can close this window
-                and check back later in your library.
+                {STATUS_MESSAGES.longRunning.description}
               </p>
             </div>
           </div>

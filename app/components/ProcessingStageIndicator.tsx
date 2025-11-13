@@ -188,116 +188,182 @@ export default function ProcessingStageIndicator({
         </motion.div>
       )}
 
-      {/* Stages */}
-      <div className="space-y-4">
-        <AnimatePresence mode="popLayout">
+      {/* Horizontal Stepper - Modern & User-Friendly Design */}
+      <div className="w-full">
+        {/* Steps Container */}
+        <div className="relative flex justify-between items-start gap-0 md:gap-4">
           {stages.map((stage, index) => {
             const isActive = stage.status === 'in_progress';
+            const isCompleted = stage.status === 'completed';
+            const isError = stage.status === 'error';
+            const isPending = stage.status === 'pending';
             const showProgress = isActive && stage.progress !== undefined;
+            const emojiIcon = getEmojiIcon(stage);
+            const colorConfig = getStageColorConfig(stage);
+            const benefit = stage.benefit || '';
+            const sublabel = stage.sublabel || '';
 
             return (
-              <motion.div
-                key={stage.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                transition={{ delay: index * 0.1 }}
-                className="relative"
-              >
-                <div className="flex items-start gap-4">
+              <React.Fragment key={stage.id}>
+                {/* Step Item */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.15, type: 'spring' }}
+                  className="flex flex-col items-center flex-1 min-w-0 relative z-10"
+                  role="status"
+                  aria-label={`${stage.label}. ${benefit}. ${isCompleted ? 'Complete' : isActive ? 'In progress' : isPending ? 'Pending' : 'Error'}`}
+                >
                   {/* Icon Circle */}
-                  <div
-                    className={cn(
-                      'relative flex size-12 flex-shrink-0 items-center justify-center rounded-full transition-colors duration-300',
-                      getStatusColor(stage.status)
-                    )}
-                  >
-                    {getStatusIcon(stage)}
+                  <div className="relative mb-3">
+                    <motion.div
+                      className={cn(
+                        'relative flex size-16 md:size-20 flex-shrink-0 items-center justify-center rounded-full transition-all duration-300',
+                        'shadow-lg',
+                        getStatusColor(stage),
+                        isActive && 'scale-110'
+                      )}
+                      animate={isActive ? { scale: [1, 1.05, 1] } : {}}
+                      transition={{ duration: 2, repeat: isActive ? Infinity : 0 }}
+                    >
+                      {/* Emoji or Icon */}
+                      {emojiIcon ? (
+                        <span className="text-3xl md:text-4xl" role="img" aria-hidden="true">
+                          {emojiIcon}
+                        </span>
+                      ) : (
+                        <div className="text-white">
+                          {getStatusIcon(stage)}
+                        </div>
+                      )}
 
-                    {/* Animated Ring for Active State */}
-                    {isActive && (
-                      <motion.div
-                        className="absolute inset-0 rounded-full border-2 border-blue-600 dark:border-blue-500"
-                        initial={{ scale: 1, opacity: 0.5 }}
-                        animate={{ scale: 1.3, opacity: 0 }}
-                        transition={{ duration: 1.5, repeat: Infinity }}
-                      />
-                    )}
+                      {/* Animated Ring for Active State */}
+                      {isActive && (
+                        <motion.div
+                          className={cn(
+                            'absolute inset-0 rounded-full border-2',
+                            colorConfig?.border || 'border-blue-600 dark:border-blue-500'
+                          )}
+                          initial={{ scale: 1, opacity: 0.6 }}
+                          animate={{ scale: 1.4, opacity: 0 }}
+                          transition={{ duration: 1.5, repeat: Infinity, ease: 'easeOut' }}
+                        />
+                      )}
+
+                      {/* Success Celebration */}
+                      {isCompleted && (
+                        <motion.div
+                          className="absolute -top-1 -right-1 bg-white dark:bg-gray-900 rounded-full p-0.5"
+                          initial={{ scale: 0, rotate: -180 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          transition={{ type: 'spring', delay: 0.2 }}
+                        >
+                          <Check className="size-5 text-green-600 dark:text-green-500" />
+                        </motion.div>
+                      )}
+                    </motion.div>
                   </div>
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0 pt-1">
+                  {/* Label & Benefit */}
+                  <div className="text-center space-y-1 px-2">
                     <motion.p
-                      className={cn('text-base font-semibold transition-colors', getStageColor(stage))}
+                      className={cn(
+                        'text-sm md:text-base font-semibold transition-colors',
+                        getStageColor(stage)
+                      )}
                       layout
                     >
                       {stage.label}
                     </motion.p>
 
-                    {/* Progress Bar */}
-                    {showProgress && (
-                      <motion.div
+                    {/* Benefit Text */}
+                    {benefit && (
+                      <motion.p
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="mt-3 space-y-2"
+                        className={cn(
+                          'text-xs text-muted-foreground leading-tight',
+                          isActive && 'font-medium'
+                        )}
+                      >
+                        {benefit}
+                      </motion.p>
+                    )}
+
+                    {/* Sublabel */}
+                    {sublabel && isActive && (
+                      <motion.p
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.5 }}
+                        className={cn('text-xs font-medium', colorConfig?.text || 'text-purple-700 dark:text-purple-300')}
+                      >
+                        {sublabel}
+                      </motion.p>
+                    )}
+
+                    {/* Progress Bar for Active Stage */}
+                    {showProgress && (
+                      <motion.div
+                        initial={{ opacity: 0, scaleX: 0 }}
+                        animate={{ opacity: 1, scaleX: 1 }}
+                        exit={{ opacity: 0, scaleX: 0 }}
+                        className="mt-2 w-full max-w-[120px] mx-auto"
+                        style={{ transformOrigin: 'left' }}
                       >
                         <Progress
                           value={stage.progress}
-                          className={cn('h-2', getProgressBarColor(stage), getProgressIndicatorColor(stage))}
+                          className={cn('h-1.5', getProgressBarColor(stage), getProgressIndicatorColor(stage))}
                           aria-label={`Progress: ${stage.progress}%`}
                         />
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs text-muted-foreground">{stage.progress?.toFixed(0)}% complete</p>
-                          {stage.progress && stage.progress > 0 && (
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0.8 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              className="flex items-center gap-1 text-xs font-medium"
-                            >
-                              <Sparkles
-                                className={cn('size-3', getStageColor(stage))}
-                                aria-hidden="true"
-                              />
-                              <span className={getStageColor(stage)}>Processing</span>
-                            </motion.div>
-                          )}
-                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {stage.progress?.toFixed(0)}%
+                        </p>
                       </motion.div>
                     )}
 
                     {/* Error Message */}
-                    {stage.status === 'error' && (
+                    {isError && (
                       <motion.p
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        className="mt-2 text-sm text-destructive"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-xs text-destructive mt-1"
                       >
-                        Processing failed at this stage
+                        Failed
                       </motion.p>
                     )}
                   </div>
-                </div>
+                </motion.div>
 
                 {/* Connector Line */}
                 {index < stages.length - 1 && (
-                  <div className="absolute left-6 top-12 h-6 w-px">
-                    <motion.div
-                      className={cn(
-                        'h-full w-full transition-colors duration-500',
-                        index < currentStageIndex ? 'bg-green-600 dark:bg-green-500' : 'bg-border'
-                      )}
-                      initial={{ scaleY: 0 }}
-                      animate={{ scaleY: 1 }}
-                      transition={{ delay: index * 0.1 + 0.2, duration: 0.3 }}
-                      style={{ transformOrigin: 'top' }}
-                    />
+                  <div className="flex items-center self-start mt-8 flex-shrink-0 hidden md:flex">
+                    <div className="relative w-12 lg:w-20 h-0.5 mx-2">
+                      {/* Background Line */}
+                      <div className="absolute inset-0 bg-border" />
+
+                      {/* Animated Fill Line */}
+                      <motion.div
+                        className={cn(
+                          'absolute inset-0 transition-colors duration-500',
+                          index < currentStageIndex
+                            ? 'bg-green-600 dark:bg-green-500'
+                            : isActive
+                              ? 'bg-gradient-to-r from-purple-600 to-transparent dark:from-purple-500'
+                              : 'bg-border'
+                        )}
+                        initial={{ scaleX: 0 }}
+                        animate={{ scaleX: index < currentStageIndex ? 1 : isActive ? 0.5 : 0 }}
+                        transition={{ duration: 0.5, delay: index * 0.1 }}
+                        style={{ transformOrigin: 'left' }}
+                      />
+                    </div>
                   </div>
                 )}
-              </motion.div>
+              </React.Fragment>
             );
           })}
-        </AnimatePresence>
+        </div>
       </div>
     </div>
   );

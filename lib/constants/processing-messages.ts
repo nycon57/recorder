@@ -301,7 +301,7 @@ export const STATUS_MESSAGES = {
   connecting: 'Connecting to processing server...',
   connected: 'Connected - processing your content',
   disconnected: 'Processing complete',
-  error: 'Connection error - retrying...',
+  connectionError: 'Connection error - retrying...',
 
   complete: {
     title: 'Processing Complete!',

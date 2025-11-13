@@ -74,13 +74,81 @@ yarn-error.log*
 # MCP
 .mcp.json
 
-# Documentation
-*.md
-/Documentation
+# Backup files
+*.backup
+*.bak
+*.old
+*.orig
+*~
+*.tmp
+*.temp
 
-# Directories
-/__tests__
-/__mocks__
+# Development screenshots/artifacts (allow in specific directories)
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+!/public/**/*.png
+!/public/**/*.jpg
+!/public/**/*.jpeg
+!/public/**/*.svg
+
+# Database files
+*.sql.backup
+*.dump
+*.db
+
+# Test artifacts
+test-results/
+playwright-report/
+playwright/.cache/
+.playwright/
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+.temp/
+
+# Lock files (keep package-lock.json but ignore others)
+yarn.lock
+pnpm-lock.yaml
+
+# OS specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.directory
+.Trash-*
+.AppleDouble
+.LSOverride
+
+# IDE specific
+*.iml
+*.iws
+*.ipr
+
+# SENSITIVE: Project documentation and configuration
+*.md
+!README.md
+/documentation/
+/documentation
+/.claude/
+
+# SENSITIVE: Test suites and mocks (may contain test data/credentials)
+/__tests__/
+/__mocks__/
+/tests/
+/test/
+
+# SENSITIVE: Database migrations (contain schema details)
+/supabase/migrations/
 /supabase/migrations
+supabase/migrations/
+
+# SENSITIVE: Component configuration
 components.json
+
+# SENSITIVE: Project instructions
 CLAUDE.md
+.claude.md
