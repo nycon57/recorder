@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, AlertCircle, RotateCcw, Trash2 } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/components/ui/tabs';
 import { Card, CardContent } from '@/app/components/ui/card';
 import { Alert, AlertTitle, AlertDescription } from '@/app/components/ui/alert';
 import {
@@ -24,16 +23,15 @@ import ProcessingPipeline from '@/app/components/ProcessingPipeline';
 import ReprocessStreamModal from '@/app/components/ReprocessStreamModal';
 import AudioPlayer from './AudioPlayer';
 
-import MetadataSidebar from '../shared/MetadataSidebar';
+// New unified sidebar component
+import ContentSidebar from '../viewers/ContentSidebar';
 import TranscriptPanel from '../shared/TranscriptPanel';
-import AIDocumentPanel from '../shared/AIDocumentPanel';
 import ShareControls from '../shared/ShareControls';
 import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
 import InlineEditableField from '../shared/InlineEditableField';
 import InlineTagsEditor from '../shared/InlineTagsEditor';
 
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import { useSwipeableTabNavigation } from '@/hooks/useSwipeableTabNavigation';
 
 import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
 import type { Tag } from '@/lib/types/database';
@@ -103,53 +101,18 @@ export default function AudioDetailView({
 }: AudioDetailViewProps) {
   const router = useRouter();
 
-  // Smart default: show first available content tab
-  const getDefaultTab = () => {
-    if (transcript) return 'transcript';
-    if (document) return 'ai-insights';
-    // All tabs disabled - prefer transcript as it will arrive first
-    return 'transcript';
-  };
-
-  const [activeTab, setActiveTab] = React.useState(getDefaultTab());
-
-  // Watch for content availability and automatically switch tabs
-  React.useEffect(() => {
-    // Only change tabs when needed to avoid unnecessary re-renders
-
-    // Case 1: Current tab is disabled, switch to first available tab
-    if (activeTab === 'transcript' && !transcript && document) {
-      setActiveTab('ai-insights');
-    } else if (activeTab === 'ai-insights' && !document && transcript) {
-      setActiveTab('transcript');
-    }
-    // Case 2: Higher-priority tab (transcript) became available, switch to it
-    else if (activeTab === 'ai-insights' && transcript) {
-      setActiveTab('transcript');
-    }
-  }, [transcript, document, activeTab]);
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
   const [tags, setTags] = React.useState<Tag[]>(initialTags);
   const [isReprocessModalOpen, setIsReprocessModalOpen] = React.useState(false);
   const [reprocessStep, setReprocessStep] = React.useState<
     'transcribe' | 'document' | 'embeddings' | 'all'
   >('all');
+  const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const isTrashed = !!recording.deleted_at;
-
-  // Available tabs for swipe navigation
-  const availableTabs = ['transcript', 'ai-insights'];
-
-  // Mobile swipe gestures for tab navigation
-  const swipeHandlers = useSwipeableTabNavigation({
-    tabs: availableTabs,
-    activeTab,
-    onTabChange: setActiveTab,
-    enabled: !isTrashed, // Disable swipe gestures when content is trashed
-  });
 
   const handleTimestampClick = (timestamp: number) => {
     if (audioRef.current) {
@@ -516,74 +479,34 @@ export default function AudioDetailView({
               </Card>
             )}
 
-            {/* Tabs - Secondary Content Only */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} {...swipeHandlers}>
-              <TabsList className="w-full justify-start">
-                <TabsTrigger value="transcript" disabled={!transcript}>
-                  Transcript
-                </TabsTrigger>
-                <TabsTrigger value="ai-insights" disabled={!document}>
-                  AI Insights
-                </TabsTrigger>
-              </TabsList>
-
-              {/* Transcript Tab */}
-              <TabsContent value="transcript" className="mt-4">
-                {transcript ? (
-                  <TranscriptPanel
-                    transcript={transcript}
-                    recordingId={recording.id}
-                    onTimestampClick={handleTimestampClick}
-                  />
-                ) : (
-                  <Card>
-                    <CardContent className="py-12 flex flex-col items-center justify-center text-center space-y-4">
-                      <Loader2 className="size-8 animate-spin text-muted-foreground" />
-                      <div>
-                        <p className="font-medium text-foreground mb-1">
-                          Transcription in progress
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          We're transcribing your audio using AI. This usually takes 1-2 minutes.
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-
-              {/* AI Insights Tab */}
-              <TabsContent value="ai-insights" className="mt-4">
-                {document ? (
-                  <AIDocumentPanel
-                    document={document}
-                    recordingId={recording.id}
-                    onRegenerate={handleRegenerateDocument}
-                  />
-                ) : (
-                  <Card>
-                    <CardContent className="py-12 flex flex-col items-center justify-center text-center space-y-4">
-                      <Loader2 className="size-8 animate-spin text-muted-foreground" />
-                      <div>
-                        <p className="font-medium text-foreground mb-1">
-                          Generating AI insights
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Our AI is analyzing your content to create structured documentation.
-                          This may take 2-3 minutes.
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-            </Tabs>
+            {/* Transcript Panel */}
+            {transcript ? (
+              <TranscriptPanel
+                transcript={transcript}
+                recordingId={recording.id}
+                onTimestampClick={handleTimestampClick}
+              />
+            ) : (
+              <Card>
+                <CardContent className="py-12 flex flex-col items-center justify-center text-center space-y-4">
+                  <Loader2 className="size-8 animate-spin text-muted-foreground" />
+                  <div>
+                    <p className="font-medium text-foreground mb-1">
+                      Transcription in progress
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      We're transcribing your audio using AI. This usually takes 1-2 minutes.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Right Column - Sidebar */}
           <div className="lg:col-span-1">
             <div className="lg:sticky lg:top-6 space-y-6">
-              <MetadataSidebar
+              <ContentSidebar
                 recordingId={recording.id}
                 contentType={recording.content_type}
                 fileType={recording.file_type}
@@ -593,10 +516,12 @@ export default function AudioDetailView({
                 createdAt={recording.created_at}
                 completedAt={recording.completed_at}
                 originalFilename={recording.original_filename}
+                deletedAt={recording.deleted_at}
                 tags={tags}
+                document={document}
                 onEdit={() => setIsEditModalOpen(true)}
+                onDelete={() => isTrashed ? setShowPermanentDeleteDialog(true) : setShowMoveToTrashDialog(true)}
                 onDownload={handleDownload}
-                onReprocess={() => handleReprocess('all')}
               />
 
               {/* Processing Pipeline */}
@@ -633,19 +558,21 @@ export default function AudioDetailView({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Permanently Delete?</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <p>
-                Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
-              </p>
-              <p className="font-semibold text-destructive">
-                This action cannot be undone. All associated data will be permanently removed:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Original file</li>
-                <li>Transcripts and documents</li>
-                <li>Search embeddings</li>
-                <li>All metadata</li>
-              </ul>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
+                </p>
+                <p className="font-semibold text-destructive">
+                  This action cannot be undone. All associated data will be permanently removed:
+                </p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Original file</li>
+                  <li>Transcripts and documents</li>
+                  <li>Search embeddings</li>
+                  <li>All metadata</li>
+                </ul>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

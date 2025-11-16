@@ -1,10 +1,8 @@
-"use client"
-
 import * as React from "react"
 import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
-import { cn } from "@/lib/utils/cn"
+import { cn } from "@/lib/utils"
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -49,16 +47,14 @@ function SheetContent({
   children,
   side = "right",
   hideOverlay = false,
-  overlayClassName,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   hideOverlay?: boolean
-  overlayClassName?: string
 }) {
   return (
     <SheetPortal>
-      {!hideOverlay && <SheetOverlay className={overlayClassName} />}
+      {!hideOverlay && <SheetOverlay />}
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(

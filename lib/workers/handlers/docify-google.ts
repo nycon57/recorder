@@ -10,6 +10,7 @@ import type { Database } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
 import { streamDocumentGeneration, isStreamingAvailable, sendCompletionNotification } from '@/lib/services/llm-streaming-helper';
+import { detectContentType, getInsightsPrompt, SCREEN_RECORDING_ENHANCEMENT } from '@/lib/prompts/insights-prompts';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -172,34 +173,48 @@ export async function generateDocument(job: Job): Promise<void> {
           .join('\n');
     }
 
-    // Enhanced prompt for video recordings with visual context
-    const enhancedPrompt = hasVisualContext
-      ? `${PROMPTS.DOCIFY}
+    // Detect content type for specialized prompt
+    logger.info('Detecting content type for specialized insights', {
+      context: { transcriptLength: transcript.text.length },
+    });
 
-**IMPORTANT:** This is a screen recording tutorial with both audio narration and visual actions.
-Create a step-by-step guide that combines WHAT is being said (audio) with WHAT is happening on screen (visual).
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'document', 20, 'Analyzing content type...');
+    }
 
-For each step:
-- Describe the SPECIFIC button/field/element being clicked or typed into
-- Include the LOCATION of UI elements (e.g., "top right corner", "sidebar menu")
-- Use the actual button text and UI labels from the visual events
-- Make it clear WHERE to look and WHAT to click
+    const model = googleAI.getGenerativeModel({
+      model: GOOGLE_CONFIG.DOCIFY_MODEL,
+    });
 
-Example format:
-**Step 1: Open Settings**
-Click the gear icon in the top right corner to open the Settings panel. Then select "Advanced Options" from the dropdown menu.
+    const contentType = await detectContentType(transcript.text, model);
 
-${contextInfo}
+    logger.info('Content type detected', {
+      context: { contentType, hasVisualContext },
+    });
 
-AUDIO TRANSCRIPT:
-${transcript.text}
-${visualContext}`
-      : `${PROMPTS.DOCIFY}\n\n${contextInfo}\n\nTranscript:\n${transcript.text}`;
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'document', 25, `Generating ${contentType.replace('_', ' ')} insights...`);
+    }
+
+    // Get content-type-specific prompt
+    const basePrompt = getInsightsPrompt(contentType);
+
+    // Build the full prompt with context
+    let enhancedPrompt = `${basePrompt}\n\n${contextInfo}\n\n`;
+
+    // Add screen recording enhancement if visual context is available
+    if (hasVisualContext) {
+      enhancedPrompt += `${SCREEN_RECORDING_ENHANCEMENT}\n\n`;
+      enhancedPrompt += `AUDIO TRANSCRIPT:\n${transcript.text}\n${visualContext}`;
+    } else {
+      enhancedPrompt += `Content to analyze:\n${transcript.text}`;
+    }
 
     // Call Gemini to generate document
     logger.info('Calling Google Gemini for document generation', {
       context: {
         model: GOOGLE_CONFIG.DOCIFY_MODEL,
+        contentType,
         hasVisualContext,
         promptLength: enhancedPrompt.length,
         temperature: GOOGLE_CONFIG.DOCIFY_TEMPERATURE,
@@ -210,10 +225,6 @@ ${visualContext}`
     if (isStreaming) {
       streamingManager.sendProgress(recordingId, 'document', 30, 'Generating document with Gemini AI...');
     }
-
-    const model = googleAI.getGenerativeModel({
-      model: GOOGLE_CONFIG.DOCIFY_MODEL,
-    });
 
     // Use streaming helper for document generation
     const streamingResult = await streamDocumentGeneration(
@@ -255,9 +266,14 @@ ${visualContext}`
         recording_id: recordingId,
         org_id: orgId,
         markdown: generatedContent,
-        version: 'v1',
+        version: 'v2', // v2 indicates new insights-based generation
         model: GOOGLE_CONFIG.DOCIFY_MODEL,
         status: 'generated',
+        metadata: {
+          content_type: contentType,
+          has_visual_context: hasVisualContext,
+          generation_method: 'insights',
+        },
       })
       .select()
       .single();
@@ -321,8 +337,10 @@ ${visualContext}`
       context: {
         recordingId,
         documentId: document.id,
+        contentType,
         hasVisualContext,
         model: GOOGLE_CONFIG.DOCIFY_MODEL,
+        generationMethod: 'insights',
         totalTime,
       },
     });

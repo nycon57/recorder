@@ -11,6 +11,14 @@ export { default as ModernFeatures } from './modern-features';
 export { default as ModernPricing } from './modern-pricing';
 export { default as ModernCTA } from './modern-cta';
 
+// Premium sections (Cryptix-inspired with green palette)
+export { default as PremiumHero } from './premium-hero';
+
+// Registry-based sections (from shadcnblocks with Caribbean Green palette)
+export { RegistryHero } from './registry-hero';
+export { RegistryFeatures } from './registry-features';
+export { RegistryPricing } from './registry-pricing';
+
 export type { RecordHeroProps } from './record-hero';
 export type { RecordFeaturesProps } from './record-features';
 export type { RecordTestimonialsProps } from './record-testimonials';

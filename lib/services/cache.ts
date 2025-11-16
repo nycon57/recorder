@@ -171,7 +171,8 @@ export class CacheService {
 
       do {
         // Scan for matching keys (non-blocking)
-        const result = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        // Upstash Redis v1 API: scan(cursor, { match, count })
+        const result = await redis.scan(cursor, { match: pattern, count: 100 });
         cursor = result[0];
         const matchedKeys = result[1];
 
@@ -460,7 +461,7 @@ export class RequestDeduplication {
     // Try to acquire lock using SETNX (set if not exists)
     if (redis) {
       try {
-        const acquired = await redis.set(lockKey, lockToken, 'EX', lockTTL, 'NX');
+        const acquired = await redis.set(lockKey, lockToken, { ex: lockTTL, nx: true });
 
         if (acquired === 'OK') {
           // We got the lock - check cache again (in case it was set while we were acquiring lock)
@@ -516,7 +517,8 @@ export class RequestDeduplication {
           return 0
         end
       `;
-      await redis.eval(script, 1, lockKey, lockToken);
+      // Upstash Redis v1 API: eval(script, keys[], args[])
+      await redis.eval(script, [lockKey], [lockToken]);
     } catch (error) {
       console.error('[RequestDedup] Lock release error:', error);
     }

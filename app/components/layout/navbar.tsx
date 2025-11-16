@@ -1,233 +1,334 @@
 'use client';
 
+import * as NavigationMenuPrimitive from '@radix-ui/react-navigation-menu';
 import { SignedIn, SignedOut } from '@clerk/nextjs';
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Menu, Sparkles, MessageSquare } from 'lucide-react';
+import React from 'react';
 
-import { cn } from '@/lib/utils/cn';
+import { cn } from '@/lib/utils';
 
-/**
- * Navigation bar component for the marketing site
- * Features:
- * - Sticky header with backdrop blur
- * - Responsive mobile menu with smooth animations
- * - Clerk authentication integration
- * - Dark mode support
- */
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/app/components/ui/accordion';
+import { Button } from '@/app/components/ui/button';
+import {
+  NavigationMenu,
+  NavigationMenuContent,
+  NavigationMenuItem,
+  NavigationMenuLink,
+  NavigationMenuList,
+  NavigationMenuTrigger,
+} from '@/app/components/ui/navigation-menu';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/app/components/ui/sheet';
+
+interface MenuItem {
+  title: string;
+  url: string;
+  description?: string;
+  icon?: React.ReactNode;
+  items?: MenuItem[];
+}
+
+const menuItems: MenuItem[] = [
+  { title: 'Features', url: '/features' },
+  { title: 'Pricing', url: '/pricing' },
+  {
+    title: 'Resources',
+    url: '#',
+    items: [
+      {
+        title: 'About',
+        description: 'Learn about our mission and team',
+        icon: <Sparkles className="size-5 shrink-0" />,
+        url: '/about',
+      },
+      {
+        title: 'Contact',
+        description: 'Get in touch with our team',
+        icon: <MessageSquare className="size-5 shrink-0" />,
+        url: '/contact',
+      },
+    ],
+  },
+];
+
 export default function Navbar() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  // Prevent body scroll when mobile menu is open
-  useEffect(() => {
-    if (isMenuOpen) {
-      document.body.classList.add('overflow-hidden');
-    } else {
-      document.body.classList.remove('overflow-hidden');
-    }
-
-    return () => {
-      document.body.classList.remove('overflow-hidden');
-    };
-  }, [isMenuOpen]);
-
-  const navigationLinks = [
-    { label: 'Features', href: '/features' },
-    { label: 'Pricing', href: '/pricing' },
-    { label: 'About', href: '/about' },
-    { label: 'Contact', href: '/contact' },
-  ];
-
   return (
-    <header
-      className={cn(
-        'sticky top-0 z-50 w-full border-b border-border',
-        'bg-background/80 backdrop-blur-md',
-        'transition-all duration-300',
-      )}
-    >
-      <div className="container mx-auto">
-        <div className="flex h-16 items-center justify-between px-4 lg:h-20 lg:px-6">
+    <section className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container">
+        {/* Desktop Menu */}
+        <nav className="hidden justify-between lg:flex">
           {/* Logo */}
-          <Link
+          <a
             href="/"
-            className="flex items-center gap-2 transition-opacity hover:opacity-80"
+            className="group flex items-center gap-2 py-4 transition-all duration-300 hover:scale-105"
           >
-            <span className="text-heading-6 flex items-center gap-2">
-              <span className="text-2xl">🎥</span>
-              <span className="font-bold">Record</span>
+            <span className="text-2xl transition-transform duration-300 group-hover:rotate-12">
+              🎬
             </span>
-          </Link>
+            <span className="text-lg font-bold tracking-tight transition-colors duration-300 group-hover:text-primary">
+              Record
+            </span>
+          </a>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden items-center gap-8 lg:flex">
-            {navigationLinks.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className={cn(
-                  'text-body-sm-medium text-foreground',
-                  'transition-colors hover:text-primary',
-                )}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-
-          {/* Auth Buttons & Mobile Menu Toggle */}
-          <div className="flex items-center gap-3">
-            {/* Desktop Auth Buttons */}
-            <div className="hidden items-center gap-3 lg:flex">
-              <SignedOut>
-                <Link
-                  href="/sign-in"
-                  className={cn(
-                    'rounded-lg border border-border px-4 py-2',
-                    'text-body-sm-medium text-foreground',
-                    'transition-all hover:border-border/80 hover:bg-muted',
-                  )}
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/sign-up"
-                  className={cn(
-                    'rounded-lg bg-primary px-4 py-2',
-                    'text-body-sm-medium text-primary-foreground',
-                    'transition-all hover:bg-primary/90',
-                    'shadow-sm hover:shadow-md',
-                  )}
-                >
-                  Get Started
-                </Link>
-              </SignedOut>
-              <SignedIn>
-                <Link
-                  href="/dashboard"
-                  className={cn(
-                    'rounded-lg bg-primary px-4 py-2',
-                    'text-body-sm-medium text-primary-foreground',
-                    'transition-all hover:bg-primary/90',
-                    'shadow-sm hover:shadow-md',
-                  )}
-                >
-                  Dashboard
-                </Link>
-              </SignedIn>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center">
+              <NavigationMenu delayDuration={0}>
+                <NavigationMenuList className="relative gap-1">
+                  {menuItems.map((item) => renderMenuItem(item))}
+                </NavigationMenuList>
+              </NavigationMenu>
             </div>
+          </div>
 
-            {/* Mobile Menu Toggle */}
-            <button
-              className="relative flex size-8 items-center justify-center lg:hidden"
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              aria-label="Toggle menu"
-              aria-expanded={isMenuOpen}
+          <div className="flex items-center gap-2">
+            <SignedOut>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="group relative overflow-hidden transition-all duration-300 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10"
+              >
+                <a href="/sign-in">
+                  <span className="relative z-10">Sign In</span>
+                  <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-primary/10 to-primary/5 transition-transform duration-300 group-hover:translate-x-0" />
+                </a>
+              </Button>
+              <Button
+                asChild
+                size="sm"
+                className="group relative overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-primary/30"
+              >
+                <a href="/sign-up">
+                  <span className="relative z-10">Get Started</span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                </a>
+              </Button>
+            </SignedOut>
+            <SignedIn>
+              <Button
+                asChild
+                size="sm"
+                className="group relative overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-primary/30"
+              >
+                <a href="/dashboard">
+                  <span className="relative z-10">Dashboard</span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                </a>
+              </Button>
+            </SignedIn>
+          </div>
+        </nav>
+
+        {/* Mobile Menu */}
+        <div className="block lg:hidden">
+          <div className="flex items-center justify-between py-4">
+            <a
+              href="/"
+              className="group flex items-center gap-2 transition-all duration-300"
             >
-              <span className="sr-only">Open main menu</span>
-              <div className="absolute top-1/2 left-1/2 block w-[18px] -translate-x-1/2 -translate-y-1/2">
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    'absolute block h-0.5 w-full rounded-full bg-foreground',
-                    'transition-all duration-300 ease-in-out',
-                    isMenuOpen ? 'rotate-45' : '-translate-y-1.5',
-                  )}
-                />
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    'absolute block h-0.5 w-full rounded-full bg-foreground',
-                    'transition-all duration-300 ease-in-out',
-                    isMenuOpen ? 'opacity-0' : 'opacity-100',
-                  )}
-                />
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    'absolute block h-0.5 w-full rounded-full bg-foreground',
-                    'transition-all duration-300 ease-in-out',
-                    isMenuOpen ? '-rotate-45' : 'translate-y-1.5',
-                  )}
-                />
-              </div>
-            </button>
+              <span className="text-2xl transition-transform duration-300 group-hover:rotate-12">
+                🎬
+              </span>
+              <span className="text-lg font-bold tracking-tight transition-colors duration-300 group-hover:text-primary">
+                Record
+              </span>
+            </a>
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="transition-all duration-300 hover:border-primary/50 hover:bg-primary/5"
+                >
+                  <Menu className="size-4" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="overflow-y-auto">
+                <SheetHeader>
+                  <SheetTitle>
+                    <a href="/" className="flex items-center gap-2">
+                      <span className="text-2xl">🎬</span>
+                      <span className="text-lg font-bold tracking-tight">
+                        Record
+                      </span>
+                    </a>
+                  </SheetTitle>
+                </SheetHeader>
+                <div className="flex flex-col gap-6 p-4">
+                  <Accordion
+                    type="single"
+                    collapsible
+                    className="flex w-full flex-col gap-4"
+                  >
+                    {menuItems.map((item) => renderMobileMenuItem(item))}
+                  </Accordion>
+
+                  <div className="flex flex-col gap-3">
+                    <SignedOut>
+                      <Button asChild variant="outline">
+                        <a href="/sign-in">Sign In</a>
+                      </Button>
+                      <Button asChild>
+                        <a href="/sign-up">Get Started</a>
+                      </Button>
+                    </SignedOut>
+                    <SignedIn>
+                      <Button asChild>
+                        <a href="/dashboard">Dashboard</a>
+                      </Button>
+                    </SignedIn>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
         </div>
       </div>
-
-      {/* Mobile Menu Overlay */}
-      <div
-        className={cn(
-          'absolute inset-x-0 top-full w-full lg:hidden',
-          'bg-background/95 backdrop-blur-md',
-          'border-b border-border',
-          'transition-all duration-300 ease-in-out',
-          isMenuOpen
-            ? 'pointer-events-auto max-h-screen opacity-100'
-            : 'pointer-events-none max-h-0 opacity-0',
-        )}
-      >
-        <div className="container mx-auto px-4">
-          <nav className="flex flex-col gap-6 py-6">
-            {navigationLinks.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className={cn(
-                  'text-body-lg-medium text-foreground',
-                  'transition-colors hover:text-primary',
-                )}
-                onClick={() => setIsMenuOpen(false)}
-              >
-                {link.label}
-              </Link>
-            ))}
-
-            {/* Mobile Auth Buttons */}
-            <div className="flex flex-col gap-3 pt-4">
-              <SignedOut>
-                <Link
-                  href="/sign-in"
-                  className={cn(
-                    'w-full rounded-lg border border-border py-3 text-center',
-                    'text-body-md-medium text-foreground',
-                    'transition-all hover:border-border/80 hover:bg-muted',
-                  )}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/sign-up"
-                  className={cn(
-                    'w-full rounded-lg bg-primary py-3 text-center',
-                    'text-body-md-medium text-primary-foreground',
-                    'transition-all hover:bg-primary/90',
-                    'shadow-sm hover:shadow-md',
-                  )}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Get Started
-                </Link>
-              </SignedOut>
-              <SignedIn>
-                <Link
-                  href="/dashboard"
-                  className={cn(
-                    'w-full rounded-lg bg-primary py-3 text-center',
-                    'text-body-md-medium text-primary-foreground',
-                    'transition-all hover:bg-primary/90',
-                    'shadow-sm hover:shadow-md',
-                  )}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Dashboard
-                </Link>
-              </SignedIn>
-            </div>
-          </nav>
-        </div>
-      </div>
-    </header>
+    </section>
   );
 }
+
+const renderMenuItem = (item: MenuItem) => {
+  if (item.items) {
+    return (
+      <NavigationMenuItem key={item.title}>
+        <NavigationMenuTrigger
+          className={cn(
+            'group relative h-10 rounded-md px-4 py-2 text-sm font-medium',
+            'bg-background transition-all duration-300',
+            'hover:text-accent',
+            'data-[state=open]:text-accent',
+          )}
+        >
+          {item.title}
+        </NavigationMenuTrigger>
+        <NavigationMenuContent
+          className={cn(
+            'data-[motion^=from-]:animate-in data-[motion^=to-]:animate-out',
+            'data-[motion^=from-]:fade-in data-[motion^=to-]:fade-out',
+            'data-[motion=from-end]:slide-in-from-right-52',
+            'data-[motion=from-start]:slide-in-from-left-52',
+            'data-[motion=to-end]:slide-out-to-right-52',
+            'data-[motion=to-start]:slide-out-to-left-52',
+            'absolute left-0 top-0 w-full md:w-[400px]',
+            'origin-top-center',
+          )}
+        >
+          <ul className="grid gap-1 p-4 pb-6">
+            {item.items.map((subItem) => (
+              <li key={subItem.title}>
+                <NavigationMenuLink asChild>
+                  <SubMenuLink item={subItem} />
+                </NavigationMenuLink>
+              </li>
+            ))}
+          </ul>
+        </NavigationMenuContent>
+      </NavigationMenuItem>
+    );
+  }
+
+  return (
+    <NavigationMenuItem key={item.title}>
+      <NavigationMenuLink
+        href={item.url}
+        className={cn(
+          'group relative inline-flex h-10 w-max items-center justify-center',
+          'rounded-md px-4 py-2 text-sm font-medium',
+          'bg-background transition-all duration-300',
+          'hover:text-accent',
+        )}
+      >
+        {item.title}
+      </NavigationMenuLink>
+    </NavigationMenuItem>
+  );
+};
+
+const renderMobileMenuItem = (item: MenuItem) => {
+  if (item.items) {
+    return (
+      <AccordionItem key={item.title} value={item.title} className="border-b-0">
+        <AccordionTrigger className="text-md py-0 font-semibold hover:no-underline hover:text-primary">
+          {item.title}
+        </AccordionTrigger>
+        <AccordionContent className="mt-2">
+          {item.items.map((subItem) => (
+            <SubMenuLink key={subItem.title} item={subItem} />
+          ))}
+        </AccordionContent>
+      </AccordionItem>
+    );
+  }
+
+  return (
+    <a
+      key={item.title}
+      href={item.url}
+      className="text-md font-semibold transition-colors duration-300 hover:text-primary"
+    >
+      {item.title}
+    </a>
+  );
+};
+
+const SubMenuLink = ({ item }: { item: MenuItem }) => {
+  return (
+    <a
+      className={cn(
+        'group relative flex select-none flex-row gap-4 rounded-lg p-3',
+        'leading-none no-underline outline-none',
+        'transition-all duration-300',
+        'hover:bg-accent/10 hover:text-accent',
+        'hover:shadow-md hover:shadow-primary/10',
+        'hover:scale-[1.02]',
+        'overflow-hidden',
+      )}
+      href={item.url}
+    >
+      {/* Animated background gradient */}
+      <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-primary/10 via-primary/5 to-transparent transition-transform duration-500 group-hover:translate-x-0" />
+
+      <div className="relative z-10 flex items-center justify-center rounded-md bg-primary/10 p-2 text-primary transition-all duration-300 group-hover:scale-110 group-hover:bg-primary/20">
+        {item.icon}
+      </div>
+      <div className="relative z-10 flex-1">
+        <div className="mb-1 text-sm font-semibold transition-colors duration-300">
+          {item.title}
+        </div>
+        {item.description && (
+          <p className="text-muted-foreground text-xs leading-snug">
+            {item.description}
+          </p>
+        )}
+      </div>
+
+      {/* Hover arrow indicator */}
+      <div className="relative z-10 flex items-center opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-1">
+        <svg
+          className="size-4 text-primary"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 5l7 7-7 7"
+          />
+        </svg>
+      </div>
+    </a>
+  );
+};

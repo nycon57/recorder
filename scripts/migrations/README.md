@@ -200,14 +200,14 @@ npx shadcn@latest add <component-name>
 
 | Registry | Base URL | Components |
 |----------|----------|------------|
-| @shadcn | https://ui.shadcn.com/r/ | 449 |
-| @ai-elements | https://registry.ai-sdk.dev/ | 81 |
-| @elevenlabs-ui | https://ui.elevenlabs.io/r/ | 41 |
-| @shadcnblocks | https://shadcnblocks.com/r/ | 963 |
-| @clerk | https://clerk.com/r/ | 6 |
-| @cult-ui | https://cult-ui.com/r/ | 82 |
-| @supabase | https://supabase.com/ui/r/ | 37 |
-| @aceternity | https://ui.aceternity.com/registry/ | 91 |
+| @shadcn | <https://ui.shadcn.com/r/> | 449 |
+| @ai-elements | <https://registry.ai-sdk.dev/> | 81 |
+| @elevenlabs-ui | <https://ui.elevenlabs.io/r/> | 41 |
+| @shadcnblocks | <https://shadcnblocks.com/r/> | 963 |
+| @clerk | <https://clerk.com/r/> | 6 |
+| @cult-ui | <https://cult-ui.com/r/> | 82 |
+| @supabase | <https://supabase.com/ui/r/> | 37 |
+| @aceternity | <https://ui.aceternity.com/registry/> | 91 |
 
 ## Migration Tracking
 

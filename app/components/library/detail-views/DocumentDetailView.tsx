@@ -2,12 +2,13 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, FileText as FileTextIcon, AlertCircle, RotateCcw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText as FileTextIcon, AlertCircle, RotateCcw, Trash2, Sparkles } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 import { Button } from '@/app/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Alert, AlertTitle, AlertDescription } from '@/app/components/ui/alert';
 import {
   AlertDialog,
@@ -21,19 +22,17 @@ import {
 } from '@/app/components/ui/alert-dialog';
 import { toast } from '@/app/components/ui/use-toast';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
-import PDFDocumentViewer from './PDFDocumentViewer';
 
-import MetadataSidebar from '../shared/MetadataSidebar';
-import AIDocumentPanel from '../shared/AIDocumentPanel';
-import ShareControls from '../shared/ShareControls';
+// New unified components
+import UnifiedContentViewer from '../viewers/UnifiedContentViewer';
+import ContentSidebar from '../viewers/ContentSidebar';
+
 import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
 import InlineEditableField from '../shared/InlineEditableField';
-import InlineTagsEditor from '../shared/InlineTagsEditor';
 import { HighlightToolbar } from '../shared/HighlightToolbar';
 import { HighlightableContent, type Highlight } from '../shared/HighlightableContent';
 
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import { useSwipeableTabNavigation } from '@/hooks/useSwipeableTabNavigation';
 
 import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
 import type { Tag } from '@/lib/types/database';
@@ -141,15 +140,6 @@ export default function DocumentDetailView({
     fetchSources();
   }, [sourceKey]);
 
-  // Smart default: show first available content tab
-  const getDefaultTab = () => {
-    if (transcript) return 'text-content';
-    if (document) return 'ai-insights';
-    // All tabs disabled - prefer text-content as it will arrive first
-    return 'text-content';
-  };
-
-  const [activeTab, setActiveTab] = React.useState(getDefaultTab());
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
   const [tags, setTags] = React.useState<Tag[]>(initialTags);
   const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
@@ -271,17 +261,6 @@ export default function DocumentDetailView({
     setHighlightsEnabled(false);
   }, []);
 
-  // Available tabs for swipe navigation
-  const availableTabs = ['text-content', 'ai-insights'];
-
-  // Mobile swipe gestures for tab navigation
-  const swipeHandlers = useSwipeableTabNavigation({
-    tabs: availableTabs,
-    activeTab,
-    onTabChange: setActiveTab,
-    enabled: !isTrashed, // Disable swipe gestures when content is trashed
-  });
-
   const handleDownload = async () => {
     if (!recording.downloadUrl) return;
 
@@ -310,8 +289,6 @@ export default function DocumentDetailView({
     onEdit: () => setIsEditModalOpen(true),
     onShowShortcuts: () => setShowKeyboardShortcuts((prev) => !prev),
   });
-
-  const isPDF = recording.file_type === 'pdf';
 
   const handleRestore = async () => {
     try {
@@ -514,15 +491,29 @@ export default function DocumentDetailView({
                     maxLength={500}
                   />
 
-                  {/* Inline Tags Editor */}
-                  <div className="mt-3">
-                    <InlineTagsEditor
-                      tags={tags}
-                      onTagsChange={setTags}
-                      onAddTag={handleAddTag}
-                      onRemoveTag={handleRemoveTag}
-                    />
-                  </div>
+                  {/* Document Stats */}
+                  {transcript?.text && (
+                    <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>
+                        <strong className="text-content-docx font-medium">
+                          {transcript.text.split(/\s+/).filter(Boolean).length.toLocaleString()}
+                        </strong>{' '}
+                        words
+                      </span>
+                      <span>
+                        <strong className="text-content-docx font-medium">
+                          {transcript.text.length.toLocaleString()}
+                        </strong>{' '}
+                        characters
+                      </span>
+                      <span className="hidden sm:inline">
+                        <strong className="text-content-docx font-medium">
+                          ~{Math.ceil(transcript.text.split(/\s+/).filter(Boolean).length / 200)}
+                        </strong>{' '}
+                        min read
+                      </span>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -534,22 +525,32 @@ export default function DocumentDetailView({
                       {recording.description}
                     </p>
                   )}
+                  {/* Document Stats (Read-only view) */}
+                  {transcript?.text && (
+                    <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>
+                        <strong className="text-content-docx font-medium">
+                          {transcript.text.split(/\s+/).filter(Boolean).length.toLocaleString()}
+                        </strong>{' '}
+                        words
+                      </span>
+                      <span>
+                        <strong className="text-content-docx font-medium">
+                          {transcript.text.length.toLocaleString()}
+                        </strong>{' '}
+                        characters
+                      </span>
+                      <span className="hidden sm:inline">
+                        <strong className="text-content-docx font-medium">
+                          ~{Math.ceil(transcript.text.split(/\s+/).filter(Boolean).length / 200)}
+                        </strong>{' '}
+                        min read
+                      </span>
+                    </div>
+                  )}
                 </>
               )}
             </div>
-
-            {!isTrashed && (
-              <div className="flex items-center gap-2">
-                <ShareControls recordingId={recording.id} />
-                <Button
-                  onClick={() => setShowMoveToTrashDialog(true)}
-                  variant="ghost"
-                  size="icon"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
 
             {isTrashed && (
               <div className="flex items-center gap-2">
@@ -586,177 +587,92 @@ export default function DocumentDetailView({
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
-          <div className="lg:col-span-2 space-y-6" style={isTrashed ? { opacity: 0.7 } : undefined}>
-            {/* Document Viewer - Always Visible */}
-            {recording.downloadUrl ? (
-              isPDF ? (
-                <PDFDocumentViewer
-                  documentUrl={recording.downloadUrl}
-                  title={recording.title}
-                  fileSize={recording.file_size}
-                  originalFilename={recording.original_filename}
-                />
-              ) : (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <FileTextIcon className="size-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground mb-4">
-                      Preview not available for this document type
-                    </p>
-                    <Button onClick={handleDownload}>
-                      Download to View
-                    </Button>
-                  </CardContent>
-                </Card>
-              )
-            ) : (
-              <Card>
-                <CardContent className="py-24 flex flex-col items-center justify-center">
-                  <Loader2 className="size-8 animate-spin text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    Document is being processed...
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+          <div className="lg:col-span-2" style={isTrashed ? { opacity: 0.7 } : undefined}>
+            {document ? (
+              <Tabs defaultValue="content" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-6">
+                  <TabsTrigger value="content" className="gap-2">
+                    <FileTextIcon className="h-4 w-4" />
+                    Original Content
+                  </TabsTrigger>
+                  <TabsTrigger value="insights" className="gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    AI Insights
+                  </TabsTrigger>
+                </TabsList>
 
-            {/* Tabs - Secondary Content Only */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} {...swipeHandlers}>
-              <TabsList className="w-full justify-start">
-                <TabsTrigger value="text-content" disabled={!transcript}>
-                  Text Content
-                </TabsTrigger>
-                <TabsTrigger value="ai-insights" disabled={!document}>
-                  AI Insights
-                </TabsTrigger>
-              </TabsList>
+                <TabsContent value="content">
+                  <UnifiedContentViewer
+                    contentType={recording.content_type}
+                    fileType={recording.file_type}
+                    recordingId={recording.id}
+                    documentUrl={recording.downloadUrl}
+                    textContent={transcript?.text}
+                    title={recording.title}
+                    fileSize={recording.file_size}
+                    originalFilename={recording.original_filename}
+                    transcript={transcript}
+                  />
+                </TabsContent>
 
-              {/* Text Content Tab */}
-              <TabsContent value="text-content" className="mt-4">
-                {transcript ? (
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">
-                          Text Content
-                          {matchedHighlightsCount > 0 && (
-                            <span className="ml-2 text-xs font-normal text-muted-foreground">
-                              ({matchedHighlightsCount} citation{matchedHighlightsCount > 1 ? 's' : ''})
-                            </span>
+                <TabsContent value="insights">
+                  <Card className="border-0 shadow-none bg-transparent">
+                    <CardContent className="p-0">
+                      <div className="min-h-[400px] max-h-[800px] overflow-y-auto px-6 py-8 sm:px-8 sm:py-10">
+                        <div className="ai-insights-prose max-w-3xl mx-auto">
+                          {document.html ? (
+                            <div dangerouslySetInnerHTML={{ __html: document.html }} />
+                          ) : document.markdown ? (
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {document.markdown}
+                            </ReactMarkdown>
+                          ) : (
+                            <p className="text-muted-foreground italic">
+                              AI insights are being generated...
+                            </p>
                           )}
-                        </CardTitle>
-                        <div className="text-xs text-muted-foreground">
-                          {transcript.text.split(/\s+/).length} words
                         </div>
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <ScrollArea className="h-[700px] rounded-md border p-6">
-                        {highlights.length > 0 ? (
-                          <HighlightableContent
-                            content={transcript.text}
-                            highlights={highlights}
-                            currentHighlightId={highlights[currentHighlightIndex]?.id}
-                            highlightsEnabled={highlightsEnabled}
-                            onHighlightRefs={(refs) => {
-                              highlightRefsMapRef.current = refs;
-                              setMatchedHighlightsCount(refs.size);
-                            }}
-                          />
-                        ) : (
-                          <div className="prose prose-sm dark:prose-invert max-w-none">
-                            <pre className="whitespace-pre-wrap font-sans leading-relaxed">
-                              {transcript.text}
-                            </pre>
-                          </div>
-                        )}
-                      </ScrollArea>
                     </CardContent>
                   </Card>
-                ) : (
-                  <Card>
-                    <CardContent className="py-12 flex flex-col items-center justify-center text-center space-y-4">
-                      <Loader2 className="size-8 animate-spin text-muted-foreground" />
-                      <div>
-                        <p className="font-medium text-foreground mb-1">
-                          Extracting text content
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          We're extracting text from your document using OCR and parsing.
-                          This usually takes 1-2 minutes.
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-
-              {/* AI Insights Tab */}
-              <TabsContent value="ai-insights" className="mt-4">
-                {document ? (
-                  <AIDocumentPanel
-                    document={document}
-                    recordingId={recording.id}
-                  />
-                ) : (
-                  <Card>
-                    <CardContent className="py-12 flex flex-col items-center justify-center text-center space-y-4">
-                      <Loader2 className="size-8 animate-spin text-muted-foreground" />
-                      <div>
-                        <p className="font-medium text-foreground mb-1">
-                          Generating AI insights
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Our AI is analyzing your document to create a structured summary.
-                          This may take 2-3 minutes.
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-            </Tabs>
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <UnifiedContentViewer
+                contentType={recording.content_type}
+                fileType={recording.file_type}
+                recordingId={recording.id}
+                documentUrl={recording.downloadUrl}
+                textContent={transcript?.text}
+                title={recording.title}
+                fileSize={recording.file_size}
+                originalFilename={recording.original_filename}
+                transcript={transcript}
+              />
+            )}
           </div>
 
           {/* Right Column - Sidebar */}
           <div className="lg:col-span-1">
-            <div className="lg:sticky lg:top-6 space-y-6">
-              <MetadataSidebar
+            <div className="lg:sticky lg:top-6">
+              <ContentSidebar
                 recordingId={recording.id}
                 contentType={recording.content_type}
                 fileType={recording.file_type}
                 status={recording.status}
                 fileSize={recording.file_size}
+                duration={recording.duration_sec}
                 createdAt={recording.created_at}
-                updatedAt={recording.updated_at}
                 completedAt={recording.completed_at}
                 originalFilename={recording.original_filename}
                 deletedAt={recording.deleted_at}
                 tags={tags}
+                document={document}
+                textContent={transcript?.text}
                 onEdit={() => setIsEditModalOpen(true)}
+                onDelete={() => isTrashed ? setShowPermanentDeleteDialog(true) : setShowMoveToTrashDialog(true)}
                 onDownload={handleDownload}
               />
-
-              {/* Processing Status Info */}
-              {recording.status !== 'completed' && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Processing Status</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="size-4 animate-spin text-primary" />
-                      <span className="text-sm text-muted-foreground">
-                        {recording.status === 'transcribing'
-                          ? 'Extracting text...'
-                          : recording.status === 'doc_generating'
-                            ? 'Generating AI summary...'
-                            : 'Processing...'}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
             </div>
           </div>
         </div>
@@ -800,19 +716,21 @@ export default function DocumentDetailView({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive">Permanently Delete?</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <p>
-                Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
-              </p>
-              <p className="font-semibold text-destructive">
-                ⚠️ This action cannot be undone. All associated data will be permanently removed:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Original file</li>
-                <li>Transcripts and documents</li>
-                <li>Search embeddings</li>
-                <li>All metadata</li>
-              </ul>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
+                </p>
+                <p className="font-semibold text-destructive">
+                  ⚠️ This action cannot be undone. All associated data will be permanently removed:
+                </p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Original file</li>
+                  <li>Transcripts and documents</li>
+                  <li>Search embeddings</li>
+                  <li>All metadata</li>
+                </ul>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

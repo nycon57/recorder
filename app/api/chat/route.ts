@@ -645,24 +645,42 @@ What would you like to know more about?
 Remember: You're helping users discover what knowledge is available in their library!`;
     } else if (ragContext) {
       // For standard queries with RAG context
-      systemPrompt = `You are a helpful AI assistant. You MUST answer questions using ONLY the information provided in the Context section below. Do NOT use any external knowledge or make assumptions.
+      // Build different prompts based on whether this was a meta-question
+      const isMetaQuestion = preprocessed.wasTransformed &&
+        preprocessed.transformation === 'meta-question-extraction-and-expansion';
+
+      if (isMetaQuestion) {
+        // User asked "Do I have recordings about X?" - confirm and summarize
+        systemPrompt = `You are a helpful AI assistant. The user asked whether they have recordings about a specific topic.
+
+**Your Task:**
+Based on the Context below, confirm that recordings exist and provide a brief summary of what's covered.
+
+**Response Format:**
+"Yes, I have recordings about [topic]. Here's what they cover: [summary from context]"
+
+**CITATION FORMAT:**
+Use citation numbers [1], [2], [3] to reference sources.
+
+**Context from User's Recordings:**
+${ragContext.context}
+
+Answer based ONLY on the Context above.`;
+      } else {
+        // Normal query - answer the question directly
+        systemPrompt = `You are a helpful AI assistant. Answer the user's question using ONLY the information provided in the Context section below.
 
 **CRITICAL RULES:**
 1. ONLY use information explicitly stated in the Context below
 2. If the answer is not in the Context, respond with: "I don't have information about that in your recordings."
 3. NEVER mention products, platforms, or concepts not present in the Context
-4. Cite the specific recording title when answering
+4. Answer questions directly and naturally based on what they asked
 5. If you're uncertain, say "The context doesn't provide enough information to answer this."
-
-**SPECIAL RULE FOR META-QUESTIONS:**
-When the user asks whether you have recordings about a topic (e.g., "Do I have recordings about X?", "Do you know about Y?", "What do you have on Z?"):
-- If Context is provided below about that topic, respond with: "Yes, I have recordings about [topic]:" followed by a summary of what's in the recordings
-- If no Context is provided, respond with: "I don't have any recordings about that topic."
-- The presence of Context means recordings exist - don't say you "don't have information" when Context is clearly provided
 
 **CITATION FORMAT:**
 When referencing sources from the Context, use ONLY the citation numbers in brackets, like [1], [2], [3].
 DO NOT include the recording title before the citation number.
+
 Example: "The login process involves navigating to the URL [1] and entering credentials [2]."
 NOT: "The login process involves navigating to the URL (Recording Title [1]) and entering credentials (Recording Title [2])."
 
@@ -670,7 +688,8 @@ NOT: "The login process involves navigating to the URL (Recording Title [1]) and
 ${ragContext.context}
 
 **Your Task:**
-Answer the user's question using ONLY the above Context. Do not invent or assume anything. Remember: if Context exists about the topic they're asking about, that means recordings exist - confirm this and summarize them. Use citation numbers [1], [2], etc. to reference sources.`;
+Answer the user's question using ONLY the above Context. Do not invent or assume anything. Use citation numbers [1], [2], etc. to reference sources.`;
+      }
     } else {
       // No recordings or no route determined
       systemPrompt = 'You are a helpful AI assistant. The user has no recordings yet. Let them know they need to create recordings first before you can answer questions about them.';
@@ -982,138 +1001,3 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
   }
 }
 
-/**
- * Build system prompt with RAG context
- */
-function buildSystemPrompt(ragContext: string): string {
-  return `You are an AI assistant helping users understand their recorded content.
-
-## Your Role
-
-You help users:
-- Search through their recordings and transcripts
-- Find specific information quickly
-- Understand complex topics from their recordings
-- Get summaries and insights
-- Navigate timestamps and content
-
-## Context from Recordings
-
-The following context has been retrieved from the user's recordings based on their query:
-
-${ragContext}
-
-## Guidelines
-
-1. **Use the provided context**: Base your answers on the context above
-2. **Cite sources**: Reference specific recordings by title when answering
-3. **Be precise**: Include timestamps when available
-4. **Use tools**: Call tools to get more information when needed:
-   - \`searchRecordings\`: Find relevant content across all recordings
-   - \`getDocument\`: Retrieve full document content
-   - \`getTranscript\`: Get detailed transcript with timestamps
-   - \`getRecordingMetadata\`: Get recording details
-   - \`listRecordings\`: Browse available recordings
-5. **Multi-step reasoning**: Break complex questions into steps, calling tools as needed
-6. **Be helpful**: If the context doesn't contain the answer, explain what you found and suggest alternative searches
-
-## Output Format
-
-- Use markdown for formatting
-- Include timestamp links: [00:32](recording-url#t=32)
-- Quote relevant excerpts when useful
-- Provide clear, concise answers
-- Suggest follow-up questions when appropriate
-
-Remember: You're helping users get maximum value from their recorded content!`;
-}
-
-/**
- * Create new conversation
- */
-async function createConversation(
-  orgId: string,
-  userId: string
-): Promise<string> {
-  // Use admin client to bypass RLS since API route already validates auth
-  const { data, error } = await supabaseAdmin
-    .from('conversations')
-    .insert({
-      org_id: orgId,
-      user_id: userId,
-      title: 'New Conversation',
-      metadata: {
-        createdAt: new Date().toISOString(),
-        source: 'web',
-      },
-    })
-    .select('id')
-    .single();
-
-  if (error) {
-    console.error('[Chat API] Failed to create conversation:', error);
-    throw new Error(`Failed to create conversation: ${error.message}`);
-  }
-
-  return data.id;
-}
-
-/**
- * Save user message to database
- */
-async function saveUserMessage(
-  conversationId: string,
-  content: string
-): Promise<void> {
-  // Use admin client to bypass RLS since API route already validates auth
-  const { error } = await supabaseAdmin
-    .from('chat_messages')
-    .insert({
-      conversation_id: conversationId,
-      role: 'user',
-      content: { type: 'text', text: content }, // AI SDK format
-      metadata: {
-        timestamp: new Date().toISOString(),
-      },
-    });
-
-  if (error) {
-    throw new Error(`Failed to save user message: ${error.message}`);
-  }
-}
-
-/**
- * Save assistant message to database
- */
-async function saveAssistantMessage(
-  conversationId: string,
-  content: string,
-  metadata: {
-    sources: any[];
-    tokensUsed: number;
-    latencyMs: number;
-    finishReason: string;
-    toolCallCount: number;
-  }
-): Promise<void> {
-  // Use admin client to bypass RLS since API route already validates auth
-  const { error } = await supabaseAdmin
-    .from('chat_messages')
-    .insert({
-      conversation_id: conversationId,
-      role: 'assistant',
-      content: { type: 'text', text: content }, // AI SDK format
-      sources: metadata.sources,
-      metadata: {
-        tokensUsed: metadata.tokensUsed,
-        latencyMs: metadata.latencyMs,
-        finishReason: metadata.finishReason,
-        toolCallCount: metadata.toolCallCount,
-        timestamp: new Date().toISOString(),
-      },
-    });
-
-  if (error) {
-    throw new Error(`Failed to save assistant message: ${error.message}`);
-  }
-}

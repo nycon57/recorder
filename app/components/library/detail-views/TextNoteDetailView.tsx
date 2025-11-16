@@ -20,8 +20,8 @@ import { toast } from '@/app/components/ui/use-toast';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
 import TextNoteViewer from './TextNoteViewer';
 
-import MetadataSidebar from '../shared/MetadataSidebar';
-import AIDocumentPanel from '../shared/AIDocumentPanel';
+// New unified sidebar component
+import ContentSidebar from '../viewers/ContentSidebar';
 import ShareControls from '../shared/ShareControls';
 import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
 import InlineEditableField from '../shared/InlineEditableField';
@@ -91,6 +91,7 @@ export default function TextNoteDetailView({
   const router = useRouter();
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
   const [tags, setTags] = React.useState<Tag[]>(initialTags);
+  const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
 
@@ -142,6 +143,30 @@ export default function TextNoteDetailView({
       toast({
         variant: 'destructive',
         description: 'Failed to restore item',
+      });
+    }
+  };
+
+  const handleMoveToTrash = async () => {
+    try {
+      const response = await fetch(`/api/recordings/${recording.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        toast({ description: 'Item moved to trash' });
+        router.refresh(); // Refresh to show trashed state
+      } else {
+        toast({
+          variant: 'destructive',
+          description: 'Failed to move item to trash',
+        });
+      }
+    } catch (error) {
+      console.error('Move to trash failed:', error);
+      toast({
+        variant: 'destructive',
+        description: 'Failed to move item to trash',
       });
     }
   };
@@ -392,19 +417,23 @@ export default function TextNoteDetailView({
 
           {/* Right Column - Sidebar */}
           <div className="lg:col-span-1">
-            <div className="lg:sticky lg:top-6 space-y-6">
-              <MetadataSidebar
+            <div className="lg:sticky lg:top-6">
+              <ContentSidebar
                 recordingId={recording.id}
                 contentType={recording.content_type}
                 fileType={recording.file_type}
                 status={recording.status}
                 fileSize={recording.file_size}
+                duration={recording.duration_sec}
                 createdAt={recording.created_at}
-                updatedAt={recording.updated_at}
                 completedAt={recording.completed_at}
                 originalFilename={recording.original_filename}
+                deletedAt={recording.deleted_at}
                 tags={tags}
+                document={document}
+                textContent={transcript?.text}
                 onEdit={() => setIsEditModalOpen(true)}
+                onDelete={() => isTrashed ? setShowPermanentDeleteDialog(true) : setShowMoveToTrashDialog(true)}
                 onDownload={handleDownload}
               />
             </div>
@@ -421,24 +450,48 @@ export default function TextNoteDetailView({
         onTagsChange={setTags}
       />
 
+      {/* Move to Trash Confirmation Dialog */}
+      <AlertDialog open={showMoveToTrashDialog} onOpenChange={setShowMoveToTrashDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move to Trash?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to move &quot;{recording.title || 'this item'}&quot; to trash?
+              You can restore it later from the trash page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleMoveToTrash}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Move to Trash
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Permanent Delete Confirmation Dialog */}
       <AlertDialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Permanently Delete?</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <p>
-                Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
-              </p>
-              <p className="font-semibold text-destructive">
-                This action cannot be undone. All associated data will be permanently removed:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Original file</li>
-                <li>Transcripts and documents</li>
-                <li>Search embeddings</li>
-                <li>All metadata</li>
-              </ul>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
+                </p>
+                <p className="font-semibold text-destructive">
+                  This action cannot be undone. All associated data will be permanently removed:
+                </p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Original file</li>
+                  <li>Transcripts and documents</li>
+                  <li>Search embeddings</li>
+                  <li>All metadata</li>
+                </ul>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

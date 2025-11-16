@@ -10,7 +10,10 @@ import {
   FileText,
   Eye,
   Code,
-  Loader2
+  Loader2,
+  Type,
+  Hash,
+  Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ReactMarkdown, { Components } from 'react-markdown';
@@ -30,6 +33,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from '@/app/components/ui/tabs';
+import { cn } from '@/lib/utils';
 
 interface TextNoteViewerProps {
   recordingId: string;
@@ -56,6 +60,47 @@ export default function TextNoteViewer({
   const wordCount = initialContent.split(/\s+/).filter(Boolean).length;
   const charCount = initialContent.length;
   const lineCount = initialContent.split('\n').length;
+
+  // File type color configuration - using new content-type CSS variables
+  const fileTypeConfig = {
+    'txt': {
+      color: 'text-content-text',
+      bgColor: 'bg-content-text-bg',
+      borderColor: 'border-l-content-text-border'
+    },
+    'md': {
+      color: 'text-content-text',
+      bgColor: 'bg-content-text-bg',
+      borderColor: 'border-l-content-text-border'
+    },
+    'default': {
+      color: 'text-content-text',
+      bgColor: 'bg-content-text-bg',
+      borderColor: 'border-l-content-text-border'
+    }
+  };
+  const config = fileTypeConfig[fileType || 'default'] || fileTypeConfig.default;
+
+  // Enhanced stats with reading time
+  const readingTime = Math.ceil(wordCount / 200);
+  const statsConfig = [
+    {
+      label: 'Words',
+      value: wordCount,
+      icon: <Type className="h-4 w-4" />,
+      subtext: `~${readingTime} min read`
+    },
+    {
+      label: 'Characters',
+      value: charCount,
+      icon: <Hash className="h-4 w-4" />
+    },
+    {
+      label: 'Lines',
+      value: lineCount,
+      icon: <FileText className="h-4 w-4" />
+    }
+  ];
 
   const handleCopy = async () => {
     try {
@@ -125,38 +170,66 @@ export default function TextNoteViewer({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
+    <div className="space-y-6">
+      {/* Enhanced Header */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <FileText className="size-4 text-muted-foreground" />
-              <CardTitle className="text-base">Text Note</CardTitle>
-              <Badge variant="outline" className="uppercase">
-                {fileType}
-              </Badge>
+        <CardContent className="p-6 sm:p-8">
+          <div className="flex flex-col gap-4 sm:gap-6">
+            {/* Title Row */}
+            <div className="flex items-start gap-3">
+              <div className={cn("p-2.5 rounded-lg shrink-0", config.bgColor)}>
+                <FileText className={cn("h-5 w-5", config.color)} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
+                  {title || 'Untitled Note'}
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {(fileType || 'txt').toUpperCase()} Document
+                </p>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            {/* Actions Row */}
+            <div className="flex flex-wrap gap-2 sm:gap-3">
               {!isEditing ? (
                 <>
-                  <Button size="sm" variant="outline" onClick={handleCopy}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCopy}
+                    className="transition-all hover:shadow-sm hover:scale-105"
+                  >
                     <Copy className="size-4" />
                     Copy
                   </Button>
-                  <Button size="sm" variant="outline" onClick={handleDownload}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleDownload}
+                    className="transition-all hover:shadow-sm hover:scale-105"
+                  >
                     <Download className="size-4" />
                     Download
                   </Button>
-                  <Button size="sm" variant="outline" onClick={handleEdit}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleEdit}
+                    className="transition-all hover:shadow-sm hover:scale-105"
+                  >
                     <Edit3 className="size-4" />
                     Edit
                   </Button>
                 </>
               ) : (
                 <>
-                  <Button size="sm" variant="outline" onClick={handleCancel}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCancel}
+                    className="transition-all hover:shadow-sm"
+                  >
                     <X className="size-4" />
                     Cancel
                   </Button>
@@ -164,6 +237,7 @@ export default function TextNoteViewer({
                     size="sm"
                     onClick={handleSave}
                     disabled={isSaving || editedContent === initialContent}
+                    className="transition-all hover:shadow-sm"
                   >
                     {isSaving ? (
                       <>
@@ -181,32 +255,40 @@ export default function TextNoteViewer({
               )}
             </div>
           </div>
-        </CardHeader>
+        </CardContent>
       </Card>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Words</p>
-            <p className="text-2xl font-bold">{wordCount.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Characters</p>
-            <p className="text-2xl font-bold">{charCount.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Lines</p>
-            <p className="text-2xl font-bold">{lineCount.toLocaleString()}</p>
-          </CardContent>
-        </Card>
+      {/* Enhanced Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+        {statsConfig.map((stat) => (
+          <Card
+            key={stat.label}
+            className={cn(
+              'transition-all duration-200 hover:shadow-md hover:scale-[1.02] border-l-4',
+              config.borderColor
+            )}
+          >
+            <CardContent className="p-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium text-muted-foreground">
+                  {stat.label}
+                </div>
+                <div className={cn('p-2 rounded-md', config.bgColor)}>
+                  {stat.icon}
+                </div>
+              </div>
+              <div className="text-3xl font-bold tabular-nums tracking-tight">
+                {stat.value.toLocaleString()}
+              </div>
+              {stat.subtext && (
+                <div className="text-xs text-muted-foreground">
+                  {stat.subtext}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
       </div>
-
-      <Separator />
 
       {/* Content */}
       {isEditing ? (
@@ -239,9 +321,9 @@ export default function TextNoteViewer({
               </TabsContent>
 
               {isMarkdown && (
-                <TabsContent value="preview" className="p-4 m-0">
-                  <ScrollArea className="h-[600px]">
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                <TabsContent value="preview" className="p-8 m-0">
+                  <div className="min-h-[600px] max-h-[800px] overflow-y-auto">
+                    <div className="prose dark:prose-invert max-w-3xl mx-auto prose-sm sm:prose-base prose-headings:font-semibold prose-p:leading-relaxed">
                       <ReactMarkdown
                         components={{
                           code(props: Parameters<NonNullable<Components['code']>>[0]) {
@@ -269,18 +351,18 @@ export default function TextNoteViewer({
                         {editedContent}
                       </ReactMarkdown>
                     </div>
-                  </ScrollArea>
+                  </div>
                 </TabsContent>
               )}
             </Tabs>
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="p-6">
-            <ScrollArea className="h-[600px]">
+        <Card className="border-0 shadow-none bg-transparent">
+          <CardContent className="p-0">
+            <div className="min-h-[400px] max-h-[800px] overflow-y-auto px-6 py-8 sm:px-8 sm:py-10">
               {isMarkdown ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none">
+                <div className="prose dark:prose-invert max-w-3xl mx-auto prose-sm sm:prose-base prose-headings:font-semibold prose-p:leading-relaxed">
                   <ReactMarkdown
                     components={{
                       code(props: Parameters<NonNullable<Components['code']>>[0]) {
@@ -309,11 +391,11 @@ export default function TextNoteViewer({
                   </ReactMarkdown>
                 </div>
               ) : (
-                <pre className="font-mono text-sm whitespace-pre-wrap leading-relaxed">
+                <pre className="font-mono text-sm sm:text-base whitespace-pre-wrap leading-relaxed max-w-3xl mx-auto">
                   {initialContent}
                 </pre>
               )}
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
       )}

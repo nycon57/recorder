@@ -445,8 +445,8 @@ export default function UploadModal({
           </DialogHeader>
 
           {/* Accepted File Types Alert */}
-          <Alert variant="default" className="bg-muted/50">
-            <AlertDescription className="text-xs">
+          <Alert variant="default" className="bg-background border-border">
+            <AlertDescription className="text-xs text-muted-foreground">
               {getAcceptedFileTypesMessage()}
             </AlertDescription>
           </Alert>
@@ -466,14 +466,14 @@ export default function UploadModal({
               touch-manipulation active:scale-[0.98]
               ${
                 isDragging
-                  ? 'border-primary bg-primary/5 scale-[1.02]'
-                  : 'border-border bg-background hover:border-primary/50 hover:bg-accent/30'
+                  ? 'border-foreground bg-muted/20 scale-[1.02]'
+                  : 'border-border bg-background hover:border-foreground/40 hover:bg-muted/30'
               }
             `}
           >
             <UploadCloudIcon
               className={`size-10 sm:size-12 mb-3 sm:mb-4 transition-colors ${
-                isDragging ? 'text-primary' : 'text-muted-foreground'
+                isDragging ? 'text-foreground' : 'text-muted-foreground'
               }`}
             />
             <p className="text-sm sm:text-base font-medium text-foreground mb-1 text-center">
@@ -530,7 +530,7 @@ export default function UploadModal({
                   return (
                     <div
                       key={uploadFile.id}
-                      className="flex items-start gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg border bg-card"
+                      className="flex items-start gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg border bg-background"
                     >
                       {/* File Icon */}
                       <div
@@ -564,17 +564,17 @@ export default function UploadModal({
                               <button
                                 onClick={() => removeFile(uploadFile.id)}
                                 disabled={isUploading}
-                                className="p-1 rounded-sm hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[48px] sm:min-h-0"
+                                className="p-1 rounded-sm hover:bg-muted/50 text-muted-foreground hover:text-destructive transition-all disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[48px] sm:min-h-0"
                                 aria-label="Remove file"
                               >
                                 <XIcon className="size-4" />
                               </button>
                             )}
                             {uploadFile.status === 'uploading' && (
-                              <Loader2Icon className="size-4 animate-spin text-primary" />
+                              <Loader2Icon className="size-4 animate-spin text-foreground" />
                             )}
                             {uploadFile.status === 'success' && (
-                              <CheckCircle2Icon className="size-4 text-green-600 dark:text-green-400" />
+                              <CheckCircle2Icon className="size-4 text-foreground" />
                             )}
                             {uploadFile.status === 'error' && (
                               <XCircleIcon className="size-4 text-destructive" />
@@ -610,7 +610,7 @@ export default function UploadModal({
 
                         {/* Success Message */}
                         {uploadFile.status === 'success' && (
-                          <p className="text-[10px] sm:text-xs text-green-600 dark:text-green-400 mt-2">
+                          <p className="text-[10px] sm:text-xs text-muted-foreground mt-2">
                             Upload complete! Processing...
                           </p>
                         )}
@@ -637,13 +637,13 @@ export default function UploadModal({
 
           {/* Summary Messages */}
           {hasUploadedFiles && !isUploading && (
-            <div className="flex items-start gap-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-              <CheckCircle2Icon className="size-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 p-3 bg-muted/20 border border-border rounded-lg">
+              <CheckCircle2Icon className="size-5 text-foreground flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                <p className="text-sm font-medium text-foreground">
                   Upload Complete
                 </p>
-                <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Your files are being processed and will appear in your library
                   shortly.
                 </p>

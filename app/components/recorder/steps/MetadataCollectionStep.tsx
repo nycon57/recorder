@@ -331,11 +331,11 @@ export default function MetadataCollectionStep({
                 </div>
               </Card>
             ) : (
-              <Card
-                className="p-8 border-2 border-dashed cursor-pointer hover:border-primary/50 hover:bg-accent/50 transition-colors"
+              <div
+                className="border-2 border-dashed rounded-lg transition-all duration-200 cursor-pointer bg-background hover:border-foreground/40 hover:bg-muted/30"
                 onClick={() => thumbnailInputRef.current?.click()}
               >
-                <div className="flex flex-col items-center justify-center">
+                <div className="flex flex-col items-center justify-center py-12 px-6">
                   <ImageIcon className="w-12 h-12 text-muted-foreground mb-3" />
                   <p className="text-sm font-medium text-foreground mb-1">
                     Upload a thumbnail
@@ -344,7 +344,7 @@ export default function MetadataCollectionStep({
                     Click to select an image (max 5 MB)
                   </p>
                 </div>
-              </Card>
+              </div>
             )}
             <input
               ref={thumbnailInputRef}

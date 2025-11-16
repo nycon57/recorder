@@ -211,13 +211,14 @@ export default function UploadProgressStep({
     };
 
     eventSource.onerror = (err) => {
-      console.error('[UploadProgressStep] SSE error:', err);
-
       // Check if the connection is closed (happens on completion)
       if (eventSource.readyState === EventSource.CLOSED) {
-        console.log('[UploadProgressStep] SSE connection closed');
+        // Normal closure after completion - not an error
+        console.log('[UploadProgressStep] SSE connection closed normally');
         setConnectionStatus('disconnected');
       } else {
+        // Actual error during connection
+        console.error('[UploadProgressStep] SSE connection error:', err);
         setConnectionStatus('error');
         setError('Lost connection to server. Retrying...');
       }

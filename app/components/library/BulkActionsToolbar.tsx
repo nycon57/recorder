@@ -295,10 +295,10 @@ export function BulkActionsToolbar({
       <Dialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-red-600">
+            <DialogTitle className="text-red-500">
               Permanently Delete {selectedCount} {selectedCount === 1 ? 'item' : 'items'}?
             </DialogTitle>
-            <DialogDescription className="text-red-600">
+            <DialogDescription className="text-red-500">
               ⚠️ This action cannot be undone. These items will be permanently deleted and cannot be restored.
             </DialogDescription>
           </DialogHeader>

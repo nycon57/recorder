@@ -15,68 +15,51 @@ export function QuickActions({ onUploadClick, onCreateNoteClick }: QuickActionsP
     {
       icon: Video,
       label: 'Record Screen',
-      description: 'Start a new screen recording',
+      description: 'Capture screen, camera, and audio instantly. No downloads required.',
       onClick: () => router.push('/record'),
-      gradient: 'from-purple-500 to-purple-600',
-      hoverGradient: 'hover:from-purple-600 hover:to-purple-700',
-      iconBg: 'bg-purple-100 dark:bg-purple-900/30',
-      iconColor: 'text-purple-600 dark:text-purple-400',
     },
     {
       icon: Upload,
       label: 'Upload File',
-      description: 'Upload video, audio, or documents',
+      description: 'Upload video, audio, or documents to your library.',
       onClick: onUploadClick || (() => {}),
-      gradient: 'from-blue-500 to-blue-600',
-      hoverGradient: 'hover:from-blue-600 hover:to-blue-700',
-      iconBg: 'bg-blue-100 dark:bg-blue-900/30',
-      iconColor: 'text-blue-600 dark:text-blue-400',
     },
     {
       icon: FileText,
       label: 'Create Note',
-      description: 'Write a quick text note',
+      description: 'Write quick text notes and save to your knowledge base.',
       onClick: onCreateNoteClick || (() => {}),
-      gradient: 'from-green-500 to-green-600',
-      hoverGradient: 'hover:from-green-600 hover:to-green-700',
-      iconBg: 'bg-green-100 dark:bg-green-900/30',
-      iconColor: 'text-green-600 dark:text-green-400',
     },
     {
       icon: Search,
       label: 'Search Library',
-      description: 'Find content across your library',
+      description: 'Find anything instantly with context-aware AI search.',
       onClick: () => router.push('/search'),
-      gradient: 'from-orange-500 to-orange-600',
-      hoverGradient: 'hover:from-orange-600 hover:to-orange-700',
-      iconBg: 'bg-orange-100 dark:bg-orange-900/30',
-      iconColor: 'text-orange-600 dark:text-orange-400',
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
       {actions.map((action) => {
         const Icon = action.icon;
         return (
           <button
             key={action.label}
             onClick={action.onClick}
-            className={`group relative overflow-hidden rounded-xl bg-gradient-to-br ${action.gradient} ${action.hoverGradient} p-4 sm:p-6 text-left shadow-sm transition-all duration-200 hover:shadow-md hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 touch-manipulation min-h-[100px] sm:min-h-0 active:scale-[0.98]`}
+            className="group relative rounded-lg border border-border bg-card p-6 text-left transition-all duration-200 hover:border-primary/50 hover:bg-card/80 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary active:scale-[0.98]"
             aria-label={action.label}
           >
-            <div className="relative z-10">
-              <div className={`inline-flex items-center justify-center rounded-lg ${action.iconBg} p-2 sm:p-3 mb-3 sm:mb-4`}>
-                <Icon className={`size-5 sm:size-6 ${action.iconColor}`} />
+            <div className="mb-4">
+              <div className="inline-flex items-center justify-center rounded-full bg-primary/10 p-3 ring-1 ring-primary/20 transition-all duration-200 group-hover:bg-primary/20 group-hover:ring-primary/30">
+                <Icon className="size-5 text-primary" />
               </div>
-              <h3 className="text-base sm:text-lg font-semibold text-white mb-1">
-                {action.label}
-              </h3>
-              <p className="text-xs sm:text-sm text-white/80 line-clamp-2">
-                {action.description}
-              </p>
             </div>
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-200" />
+            <h3 className="text-base font-semibold text-foreground mb-2">
+              {action.label}
+            </h3>
+            <p className="text-sm text-muted-foreground line-clamp-2">
+              {action.description}
+            </p>
           </button>
         );
       })}

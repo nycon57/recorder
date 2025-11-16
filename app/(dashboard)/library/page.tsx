@@ -516,18 +516,39 @@ function LibraryPageContent() {
     console.log('[Library Page] Number of items to delete:', selectedIds.length);
 
     try {
-      const promises = selectedIds.map(id => {
+      const promises = selectedIds.map(async id => {
         const url = `/api/recordings/${id}?permanent=true`;
         console.log(`[Library Page] Deleting item ${id} with URL: ${url}`);
-        return fetch(url, { method: 'DELETE' });
+        const response = await fetch(url, { method: 'DELETE' });
+
+        console.log(`[Library Page] Response for ${id}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+        });
+
+        const responseData = await response.json();
+        console.log(`[Library Page] Response data for ${id}:`, responseData);
+
+        if (!response.ok) {
+          console.error(`[Library Page] Delete failed for ${id}:`, responseData);
+          throw new Error(responseData.error?.message || 'Delete failed');
+        }
+
+        return { id, success: true, response: responseData };
       });
 
       console.log('[Library Page] Waiting for all delete requests...');
       const results = await Promise.allSettled(promises);
 
       console.log('[Library Page] Delete results:', results);
-      const successCount = results.filter(r => r.status === 'fulfilled').length;
-      const failCount = results.filter(r => r.status === 'rejected').length;
+      const successful = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+      const failed = results.filter(r => r.status === 'rejected').map(r => r.reason);
+      console.log(`[Library Page] Successful deletions (${successful.length}):`, successful);
+      console.log(`[Library Page] Failed deletions (${failed.length}):`, failed);
+
+      const successCount = successful.length;
+      const failCount = failed.length;
       console.log(`[Library Page] Success: ${successCount}, Failed: ${failCount}`);
 
       setItems(prev => prev.filter(item => !selectedIds.includes(item.id)));
@@ -688,7 +709,10 @@ function LibraryPageContent() {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  onClick={() => setShowCollectionManager(true)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowCollectionManager(true);
+                  }}
                   title="New collection"
                 >
                   <Plus className="h-4 w-4" />
@@ -721,7 +745,10 @@ function LibraryPageContent() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowCollectionManager(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowCollectionManager(true);
+              }}
               className="w-full"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -1241,7 +1268,7 @@ function LibraryPageContent() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-500 text-white hover:bg-red-600">
               Move to Trash
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1258,7 +1285,7 @@ function LibraryPageContent() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction onClick={confirmBulkDelete} className="bg-red-500 text-white hover:bg-red-600">
               Move to Trash
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1271,14 +1298,14 @@ function LibraryPageContent() {
             <AlertDialogTitle>Permanently Delete {selectedIds.length} items?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">
-                <div className="font-semibold text-destructive">This action cannot be undone!</div>
+                <div className="font-semibold text-red-500">This action cannot be undone!</div>
                 <div>These items will be permanently deleted from the system and cannot be recovered.</div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmBulkPermanentDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction onClick={confirmBulkPermanentDelete} className="bg-red-500 text-white hover:bg-red-600">
               Delete Forever
             </AlertDialogAction>
           </AlertDialogFooter>

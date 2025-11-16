@@ -76,7 +76,7 @@ const docExtensions = FileUploadConnector.getExtensions('documents');
 
 ### 2. URL Import Connector
 
-Import content from web URLs with HTML to markdown conversion.
+Import content from web URLs with HTML-to-markdown conversion.
 
 **Features:**
 

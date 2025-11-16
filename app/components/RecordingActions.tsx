@@ -43,7 +43,7 @@ export default function RecordingActions({
     <div className="relative">
       <button
         onClick={() => setShowMenu(!showMenu)}
-        className="p-2 hover:bg-accent rounded-lg transition"
+        className="p-2 hover:bg-muted/50 active:bg-muted/70 rounded-lg transition"
       >
         <svg
           className="w-6 h-6 text-muted-foreground"
@@ -68,7 +68,7 @@ export default function RecordingActions({
                   setIsDeleteDialogOpen(true);
                 }}
                 disabled={isDeleting}
-                className="w-full text-left px-4 py-2 text-sm text-destructive hover:bg-accent disabled:opacity-50"
+                className="w-full text-left px-4 py-2 text-sm text-destructive hover:bg-destructive/10 active:bg-destructive/20 disabled:opacity-50 transition-colors"
               >
                 {isDeleting ? 'Moving to Trash...' : 'Move to Trash'}
               </button>

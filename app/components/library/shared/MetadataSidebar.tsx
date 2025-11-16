@@ -401,7 +401,7 @@ export default function MetadataSidebar({
 
             <Button
               variant="outline"
-              className="w-full justify-start text-destructive hover:text-destructive"
+              className="w-full justify-start text-red-500 hover:text-red-500"
               onClick={() => setIsDeleteDialogOpen(true)}
               disabled={isDeleting}
             >
@@ -423,27 +423,29 @@ export default function MetadataSidebar({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className={isTrashed ? 'text-destructive' : ''}>
+            <AlertDialogTitle className={isTrashed ? 'text-red-500' : ''}>
               {isTrashed ? 'Permanently Delete?' : 'Move to Trash?'}
             </AlertDialogTitle>
-            <AlertDialogDescription className={isTrashed ? 'space-y-2' : ''}>
-              {isTrashed ? (
-                <>
+            {isTrashed ? (
+              <AlertDialogDescription asChild>
+                <div className="space-y-2 text-sm text-muted-foreground">
                   <p>Are you sure you want to permanently delete this content?</p>
-                  <p className="font-semibold text-destructive">
+                  <p className="font-semibold text-red-500">
                     ⚠️ This action cannot be undone. All associated data will be permanently removed:
                   </p>
-                  <ul className="list-disc list-inside space-y-1 text-sm">
+                  <ul className="list-disc list-inside space-y-1">
                     <li>Original file</li>
                     <li>Transcripts and documents</li>
                     <li>Search embeddings</li>
                     <li>All metadata</li>
                   </ul>
-                </>
-              ) : (
-                'Are you sure you want to move this content to trash? You can restore it later from the trash page.'
-              )}
-            </AlertDialogDescription>
+                </div>
+              </AlertDialogDescription>
+            ) : (
+              <AlertDialogDescription>
+                Are you sure you want to move this content to trash? You can restore it later from the trash page.
+              </AlertDialogDescription>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

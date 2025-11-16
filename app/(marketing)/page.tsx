@@ -1,7 +1,7 @@
 import {
-  ModernHero,
-  ModernFeatures,
-  ModernPricing,
+  RegistryHero,
+  RegistryFeatures,
+  RegistryPricing,
   ModernCTA,
   RecordTestimonials,
 } from '@/app/components/sections';
@@ -9,10 +9,10 @@ import {
 export default function HomePage() {
   return (
     <>
-      <ModernHero />
-      <ModernFeatures />
+      <RegistryHero />
+      <RegistryFeatures />
       <RecordTestimonials />
-      <ModernPricing />
+      <RegistryPricing />
       <ModernCTA />
     </>
   );

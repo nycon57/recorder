@@ -209,7 +209,7 @@ export function ActivityItem({ activity, className }: ActivityItemProps) {
         className={cn(
           'p-2 rounded-md shrink-0',
           'bg-muted group-hover:bg-muted/70',
-          activity.action.includes('deleted') && 'text-destructive',
+          activity.action.includes('deleted') && 'text-red-500',
           activity.action.includes('favorited') && !activity.action.includes('unfavorited') && 'text-yellow-500',
           activity.action.includes('shared') && 'text-blue-500',
           activity.action.includes('created') && 'text-green-500'

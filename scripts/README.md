@@ -25,15 +25,15 @@ yarn tsx scripts/test-sse-stream.ts <recording-id>
 
 **Prerequisites**:
 - `.env` file configured
-- None (works offline, just checks configuration)
 
 **What it checks**:
-- Environment variables
-- Supabase connection
-- Google AI API access
-- Database health
-- Job handlers availability
-- Streaming manager status
+- **Offline checks:**
+  - Environment variables configuration
+  - Job handlers availability
+  - Streaming manager status
+- **Online checks (requires network):**
+  - Supabase connection and database health
+  - Google AI API access
 
 **When to use**:
 - First thing after cloning repo

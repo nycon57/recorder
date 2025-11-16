@@ -265,18 +265,20 @@ export function SessionsList() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke Session?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to revoke this session? The device will be logged out immediately.
-              {sessionToRevoke && (
-                <div className="mt-4 rounded-md bg-muted p-3">
-                  <p className="text-sm">
-                    <strong>Device:</strong> {sessionToRevoke.device_name || 'Unknown'}
-                  </p>
-                  <p className="text-sm">
-                    <strong>Location:</strong> {sessionToRevoke.location || 'Unknown'}
-                  </p>
-                </div>
-              )}
+            <AlertDialogDescription asChild>
+              <div className="text-sm text-muted-foreground">
+                <p>Are you sure you want to revoke this session? The device will be logged out immediately.</p>
+                {sessionToRevoke && (
+                  <div className="mt-4 rounded-md bg-muted p-3">
+                    <p className="text-sm">
+                      <strong>Device:</strong> {sessionToRevoke.device_name || 'Unknown'}
+                    </p>
+                    <p className="text-sm">
+                      <strong>Location:</strong> {sessionToRevoke.location || 'Unknown'}
+                    </p>
+                  </div>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

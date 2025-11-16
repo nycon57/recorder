@@ -17,7 +17,7 @@ import { createLogger } from '@/lib/utils/logger';
 const logger = createLogger({ endpoint: 'upload-stream' });
 
 interface StreamParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 /**
@@ -26,7 +26,7 @@ interface StreamParams {
  */
 export const GET = apiHandler(async (request: NextRequest, context: StreamParams) => {
   const requestId = request.headers.get('x-request-id') || 'unknown';
-  const recordingId = context.params.id;
+  const { id: recordingId } = await context.params;
 
   logger.info('Upload stream request initiated', {
     context: { recordingId, requestId },

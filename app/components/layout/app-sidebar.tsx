@@ -49,14 +49,18 @@ export function AppSidebar({ role, isSystemAdmin = false, ...props }: AppSidebar
         <div className="flex items-center gap-2 px-2 py-1">
           <Link
             href="/dashboard"
-            className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center"
+            className="group flex items-center gap-2 rounded-lg p-2 transition-all duration-300 hover:bg-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2"
           >
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <span className="text-xl">🎥</span>
+            <div className="relative flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-sm">
+              <span className="relative text-xl">
+                🎥
+              </span>
             </div>
             <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-              <span className="truncate font-semibold">Record</span>
-              <span className="truncate text-xs text-muted-foreground">
+              <span className="truncate font-semibold transition-colors duration-300 group-hover:text-primary">
+                Record
+              </span>
+              <span className="truncate text-xs text-muted-foreground transition-colors duration-300 group-hover:text-primary/60">
                 AI Knowledge
               </span>
             </div>

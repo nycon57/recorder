@@ -150,8 +150,8 @@ export function AdvancedFilters({
                     type="button"
                     onClick={() => onFiltersChange({ ...filters, statusFilter: status.value })}
                     className={cn(
-                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-accent transition-colors',
-                      filters.statusFilter === status.value && 'bg-accent'
+                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-accent/50 transition-colors duration-150',
+                      filters.statusFilter === status.value && 'bg-accent/60'
                     )}
                   >
                     {status.icon}
@@ -178,8 +178,8 @@ export function AdvancedFilters({
                     type="button"
                     onClick={() => toggleContentType(type.value)}
                     className={cn(
-                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-accent transition-colors',
-                      filters.contentTypes.includes(type.value) && 'bg-accent'
+                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-accent/50 transition-colors duration-150',
+                      filters.contentTypes.includes(type.value) && 'bg-accent/60'
                     )}
                   >
                     {type.icon}

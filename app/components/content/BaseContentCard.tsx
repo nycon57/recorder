@@ -213,7 +213,7 @@ export function BaseContentCard({ item }: BaseContentCardProps) {
       {/* Trash indicator (if deleted) - Top Right for prominence */}
       {item.deleted_at && (
         <div className="absolute top-2 right-2">
-          <Badge className="text-xs font-medium backdrop-blur-sm bg-destructive text-destructive-foreground border-destructive shadow-lg">
+          <Badge className="text-xs font-medium backdrop-blur-sm bg-red-500 text-white border-red-500 shadow-lg">
             <Trash2 className="w-3.5 h-3.5 mr-1" />
             Trashed
           </Badge>
@@ -251,7 +251,7 @@ export function BaseContentCard({ item }: BaseContentCardProps) {
   return (
     <Card className={cn(
       "group relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/20 p-0 gap-2 h-full",
-      item.deleted_at && "opacity-70 border-destructive/20"
+      item.deleted_at && "opacity-70 border-red-500/20"
     )}>
       <Link href={`/library/${item.id}`} className="block">
         {renderThumbnail()}
@@ -262,7 +262,7 @@ export function BaseContentCard({ item }: BaseContentCardProps) {
         {/* Trash indicator - Always visible when deleted */}
         {item.deleted_at && (
           <div className="mb-2">
-            <Badge className="text-xs font-medium bg-destructive/10 text-destructive border-destructive/30">
+            <Badge className="text-xs font-medium bg-red-500/10 text-red-500 border-red-500/30">
               <Trash2 className="w-3 h-3 mr-1" />
               In Trash
             </Badge>

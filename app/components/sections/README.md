@@ -35,7 +35,7 @@ Hero section with gradient accent background and dual-column layout.
 }
 ```
 
-**File Path:** `/Users/jarrettstanley/Desktop/websites/recorder/app/components/sections/record-hero.tsx`
+**File Path:** `app/components/sections/record-hero.tsx`
 
 ---
 
@@ -83,7 +83,7 @@ type SmallFeature = {
 };
 ```
 
-**File Path:** `/Users/jarrettstanley/Desktop/websites/recorder/app/components/sections/record-features.tsx`
+**File Path:** `app/components/sections/record-features.tsx`
 
 ---
 
@@ -109,7 +109,7 @@ Full-width call-to-action section with gradient background.
 }
 ```
 
-**File Path:** `/Users/jarrettstanley/Desktop/websites/recorder/app/components/sections/record-cta.tsx`
+**File Path:** `app/components/sections/record-cta.tsx`
 
 ---
 
@@ -146,7 +146,7 @@ type Testimonial = {
 };
 ```
 
-**File Path:** `/Users/jarrettstanley/Desktop/websites/recorder/app/components/sections/record-testimonials.tsx`
+**File Path:** `app/components/sections/record-testimonials.tsx`
 
 ---
 
@@ -188,7 +188,7 @@ type PricingPlan = {
 };
 ```
 
-**File Path:** `/Users/jarrettstanley/Desktop/websites/recorder/app/components/sections/record-pricing.tsx`
+**File Path:** `app/components/sections/record-pricing.tsx`
 
 ---
 
@@ -226,7 +226,7 @@ type FaqItem = {
 };
 ```
 
-**File Path:** `/Users/jarrettstanley/Desktop/websites/recorder/app/components/sections/record-faq.tsx`
+**File Path:** `app/components/sections/record-faq.tsx`
 
 ---
 

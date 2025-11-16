@@ -42,12 +42,12 @@ type MetadataRequest = z.infer<typeof metadataSchema>;
  */
 export const POST = apiHandler(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) => {
   const requestId = generateRequestId();
   const { orgId, userId } = await requireOrg();
   const supabase = supabaseAdmin;
-  const recordingId = params.id;
+  const { id: recordingId } = await params;
 
   try {
     // Parse and validate request body

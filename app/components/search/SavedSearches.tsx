@@ -239,7 +239,7 @@ export function SavedSearches({
                 onClick={() => handleDeleteSearch(search.id)}
                 className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
               >
-                <Trash2 className="h-4 w-4 text-destructive" />
+                <Trash2 className="h-4 w-4 text-red-500" />
                 <span className="sr-only">Delete</span>
               </Button>
             </div>

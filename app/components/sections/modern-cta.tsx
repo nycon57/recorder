@@ -43,11 +43,11 @@ export default function ModernCTA({
       {/* Animated Background */}
       <div className="absolute inset-0">
         {/* Gradient layers */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-purple-500/10 to-primary/20" />
+        <div className="absolute inset-0 bg-gradient-to-br from-accent/20 via-secondary/10 to-primary/20" />
 
         {/* Animated orbs */}
         <motion.div
-          className="absolute top-0 left-1/4 w-96 h-96 rounded-full bg-primary/20 blur-3xl"
+          className="absolute top-0 left-1/4 w-96 h-96 rounded-full bg-accent/20 blur-3xl"
           animate={{
             scale: [1, 1.2, 1],
             opacity: [0.3, 0.5, 0.3],
@@ -59,7 +59,7 @@ export default function ModernCTA({
           }}
         />
         <motion.div
-          className="absolute bottom-0 right-1/4 w-96 h-96 rounded-full bg-purple-500/20 blur-3xl"
+          className="absolute bottom-0 right-1/4 w-96 h-96 rounded-full bg-secondary/20 blur-3xl"
           animate={{
             scale: [1, 1.3, 1],
             opacity: [0.2, 0.4, 0.2],
@@ -156,7 +156,7 @@ export default function ModernCTA({
                         key={i}
                         className="w-10 h-10 rounded-full border-2 border-background bg-muted overflow-hidden"
                       >
-                        <div className="w-full h-full bg-gradient-to-br from-primary/20 to-purple-500/20" />
+                        <div className="w-full h-full bg-gradient-to-br from-accent/20 to-secondary/20" />
                       </div>
                     ))}
                   </div>
@@ -208,10 +208,10 @@ export default function ModernCTA({
                   whileHover={{ scale: 1.05, rotate: -8 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-purple-500/20" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-accent/20 to-secondary/20" />
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center p-8">
-                      <div className="text-6xl font-bold text-primary mb-2">95%</div>
+                      <div className="text-6xl font-bold text-accent mb-2">95%</div>
                       <div className="text-sm text-muted-foreground">Accuracy Rate</div>
                     </div>
                   </div>
@@ -224,10 +224,10 @@ export default function ModernCTA({
                   whileHover={{ scale: 1.05, rotate: 8 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-primary/20" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-secondary/20 to-accent/20" />
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center p-8">
-                      <div className="text-6xl font-bold text-primary mb-2">&lt;2min</div>
+                      <div className="text-6xl font-bold text-secondary mb-2">&lt;2min</div>
                       <div className="text-sm text-muted-foreground">Processing Time</div>
                     </div>
                   </div>
@@ -235,7 +235,7 @@ export default function ModernCTA({
 
                 {/* Floating Elements */}
                 <motion.div
-                  className="absolute top-1/4 right-1/4 w-16 h-16 rounded-full bg-primary/20 backdrop-blur-xl border border-primary/30 flex items-center justify-center"
+                  className="absolute top-1/4 right-1/4 w-16 h-16 rounded-full bg-accent/20 backdrop-blur-xl border border-accent/30 flex items-center justify-center"
                   animate={{
                     y: [0, -20, 0],
                   }}
@@ -245,11 +245,11 @@ export default function ModernCTA({
                     ease: "easeInOut",
                   }}
                 >
-                  <Sparkles className="h-8 w-8 text-primary" />
+                  <Sparkles className="h-8 w-8 text-accent" />
                 </motion.div>
 
                 <motion.div
-                  className="absolute bottom-1/4 left-1/4 w-12 h-12 rounded-full bg-purple-500/20 backdrop-blur-xl border border-purple-500/30 flex items-center justify-center"
+                  className="absolute bottom-1/4 left-1/4 w-12 h-12 rounded-full bg-secondary/20 backdrop-blur-xl border border-secondary/30 flex items-center justify-center"
                   animate={{
                     y: [0, 20, 0],
                   }}
@@ -260,7 +260,7 @@ export default function ModernCTA({
                     delay: 0.5,
                   }}
                 >
-                  <Zap className="h-6 w-6 text-purple-500" />
+                  <Zap className="h-6 w-6 text-secondary" />
                 </motion.div>
               </div>
             </motion.div>
