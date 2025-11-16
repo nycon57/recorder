@@ -243,6 +243,32 @@ export default function AudioDetailView({
     }
   };
 
+  const handleMoveToTrash = async () => {
+    try {
+      const response = await fetch(`/api/recordings/${recording.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        toast({ description: 'Item moved to trash' });
+        router.push('/library');
+      } else {
+        toast({
+          variant: 'destructive',
+          description: 'Failed to move item to trash',
+        });
+      }
+    } catch (error) {
+      console.error('Move to trash failed:', error);
+      toast({
+        variant: 'destructive',
+        description: 'Failed to move item to trash',
+      });
+    } finally {
+      setShowMoveToTrashDialog(false);
+    }
+  };
+
   const handlePermanentDelete = async () => {
     try {
       const response = await fetch(`/api/recordings/${recording.id}?permanent=true`, {
@@ -552,6 +578,28 @@ export default function AudioDetailView({
         step={reprocessStep}
         recordingTitle={recording.title || undefined}
       />
+
+      {/* Move to Trash Confirmation Dialog */}
+      <AlertDialog open={showMoveToTrashDialog} onOpenChange={setShowMoveToTrashDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move to Trash?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to move &quot;{recording.title || 'this item'}&quot; to trash?
+              You can restore it later from the trash.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleMoveToTrash}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Move to Trash
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Permanent Delete Confirmation Dialog */}
       <AlertDialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>

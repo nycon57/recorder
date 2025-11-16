@@ -358,9 +358,15 @@
     letter-spacing: var(--tracking-normal);
   }
 
-  /* Force exact Full Black in dark mode - use rgb() to prevent color space conversion */
+  /*
+   * Force exact Full Black (#030e10) in dark mode
+   *
+   * Uses !important to override framework defaults and prevent color space conversion.
+   * The rgb() format ensures the exact color value is preserved without oklch/p3 conversion.
+   * !important is required because framework utilities may apply background colors with higher specificity.
+   */
   .dark body {
-    background-color: rgb(3, 14, 16) !important; /* #030e10 in RGB to prevent oklch conversion */
+    background-color: rgb(3, 14, 16) !important;
   }
 
   /* Ensure all backgrounds in dark mode use exact Full Black */

@@ -22,6 +22,7 @@ interface UploadProgressStepProps {
   streamUrl: string;
   onRetry?: () => void;
   onCancel?: () => void;
+  onComplete?: () => void;
 }
 
 /**
@@ -51,6 +52,7 @@ export default function UploadProgressStep({
   streamUrl,
   onRetry,
   onCancel,
+  onComplete,
 }: UploadProgressStepProps) {
   const router = useRouter();
 
@@ -164,6 +166,11 @@ export default function UploadProgressStep({
       setOverallProgress(100);
       progressRef.current = 100;
       setConnectionStatus('disconnected');
+
+      // Notify parent that upload is complete
+      if (onComplete) {
+        onComplete();
+      }
 
       // Auto-redirect after 3 seconds
       redirectTimeoutRef.current = setTimeout(() => {

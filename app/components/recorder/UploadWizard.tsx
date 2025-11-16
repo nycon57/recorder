@@ -52,6 +52,7 @@ interface UploadState {
   uploadPath?: string;
   thumbnailPath?: string;
   streamUrl?: string;
+  uploadCompleted?: boolean;
 }
 
 /**
@@ -93,7 +94,9 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
    * This prevents accidental data loss if user closes browser/tab
    */
   useEffect(() => {
-    const shouldWarn = (currentStep === 'metadata' || currentStep === 'progress') && uploadState.recordingId;
+    const shouldWarn = (currentStep === 'metadata' || currentStep === 'progress') &&
+                       uploadState.recordingId &&
+                       !uploadState.uploadCompleted;
 
     if (!shouldWarn) {
       return;
@@ -113,7 +116,7 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
       console.log('[UploadWizard] 🔕 Removing beforeunload warning');
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [currentStep, uploadState.recordingId]);
+  }, [currentStep, uploadState.recordingId, uploadState.uploadCompleted]);
 
   /**
    * Log step changes for debugging
@@ -619,6 +622,7 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
               streamUrl={uploadState.streamUrl}
               onRetry={handleProgressRetry}
               onCancel={handleProgressCancel}
+              onComplete={() => setUploadState((prev) => ({ ...prev, uploadCompleted: true }))}
             />
           )}
 

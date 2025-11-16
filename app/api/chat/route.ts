@@ -651,6 +651,10 @@ Remember: You're helping users discover what knowledge is available in their lib
 
       if (isMetaQuestion) {
         // User asked "Do I have recordings about X?" - confirm and summarize
+        const contextContent = ragContext && ragContext.context && ragContext.context.trim().length > 0
+          ? ragContext.context
+          : 'No context available';
+
         systemPrompt = `You are a helpful AI assistant. The user asked whether they have recordings about a specific topic.
 
 **Your Task:**
@@ -663,7 +667,7 @@ Based on the Context below, confirm that recordings exist and provide a brief su
 Use citation numbers [1], [2], [3] to reference sources.
 
 **Context from User's Recordings:**
-${ragContext.context}
+${contextContent}
 
 Answer based ONLY on the Context above.`;
       } else {

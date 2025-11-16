@@ -8,6 +8,7 @@ import {
 } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createLogger } from '@/lib/utils/logger';
 
 // GET /api/recordings/[id] - Get a specific recording
 export const GET = apiHandler(
@@ -125,13 +126,15 @@ export const DELETE = apiHandler(
     const permanent = url.searchParams.get('permanent') === 'true';
     const reason = url.searchParams.get('reason') || undefined;
 
-    console.log('[DELETE Recording API] Request received');
-    console.log('[DELETE Recording API] ID:', id);
-    console.log('[DELETE Recording API] OrgID:', orgId);
-    console.log('[DELETE Recording API] UserID:', userId);
-    console.log('[DELETE Recording API] URL:', url.toString());
-    console.log('[DELETE Recording API] Permanent flag:', permanent);
-    console.log('[DELETE Recording API] Reason:', reason);
+    const logger = createLogger({ orgId, userId, recordingId: id });
+
+    logger.info('DELETE Recording API - Request received', {
+      data: {
+        url: url.toString(),
+        permanent,
+        reason,
+      },
+    });
 
     // Check if recording exists and belongs to org
     const { data: recording, error: fetchError } = await supabase
@@ -141,31 +144,37 @@ export const DELETE = apiHandler(
       .eq('org_id', orgId)
       .single();
 
-    console.log('[DELETE Recording] Fetch result:', { recording, fetchError });
+    logger.info('DELETE Recording - Fetch result', {
+      data: { recording, fetchError },
+    });
 
     if (fetchError) {
-      console.error('[DELETE Recording] Error fetching recording:', fetchError);
+      logger.error('DELETE Recording - Error fetching recording', {
+        error: fetchError,
+      });
       return errors.notFound('Recording');
     }
 
     if (!recording) {
-      console.log('[DELETE Recording] Recording not found - ID:', id, 'OrgID:', orgId);
+      logger.info('DELETE Recording - Recording not found');
       return errors.notFound('Recording');
     }
 
-    console.log('[DELETE Recording] Found recording:', {
-      id: recording.id,
-      org_id: recording.org_id,
-      deleted_at: recording.deleted_at,
-      has_raw_storage: !!recording.storage_path_raw,
-      has_processed_storage: !!recording.storage_path_processed,
+    logger.info('DELETE Recording - Found recording', {
+      data: {
+        id: recording.id,
+        org_id: recording.org_id,
+        deleted_at: recording.deleted_at,
+        has_raw_storage: !!recording.storage_path_raw,
+        has_processed_storage: !!recording.storage_path_processed,
+      },
     });
 
     // Permanent delete (hard delete with CASCADE)
     if (permanent) {
       // Enforce that permanent deletions are only allowed on trashed items
       if (!recording.deleted_at) {
-        console.log('[DELETE Recording] Permanent delete attempted on non-trashed item:', id);
+        logger.info('DELETE Recording - Permanent delete attempted on non-trashed item');
         return new Response(
           JSON.stringify({
             error: {
@@ -182,12 +191,13 @@ export const DELETE = apiHandler(
         );
       }
 
-      console.log('[DELETE Recording] Performing permanent delete for:', id);
-      console.log('[DELETE Recording] Recording was in trash since:', recording.deleted_at);
+      logger.info('DELETE Recording - Performing permanent delete', {
+        data: { deleted_at: recording.deleted_at },
+      });
 
       // CRITICAL: Delete database record FIRST (cascades to transcripts, documents, chunks)
       // This ensures we never leave orphaned DB rows if storage deletion fails
-      console.log('[DELETE Recording] About to execute DELETE query...');
+      logger.debug('DELETE Recording - About to execute DELETE query');
       const { data: deletedData, error: dbError } = await supabase
         .from('recordings')
         .delete()
@@ -195,23 +205,25 @@ export const DELETE = apiHandler(
         .eq('org_id', orgId)
         .select(); // Add select() to get deleted rows
 
-      console.log('[DELETE Recording] DELETE query executed');
-      console.log('[DELETE Recording] Deleted data:', deletedData);
-      console.log('[DELETE Recording] Delete error:', dbError);
+      logger.debug('DELETE Recording - DELETE query executed', {
+        data: { deletedData, hasError: !!dbError },
+      });
 
       if (dbError) {
-        console.error('[DELETE Recording] ❌ Error deleting database record:', dbError);
-        console.error('[DELETE Recording] Error details:', JSON.stringify(dbError, null, 2));
+        logger.error('DELETE Recording - Error deleting database record', {
+          error: dbError,
+        });
         return errors.internalError();
       }
 
       if (!deletedData || deletedData.length === 0) {
-        console.warn('[DELETE Recording] ⚠️ DELETE executed but no rows were affected!');
-        console.warn('[DELETE Recording] Query params - ID:', id, 'OrgID:', orgId);
-        console.warn('[DELETE Recording] This suggests the record was not found or RLS policy blocked the deletion');
+        logger.warn('DELETE Recording - DELETE executed but no rows were affected', {
+          data: { deletedData },
+        });
       } else {
-        console.log('[DELETE Recording] ✅ Database record successfully deleted:', id);
-        console.log('[DELETE Recording] Deleted row count:', deletedData.length);
+        logger.info('DELETE Recording - Database record successfully deleted', {
+          data: { deletedRowCount: deletedData.length },
+        });
       }
 
       // Only after successful DB deletion, remove storage files
@@ -269,7 +281,9 @@ export const DELETE = apiHandler(
         id, // Include ID for verification
         deletedRowCount: deletedData?.length || 0,
       };
-      console.log('[DELETE Recording] Sending success response:', responsePayload);
+      logger.info('DELETE Recording - Sending success response', {
+        data: responsePayload,
+      });
 
       return successResponse(responsePayload);
     }

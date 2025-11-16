@@ -77,6 +77,11 @@ const RegistryHero = () => {
               className="glass-caribbean border border-accent/30
                 text-accent hover:bg-accent/10 font-light
                 px-8 py-6 text-lg group"
+              onClick={() => {
+                // TODO: Replace with actual demo video URL or modal
+                window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank');
+              }}
+              aria-label="Watch product demo video"
             >
               <Play className="h-5 w-5 mr-2 group-hover:scale-110 transition-transform" />
               Watch Demo

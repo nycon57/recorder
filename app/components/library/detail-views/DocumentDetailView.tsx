@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, FileText as FileTextIcon, AlertCircle, RotateCcw, Trash2, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import DOMPurify from 'isomorphic-dompurify';
 
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -621,7 +622,7 @@ export default function DocumentDetailView({
                       <div className="min-h-[400px] max-h-[800px] overflow-y-auto px-6 py-8 sm:px-8 sm:py-10">
                         <div className="ai-insights-prose max-w-3xl mx-auto">
                           {document.html ? (
-                            <div dangerouslySetInnerHTML={{ __html: document.html }} />
+                            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(document.html) }} />
                           ) : document.markdown ? (
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {document.markdown}

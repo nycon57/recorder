@@ -11,8 +11,9 @@ import { chromium } from 'playwright';
   // Navigate to localhost
   await page.goto('http://localhost:3000', { waitUntil: 'networkidle' });
 
-  // Wait for page to be fully rendered
-  await page.waitForTimeout(2000);
+  // Wait for page to be fully rendered with styles applied
+  await page.waitForSelector('body', { state: 'visible', timeout: 5000 });
+  await page.waitForLoadState('load');
 
   // Get computed background color of body and other elements
   const result = await page.evaluate(() => {
