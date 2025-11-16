@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/app/components/ui/dialog';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
@@ -89,15 +89,95 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
   }, []);
 
   /**
+   * Add beforeunload warning when user has an incomplete upload
+   * This prevents accidental data loss if user closes browser/tab
+   */
+  useEffect(() => {
+    const shouldWarn = (currentStep === 'metadata' || currentStep === 'progress') && uploadState.recordingId;
+
+    if (!shouldWarn) {
+      return;
+    }
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Modern browsers require returnValue to be set
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+
+    console.log('[UploadWizard] 🔔 Adding beforeunload warning - upload in progress');
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      console.log('[UploadWizard] 🔕 Removing beforeunload warning');
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [currentStep, uploadState.recordingId]);
+
+  /**
+   * Log step changes for debugging
+   */
+  useEffect(() => {
+    console.log('[UploadWizard] 📍 Step changed:', currentStep, {
+      hasFileData: !!fileData,
+      hasMetadataData: !!metadataData,
+      recordingId: uploadState.recordingId,
+      isUploading,
+    });
+  }, [currentStep, fileData, metadataData, uploadState.recordingId, isUploading]);
+
+  /**
+   * Cleanup orphan recording if user closes modal after file upload but before completion
+   */
+  const cleanupOrphanRecording = useCallback(async () => {
+    const { recordingId } = uploadState;
+
+    if (!recordingId) {
+      console.log('[UploadWizard] 🧹 No orphan recording to cleanup');
+      return; // No recording to cleanup
+    }
+
+    console.log('[UploadWizard] 🧹 Cleaning up orphan recording:', recordingId);
+
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}?permanent=true`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        console.log('[UploadWizard] ✅ Orphan recording cleaned up successfully');
+      } else {
+        console.warn('[UploadWizard] ⚠️ Failed to cleanup orphan recording:', await response.text());
+      }
+    } catch (err) {
+      console.error('[UploadWizard] ❌ Error cleaning up orphan recording:', err);
+    }
+  }, [uploadState]);
+
+  /**
    * Handle wizard close
    */
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback(async () => {
+    console.log('[UploadWizard] 🚪 Close requested', { currentStep, isUploading, recordingId: uploadState.recordingId });
+
     // Only allow close if not actively uploading
-    if (!isUploading) {
-      resetWizard();
-      onClose();
+    if (isUploading) {
+      console.log('[UploadWizard] 🚫 Close blocked - upload in progress');
+      return;
     }
-  }, [isUploading, resetWizard, onClose]);
+
+    // If user is at metadata step (Step 2), they've uploaded a file but haven't completed the wizard
+    // This leaves an orphan recording in the database - we should clean it up
+    if (currentStep === 'metadata' && uploadState.recordingId) {
+      console.log('[UploadWizard] 🗑️ User closing modal at metadata step - cleaning up orphan recording');
+      await cleanupOrphanRecording();
+    }
+
+    console.log('[UploadWizard] ✅ Closing wizard and resetting state');
+    resetWizard();
+    onClose();
+  }, [isUploading, currentStep, uploadState.recordingId, cleanupOrphanRecording, resetWizard, onClose]);
 
   /**
    * Step 1 Complete: Initialize upload and upload file
@@ -364,10 +444,23 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
   /**
    * Handle back from metadata step
    */
-  const handleMetadataBack = useCallback(() => {
+  const handleMetadataBack = useCallback(async () => {
+    console.log('[UploadWizard] ⬅️ Back button clicked from metadata step');
+
+    // User is going back from Step 2 to Step 1
+    // This means they want to select a different file, so we should cleanup the current orphan recording
+    if (uploadState.recordingId) {
+      console.log('[UploadWizard] 🗑️ Cleaning up current recording before going back');
+      await cleanupOrphanRecording();
+    }
+
+    console.log('[UploadWizard] 📍 Returning to file upload step (preserving file data)');
     setCurrentStep('file_upload');
     setMetadataData(null);
-  }, []);
+    // Reset upload state since we're starting over
+    setUploadState({});
+    // NOTE: We keep fileData so the uploaded file is still visible
+  }, [uploadState.recordingId, cleanupOrphanRecording]);
 
   /**
    * Handle retry from progress step
@@ -419,20 +512,20 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
                   {/* Step Circle */}
                   <div
                     className={cn(
-                      'flex items-center justify-center w-8 h-8 rounded-full border-2 transition-colors',
-                      isCompleted && 'bg-green-600 border-green-600 dark:bg-green-500 dark:border-green-500',
-                      isActive && 'bg-[#2fb861] border-[#2fb861] dark:bg-[#56d283] dark:border-[#56d283]',
-                      isPending && 'bg-transparent border-gray-300 dark:border-gray-700'
+                      'flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-200',
+                      isCompleted && 'bg-muted border-muted',
+                      isActive && 'bg-foreground border-foreground ring-2 ring-foreground/20',
+                      isPending && 'bg-transparent border-border'
                     )}
                   >
                     {isCompleted ? (
-                      <Check className="w-4 h-4 text-white" />
+                      <Check className="w-4 h-4 text-background" />
                     ) : (
                       <span
                         className={cn(
                           'text-sm font-medium',
-                          isActive && 'text-white',
-                          isPending && 'text-gray-400 dark:text-gray-600'
+                          isActive && 'text-background',
+                          isPending && 'text-muted-foreground'
                         )}
                       >
                         {index + 1}
@@ -444,10 +537,10 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
                   <div className="mt-2 text-center w-full px-2">
                     <div
                       className={cn(
-                        'text-sm font-medium',
-                        isCompleted && 'text-green-600 dark:text-green-400',
-                        isActive && 'text-[#2fb861] dark:text-[#56d283]',
-                        isPending && 'text-gray-500 dark:text-gray-400'
+                        'text-sm font-medium transition-colors',
+                        isCompleted && 'text-foreground',
+                        isActive && 'text-foreground',
+                        isPending && 'text-muted-foreground'
                       )}
                     >
                       {step.label}
@@ -463,10 +556,10 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
                   <div className="w-16 -mt-6 sm:w-20">
                     <div
                       className={cn(
-                        'h-0.5 w-full',
+                        'h-0.5 w-full transition-all duration-200',
                         index < stepIndex
-                          ? 'bg-green-600 dark:bg-green-500'
-                          : 'bg-gray-200 dark:bg-gray-800'
+                          ? 'bg-muted'
+                          : 'bg-border'
                       )}
                     />
                   </div>
@@ -481,7 +574,10 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0">
+      <DialogContent
+        className="max-w-3xl max-h-[90vh] overflow-y-auto p-0"
+        showCloseButton={!isUploading}
+      >
         <DialogHeader className="px-6 pt-6 pb-4">
           <VisuallyHidden>
             <DialogTitle>
@@ -502,6 +598,7 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
             <FileUploadStep
               onNext={handleFileUploadComplete}
               onCancel={handleClose}
+              initialFileData={fileData}
             />
           )}
 

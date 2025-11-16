@@ -3,7 +3,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, X, AlertCircle, FileIcon, Video, Music, FileText } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
-import { Card } from '@/app/components/ui/card';
 import { cn } from '@/lib/utils';
 import {
   validateFileForUpload,
@@ -22,6 +21,12 @@ interface FileUploadStepProps {
     durationSec?: number;
   }) => void;
   onCancel?: () => void;
+  initialFileData?: {
+    file: File;
+    contentType: ContentType;
+    thumbnail?: string;
+    durationSec?: number;
+  } | null;
 }
 
 /**
@@ -38,18 +43,35 @@ interface FileUploadStepProps {
 export default function FileUploadStep({
   onNext,
   onCancel,
+  initialFileData,
 }: FileUploadStepProps) {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(initialFileData?.file || null);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [thumbnail, setThumbnail] = useState<string | null>(null);
-  const [durationSec, setDurationSec] = useState<number | undefined>(undefined);
+  const [thumbnail, setThumbnail] = useState<string | null>(initialFileData?.thumbnail || null);
+  const [durationSec, setDurationSec] = useState<number | undefined>(initialFileData?.durationSec);
   const [isExtracting, setIsExtracting] = useState(false);
   const [videoObjectUrl, setVideoObjectUrl] = useState<string | null>(null);
   const [audioObjectUrl, setAudioObjectUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  /**
+   * Log when component mounts with initial data
+   */
+  useEffect(() => {
+    if (initialFileData) {
+      console.log('[FileUploadStep] 🔄 Mounted with initial file data:', {
+        fileName: initialFileData.file.name,
+        contentType: initialFileData.contentType,
+        hasThumbnail: !!initialFileData.thumbnail,
+        duration: initialFileData.durationSec,
+      });
+    } else {
+      console.log('[FileUploadStep] 🆕 Mounted with no initial data');
+    }
+  }, [initialFileData]);
 
   /**
    * Manage object URLs for video/audio previews
@@ -337,15 +359,15 @@ export default function FileUploadStep({
     if (!file) return <Upload className="w-12 h-12 text-muted-foreground" />;
 
     if (file.type.startsWith('video/')) {
-      return <Video className="w-12 h-12 text-blue-500" />;
+      return <Video className="w-12 h-12 text-foreground" />;
     }
     if (file.type.startsWith('audio/')) {
-      return <Music className="w-12 h-12 text-green-500" />;
+      return <Music className="w-12 h-12 text-foreground" />;
     }
     if (file.type.includes('pdf') || file.type.includes('document')) {
-      return <FileText className="w-12 h-12 text-orange-500" />;
+      return <FileText className="w-12 h-12 text-foreground" />;
     }
-    return <FileIcon className="w-12 h-12 text-gray-500" />;
+    return <FileIcon className="w-12 h-12 text-muted-foreground" />;
   };
 
   return (
@@ -361,12 +383,12 @@ export default function FileUploadStep({
 
       {/* Drop Zone */}
       {!file && (
-        <Card
+        <div
           className={cn(
-            'border-2 border-dashed transition-all duration-200 cursor-pointer',
+            'border-2 border-dashed rounded-lg transition-all duration-200 cursor-pointer bg-background',
             isDragging
-              ? 'border-primary bg-primary/5'
-              : 'border-border hover:border-primary/50 hover:bg-accent/50'
+              ? 'border-foreground bg-muted/20'
+              : 'border-border hover:border-foreground/40 hover:bg-muted/30'
           )}
           onClick={handleClick}
           onDragEnter={handleDragEnter}
@@ -378,7 +400,7 @@ export default function FileUploadStep({
             <Upload
               className={cn(
                 'w-16 h-16 mb-4 transition-colors',
-                isDragging ? 'text-primary' : 'text-muted-foreground'
+                isDragging ? 'text-foreground' : 'text-muted-foreground'
               )}
             />
             <p className="text-base font-medium text-foreground mb-2">
@@ -391,7 +413,7 @@ export default function FileUploadStep({
               Max size: 500 MB for video, 100 MB for audio, 50 MB for documents
             </p>
           </div>
-        </Card>
+        </div>
       )}
 
       {/* File Input (Hidden) */}
@@ -405,7 +427,7 @@ export default function FileUploadStep({
 
       {/* File Preview */}
       {file && (
-        <Card className="p-6">
+        <div className="p-6 rounded-lg border bg-background">
           <div className="space-y-4">
             {/* File Info Header */}
             <div className="flex items-start justify-between">
@@ -450,7 +472,7 @@ export default function FileUploadStep({
             {/* Loading State */}
             {isExtracting && (
               <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
                 <span>Processing file...</span>
               </div>
             )}
@@ -498,17 +520,17 @@ export default function FileUploadStep({
             )}
 
           </div>
-        </Card>
+        </div>
       )}
 
       {/* Error Message */}
       {error && (
-        <Card className="p-4 bg-destructive/10 border-destructive/20">
+        <div className="p-4 rounded-lg border bg-destructive/10 border-destructive/20">
           <div className="flex items-start space-x-3">
             <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
             <p className="text-sm text-destructive">{error}</p>
           </div>
-        </Card>
+        </div>
       )}
 
       {/* Actions */}
