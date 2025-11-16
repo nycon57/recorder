@@ -132,6 +132,7 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
 
   /**
    * Cleanup orphan recording if user closes modal after file upload but before completion
+   * Uses soft delete (moves to trash) to properly release quota and respect safety checks
    */
   const cleanupOrphanRecording = useCallback(async () => {
     const { recordingId } = uploadState;
@@ -141,17 +142,20 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
       return; // No recording to cleanup
     }
 
-    console.log('[UploadWizard] 🧹 Cleaning up orphan recording:', recordingId);
+    console.log('[UploadWizard] 🧹 Cleaning up orphan recording (soft delete):', recordingId);
 
     try {
-      const response = await fetch(`/api/recordings/${recordingId}?permanent=true`, {
+      // Use soft delete (no permanent flag) - moves to trash and releases quota
+      // This respects the DELETE endpoint's safety checks and properly releases quota
+      const response = await fetch(`/api/recordings/${recordingId}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
-        console.log('[UploadWizard] ✅ Orphan recording cleaned up successfully');
+        console.log('[UploadWizard] ✅ Orphan recording moved to trash (quota released)');
       } else {
-        console.warn('[UploadWizard] ⚠️ Failed to cleanup orphan recording:', await response.text());
+        const errorText = await response.text();
+        console.warn('[UploadWizard] ⚠️ Failed to cleanup orphan recording:', errorText);
       }
     } catch (err) {
       console.error('[UploadWizard] ❌ Error cleaning up orphan recording:', err);
