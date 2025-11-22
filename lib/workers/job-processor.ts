@@ -76,6 +76,25 @@ export interface ProgressCallback {
 }
 
 /**
+ * Get contextual completion message for job type
+ */
+function getCompletionMessage(jobType: string): string {
+  const messages: Record<string, string> = {
+    'extract_text_docx': 'Text extracted successfully',
+    'extract_text_pdf': 'PDF text extracted successfully',
+    'extract_audio': 'Audio extracted successfully',
+    'transcribe': 'Transcription complete',
+    'doc_generate': 'Document generated successfully',
+    'generate_embeddings': 'Search indexing complete',
+    'generate_summary': 'AI summary generated',
+    'extract_frames': 'Video frames extracted',
+    'sync_connector': 'External sync complete',
+  };
+
+  return messages[jobType] || 'Processing complete';
+}
+
+/**
  * Update job progress in database and stream to connected clients
  */
 export async function updateJobProgress(
@@ -194,9 +213,9 @@ export async function processJobs(options?: {
 }) {
   const {
     batchSize = 10,
-    pollInterval = 5000, // Base interval: 5 seconds
+    pollInterval = 2000, // Base interval: 2 seconds (reduced from 5s for faster response)
     maxRetries = 3,
-    maxPollInterval = 60000, // Max interval when idle: 60 seconds
+    maxPollInterval = 10000, // Max interval when idle: 10 seconds (reduced from 60s)
   } = options || {};
 
   const supabase = createAdminClient();
@@ -317,14 +336,15 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
     // Execute handler with progress callback
     await handler(job, progressCallback);
 
-    // Mark job as completed
+    // Mark job as completed (preserve contextual message)
+    const completionMessage = getCompletionMessage(job.type);
     await supabase
       .from('jobs')
       .update({
         status: 'completed' as JobStatus,
         completed_at: new Date().toISOString(),
         progress_percent: 100,
-        progress_message: 'Completed',
+        progress_message: completionMessage,
       })
       .eq('id', job.id);
 

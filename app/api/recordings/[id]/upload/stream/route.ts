@@ -87,20 +87,25 @@ export const GET = apiHandler(async (request: NextRequest, context: StreamParams
     .order('created_at', { ascending: true });
 
   if (!jobsError && jobs && jobs.length > 0) {
-    // Send initial job status
-    streamingManager.sendProgress(
-      recordingId,
-      'all',
-      0,
-      `Processing pipeline: ${jobs.length} jobs`,
-      {
-        totalJobs: jobs.length,
-        jobs: jobs.map(j => ({
-          type: j.type,
-          status: j.status,
-        })),
-      }
-    );
+    // Send initial status for first pending/running job (natural language)
+    const firstActiveJob = jobs.find(j => j.status === 'pending' || j.status === 'running');
+
+    if (firstActiveJob) {
+      const jobLabel = getJobLabel(firstActiveJob.type);
+      const progress = firstActiveJob.status === 'running' ? 50 : 0;
+      const statusText = firstActiveJob.status === 'running' ? 'in progress...' : 'starting...';
+
+      streamingManager.sendProgress(
+        recordingId,
+        firstActiveJob.type as any,
+        progress,
+        `${jobLabel} ${statusText}`,
+        {
+          jobId: firstActiveJob.id,
+          jobType: firstActiveJob.type,
+        }
+      );
+    }
 
     logger.info('Initial job status sent', {
       context: { recordingId },
@@ -108,11 +113,9 @@ export const GET = apiHandler(async (request: NextRequest, context: StreamParams
     });
   } else {
     // No jobs yet, recording might still be in pending_metadata or uploaded state
-    streamingManager.sendProgress(
+    streamingManager.sendLog(
       recordingId,
-      'all',
-      0,
-      `Waiting for processing to start... (Status: ${recording.status})`
+      `Preparing to process your content...`
     );
   }
 
@@ -174,10 +177,10 @@ async function startJobProgressPolling(recordingId: string, orgId: string): Prom
     }
 
     try {
-      // Query all jobs for this recording
+      // Query all jobs for this recording (including progress columns!)
       const { data: jobs, error: jobsError } = await supabaseAdmin
         .from('jobs')
-        .select('id, type, status, error, created_at, started_at, completed_at')
+        .select('id, type, status, error, created_at, started_at, completed_at, progress_percent, progress_message')
         .eq('payload->>recordingId', recordingId)
         .order('created_at', { ascending: true });
 
@@ -201,26 +204,35 @@ async function startJobProgressPolling(recordingId: string, orgId: string): Prom
       const failedJobCount = jobs.filter(j => j.status === 'failed').length;
       const overallProgress = Math.round((completedJobCount / totalJobs) * 100);
 
-      // Send updates for jobs that changed status
+      // Send updates for jobs that changed status OR progress
       for (const job of jobs) {
         const lastStatus = lastKnownStatus[job.id];
         const currentStatus = job.status;
+        const currentProgress = job.progress_percent ?? 0;
 
-        // Check if status changed or newly completed
-        if (!lastStatus || lastStatus.status !== currentStatus) {
-          // Map job type to progress step
-          let stepLabel = job.type;
-          let progressPercent = 0;
+        // Check if status changed, progress changed, or newly discovered job
+        const statusChanged = !lastStatus || lastStatus.status !== currentStatus;
+        const progressChanged = !lastStatus || lastStatus.progress !== currentProgress;
+
+        if (statusChanged || progressChanged) {
+          // Use actual progress from database, fallback to estimates
+          let progressPercent = currentProgress;
+          let progressMessage = job.progress_message;
 
           if (currentStatus === 'completed') {
             progressPercent = 100;
             completedJobs.add(job.id);
 
+            // If the progress message is generic "Completed", use a better description
+            const finalMessage = progressMessage === 'Completed'
+              ? `${getJobLabel(job.type)} complete`
+              : (progressMessage || `${getJobLabel(job.type)} complete`);
+
             streamingManager.sendProgress(
               recordingId,
               job.type as any,
               100,
-              `${getJobLabel(job.type)} complete`,
+              finalMessage,
               {
                 jobId: job.id,
                 jobType: job.type,
@@ -230,13 +242,14 @@ async function startJobProgressPolling(recordingId: string, orgId: string): Prom
               }
             );
           } else if (currentStatus === 'running') {
-            progressPercent = 50; // Estimate mid-progress for running jobs
+            // Use actual progress from database, fallback to 50% if not set
+            progressPercent = currentProgress > 0 ? currentProgress : 50;
 
             streamingManager.sendProgress(
               recordingId,
               job.type as any,
               progressPercent,
-              `${getJobLabel(job.type)} in progress...`,
+              progressMessage || `${getJobLabel(job.type)} in progress...`,
               {
                 jobId: job.id,
                 jobType: job.type,
@@ -326,15 +339,15 @@ async function startJobProgressPolling(recordingId: string, orgId: string): Prom
  */
 function getJobLabel(jobType: string): string {
   const labels: Record<string, string> = {
-    transcribe: 'Transcribing content',
-    extract_audio: 'Extracting audio',
-    extract_frames: 'Extracting frames',
-    doc_generate: 'Generating document',
-    generate_embeddings: 'Creating search embeddings',
-    extract_text_pdf: 'Extracting text from PDF',
-    extract_text_docx: 'Extracting text from Word document',
-    process_text_note: 'Processing text note',
-    generate_summary: 'Generating summary',
+    transcribe: 'Transcription',
+    extract_audio: 'Audio extraction',
+    extract_frames: 'Frame extraction',
+    doc_generate: 'Document generation',
+    generate_embeddings: 'Search indexing',
+    extract_text_pdf: 'PDF text extraction',
+    extract_text_docx: 'Document text extraction',
+    process_text_note: 'Text processing',
+    generate_summary: 'Summary generation',
   };
 
   return labels[jobType] || jobType;

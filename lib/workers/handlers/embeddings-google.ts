@@ -60,7 +60,7 @@ function validateSemanticScore(score: any): number | null {
 /**
  * Generate embeddings for transcript and document using Google
  */
-export async function generateEmbeddings(job: Job): Promise<void> {
+export async function generateEmbeddings(job: Job, progressCallback?: (percent: number, message: string, data?: any) => void): Promise<void> {
   const payload = job.payload as unknown as EmbeddingsPayload;
   const { recordingId, transcriptId, documentId, orgId } = payload;
 
@@ -227,6 +227,11 @@ export async function generateEmbeddings(job: Job): Promise<void> {
       },
     });
 
+    progressCallback?.(5, 'Analyzing content structure...');
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'embeddings', 5, 'Analyzing content structure...');
+    }
+
     // Chunk transcript based on type
     let transcriptChunks: VideoTranscriptChunk[] | Array<any>;
 
@@ -259,6 +264,11 @@ export async function generateEmbeddings(job: Job): Promise<void> {
           chunkingStrategy: 'segment-based',
         },
       });
+    }
+
+    progressCallback?.(8, 'Chunking document for indexing...');
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'embeddings', 8, 'Chunking document for indexing...');
     }
 
     // Chunk document using semantic chunking (always markdown format)
@@ -410,12 +420,16 @@ export async function generateEmbeddings(job: Job): Promise<void> {
         },
       });
 
+      const batchProgressPercent = Math.round(20 + (60 * (i / validChunks.length)));
+      const batchProgressMsg = `Generating embeddings: batch ${batchNumber}/${totalBatches}`;
+
+      progressCallback?.(batchProgressPercent, batchProgressMsg);
       if (isStreaming) {
         sendEmbeddingProgress(
           recordingId,
           batchNumber,
           totalBatches,
-          `Generating embeddings: batch ${batchNumber}/${totalBatches}`
+          batchProgressMsg
         );
       }
 
@@ -593,6 +607,7 @@ export async function generateEmbeddings(job: Job): Promise<void> {
         context: { recordingId, totalRecords: embeddingRecords.length },
       });
 
+      progressCallback?.(90, 'Finalizing search index...');
       if (isStreaming) {
         streamingManager.sendProgress(recordingId, 'embeddings', 90, 'Finalizing embedding generation...');
       }

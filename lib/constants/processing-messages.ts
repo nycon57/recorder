@@ -126,8 +126,8 @@ export const DETAILED_STAGE_CONFIGS: Record<string, ProcessingStageConfig> = {
   },
   extract_text: {
     id: 'extract_text',
-    label: 'Reading your document',
-    benefit: 'Extracting content from your file',
+    label: 'Extracting text',
+    benefit: 'Reading content from your document',
     icon: '📄',
     color: {
       icon: 'text-indigo-600 dark:text-indigo-500',
@@ -150,27 +150,40 @@ export const DETAILED_STAGE_CONFIGS: Record<string, ProcessingStageConfig> = {
   },
   document: {
     id: 'document',
-    label: 'Creating your summary',
-    benefit: 'AI is analyzing and summarizing key points',
+    label: 'Creating structured content',
+    benefit: 'Generating AI-powered summary and insights',
+    sublabel: 'This may take 15-30 seconds',
     icon: '✨',
-    color: {
-      icon: 'text-violet-600 dark:text-violet-500',
-      bg: 'bg-violet-600 dark:bg-violet-500',
-      border: 'border-violet-200 dark:border-violet-800',
-      text: 'text-violet-700 dark:text-violet-300',
-    },
-  },
-  embeddings: {
-    id: 'embeddings',
-    label: 'Making it searchable',
-    benefit: 'Powering AI search and chat',
-    sublabel: 'Almost there!',
-    icon: '🔍',
     color: {
       icon: 'text-purple-600 dark:text-purple-500',
       bg: 'bg-purple-600 dark:bg-purple-500',
       border: 'border-purple-200 dark:border-purple-800',
       text: 'text-purple-700 dark:text-purple-300',
+    },
+  },
+  embeddings: {
+    id: 'embeddings',
+    label: 'Indexing for search',
+    benefit: 'Making your content instantly searchable',
+    icon: '🔍',
+    color: {
+      icon: 'text-emerald-600 dark:text-emerald-500',
+      bg: 'bg-emerald-600 dark:bg-emerald-500',
+      border: 'border-emerald-200 dark:border-emerald-800',
+      text: 'text-emerald-700 dark:text-emerald-300',
+    },
+  },
+  summary: {
+    id: 'summary',
+    label: 'Finalizing summary',
+    benefit: 'Creating quick overview for easy reference',
+    sublabel: 'Almost done!',
+    icon: '📝',
+    color: {
+      icon: 'text-cyan-600 dark:text-cyan-500',
+      bg: 'bg-cyan-600 dark:bg-cyan-500',
+      border: 'border-cyan-200 dark:border-cyan-800',
+      text: 'text-cyan-700 dark:text-cyan-300',
     },
   },
   complete: {
@@ -195,6 +208,7 @@ export const JOB_TYPE_TO_STAGE: Record<string, string> = {
   transcribe: 'transcribe',
   doc_generate: 'document',
   generate_embeddings: 'embeddings',
+  generate_summary: 'summary', // Map to its own stage so it's visible
   extract_text_pdf: 'extract_text',
   extract_text_docx: 'extract_text',
   process_text_note: 'process_text',

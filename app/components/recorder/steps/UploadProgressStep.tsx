@@ -56,16 +56,44 @@ export default function UploadProgressStep({
 }: UploadProgressStepProps) {
   const router = useRouter();
 
-  // Initialize with simplified 3-step view
-  const uploadConfig = SIMPLIFIED_STAGES[0]; // Uploading
+  // Pre-populate ALL expected stages upfront so users see the full pipeline
   const [stages, setStages] = useState<ProcessingStage[]>([
     {
-      id: uploadConfig.id,
-      label: uploadConfig.label,
-      benefit: uploadConfig.benefit,
-      sublabel: uploadConfig.sublabel,
+      id: 'upload',
+      label: 'Uploading',
+      benefit: 'Securely transferring your content',
       status: 'completed',
       progress: 100,
+    },
+    {
+      id: 'extract_text',
+      label: 'Extracting text',
+      benefit: 'Reading content from your document',
+      status: 'pending',
+      progress: 0,
+    },
+    {
+      id: 'document',
+      label: 'Creating structured content',
+      benefit: 'Generating AI-powered summary and insights',
+      sublabel: 'This may take 15-30 seconds',
+      status: 'pending',
+      progress: 0,
+    },
+    {
+      id: 'embeddings',
+      label: 'Indexing for search',
+      benefit: 'Making your content instantly searchable',
+      status: 'pending',
+      progress: 0,
+    },
+    {
+      id: 'summary',
+      label: 'Finalizing summary',
+      benefit: 'Creating quick overview for easy reference',
+      sublabel: 'Almost done!',
+      status: 'pending',
+      progress: 0,
     },
   ]);
   const [currentStep, setCurrentStep] = useState('upload');
@@ -83,7 +111,6 @@ export default function UploadProgressStep({
   const eventSourceRef = useRef<EventSource | null>(null);
   const startTimeRef = useRef<number>(Date.now());
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const handleSSEMessageRef = useRef<((message: SSEMessage) => void) | null>(null);
   const progressRef = useRef<number>(0);
 
@@ -95,16 +122,30 @@ export default function UploadProgressStep({
       setStages((prev) => {
         const existingIndex = prev.findIndex((s) => s.id === stageId);
 
-        // Get user-friendly config from centralized messages
-        const stageConfig = getStageConfig(stageId);
-
         if (existingIndex >= 0) {
-          // Update existing stage
+          // Update existing stage - preserve the label/benefit unless explicitly updated
           const updated = [...prev];
-          updated[existingIndex] = { ...updated[existingIndex], ...updates };
+          const currentStage = updated[existingIndex];
+
+          // Only update label if it's not a generic "Completed" message
+          const newLabel = updates.label;
+          if (newLabel && newLabel !== 'Completed') {
+            updated[existingIndex] = { ...currentStage, ...updates };
+          } else {
+            // Keep existing label, just update status/progress
+            updated[existingIndex] = {
+              ...currentStage,
+              ...updates,
+              label: currentStage.label, // Preserve original label
+              benefit: currentStage.benefit, // Preserve original benefit
+              sublabel: currentStage.sublabel, // Preserve original sublabel
+            };
+          }
           return updated;
         } else {
-          // Add new stage with user-friendly messaging
+          // Stage not found - this shouldn't happen with pre-populated stages
+          // But handle it gracefully just in case
+          const stageConfig = getStageConfig(stageId);
           const newStage: ProcessingStage = {
             id: stageId,
             label: stageConfig?.label || stageId,
@@ -138,13 +179,48 @@ export default function UploadProgressStep({
         const stageId = JOB_TYPE_TO_STAGE[step] || step;
         const stageConfig = getStageConfig(stageId);
 
+        // Determine status based on progress
+        const status = progress === 100 ? 'completed' : 'in_progress';
+
+        // For completed jobs, use the message if it's not generic "Completed"
+        // Otherwise use the stage config label
+        let displayLabel = stageConfig?.label || step;
+        if (status === 'completed' && msg && msg !== 'Completed') {
+          displayLabel = msg;
+        } else if (status === 'in_progress' && msg) {
+          // For in-progress, show the descriptive message
+          displayLabel = msg;
+        }
+
         updateStage(stageId, {
-          status: 'in_progress',
+          status,
           progress: progress || 50,
-          label: msg || stageConfig?.label || step,
+          label: displayLabel,
         });
 
-        setCurrentStep(stageId);
+        // Only set as current step if in progress
+        if (status === 'in_progress') {
+          setCurrentStep(stageId);
+        }
+
+        // CRITICAL: When a stage completes, immediately set the next pending stage to in_progress
+        // This prevents the 20-second gap where nothing appears to be happening
+        if (status === 'completed') {
+          setStages((prev) => {
+            const updated = [...prev];
+            const nextPendingIndex = updated.findIndex(s => s.status === 'pending');
+            if (nextPendingIndex >= 0) {
+              console.log(`[UploadProgressStep] Auto-advancing to next stage: ${updated[nextPendingIndex].id}`);
+              updated[nextPendingIndex] = {
+                ...updated[nextPendingIndex],
+                status: 'in_progress',
+                progress: 5, // Show minimal progress to indicate it's starting
+              };
+              setCurrentStep(updated[nextPendingIndex].id);
+            }
+            return updated;
+          });
+        }
       }
 
       // Update overall progress if provided
@@ -167,15 +243,19 @@ export default function UploadProgressStep({
       progressRef.current = 100;
       setConnectionStatus('disconnected');
 
+      // Close EventSource immediately to prevent reconnection loop
+      if (eventSourceRef.current) {
+        console.log('[UploadProgressStep] Closing SSE connection after completion');
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+
       // Notify parent that upload is complete
       if (onComplete) {
         onComplete();
       }
 
-      // Auto-redirect after 3 seconds
-      redirectTimeoutRef.current = setTimeout(() => {
-        router.push(`/library/${recordingId}`);
-      }, 3000);
+      // Don't auto-redirect - let user click button to view content
     } else if (message.type === 'error') {
       const errorMsg = message.message || 'An error occurred during processing';
       setError(errorMsg);
@@ -196,6 +276,23 @@ export default function UploadProgressStep({
 
     console.log('[UploadProgressStep] Connecting to SSE:', streamUrl);
     setConnectionStatus('connecting');
+
+    // Immediately set the first stage after upload to in_progress
+    // This ensures users see activity right away
+    setStages((prev) => {
+      const updated = [...prev];
+      // Find first pending stage (should be extract_text)
+      const firstPendingIndex = updated.findIndex(s => s.status === 'pending');
+      if (firstPendingIndex >= 0) {
+        updated[firstPendingIndex] = {
+          ...updated[firstPendingIndex],
+          status: 'in_progress',
+          progress: 10, // Show some initial progress
+        };
+        setCurrentStep(updated[firstPendingIndex].id);
+      }
+      return updated;
+    });
 
     const eventSource = new EventSource(streamUrl);
     eventSourceRef.current = eventSource;
@@ -223,11 +320,19 @@ export default function UploadProgressStep({
         // Normal closure after completion - not an error
         console.log('[UploadProgressStep] SSE connection closed normally');
         setConnectionStatus('disconnected');
+      } else if (eventSource.readyState === EventSource.CONNECTING) {
+        // Temporary disconnection, browser is auto-reconnecting
+        console.log('[UploadProgressStep] SSE reconnecting...');
+        // Don't change status to error - this is normal reconnection behavior
       } else {
-        // Actual error during connection
-        console.error('[UploadProgressStep] SSE connection error:', err);
-        setConnectionStatus('error');
-        setError('Lost connection to server. Retrying...');
+        // Actual error during connection (readyState === CLOSED but we haven't seen completion)
+        console.warn('[UploadProgressStep] SSE connection error (state:', eventSource.readyState, ')');
+
+        // Only show error if we haven't completed yet
+        if (!isComplete) {
+          setConnectionStatus('error');
+          setError('Connection interrupted. Reconnecting...');
+        }
       }
     };
 
@@ -264,23 +369,9 @@ export default function UploadProgressStep({
   }, []); // Empty deps - timer runs once and uses ref for current progress
 
   /**
-   * Cleanup redirect timeout on unmount
-   */
-  useEffect(() => {
-    return () => {
-      if (redirectTimeoutRef.current) {
-        clearTimeout(redirectTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  /**
    * Handle manual redirect
    */
   const handleViewRecording = useCallback(() => {
-    if (redirectTimeoutRef.current) {
-      clearTimeout(redirectTimeoutRef.current);
-    }
     router.push(`/library/${recordingId}`);
   }, [recordingId, router]);
 
@@ -328,7 +419,7 @@ export default function UploadProgressStep({
                 {STATUS_MESSAGES.complete.title}
               </p>
               <p className="mt-1 text-sm text-green-700 dark:text-green-300">
-                {STATUS_MESSAGES.complete.description}. Redirecting in 3 seconds...
+                {STATUS_MESSAGES.complete.description}
               </p>
             </div>
           </div>
@@ -368,25 +459,20 @@ export default function UploadProgressStep({
       )}
 
       {/* Actions */}
-      <div className="flex justify-between pt-4">
-        {!isComplete && !error && (
-          <Button variant="outline" onClick={onCancel} disabled={connectionStatus === 'connecting'}>
-            Close
-          </Button>
-        )}
-
+      <div className="flex justify-center pt-4">
         {isComplete && (
           <Button
             onClick={handleViewRecording}
-            className="flex-1 max-w-xs mx-auto"
+            size="lg"
+            className="min-w-[200px]"
           >
             <ExternalLink className="w-4 h-4 mr-2" />
-            View in Library
+            View Content
           </Button>
         )}
 
         {error && onRetry && (
-          <div className="flex space-x-3 ml-auto">
+          <div className="flex space-x-3">
             <Button variant="outline" onClick={onCancel}>
               Cancel
             </Button>

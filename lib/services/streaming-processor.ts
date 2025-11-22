@@ -220,10 +220,9 @@ class StreamingManager {
       timestamp: new Date().toISOString(),
     });
 
-    // Disconnect after completion
-    setTimeout(() => {
-      this.disconnect(recordingId);
-    }, 1000);
+    // Disconnect immediately after sending completion event
+    // Client is responsible for closing EventSource to prevent reconnection
+    this.disconnect(recordingId);
 
     return sent;
   }

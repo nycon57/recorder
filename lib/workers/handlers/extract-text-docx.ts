@@ -58,12 +58,12 @@ export async function handleExtractTextDocx(
     .update({ status: 'transcribing' })
     .eq('id', recordingId);
 
-  progressCallback?.(5, 'Downloading DOCX file...');
+  progressCallback?.(5, 'Downloading document from storage...');
   streamingManager.sendProgress(
     recordingId,
     'all',
     5,
-    'Downloading DOCX file...'
+    'Downloading document from storage...'
   );
 
   let tempDocxPath: string | null = null;
@@ -84,6 +84,14 @@ export async function handleExtractTextDocx(
       );
     }
 
+    progressCallback?.(15, 'Download complete, preparing file...');
+    streamingManager.sendProgress(
+      recordingId,
+      'all',
+      15,
+      'Download complete, preparing file...'
+    );
+
     // Save DOCX to temp file
     tempDocxPath = join(tmpdir(), `${randomUUID()}.docx`);
     const buffer = await docxBlob.arrayBuffer();
@@ -93,18 +101,26 @@ export async function handleExtractTextDocx(
       context: { tempDocxPath, sizeBytes: buffer.byteLength },
     });
 
-    progressCallback?.(25, 'Extracting text from DOCX...');
+    progressCallback?.(25, 'Parsing document structure...');
     streamingManager.sendProgress(
       recordingId,
       'all',
       25,
-      'Extracting text from Word document...'
+      'Parsing document structure...'
     );
 
     // Extract text using mammoth
     const result = await mammoth.extractRawText({
       path: tempDocxPath,
     });
+
+    progressCallback?.(45, 'Reading document content...');
+    streamingManager.sendProgress(
+      recordingId,
+      'all',
+      45,
+      'Reading document content...'
+    );
 
     const extractedText = result.value;
     const warnings = result.messages;
@@ -131,12 +147,12 @@ export async function handleExtractTextDocx(
       );
     }
 
-    progressCallback?.(60, 'Processing extracted text...');
+    progressCallback?.(55, 'Cleaning and formatting text...');
     streamingManager.sendProgress(
       recordingId,
       'all',
-      60,
-      'Processing extracted text...'
+      55,
+      'Cleaning and formatting text...'
     );
 
     // Clean and normalize text
@@ -145,6 +161,14 @@ export async function handleExtractTextDocx(
       .replace(/\n{3,}/g, '\n\n') // Remove excessive line breaks
       .replace(/[ \t]+/g, ' ') // Normalize whitespace
       .trim();
+
+    progressCallback?.(65, 'Validating extracted content...');
+    streamingManager.sendProgress(
+      recordingId,
+      'all',
+      65,
+      'Validating extracted content...'
+    );
 
     // Truncate if too long
     let wasTruncated = false;
@@ -159,7 +183,7 @@ export async function handleExtractTextDocx(
       });
     }
 
-    progressCallback?.(75, 'Saving extracted text...');
+    progressCallback?.(75, 'Saving to database...');
     streamingManager.sendProgress(
       recordingId,
       'all',

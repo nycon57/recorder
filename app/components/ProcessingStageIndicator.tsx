@@ -1,8 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { motion } from 'framer-motion';
-import { Check, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Check, Upload, FileText, Sparkles, Search, FileCheck } from 'lucide-react';
 
 import { cn } from '@/lib/utils/cn';
 import { getStageConfig } from '@/lib/constants/processing-messages';
@@ -21,150 +21,194 @@ interface ProcessingStageIndicatorProps {
   progress: number;
   stages: ProcessingStage[];
   className?: string;
-  /** Use simplified 3-step view (recommended for non-technical users) */
   simplified?: boolean;
+  elapsedTime?: number;
+  estimatedTimeRemaining?: number;
 }
 
+// Map stage IDs to Lucide icons
+const STAGE_ICONS: Record<string, React.ComponentType<any>> = {
+  upload: Upload,
+  extract_text: FileText,
+  document: Sparkles,
+  embeddings: Search,
+  complete: FileCheck,
+};
+
+/**
+ * Processing Stage Indicator with flat icons and loader rings
+ */
 export default function ProcessingStageIndicator({
   currentStep,
   progress,
   stages,
   className,
   simplified = false,
+  elapsedTime,
+  estimatedTimeRemaining,
 }: ProcessingStageIndicatorProps) {
-  // Get emoji icon from config if available
-  const getEmojiIcon = (stage: ProcessingStage): string | undefined => {
-    const config = getStageConfig(stage.id);
-    return config?.icon;
+  // Get icon for stage
+  const getStageIcon = (stageId: string) => {
+    return STAGE_ICONS[stageId] || FileText;
   };
 
-  // Separate stages by status
-  const completedStages = stages.filter((stage) => stage.status === 'completed');
-  const activeStage = stages.find((stage) => stage.status === 'in_progress');
-
   return (
-    <div className={cn('w-full space-y-6', className)} role="region" aria-label="Processing stages">
-      {/* Completed Steps - Compact List */}
-      {completedStages.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="flex flex-col gap-2"
-        >
-          {completedStages.map((stage, index) => (
+    <div className={cn('w-full space-y-2', className)} role="region" aria-label="Processing stages">
+      <AnimatePresence mode="popLayout">
+        {stages.map((stage, index) => {
+          const isActive = stage.status === 'in_progress';
+          const isCompleted = stage.status === 'completed';
+          const isPending = stage.status === 'pending';
+          const IconComponent = getStageIcon(stage.id);
+
+          return (
             <motion.div
               key={stage.id}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05 }}
-              className="flex items-center gap-2 text-sm text-muted-foreground"
-              role="status"
-              aria-label={`${stage.label} complete`}
-            >
-              <div className="flex-shrink-0 rounded-full bg-[#2fb861]/10 p-1">
-                <Check className="size-3 text-[#2fb861]" strokeWidth={3} />
-              </div>
-              <span className="font-medium">{stage.label}</span>
-            </motion.div>
-          ))}
-        </motion.div>
-      )}
-
-      {/* Active Step - Featured Card */}
-      {activeStage && (
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.4, type: 'spring', stiffness: 200, damping: 20 }}
-          className="rounded-2xl border-2 border-[#2fb861]/20 bg-card p-8 shadow-lg shadow-[#2fb861]/5"
-          role="status"
-          aria-label={`${activeStage.label} in progress. ${activeStage.benefit || ''}`}
-        >
-          <div className="flex flex-col items-center gap-6 text-center">
-            {/* Icon/Emoji */}
-            <motion.div
-              className="relative"
+              layout
+              initial={{ opacity: 0, x: -20 }}
               animate={{
-                scale: [1, 1.05, 1],
+                opacity: 1,
+                x: 0,
               }}
+              exit={{ opacity: 0, x: 20 }}
               transition={{
-                duration: 2,
-                repeat: Infinity,
-                ease: 'easeInOut',
+                layout: { duration: 0.3 },
+                opacity: { duration: 0.2 },
+                x: { duration: 0.3 },
               }}
-            >
-              {getEmojiIcon(activeStage) ? (
-                <span className="text-6xl drop-shadow-sm" role="img" aria-hidden="true">
-                  {getEmojiIcon(activeStage)}
-                </span>
-              ) : (
-                <div className="rounded-full bg-[#2fb861]/10 p-4">
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                  >
-                    <Loader2 className="size-8 text-[#2fb861]" strokeWidth={2.5} />
-                  </motion.div>
-                </div>
+              className={cn(
+                'relative flex items-center gap-3 rounded-lg border px-4 py-3 transition-all',
+                isActive && 'border-primary/30 bg-primary/5',
+                isCompleted && 'border-border/50 bg-muted/30',
+                isPending && 'border-border/30 bg-background opacity-60'
               )}
+            >
+              {/* Icon with loader ring */}
+              <div className="relative flex-shrink-0">
+                {isCompleted && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                    className="flex size-10 items-center justify-center rounded-full bg-primary/10"
+                  >
+                    <Check className="size-5 text-primary" strokeWidth={2.5} />
+                  </motion.div>
+                )}
 
-              {/* Subtle pulsing ring */}
-              <motion.div
-                className="absolute inset-0 -z-10 rounded-full border-2 border-[#2fb861]/20"
-                initial={{ scale: 1, opacity: 0.5 }}
-                animate={{ scale: 1.5, opacity: 0 }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
-              />
-            </motion.div>
+                {isActive && (
+                  <div className="relative flex size-10 items-center justify-center">
+                    {/* Spinning loader ring */}
+                    <svg
+                      className="absolute inset-0 size-10 -rotate-90"
+                      viewBox="0 0 40 40"
+                    >
+                      <circle
+                        cx="20"
+                        cy="20"
+                        r="18"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        className="text-border/30"
+                      />
+                      <motion.circle
+                        cx="20"
+                        cy="20"
+                        r="18"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        className="text-primary"
+                        initial={{ strokeDasharray: '0 113' }}
+                        animate={{
+                          strokeDasharray: ['0 113', '85 113', '85 113'],
+                          rotate: [0, 0, 360],
+                        }}
+                        transition={{
+                          strokeDasharray: {
+                            duration: 1.5,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                          },
+                          rotate: {
+                            duration: 2,
+                            repeat: Infinity,
+                            ease: 'linear',
+                          },
+                        }}
+                      />
+                    </svg>
 
-            {/* Step Label */}
-            <div className="space-y-2">
-              <h3 className="text-2xl font-bold tracking-tight text-foreground">
-                {activeStage.label}
-              </h3>
+                    {/* Static icon in center */}
+                    <IconComponent className="size-5 text-primary" strokeWidth={2} />
+                  </div>
+                )}
 
-              {/* Benefit Description */}
-              {activeStage.benefit && (
-                <motion.p
+                {isPending && (
+                  <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+                    <IconComponent className="size-5 text-muted-foreground/40" strokeWidth={2} />
+                  </div>
+                )}
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div
+                  className={cn(
+                    'text-sm font-medium transition-colors',
+                    isActive && 'text-foreground',
+                    isCompleted && 'text-muted-foreground',
+                    isPending && 'text-muted-foreground/60'
+                  )}
+                >
+                  {stage.label}
+                </div>
+
+                {/* Show benefit only for active stage */}
+                {isActive && stage.benefit && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mt-0.5 text-xs text-muted-foreground/70"
+                  >
+                    {stage.benefit}
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Status indicator */}
+              {isActive && (
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                  className="text-sm leading-relaxed text-muted-foreground"
+                  className="flex-shrink-0"
                 >
-                  {activeStage.benefit}
-                </motion.p>
+                  <div className="flex gap-0.5">
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={i}
+                        className="size-1 rounded-full bg-primary"
+                        animate={{
+                          opacity: [0.3, 1, 0.3],
+                        }}
+                        transition={{
+                          duration: 1.5,
+                          repeat: Infinity,
+                          delay: i * 0.2,
+                          ease: 'easeInOut',
+                        }}
+                      />
+                    ))}
+                  </div>
+                </motion.div>
               )}
-            </div>
-
-            {/* Minimal Loading Indicator */}
-            <motion.div
-              className="flex gap-1.5"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-            >
-              {[0, 1, 2].map((i) => (
-                <motion.div
-                  key={i}
-                  className="size-2 rounded-full bg-[#2fb861]"
-                  animate={{
-                    opacity: [0.3, 1, 0.3],
-                    scale: [0.8, 1, 0.8],
-                  }}
-                  transition={{
-                    duration: 1.5,
-                    repeat: Infinity,
-                    delay: i * 0.2,
-                    ease: 'easeInOut',
-                  }}
-                  aria-hidden="true"
-                />
-              ))}
             </motion.div>
-          </div>
-        </motion.div>
-      )}
+          );
+        })}
+      </AnimatePresence>
     </div>
   );
 }

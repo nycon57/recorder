@@ -117,7 +117,8 @@ async function main() {
     // Start processing
     await processJobs({
       batchSize: 10,
-      pollInterval: 5000,
+      pollInterval: 2000,        // Poll every 2 seconds (reduced from 5s)
+      maxPollInterval: 10000,    // Max backoff: 10 seconds (reduced from 60s)
       maxRetries: 3,
     });
   }

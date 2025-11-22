@@ -23,7 +23,7 @@ interface DocifyPayload {
 /**
  * Generate document from transcript using Google Gemini
  */
-export async function generateDocument(job: Job): Promise<void> {
+export async function generateDocument(job: Job, progressCallback?: (percent: number, message: string, data?: any) => void): Promise<void> {
   const payload = job.payload as unknown as DocifyPayload;
   const { recordingId, transcriptId, orgId } = payload;
 
@@ -126,6 +126,8 @@ export async function generateDocument(job: Job): Promise<void> {
       },
     });
 
+    // Send progress via callback AND streaming (if available)
+    progressCallback?.(10, 'Loading transcript and metadata...');
     if (isStreaming) {
       streamingManager.sendProgress(recordingId, 'document', 10, 'Loading transcript and metadata...');
     }
@@ -178,6 +180,7 @@ export async function generateDocument(job: Job): Promise<void> {
       context: { transcriptLength: transcript.text.length },
     });
 
+    progressCallback?.(20, 'Analyzing content type...');
     if (isStreaming) {
       streamingManager.sendProgress(recordingId, 'document', 20, 'Analyzing content type...');
     }
@@ -192,6 +195,7 @@ export async function generateDocument(job: Job): Promise<void> {
       context: { contentType, hasVisualContext },
     });
 
+    progressCallback?.(25, `Generating ${contentType.replace('_', ' ')} insights...`);
     if (isStreaming) {
       streamingManager.sendProgress(recordingId, 'document', 25, `Generating ${contentType.replace('_', ' ')} insights...`);
     }
@@ -222,8 +226,17 @@ export async function generateDocument(job: Job): Promise<void> {
       },
     });
 
+    progressCallback?.(30, 'Preparing prompt for AI analysis...');
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'document', 30, 'Generating document with Gemini AI...');
+      streamingManager.sendProgress(recordingId, 'document', 30, 'Preparing prompt for AI analysis...');
+    }
+
+    // Brief delay to show the "preparing" message
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    progressCallback?.(35, 'Calling Gemini AI (this may take 15-30 seconds)...');
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'document', 35, 'Calling Gemini AI (this may take 15-30 seconds)...');
     }
 
     // Use streaming helper for document generation
@@ -254,8 +267,17 @@ export async function generateDocument(job: Job): Promise<void> {
       },
     });
 
+    progressCallback?.(80, 'AI response received, processing output...');
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'document', 85, 'Document generated, saving to database...');
+      streamingManager.sendProgress(recordingId, 'document', 80, 'AI response received, processing output...');
+    }
+
+    // Brief delay to show processing message
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    progressCallback?.(85, 'Saving document to database...');
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'document', 85, 'Saving document to database...');
     }
 
     // Save document to database
@@ -292,6 +314,7 @@ export async function generateDocument(job: Job): Promise<void> {
       },
     });
 
+    progressCallback?.(90, 'Document saved, starting embedding generation...');
     if (isStreaming) {
       streamingManager.sendProgress(recordingId, 'document', 90, 'Document saved, starting embedding generation...');
     }
