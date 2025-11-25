@@ -229,12 +229,17 @@ export const JOB_PRIORITY = {
 } as const;
 
 // CFG-001-003: Environment-based configuration with sensible defaults
+function parseIntWithDefault(value: string | undefined, defaultValue: number): number {
+  const parsed = parseInt(value || '', 10);
+  return Number.isNaN(parsed) || parsed <= 0 ? defaultValue : parsed;
+}
+
 const CONFIG = {
-  batchSize: parseInt(process.env.JOB_BATCH_SIZE || '10', 10),
-  pollInterval: parseInt(process.env.JOB_POLL_INTERVAL_MS || '2000', 10),
-  maxPollInterval: parseInt(process.env.JOB_MAX_POLL_INTERVAL_MS || '10000', 10),
-  maxRetries: parseInt(process.env.JOB_MAX_RETRIES || '3', 10),
-  deadLetterAfterRetries: parseInt(process.env.JOB_DEAD_LETTER_RETRIES || '5', 10),
+  batchSize: parseIntWithDefault(process.env.JOB_BATCH_SIZE, 10),
+  pollInterval: parseIntWithDefault(process.env.JOB_POLL_INTERVAL_MS, 2000),
+  maxPollInterval: parseIntWithDefault(process.env.JOB_MAX_POLL_INTERVAL_MS, 10000),
+  maxRetries: parseIntWithDefault(process.env.JOB_MAX_RETRIES, 3),
+  deadLetterAfterRetries: parseIntWithDefault(process.env.JOB_DEAD_LETTER_RETRIES, 5),
 };
 
 /**

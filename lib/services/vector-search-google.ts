@@ -364,12 +364,12 @@ export async function vectorSearch(
   }
 
   // Calculate statistics for monitoring
-  const similarities = results.map((r: any) => r.similarity).filter((s: number) => s !== null);
+  const similarities = results.map((r: any) => r.similarity).filter((s: number | null): s is number => s !== null);
   const avgSimilarity = similarities.length > 0
     ? similarities.reduce((a: number, b: number) => a + b, 0) / similarities.length
     : 0;
-  const minSimilarity = Math.min(...similarities);
-  const maxSimilarity = Math.max(...similarities);
+  const minSimilarity = similarities.length > 0 ? Math.min(...similarities) : 0;
+  const maxSimilarity = similarities.length > 0 ? Math.max(...similarities) : 0;
 
   console.log('[Vector Search] Search stats:', {
     resultsReturned: results.length,

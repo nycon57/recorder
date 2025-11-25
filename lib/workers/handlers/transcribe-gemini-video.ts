@@ -591,7 +591,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
           transcriptId: transcript.id,
           orgId,
         },
-        dedupe_key: `embeddings:${recordingId}`,
+        dedupe_key: `generate_embeddings:${recordingId}`,
       }),
     ];
 

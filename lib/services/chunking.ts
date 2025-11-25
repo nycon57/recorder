@@ -96,7 +96,53 @@ function splitIntoParagraphs(text: string): string[] {
 }
 
 /**
+ * Chunk text by paragraphs - each paragraph becomes one chunk
+ *
+ * NOTE: This strategy ignores maxTokens/overlapTokens/minTokens options.
+ * Paragraphs are returned as-is regardless of size. This is useful when
+ * the source text has meaningful paragraph boundaries that should be preserved.
+ */
+function chunkByParagraphs(text: string): TextChunk[] {
+  if (!text || text.trim().length === 0) {
+    return [];
+  }
+
+  const paragraphs = splitIntoParagraphs(text);
+  const chunks: TextChunk[] = [];
+  let charPosition = 0;
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const paragraph = paragraphs[i];
+
+    // Find the actual start position in the original text
+    // Account for the paragraph separators we split on
+    const startChar = text.indexOf(paragraph, charPosition);
+    const endChar = startChar + paragraph.length;
+
+    chunks.push({
+      text: paragraph,
+      index: i,
+      startChar: startChar >= 0 ? startChar : charPosition,
+      endChar: startChar >= 0 ? endChar : charPosition + paragraph.length,
+      estimatedTokens: estimateTokens(paragraph),
+      strategy: 'paragraph',
+    });
+
+    // Update position for next search
+    charPosition = endChar;
+  }
+
+  return chunks;
+}
+
+/**
  * Chunk text for embedding generation
+ *
+ * Strategies:
+ * - 'sentence' (default): Split on sentence boundaries with overlap. Respects maxTokens, overlapTokens, minTokens.
+ * - 'paragraph': Split on paragraph boundaries (double newlines). Each paragraph becomes one chunk.
+ *   NOTE: Paragraph mode ignores maxTokens/overlapTokens/minTokens - paragraphs are returned as-is.
+ * - 'hybrid': Reserved for future implementation combining sentence and paragraph strategies.
  */
 export function chunkText(
   text: string,
@@ -106,8 +152,15 @@ export function chunkText(
     maxTokens = 500,
     overlapTokens = 50,
     minTokens = 100,
+    strategy = 'sentence',
   } = options;
 
+  // Handle paragraph strategy - split on double newlines, return each paragraph as a chunk
+  if (strategy === 'paragraph') {
+    return chunkByParagraphs(text);
+  }
+
+  // Default: sentence-based chunking with overlap
   // Split into sentences
   const sentences = splitIntoSentences(text);
   const chunks: TextChunk[] = [];
