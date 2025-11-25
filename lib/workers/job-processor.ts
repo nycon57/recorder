@@ -63,9 +63,27 @@ import { handlePerformHealthCheck } from './handlers/perform-health-check';
 // import { generateDocument } from './handlers/docify';
 // import { generateEmbeddings } from './handlers/embeddings';
 
-type Job = Database['public']['Tables']['jobs']['Row'];
-type JobType = Job['type'];
-type JobStatus = Job['status'];
+type JobRow = Database['public']['Tables']['jobs']['Row'];
+type JobType = JobRow['type'];
+type JobStatus = JobRow['status'];
+
+// PERF-DB-002: Extended job type with prefetched recording data
+// This eliminates N+1 queries by joining jobs with recordings in the initial fetch
+interface PrefetchedRecording {
+  id: string;
+  org_id: string;
+  title: string | null;
+  status: string;
+  content_type: string;
+  file_type: string | null;
+  storage_path_raw: string | null;
+  storage_path_processed: string | null;
+  file_size: number | null;
+}
+
+type Job = JobRow & {
+  recording?: PrefetchedRecording | null;
+};
 
 interface JobHandler {
   (job: Job, progressCallback?: ProgressCallback): Promise<void>;
@@ -202,8 +220,27 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   perform_health_check: handlePerformHealthCheck,
 };
 
+// PERF-WK-001: Job priority levels (0 = highest, 3 = lowest)
+export const JOB_PRIORITY = {
+  CRITICAL: 0, // User is actively waiting (transcribe, extract)
+  HIGH: 1,     // Processing pipeline (doc_generate, embeddings)
+  NORMAL: 2,   // Background operations (sync, compress)
+  LOW: 3,      // Analytics and monitoring (metrics, alerts)
+} as const;
+
+// CFG-001-003: Environment-based configuration with sensible defaults
+const CONFIG = {
+  batchSize: parseInt(process.env.JOB_BATCH_SIZE || '10', 10),
+  pollInterval: parseInt(process.env.JOB_POLL_INTERVAL_MS || '2000', 10),
+  maxPollInterval: parseInt(process.env.JOB_MAX_POLL_INTERVAL_MS || '10000', 10),
+  maxRetries: parseInt(process.env.JOB_MAX_RETRIES || '3', 10),
+  deadLetterAfterRetries: parseInt(process.env.JOB_DEAD_LETTER_RETRIES || '5', 10),
+};
+
 /**
  * Main job processing loop with exponential backoff for idle periods
+ * PERF-WK-001: Jobs are now processed by priority (0=critical, 3=low)
+ * CFG-001-003: Configuration is now environment-based
  */
 export async function processJobs(options?: {
   batchSize?: number;
@@ -212,10 +249,10 @@ export async function processJobs(options?: {
   maxPollInterval?: number;
 }) {
   const {
-    batchSize = 10,
-    pollInterval = 2000, // Base interval: 2 seconds (reduced from 5s for faster response)
-    maxRetries = 3,
-    maxPollInterval = 10000, // Max interval when idle: 10 seconds (reduced from 60s)
+    batchSize = CONFIG.batchSize,
+    pollInterval = CONFIG.pollInterval,
+    maxRetries = CONFIG.maxRetries,
+    maxPollInterval = CONFIG.maxPollInterval,
   } = options || {};
 
   const supabase = createAdminClient();
@@ -230,12 +267,29 @@ export async function processJobs(options?: {
   // Main processing loop
   while (true) {
     try {
-      // Fetch pending jobs
+      // PERF-DB-002: Fetch pending jobs with recording data (eliminates N+1 queries)
+      // PERF-WK-001: Order by priority (0=critical first), then run_at, then created_at
       const { data: jobs, error } = await supabase
         .from('jobs')
-        .select('*')
+        .select(`
+          *,
+          recording:recordings!jobs_recording_id_fkey (
+            id,
+            org_id,
+            title,
+            status,
+            content_type,
+            file_type,
+            storage_path_raw,
+            storage_path_processed,
+            file_size
+          )
+        `)
         .eq('status', 'pending')
-        .order('created_at', { ascending: true })
+        .lte('run_at', new Date().toISOString()) // Only jobs ready to run
+        .order('priority', { ascending: true })   // High priority first (0 before 3)
+        .order('run_at', { ascending: true })     // Then by scheduled time
+        .order('created_at', { ascending: true }) // Then by creation time
         .limit(batchSize);
 
       if (error) {
@@ -400,15 +454,19 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
         context: { jobId: job.id, recordingId, attemptCount, maxRetries, retryDelay },
       });
     } else {
-      // Mark as failed
+      // PERF-WK-002: Determine if job should go to dead letter queue
+      // Jobs that exceed deadLetterAfterRetries go to dead_letter for manual review
+      const isDeadLetter = attemptCount >= CONFIG.deadLetterAfterRetries;
+      const finalStatus = isDeadLetter ? 'dead_letter' : 'failed';
+
       await supabase
         .from('jobs')
         .update({
-          status: 'failed' as JobStatus,
+          status: finalStatus as JobStatus,
           attempts: attemptCount,
           error: errorMessage,
           progress_percent: null,
-          progress_message: 'Failed',
+          progress_message: isDeadLetter ? 'Moved to dead letter queue' : 'Failed',
         })
         .eq('id', job.id);
 
@@ -416,12 +474,14 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
       if (recordingId) {
         streamingManager.sendError(
           recordingId,
-          `Job failed after ${maxRetries} attempts: ${errorMessage}`
+          isDeadLetter
+            ? `Job moved to dead letter queue after ${attemptCount} attempts: ${errorMessage}`
+            : `Job failed after ${maxRetries} attempts: ${errorMessage}`
         );
       }
 
-      processorLogger.error('Job failed permanently', {
-        context: { jobId: job.id, recordingId, attemptCount, maxRetries },
+      processorLogger.error(isDeadLetter ? 'Job moved to dead letter queue' : 'Job failed permanently', {
+        context: { jobId: job.id, recordingId, attemptCount, maxRetries, isDeadLetter },
         error: error as Error,
       });
     }

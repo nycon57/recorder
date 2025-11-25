@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useKeyboardShortcuts, KeyboardShortcut, formatShortcut, getModifierKey } from '@/app/hooks/useKeyboardShortcuts';
 import { useToast } from '@/app/components/ui/use-toast';
@@ -107,8 +107,8 @@ export function KeyboardShortcutsProvider({ children }: { children: React.ReactN
     router.push('/assistant');
   }, [router]);
 
-  // Default shortcuts
-  const defaultShortcuts: ShortcutDefinition[] = [
+  // PERF-FE-004: Memoize default shortcuts to prevent recreation on every render
+  const defaultShortcuts = useMemo<ShortcutDefinition[]>(() => [
     {
       id: 'quick-search',
       keys: ['cmd', 'k'],
@@ -218,10 +218,23 @@ export function KeyboardShortcutsProvider({ children }: { children: React.ReactN
         }
       },
     },
-  ];
+  ], [
+    handleQuickSearch,
+    handleUpload,
+    handleNewNote,
+    handleStartRecording,
+    handleToggleFavorites,
+    toggleHelp,
+    handleGoToDashboard,
+    handleGoToLibrary,
+    handleGoToAssistant,
+  ]);
 
-  // Combine default and custom shortcuts
-  const allShortcuts = [...defaultShortcuts, ...customShortcuts];
+  // PERF-FE-004: Memoize combined shortcuts
+  const allShortcuts = useMemo(
+    () => [...defaultShortcuts, ...customShortcuts],
+    [defaultShortcuts, customShortcuts]
+  );
 
   // Register shortcut
   const registerShortcut = useCallback((shortcut: ShortcutDefinition) => {
@@ -245,16 +258,19 @@ export function KeyboardShortcutsProvider({ children }: { children: React.ReactN
     }
   }, [allShortcuts]);
 
-  // Convert to KeyboardShortcut format for the hook
-  const keyboardShortcuts: KeyboardShortcut[] = allShortcuts
-    .filter((s) => s.handler)
-    .map((s) => ({
-      keys: s.keys,
-      handler: s.handler!,
-      description: s.description,
-      global: s.global,
-      enabled: true,
-    }));
+  // PERF-FE-004: Memoize keyboard shortcuts conversion
+  const keyboardShortcuts = useMemo<KeyboardShortcut[]>(
+    () => allShortcuts
+      .filter((s) => s.handler)
+      .map((s) => ({
+        keys: s.keys,
+        handler: s.handler!,
+        description: s.description,
+        global: s.global,
+        enabled: true,
+      })),
+    [allShortcuts]
+  );
 
   // Use the keyboard shortcuts hook
   useKeyboardShortcuts(keyboardShortcuts, [
@@ -269,17 +285,21 @@ export function KeyboardShortcutsProvider({ children }: { children: React.ReactN
     toggleHelp,
   ]);
 
+  // PERF-FE-004: Memoize context value to prevent consumer re-renders
+  const contextValue = useMemo<KeyboardShortcutsContextType>(
+    () => ({
+      shortcuts: allShortcuts,
+      isHelpOpen,
+      toggleHelp,
+      registerShortcut,
+      unregisterShortcut,
+      triggerShortcut,
+    }),
+    [allShortcuts, isHelpOpen, toggleHelp, registerShortcut, unregisterShortcut, triggerShortcut]
+  );
+
   return (
-    <KeyboardShortcutsContext.Provider
-      value={{
-        shortcuts: allShortcuts,
-        isHelpOpen,
-        toggleHelp,
-        registerShortcut,
-        unregisterShortcut,
-        triggerShortcut,
-      }}
-    >
+    <KeyboardShortcutsContext.Provider value={contextValue}>
       {children}
     </KeyboardShortcutsContext.Provider>
   );

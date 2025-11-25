@@ -3,6 +3,8 @@
  *
  * Splits large text into smaller chunks for embedding generation and vector search.
  * Uses sliding window with overlap to preserve context across chunk boundaries.
+ *
+ * PERF-AI-005: Enhanced sentence boundary detection for improved relevance.
  */
 
 interface ChunkOptions {
@@ -12,6 +14,8 @@ interface ChunkOptions {
   overlapTokens?: number;
   /** Minimum chunk size in tokens (default: 100) */
   minTokens?: number;
+  /** Chunking strategy to use (default: 'sentence') */
+  strategy?: 'sentence' | 'paragraph' | 'hybrid';
 }
 
 interface TextChunk {
@@ -20,6 +24,8 @@ interface TextChunk {
   startChar: number;
   endChar: number;
   estimatedTokens: number;
+  /** PERF-AI-005: Track chunking strategy used */
+  strategy?: string;
 }
 
 /**
@@ -30,12 +36,63 @@ function estimateTokens(text: string): number {
 }
 
 /**
- * Split text into sentences (simple heuristic)
+ * PERF-AI-005: Enhanced sentence boundary detection
+ *
+ * Improvements over simple regex:
+ * 1. Handles abbreviations (Dr., Mr., Mrs., Ms., etc.)
+ * 2. Handles decimal numbers (3.14, $19.99)
+ * 3. Handles URLs and email addresses
+ * 4. Handles ellipsis (...) as potential sentence boundaries
+ * 5. Handles multi-line breaks as strong sentence boundaries
  */
 function splitIntoSentences(text: string): string[] {
-  // Split on sentence-ending punctuation followed by whitespace
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-  return sentences.map(s => s.trim()).filter(s => s.length > 0);
+  if (!text || text.trim().length === 0) {
+    return [];
+  }
+
+  // Common abbreviations that shouldn't end sentences (bounded for security)
+  const abbreviations = /\b(Dr|Mr|Mrs|Ms|Prof|Jr|Sr|vs|etc|Inc|Ltd|Corp|Co|No|Vol|pp|ed|Rev|St|Ave|Blvd|Rd|Fig|e\.g|i\.e|a\.m|p\.m|U\.S|U\.K)\./gi;
+
+  // Preserve abbreviations by replacing with placeholder
+  const preserved = text.replace(abbreviations, (match) => match.replace(/\./g, '<<DOT>>'));
+
+  // Preserve decimal numbers (e.g., 3.14, $19.99)
+  const preservedDecimals = preserved.replace(/(\d)\.(\d)/g, '$1<<DOT>>$2');
+
+  // Preserve URLs (simplified pattern with bounded quantifiers)
+  const preservedUrls = preservedDecimals.replace(
+    /https?:\/\/[^\s]{1,500}/gi,
+    (match) => match.replace(/\./g, '<<DOT>>')
+  );
+
+  // Preserve email addresses (simplified pattern with bounded quantifiers)
+  const preservedEmails = preservedUrls.replace(
+    /[a-zA-Z0-9._%+-]{1,100}@[a-zA-Z0-9.-]{1,100}\.[a-zA-Z]{2,10}/g,
+    (match) => match.replace(/\./g, '<<DOT>>')
+  );
+
+  // Now split on sentence boundaries
+  // Pattern: sentence-ending punctuation followed by:
+  // - One or more whitespace characters
+  // - OR end of string
+  // - OR a capital letter (new sentence start)
+  const sentencePattern = /(?<=[.!?])\s+(?=[A-Z"])|(?<=[.!?])(?=\s*$)|(?<=\.{3})\s+|(?<=\n\n+)/g;
+
+  const sentences = preservedEmails.split(sentencePattern);
+
+  // Restore dots in abbreviations/decimals/URLs
+  return sentences
+    .map(s => s.replace(/<<DOT>>/g, '.').trim())
+    .filter(s => s.length > 0);
+}
+
+/**
+ * PERF-AI-005: Split text into paragraphs for hybrid chunking
+ */
+function splitIntoParagraphs(text: string): string[] {
+  // Split on double newlines or more
+  const paragraphs = text.split(/\n\s*\n+/);
+  return paragraphs.map(p => p.trim()).filter(p => p.length > 0);
 }
 
 /**

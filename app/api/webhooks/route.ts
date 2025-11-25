@@ -1,49 +1,57 @@
 /**
  * Webhook Handler
  *
- * Handles incoming webhooks from external services with HMAC verification.
- * Currently supports custom transcription webhooks (for future external transcription services).
+ * SEC-002: Handles incoming webhooks with secure HMAC verification.
+ * Features:
+ * - Timing-safe signature comparison (prevents timing attacks)
+ * - Timestamp validation (prevents replay attacks)
+ * - Idempotency checking (prevents duplicate processing)
+ *
+ * Currently supports custom transcription webhooks (for external transcription services).
  */
-
-import { createHmac } from 'crypto';
 
 import { NextRequest, NextResponse } from 'next/server';
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import {
+  verifyWebhook,
+  markWebhookEventProcessed,
+} from '@/lib/utils/webhook-verification';
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
 
 /**
- * Verify HMAC signature
- */
-function verifySignature(payload: string, signature: string): boolean {
-  if (!WEBHOOK_SECRET) {
-    console.warn('[Webhook] WEBHOOK_SECRET not configured, skipping verification');
-    return true; // Allow in development
-  }
-
-  const expectedSignature = createHmac('sha256', WEBHOOK_SECRET)
-    .update(payload)
-    .digest('hex');
-
-  return signature === expectedSignature;
-}
-
-/**
  * POST /api/webhooks
- * Handle incoming webhooks
+ * Handle incoming webhooks with secure verification
  */
 export async function POST(request: NextRequest) {
   try {
-    const signature = request.headers.get('x-webhook-signature') || '';
+    // Extract verification headers
+    const signature = request.headers.get('x-webhook-signature');
+    const timestamp = request.headers.get('x-webhook-timestamp');
+    const eventId = request.headers.get('x-webhook-event-id');
     const payload = await request.text();
 
-    // Verify signature
-    if (!verifySignature(payload, signature)) {
+    // SEC-002: Verify webhook with timing-safe comparison and replay protection
+    const verification = await verifyWebhook(
+      payload,
+      { signature, timestamp, eventId },
+      WEBHOOK_SECRET,
+      'custom'
+    );
+
+    if (!verification.valid) {
+      console.warn('[Webhook] Verification failed:', verification.error);
       return NextResponse.json(
-        { error: 'Invalid signature' },
+        { error: verification.error || 'Invalid signature' },
         { status: 401 }
       );
+    }
+
+    // Check for duplicate processing
+    if (verification.isDuplicate) {
+      console.log('[Webhook] Duplicate event, already processed:', eventId);
+      return NextResponse.json({ success: true, message: 'Already processed' });
     }
 
     // Parse payload
@@ -68,6 +76,11 @@ export async function POST(request: NextRequest) {
           { error: 'Unknown event type' },
           { status: 400 }
         );
+    }
+
+    // SEC-002: Mark event as processed for idempotency
+    if (eventId) {
+      await markWebhookEventProcessed(eventId, 'custom', { type });
     }
 
     return NextResponse.json({ success: true });

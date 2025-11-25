@@ -1,5 +1,25 @@
 "use client"
 
+/**
+ * PERF-FE-002: Three.js Orb Visualization Component
+ *
+ * WARNING: This component includes Three.js (~350KB minified) and @react-three ecosystem.
+ * Currently UNUSED in the codebase - available for future AI agent visualization.
+ *
+ * USAGE: Import via dynamic() to avoid loading Three.js in the main bundle:
+ *
+ * ```tsx
+ * import dynamic from 'next/dynamic';
+ *
+ * const Orb = dynamic(() => import('@/app/components/ui/orb').then(m => m.Orb), {
+ *   ssr: false,
+ *   loading: () => <div className="animate-pulse">Loading...</div>
+ * });
+ * ```
+ *
+ * DO NOT import this component directly - it will add ~350KB to your bundle.
+ */
+
 import { useEffect, useMemo, useRef } from "react"
 import { useTexture } from "@react-three/drei"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"

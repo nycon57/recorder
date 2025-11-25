@@ -2,6 +2,7 @@
  * Document Generation Handler (Google Gemini)
  *
  * Uses Google Gemini to convert transcripts into well-structured, readable documents.
+ * PERF-AI-006: Includes OpenAI fallback for API failures.
  */
 
 import { googleAI, PROMPTS, GOOGLE_CONFIG } from '@/lib/google/client';
@@ -11,6 +12,78 @@ import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
 import { streamDocumentGeneration, isStreamingAvailable, sendCompletionNotification } from '@/lib/services/llm-streaming-helper';
 import { detectContentType, getInsightsPrompt, SCREEN_RECORDING_ENHANCEMENT } from '@/lib/prompts/insights-prompts';
+import OpenAI from 'openai';
+
+// PERF-AI-006: Lazy-initialized OpenAI client for fallback
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY not configured for fallback');
+    }
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openaiClient;
+}
+
+/**
+ * PERF-AI-006: Check if a Gemini error is recoverable via fallback
+ */
+function isRecoverableGeminiError(error: any): boolean {
+  const errorMessage = error?.message || String(error);
+  return (
+    errorMessage.includes('503') ||
+    errorMessage.includes('overloaded') ||
+    errorMessage.includes('RESOURCE_EXHAUSTED') ||
+    errorMessage.includes('rate limit') ||
+    errorMessage.includes('quota') ||
+    error?.status === 503 ||
+    error?.status === 429
+  );
+}
+
+/**
+ * PERF-AI-006: Generate document using OpenAI as fallback
+ */
+async function generateDocumentWithOpenAIFallback(
+  prompt: string,
+  logger: ReturnType<typeof createLogger>
+): Promise<{ content: string; provider: 'openai' }> {
+  logger.info('Falling back to OpenAI GPT-4o-mini for document generation');
+
+  const openai = getOpenAIClient();
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a professional document writer that creates clear, well-structured documents from transcripts. Follow the user\'s formatting instructions exactly.',
+      },
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ],
+    temperature: 0.7,
+    max_tokens: 8000,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error('OpenAI returned empty response');
+  }
+
+  logger.info('OpenAI fallback document generation successful', {
+    context: {
+      model: 'gpt-4o-mini',
+      contentLength: content.length,
+    },
+  });
+
+  return { content, provider: 'openai' };
+}
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -239,31 +312,67 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
       streamingManager.sendProgress(recordingId, 'document', 35, 'Calling Gemini AI (this may take 15-30 seconds)...');
     }
 
-    // Use streaming helper for document generation
-    const streamingResult = await streamDocumentGeneration(
-      model,
-      enhancedPrompt,
-      {
-        recordingId,
-        chunkBufferSize: 200,
-        chunkDelayMs: 100,
-        punctuationChunking: true,
-        progressUpdateInterval: 5,
+    // PERF-AI-006: Track which provider was used
+    let generatedContent: string;
+    let docProvider: 'gemini' | 'openai' = 'gemini';
+    let modelUsed: string = GOOGLE_CONFIG.DOCIFY_MODEL;
+    let chunkCount = 0;
+    let streamedToClient = false;
+
+    try {
+      // Use streaming helper for document generation
+      const streamingResult = await streamDocumentGeneration(
+        model,
+        enhancedPrompt,
+        {
+          recordingId,
+          chunkBufferSize: 200,
+          chunkDelayMs: 100,
+          punctuationChunking: true,
+          progressUpdateInterval: 5,
+        }
+      );
+
+      generatedContent = streamingResult.fullText;
+      chunkCount = streamingResult.chunkCount;
+      streamedToClient = streamingResult.streamedToClient;
+
+      if (!generatedContent) {
+        throw new Error('Gemini returned empty response');
       }
-    );
+    } catch (geminiError: any) {
+      // PERF-AI-006: Attempt fallback on recoverable errors
+      if (isRecoverableGeminiError(geminiError) && process.env.OPENAI_API_KEY) {
+        logger.warn('Gemini document generation failed, attempting OpenAI fallback', {
+          context: {
+            recordingId,
+            error: geminiError.message || String(geminiError),
+          },
+        });
 
-    const generatedContent = streamingResult.fullText;
+        progressCallback?.(40, 'Gemini unavailable, using OpenAI fallback...');
+        if (isStreaming) {
+          streamingManager.sendProgress(recordingId, 'document', 40, 'Gemini unavailable, using OpenAI fallback...');
+        }
 
-    if (!generatedContent) {
-      throw new Error('Gemini returned empty response');
+        const fallbackResult = await generateDocumentWithOpenAIFallback(enhancedPrompt, logger);
+        generatedContent = fallbackResult.content;
+        docProvider = 'openai';
+        modelUsed = 'gpt-4o-mini';
+      } else {
+        // Non-recoverable error or no fallback configured
+        throw geminiError;
+      }
     }
 
     logger.info('Generated document successfully', {
       context: {
+        provider: docProvider,
+        model: modelUsed,
         contentLength: generatedContent.length,
         contentPreview: generatedContent.substring(0, 200),
-        chunkCount: streamingResult.chunkCount,
-        streamedToClient: streamingResult.streamedToClient,
+        chunkCount,
+        streamedToClient,
       },
     });
 
@@ -289,12 +398,13 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
         org_id: orgId,
         markdown: generatedContent,
         version: 'v2', // v2 indicates new insights-based generation
-        model: GOOGLE_CONFIG.DOCIFY_MODEL,
+        model: modelUsed, // PERF-AI-006: Use actual model (Gemini or OpenAI)
         status: 'generated',
         metadata: {
           content_type: contentType,
           has_visual_context: hasVisualContext,
           generation_method: 'insights',
+          doc_provider: docProvider, // PERF-AI-006: Track provider
         },
       })
       .select()
@@ -362,7 +472,8 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
         documentId: document.id,
         contentType,
         hasVisualContext,
-        model: GOOGLE_CONFIG.DOCIFY_MODEL,
+        model: modelUsed, // PERF-AI-006: Actual model used
+        provider: docProvider, // PERF-AI-006: Track provider
         generationMethod: 'insights',
         totalTime,
       },

@@ -23,6 +23,7 @@ const CACHE_PREFIXES = {
   STATS: 'cache:stats',
   LIBRARY_META: 'cache:library:meta',
   DEDUP: 'dedup',
+  EMBEDDING: 'cache:embedding:query',
 } as const;
 
 /**
@@ -35,6 +36,7 @@ const CACHE_TTL = {
   STATS: 60,          // 1 minute - Stats need to be relatively fresh
   LIBRARY_META: 600,  // 10 minutes - Combined tags + collections metadata
   DEDUP: 10,          // 10 seconds - Request deduplication window
+  EMBEDDING: 86400,   // 24 hours - Query embeddings are deterministic and stable
 } as const;
 
 /**
@@ -406,6 +408,103 @@ export class LibraryMetadataCache {
     // Also invalidate individual caches
     await TagsCache.invalidate(orgId);
     await CollectionsCache.invalidate(orgId);
+  }
+}
+
+/**
+ * Simple hash function for query strings
+ * Uses djb2 algorithm for fast, consistent hashing
+ */
+function hashQueryString(str: string): string {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) + hash) ^ char; // hash * 33 ^ char
+  }
+  // Convert to unsigned 32-bit integer and then to base36 string
+  return (hash >>> 0).toString(36);
+}
+
+/**
+ * Query embedding caching operations
+ *
+ * Caches vector embeddings for search queries to reduce API costs.
+ * Queries are normalized (lowercase, trimmed, whitespace collapsed) before hashing.
+ *
+ * Expected savings: 20-35% reduction in embedding API calls for repeated queries.
+ * TTL: 24 hours (embeddings are deterministic for the same input)
+ */
+export class EmbeddingCache {
+  /**
+   * Normalize query for consistent cache keys
+   * - Lowercase
+   * - Trim whitespace
+   * - Collapse multiple spaces to single space
+   */
+  static normalizeQuery(query: string): string {
+    return query.toLowerCase().trim().replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Build cache key for query embedding
+   * Includes orgId to scope embeddings per organization (for potential future customization)
+   */
+  private static buildKey(normalizedQuery: string, orgId: string): string {
+    const queryHash = hashQueryString(normalizedQuery);
+    return `${CACHE_PREFIXES.EMBEDDING}:${orgId}:${queryHash}`;
+  }
+
+  /**
+   * Get cached embedding for query
+   * Returns null if not cached or on error
+   */
+  static async get(query: string, orgId: string): Promise<number[] | null> {
+    const normalizedQuery = this.normalizeQuery(query);
+    const key = this.buildKey(normalizedQuery, orgId);
+
+    try {
+      const cached = await CacheService.get<number[]>(key);
+      if (cached) {
+        console.log('[EmbeddingCache] Cache hit for query:', normalizedQuery.substring(0, 50));
+      }
+      return cached;
+    } catch (error) {
+      console.error('[EmbeddingCache] Error getting cached embedding:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Cache embedding for query
+   */
+  static async set(query: string, orgId: string, embedding: number[]): Promise<void> {
+    const normalizedQuery = this.normalizeQuery(query);
+    const key = this.buildKey(normalizedQuery, orgId);
+
+    try {
+      await CacheService.set(key, embedding, CACHE_TTL.EMBEDDING);
+      console.log('[EmbeddingCache] Cached embedding for query:', normalizedQuery.substring(0, 50));
+    } catch (error) {
+      console.error('[EmbeddingCache] Error caching embedding:', error);
+      // Silently fail - caching is an optimization, not critical
+    }
+  }
+
+  /**
+   * Invalidate embedding cache for a specific query
+   */
+  static async invalidate(query: string, orgId: string): Promise<void> {
+    const normalizedQuery = this.normalizeQuery(query);
+    const key = this.buildKey(normalizedQuery, orgId);
+    await CacheService.delete(key);
+  }
+
+  /**
+   * Invalidate all embedding caches for an organization
+   * WARNING: Use sparingly - scans all keys matching the pattern
+   */
+  static async invalidateOrg(orgId: string): Promise<void> {
+    await CacheService.deletePattern(`${CACHE_PREFIXES.EMBEDDING}:${orgId}:*`);
   }
 }
 

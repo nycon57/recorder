@@ -3,12 +3,16 @@
  *
  * Downloads recording from Supabase Storage, sends to Gemini 2.5 Flash for
  * multimodal analysis (audio + visual), and stores transcript with visual events.
+ *
+ * PERF-AI-006: Includes automatic fallback to OpenAI Whisper if Gemini fails.
  */
 
+import { createReadStream } from 'fs';
 import { readFile, unlink , writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
+import OpenAI from 'openai';
 
 import type { Database } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
@@ -16,6 +20,35 @@ import { getGoogleAI, GOOGLE_CONFIG } from '@/lib/google/client';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
 import { streamTranscription, isStreamingAvailable, sendCompletionNotification } from '@/lib/services/llm-streaming-helper';
+
+// PERF-AI-006: Lazy-initialized OpenAI client for fallback transcription
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY not configured for fallback');
+    }
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openaiClient;
+}
+
+/**
+ * PERF-AI-006: Check if error is recoverable (should fall back to Whisper)
+ */
+function isRecoverableGeminiError(error: any): boolean {
+  const errorMessage = error?.message || String(error);
+  return (
+    errorMessage.includes('503') ||
+    errorMessage.includes('overloaded') ||
+    errorMessage.includes('RESOURCE_EXHAUSTED') ||
+    errorMessage.includes('rate limit') ||
+    errorMessage.includes('quota') ||
+    error?.status === 503 ||
+    error?.status === 429
+  );
+}
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -51,6 +84,67 @@ interface GeminiVideoResponse {
     timestamp: string;
     description: string;
   }>;
+}
+
+/**
+ * PERF-AI-006: Fallback transcription using OpenAI Whisper
+ * Used when Gemini is unavailable (503, rate limits, quota exhausted)
+ * Note: Returns audio-only transcription (no visual events)
+ */
+async function transcribeWithWhisperFallback(
+  tempFilePath: string,
+  logger: ReturnType<typeof createLogger>
+): Promise<GeminiVideoResponse> {
+  logger.info('Using Whisper fallback for transcription');
+
+  const openai = getOpenAIClient();
+
+  // Call Whisper API
+  const transcription = await openai.audio.transcriptions.create({
+    file: createReadStream(tempFilePath) as any,
+    model: 'whisper-1',
+    language: 'en',
+    response_format: 'verbose_json',
+    timestamp_granularities: ['word', 'segment'],
+  });
+
+  // Convert Whisper response to GeminiVideoResponse format
+  const segments = (transcription as any).segments || [];
+  const audioTranscript: AudioSegment[] = segments.map((seg: any, index: number) => ({
+    timestamp: formatTimestamp(seg.start),
+    startTime: seg.start,
+    endTime: seg.end,
+    speaker: 'narrator',
+    text: seg.text.trim(),
+  }));
+
+  const fullText = (transcription as any).text || audioTranscript.map(s => s.text).join(' ');
+  const duration = (transcription as any).duration || (segments.length > 0 ? segments[segments.length - 1].end : 0);
+
+  logger.info('Whisper fallback completed', {
+    context: {
+      segmentCount: audioTranscript.length,
+      duration,
+      textLength: fullText.length,
+    },
+  });
+
+  return {
+    audioTranscript,
+    visualEvents: [], // Whisper doesn't provide visual events
+    combinedNarrative: `[Transcribed via Whisper fallback - no visual events available]\n\n${fullText}`,
+    duration,
+    keyMoments: [], // No key moments from Whisper
+  };
+}
+
+/**
+ * Format seconds to MM:SS timestamp
+ */
+function formatTimestamp(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
 /**
@@ -285,41 +379,42 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       streamingManager.sendProgress(recordingId, 'transcribe', 50, 'Analyzing video with Gemini AI...');
     }
 
-    // Use streaming helper for transcription
-    const streamingResult = await streamTranscription(
-      model,
-      videoBase64,
-      prompt,
-      {
-        recordingId,
-        chunkBufferSize: 500,
-        chunkDelayMs: 100,
-        punctuationChunking: true,
-        progressUpdateInterval: 5,
-      }
-    );
-
-    const responseText = streamingResult.fullText;
-    const analysisTime = Date.now() - startTime;
-
-    logger.info('Received Gemini response', {
-      context: {
-        responseLength: responseText.length,
-        responsePreview: responseText.substring(0, 200),
-        analysisTime,
-        streamedToClient: streamingResult.streamedToClient,
-      },
-    });
-
-    if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'transcribe', 70, 'Processing Gemini response...');
-    }
-
-    // Parse JSON response (strip markdown if present)
+    // PERF-AI-006: Track which provider was used for transcription
+    let transcriptionProvider: 'gemini' | 'whisper' = 'gemini';
     let parsedResponse: GeminiVideoResponse;
 
     try {
-      // Remove markdown code blocks if present
+      // Use streaming helper for transcription (Gemini)
+      const streamingResult = await streamTranscription(
+        model,
+        videoBase64,
+        prompt,
+        {
+          recordingId,
+          chunkBufferSize: 500,
+          chunkDelayMs: 100,
+          punctuationChunking: true,
+          progressUpdateInterval: 5,
+        }
+      );
+
+      const responseText = streamingResult.fullText;
+      const analysisTime = Date.now() - startTime;
+
+      logger.info('Received Gemini response', {
+        context: {
+          responseLength: responseText.length,
+          responsePreview: responseText.substring(0, 200),
+          analysisTime,
+          streamedToClient: streamingResult.streamedToClient,
+        },
+      });
+
+      if (isStreaming) {
+        streamingManager.sendProgress(recordingId, 'transcribe', 70, 'Processing Gemini response...');
+      }
+
+      // Parse JSON response (strip markdown if present)
       const jsonText = responseText
         .replace(/```json\n?/g, '')
         .replace(/```\n?/g, '')
@@ -327,33 +422,61 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
 
       parsedResponse = JSON.parse(jsonText);
 
-      logger.info('Parsed response successfully', {
+      logger.info('Parsed Gemini response successfully', {
         context: {
           audioSegments: parsedResponse.audioTranscript.length,
           visualEvents: parsedResponse.visualEvents.length,
           keyMoments: parsedResponse.keyMoments?.length || 0,
           duration: parsedResponse.duration,
+          provider: 'gemini',
         },
       });
+    } catch (geminiError: any) {
+      // PERF-AI-006: Check if we should fall back to Whisper
+      if (isRecoverableGeminiError(geminiError) && process.env.OPENAI_API_KEY && tempFilePath) {
+        logger.warn('Gemini transcription failed, using Whisper fallback', {
+          context: {
+            geminiError: geminiError.message,
+            recordingId,
+          },
+        });
 
-      if (isStreaming) {
-        streamingManager.sendProgress(
-          recordingId,
-          'transcribe',
-          80,
-          `Extracted ${parsedResponse.audioTranscript.length} audio segments and ${parsedResponse.visualEvents.length} visual events`
-        );
+        if (isStreaming) {
+          streamingManager.sendProgress(recordingId, 'transcribe', 55, 'Gemini unavailable, using Whisper fallback...');
+        }
+
+        try {
+          parsedResponse = await transcribeWithWhisperFallback(tempFilePath, logger);
+          transcriptionProvider = 'whisper';
+          logger.info('Whisper fallback successful', {
+            context: {
+              recordingId,
+              audioSegments: parsedResponse.audioTranscript.length,
+            },
+          });
+        } catch (whisperError: any) {
+          logger.error('Both Gemini and Whisper failed', {
+            context: {
+              geminiError: geminiError.message,
+              whisperError: whisperError.message,
+              recordingId,
+            },
+          });
+          throw new Error(`All transcription providers failed: Gemini (${geminiError.message}), Whisper (${whisperError.message})`);
+        }
+      } else {
+        // Not a recoverable error, or no fallback available
+        throw geminiError;
       }
-    } catch (parseError) {
-      logger.error('Failed to parse Gemini JSON response', {
-        context: {
-          responseLength: responseText.length,
-          responsePreview: responseText.substring(0, 500),
-        },
-        error: parseError as Error,
-      });
-      throw new Error(
-        `Failed to parse Gemini response as JSON: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`
+    }
+
+    if (isStreaming) {
+      streamingManager.sendProgress(
+        recordingId,
+        'transcribe',
+        80,
+        `Extracted ${parsedResponse.audioTranscript.length} audio segments` +
+          (parsedResponse.visualEvents.length > 0 ? ` and ${parsedResponse.visualEvents.length} visual events` : '')
       );
     }
 
@@ -376,8 +499,8 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
 
     // Prepare video metadata
     const video_metadata = {
-      model: GOOGLE_CONFIG.DOCIFY_MODEL,
-      provider: 'gemini-video',
+      model: transcriptionProvider === 'gemini' ? GOOGLE_CONFIG.DOCIFY_MODEL : 'whisper-1',
+      provider: transcriptionProvider === 'gemini' ? 'gemini-video' : 'whisper-fallback', // PERF-AI-006: Track provider
       duration: parsedResponse.duration,
       file_size_mb: (fileSize / 1024 / 1024).toFixed(2),
       processed_at: new Date().toISOString(),
@@ -404,8 +527,8 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
         words_json,
         visual_events: parsedResponse.visualEvents,
         video_metadata,
-        confidence: 0.95, // Gemini is generally high confidence
-        provider: 'gemini-video',
+        confidence: transcriptionProvider === 'gemini' ? 0.95 : 0.92, // Gemini 95%, Whisper 92%
+        provider: transcriptionProvider === 'gemini' ? 'gemini-video' : 'whisper-fallback', // PERF-AI-006
       })
       .select()
       .single();
@@ -437,63 +560,78 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       .update({ status: 'transcribed' })
       .eq('id', recordingId);
 
-    // Enqueue document generation job
-    await supabase.from('jobs').insert({
-      type: 'doc_generate',
-      status: 'pending',
-      payload: {
-        recordingId,
-        transcriptId: transcript.id,
-        orgId,
-      },
-      dedupe_key: `doc_generate:${recordingId}`,
-    });
-
-    logger.info('Enqueued document generation job', {
-      context: {
-        recordingId,
-        transcriptId: transcript.id,
-      },
-    });
-
-    // Enqueue compression job (runs in parallel with doc generation)
-    // Get recording info to determine if compression is needed
+    // PERF-AI-001: Create all dependent jobs in parallel for faster pipeline execution
+    // Previously, jobs were created sequentially which added unnecessary latency
+    // Get recording info first for compression job preparation
     const { data: recording } = await supabase
       .from('recordings')
       .select('content_type, file_type, file_size, storage_path_raw')
       .eq('id', recordingId)
       .single();
 
+    // Build array of jobs to create in parallel
+    const jobPromises: Promise<any>[] = [
+      // Document generation job
+      supabase.from('jobs').insert({
+        type: 'doc_generate',
+        status: 'pending',
+        payload: {
+          recordingId,
+          transcriptId: transcript.id,
+          orgId,
+        },
+        dedupe_key: `doc_generate:${recordingId}`,
+      }),
+      // Embeddings generation job - can start in parallel with doc generation
+      supabase.from('jobs').insert({
+        type: 'generate_embeddings',
+        status: 'pending',
+        payload: {
+          recordingId,
+          transcriptId: transcript.id,
+          orgId,
+        },
+        dedupe_key: `embeddings:${recordingId}`,
+      }),
+    ];
+
+    // Add compression job if applicable
     if (recording && recording.storage_path_raw) {
       const contentType = recording.content_type || 'recording';
       const outputPath = recording.storage_path_raw.replace('/raw.', '/compressed.');
 
       // Only compress video/audio content types
       if (['recording', 'video', 'audio'].includes(contentType)) {
-        await supabase.from('jobs').insert({
-          type: contentType === 'audio' ? 'compress_audio' : 'compress_video',
-          status: 'pending',
-          payload: {
-            recordingId,
-            orgId,
-            inputPath: recording.storage_path_raw,
-            outputPath,
-            profile: 'uploadedVideo', // Will be determined by classifier
-            contentType,
-            fileType: recording.file_type || 'mp4',
-          },
-          dedupe_key: `compress_${contentType}:${recordingId}`,
-        });
-
-        logger.info('Enqueued compression job', {
-          context: {
-            recordingId,
-            contentType,
-            jobType: contentType === 'audio' ? 'compress_audio' : 'compress_video',
-          },
-        });
+        jobPromises.push(
+          supabase.from('jobs').insert({
+            type: contentType === 'audio' ? 'compress_audio' : 'compress_video',
+            status: 'pending',
+            payload: {
+              recordingId,
+              orgId,
+              inputPath: recording.storage_path_raw,
+              outputPath,
+              profile: 'uploadedVideo', // Will be determined by classifier
+              contentType,
+              fileType: recording.file_type || 'mp4',
+            },
+            dedupe_key: `compress_${contentType}:${recordingId}`,
+          })
+        );
       }
     }
+
+    // Execute all job creations in parallel
+    await Promise.all(jobPromises);
+
+    logger.info('Enqueued all dependent jobs in parallel', {
+      context: {
+        recordingId,
+        transcriptId: transcript.id,
+        jobCount: jobPromises.length,
+        jobs: ['doc_generate', 'generate_embeddings', recording?.storage_path_raw ? 'compression' : null].filter(Boolean),
+      },
+    });
 
     if (isStreaming) {
       streamingManager.sendProgress(recordingId, 'transcribe', 95, 'Processing complete, starting document generation');
