@@ -153,11 +153,9 @@ export function MemberDetailDrawer({
           {/* Profile Section */}
           <div className="flex items-start gap-4">
             <UserAvatar
-              user={{
-                name: member.name,
-                email: member.email,
-                avatar_url: member.avatar_url,
-              }}
+              name={member.name || 'Unknown'}
+              avatarUrl={member.avatar_url}
+              email={member.email}
               size="lg"
             />
             <div className="flex-1 space-y-1">

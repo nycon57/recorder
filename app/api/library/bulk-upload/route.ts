@@ -70,7 +70,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     try {
       // Create recording placeholder
       const { data: recording, error: insertError } = await supabase
-        .from('recordings')
+        .from('content')
         .insert({
           org_id: orgId,
           created_by: userId,
@@ -120,7 +120,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
             recording_id: recording.id,
             tag_id: tagId,
           }));
-          const { error: tagsError } = await supabase.from('recording_tags').insert(tagInserts);
+          const { error: tagsError } = await supabase.from('content_tags').insert(tagInserts);
           if (tagsError) {
             warnings.push(`Failed to apply tags: ${tagsError.message}`);
           }

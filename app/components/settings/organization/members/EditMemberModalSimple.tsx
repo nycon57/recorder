@@ -36,7 +36,7 @@ import {
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { updateMemberSchema } from '@/lib/validations/organizations';
 
-import type { OrganizationMember } from '../types';
+import type { OrganizationMember } from '@/app/(dashboard)/settings/organization/members/types';
 
 interface EditMemberModalProps {
   open: boolean;

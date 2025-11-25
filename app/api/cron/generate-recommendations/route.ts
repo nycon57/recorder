@@ -6,8 +6,8 @@
  * by the background worker.
  */
 
-import { NextRequest } from 'next/server';
-import { apiHandler, successResponse } from '@/lib/utils/api';
+import { NextRequest, NextResponse } from 'next/server';
+import { apiHandler, successResponse, errorResponse } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/admin';
 
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -22,11 +22,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
     const isProduction = process.env.NODE_ENV === 'production';
     if (isProduction) {
       console.error('[Cron] CRON_SECRET not set in production');
-      return new Response('Unauthorized - CRON_SECRET not configured', { status: 401 });
+      return errorResponse('Unauthorized - CRON_SECRET not configured', 'UNAUTHORIZED', 401);
     }
     // In non-production, allow if secret is not set (for local development)
   } else if (authHeader !== `Bearer ${cronSecret}`) {
-    return new Response('Unauthorized', { status: 401 });
+    return errorResponse('Unauthorized', 'UNAUTHORIZED', 401);
   }
 
   // Create a job to generate recommendations

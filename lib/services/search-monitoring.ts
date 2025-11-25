@@ -313,7 +313,7 @@ class SearchMonitor {
 
       // Add to sorted set for chronological access (score = timestamp)
       const listKey = `${this.redisKeyPrefix}list:${metrics.orgId}`;
-      await redis.zadd(listKey, metrics.timestamp.getTime(), key);
+      await redis.zadd(listKey, { score: metrics.timestamp.getTime(), member: key });
 
       // Trim sorted set to buffer size
       const count = await redis.zcard(listKey);
@@ -386,19 +386,21 @@ class SearchMonitor {
       const listKey = `${this.redisKeyPrefix}list:${orgId}`;
 
       // Get most recent keys from sorted set (descending order)
-      const keys = await redis.zrevrange(listKey, 0, limit - 1);
+      const keys = await redis.zrange(listKey, 0, limit - 1, { rev: true });
 
       if (!keys || keys.length === 0) {
         return [];
       }
 
       // Fetch metrics for each key
-      const metricsData = await redis.mget(...keys);
+      const metricsData = await Promise.all(
+        (keys as string[]).map((key: string) => redis.get(key))
+      );
 
       // Parse and deserialize
       const metrics: SearchPerformanceMetrics[] = [];
       for (const data of metricsData) {
-        if (data) {
+        if (typeof data === 'string') {
           try {
             const parsed = JSON.parse(data);
             // Convert timestamp back to Date object
@@ -498,7 +500,7 @@ class SearchMonitor {
 
       // Delete all metric keys
       if (keys && keys.length > 0) {
-        await redis.del(...keys);
+        await redis.del(...(keys as string[]));
       }
 
       // Delete the list key

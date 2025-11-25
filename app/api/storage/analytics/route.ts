@@ -17,7 +17,7 @@ import { getMigrationStats } from '@/lib/workers/handlers/migrate-storage-tier';
  */
 export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   try {
     // 1. Get storage costs by tier using database function

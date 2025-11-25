@@ -213,7 +213,7 @@ export async function processImportedDocument(job: Job): Promise<void> {
 
       // Transform to transcript_chunks format
       const transcriptChunksBatch = batch.map(record => ({
-        recording_id: documentId, // Use documentId as recording_id temporarily
+        content_id: documentId, // Use documentId as recording_id temporarily
         org_id: record.org_id,
         chunk_index: record.chunk_index,
         chunk_text: record.chunk_text,

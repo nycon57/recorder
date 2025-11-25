@@ -56,7 +56,7 @@ function escapeHtml(text: string): string {
  *
  * @security Rate limited to 5 requests per hour per IP for public access
  */
-export const POST = rateLimit(RateLimitTier.PUBLIC, (req: NextRequest) => {
+export const POST = rateLimit(RateLimitTier.PUBLIC, async (req: NextRequest) => {
   // Rate limit by IP address for public endpoint
   // Parse x-forwarded-for (may contain multiple IPs) and take the first one
   const forwardedFor = req.headers.get('x-forwarded-for');
@@ -76,7 +76,24 @@ export const POST = rateLimit(RateLimitTier.PUBLIC, (req: NextRequest) => {
     // Validate request body
     const body = await parseBody(request, contactFormSchema);
 
-    const { name, email, company, subject, message } = body;
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      !('name' in body) ||
+      !('email' in body) ||
+      !('subject' in body) ||
+      !('message' in body)
+    ) {
+      return errors.badRequest('Invalid request body');
+    }
+
+    const { name, email, company, subject, message } = body as {
+      name: string;
+      email: string;
+      company?: string;
+      subject: string;
+      message: string;
+    };
 
     // Escape all user-controlled values to prevent XSS
     const escapedName = escapeHtml(name);
@@ -94,8 +111,8 @@ export const POST = rateLimit(RateLimitTier.PUBLIC, (req: NextRequest) => {
 
       await resend.emails.send({
         from: fromEmail,
-        to: toEmail,
-        replyTo: email,
+        to: toEmail as string,
+        reply_to: email,
         subject: `Contact Form: ${escapedSubject}`,
         html: `
           <!DOCTYPE html>

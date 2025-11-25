@@ -23,7 +23,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Parse and validate query parameters
   const params = parseSearchParams(request, alertsQuerySchema);
-  const { resolved, severity, limit } = params;
+  const { resolved, severity, limit } = params as { resolved?: boolean; severity?: string; limit?: number };
 
   // Build query with filters
   let query = supabaseAdmin
@@ -38,7 +38,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .eq('organization_id', orgId)
     .order('severity', { ascending: false }) // critical first
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .limit(limit ?? 50); // Default to 50 if undefined
 
   // Apply filters
   if (resolved !== undefined) {

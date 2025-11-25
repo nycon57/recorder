@@ -198,7 +198,7 @@ export async function executeBatchQueries<T extends Record<string, any>>(
     if (error) {
       console.error(`[QueryOptimizer] Batch query error for ${key}:`, error);
     }
-    acc[key] = result;
+    (acc as any)[key] = result;
     return acc;
   }, {} as T);
 

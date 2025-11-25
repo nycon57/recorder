@@ -204,8 +204,9 @@ export class BatchUploader {
         console.log(`[BatchUploader] Form field: ${fieldname} = ${value}`);
       });
 
-      bb.on('error', (error) => {
-        reject(new Error(`Busboy error: ${error.message}`));
+      bb.on('error', (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        reject(new Error(`Busboy error: ${message}`));
       });
 
       bb.on('finish', async () => {

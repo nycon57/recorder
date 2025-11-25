@@ -173,7 +173,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
   const { data: chunkStats } = await supabase
     .from('transcript_chunks')
     .select('id, embedding', { count: 'exact' })
-    .eq('recording_id', recordingId);
+    .eq('content_id', recordingId);
 
   const totalChunks = chunkStats?.length || 0;
   const chunksWithEmbeddings = chunkStats?.filter(
@@ -230,7 +230,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     const { error: deleteError } = await supabase
       .from('transcript_chunks')
       .delete()
-      .eq('recording_id', recordingId);
+      .eq('content_id', recordingId);
 
     if (deleteError) {
       throw new Error(`Failed to clean up partial embeddings: ${deleteError.message}`);
@@ -541,7 +541,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
             const sanitizedMetadata = sanitizeMetadata(chunk.metadata);
 
             return {
-              recording_id: recordingId,
+              content_id: recordingId,
               org_id: orgId,
               chunk_text: chunk.text,
               chunk_index: sanitizedMetadata.chunkIndex as number,
@@ -665,7 +665,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
           const { error: cleanupError } = await supabase
             .from('transcript_chunks')
             .delete()
-            .eq('recording_id', recordingId);
+            .eq('content_id', recordingId);
 
           if (cleanupError) {
             logger.error('Failed to cleanup partial embeddings after insert error', {
@@ -700,7 +700,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
       const timestamp = new Date().toISOString();
       const { data: updateResult, error: rpcError } = await supabase
         .rpc('update_embedding_completion', {
-          p_recording_id: recordingId,
+          p_content_id: recordingId,
           p_timestamp: timestamp,
         });
 

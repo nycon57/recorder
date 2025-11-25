@@ -34,7 +34,8 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
 
   const { id: recommendationId } = await context.params;
   const body = await parseBody(request, recommendationImplementSchema);
-  const { estimatedCompletionDays = 30 } = body;
+  // Type assertion for parsed body
+  const { estimatedCompletionDays = 30 } = body as { estimatedCompletionDays?: number };
 
   // Calculate estimated completion date
   const estimatedCompletion = new Date();

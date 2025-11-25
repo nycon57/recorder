@@ -1,6 +1,7 @@
 import { createHmac } from 'crypto';
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
 import { createSupabaseClient } from '@/lib/supabase/server';
@@ -18,7 +19,7 @@ export const POST = apiHandler(async (
     throw new Error('Unauthorized: Admin access required');
   }
 
-  const body = await parseBody(request, testWebhookSchema);
+  const bodyData = await parseBody<z.infer<typeof testWebhookSchema>>(request, testWebhookSchema);
   const supabase = await createSupabaseClient();
 
   // Get webhook details
@@ -34,8 +35,8 @@ export const POST = apiHandler(async (
   }
 
   // Prepare the test payload
-  const payload = body.test_payload || {
-    event: body.event_type || 'test',
+  const payload = bodyData.test_payload || {
+    event: bodyData.event_type || 'test',
     timestamp: new Date().toISOString(),
     test: true,
     data: {
@@ -54,7 +55,7 @@ export const POST = apiHandler(async (
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Webhook-Signature': signature,
-    'X-Webhook-Event': body.event_type || 'test',
+    'X-Webhook-Event': bodyData.event_type || 'test',
     'X-Webhook-Test': 'true',
     ...webhook.headers,
   };
@@ -107,7 +108,7 @@ export const POST = apiHandler(async (
   await supabase.from('webhook_deliveries').insert({
     webhook_id: webhook.id,
     org_id: orgId,
-    event_type: body.event_type || 'test',
+    event_type: bodyData.event_type || 'test',
     status: success ? 'success' : 'failure',
     status_code: responseStatus,
     duration_ms: duration,

@@ -51,7 +51,11 @@ export type FileType =
   | 'txt'
   | 'md';
 
-export type RecordingStatus =
+/**
+ * Content processing status (applies to all content types).
+ * Flow: uploading → uploaded → transcribing → transcribed → doc_generating → completed
+ */
+export type ContentStatus =
   | 'uploading'
   | 'uploaded'
   | 'transcribing'
@@ -59,6 +63,9 @@ export type RecordingStatus =
   | 'doc_generating'
   | 'completed'
   | 'error';
+
+/** @deprecated Use ContentStatus instead */
+export type RecordingStatus = ContentStatus;
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -142,8 +149,9 @@ export type SearchMode = 'standard' | 'agentic' | 'hybrid' | 'hierarchical';
  * - 'hot': Recent files in Supabase Storage (< 30 days) - $0.021/GB/month
  * - 'warm': Moderate-age files in Cloudflare R2 (30-180 days) - $0.015/GB/month
  * - 'cold': Archive files in Cloudflare R2 (> 180 days) - $0.01/GB/month
+ * - 'glacier': Deep archive files in Cloudflare R2 (> 365 days) - $0.001/GB/month
  */
-export type StorageTier = 'hot' | 'warm' | 'cold';
+export type StorageTier = 'hot' | 'warm' | 'cold' | 'glacier';
 
 /**
  * Storage provider for multi-tier storage.
@@ -207,9 +215,11 @@ export interface CompressionStats {
  * Job payload for video compression tasks.
  */
 export interface CompressVideoJobPayload {
-  /** Recording ID to compress */
-  recordingId: string;
-  /** Organization ID for the recording */
+  /** Content ID to compress */
+  contentId: string;
+  /** @deprecated Use contentId instead */
+  recordingId?: string;
+  /** Organization ID for the content */
   orgId: string;
   /** Storage path to input (raw) video file */
   inputPath: string;
@@ -217,9 +227,9 @@ export interface CompressVideoJobPayload {
   outputPath: string;
   /** Compression profile to use */
   profile: CompressionProfile;
-  /** Content type of the recording */
+  /** Content type of the content item */
   contentType: ContentType;
-  /** File type of the recording */
+  /** File type of the content item */
   fileType: FileType;
 }
 
@@ -227,9 +237,11 @@ export interface CompressVideoJobPayload {
  * Job payload for audio compression tasks.
  */
 export interface CompressAudioJobPayload {
-  /** Recording ID to compress */
-  recordingId: string;
-  /** Organization ID for the recording */
+  /** Content ID to compress */
+  contentId: string;
+  /** @deprecated Use contentId instead */
+  recordingId?: string;
+  /** Organization ID for the content */
   orgId: string;
   /** Storage path to input (raw) audio file */
   inputPath: string;
@@ -237,9 +249,9 @@ export interface CompressAudioJobPayload {
   outputPath: string;
   /** Compression profile to use */
   profile: CompressionProfile;
-  /** Content type of the recording */
+  /** Content type of the content item */
   contentType: ContentType;
-  /** File type of the recording */
+  /** File type of the content item */
   fileType: FileType;
 }
 
@@ -247,9 +259,11 @@ export interface CompressAudioJobPayload {
  * Job payload for storage tier migration tasks.
  */
 export interface MigrateStorageTierJobPayload {
-  /** Recording ID to migrate */
-  recordingId: string;
-  /** Organization ID for the recording */
+  /** Content ID to migrate */
+  contentId: string;
+  /** @deprecated Use contentId instead */
+  recordingId?: string;
+  /** Organization ID for the content */
   orgId: string;
   /** Current storage provider */
   fromProvider: StorageProvider;
@@ -272,18 +286,21 @@ export interface Tag {
   updated_at: string;
 }
 
-export interface RecordingTag {
-  recording_id: string;
+export interface ContentTag {
+  content_id: string;
   tag_id: string;
   created_at: string;
 }
 
+/** @deprecated Use ContentTag instead */
+export type RecordingTag = ContentTag;
+
 /**
- * Comment on a recording with optional timestamp for video/audio
+ * Comment on content with optional timestamp for video/audio
  */
 export interface Comment {
   id: string;
-  recording_id: string;
+  content_id: string;
   user_id: string;
   org_id: string;
   parent_id: string | null;
@@ -457,14 +474,15 @@ export interface Database {
           updated_at?: string;
         };
       };
-      recordings: {
+      /** Universal content table - stores all content types (recordings, videos, audio, documents, text) */
+      content: {
         Row: {
           id: string;
           org_id: string;
           created_by: string;
           title: string | null;
           description: string | null;
-          status: RecordingStatus;
+          status: ContentStatus;
           duration_sec: number | null;
           storage_path_raw: string | null;
           storage_path_processed: string | null;
@@ -497,6 +515,8 @@ export interface Database {
           tier_migrated_at: string | null;
           /** Flag indicating if tier migration job is scheduled */
           tier_migration_scheduled: boolean | null;
+          /** Reference to original content if this is a deduplicated copy */
+          deduplicated_from_content_id: string | null;
         };
         Insert: {
           id?: string;
@@ -504,7 +524,7 @@ export interface Database {
           created_by: string;
           title?: string | null;
           description?: string | null;
-          status?: RecordingStatus;
+          status?: ContentStatus;
           duration_sec?: number | null;
           storage_path_raw?: string | null;
           storage_path_processed?: string | null;
@@ -526,11 +546,12 @@ export interface Database {
           storage_path_r2?: string | null;
           tier_migrated_at?: string | null;
           tier_migration_scheduled?: boolean | null;
+          deduplicated_from_content_id?: string | null;
         };
         Update: {
           title?: string | null;
           description?: string | null;
-          status?: RecordingStatus;
+          status?: ContentStatus;
           duration_sec?: number | null;
           storage_path_raw?: string | null;
           storage_path_processed?: string | null;
@@ -551,12 +572,103 @@ export interface Database {
           storage_path_r2?: string | null;
           tier_migrated_at?: string | null;
           tier_migration_scheduled?: boolean | null;
+          deduplicated_from_content_id?: string | null;
         };
       };
-      recording_summaries: {
+      /** @deprecated Use 'content' table instead */
+      recordings: {
         Row: {
           id: string;
-          recording_id: string;
+          org_id: string;
+          created_by: string;
+          title: string | null;
+          description: string | null;
+          status: ContentStatus;
+          duration_sec: number | null;
+          storage_path_raw: string | null;
+          storage_path_processed: string | null;
+          thumbnail_url: string | null;
+          error_message: string | null;
+          metadata: Json;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+          completed_at: string | null;
+          content_type: ContentType | null;
+          file_type: FileType | null;
+          original_filename: string | null;
+          mime_type: string | null;
+          file_size: number | null;
+          compression_stats: CompressionStats | null;
+          storage_tier: StorageTier | null;
+          storage_provider: StorageProvider | null;
+          storage_path_r2: string | null;
+          tier_migrated_at: string | null;
+          tier_migration_scheduled: boolean | null;
+          deduplicated_from_content_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          created_by: string;
+          title?: string | null;
+          description?: string | null;
+          status?: ContentStatus;
+          duration_sec?: number | null;
+          storage_path_raw?: string | null;
+          storage_path_processed?: string | null;
+          thumbnail_url?: string | null;
+          error_message?: string | null;
+          metadata?: Json;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          completed_at?: string | null;
+          content_type?: ContentType | null;
+          file_type?: FileType | null;
+          original_filename?: string | null;
+          mime_type?: string | null;
+          file_size?: number | null;
+          compression_stats?: CompressionStats | null;
+          storage_tier?: StorageTier | null;
+          storage_provider?: StorageProvider | null;
+          storage_path_r2?: string | null;
+          tier_migrated_at?: string | null;
+          tier_migration_scheduled?: boolean | null;
+          deduplicated_from_content_id?: string | null;
+        };
+        Update: {
+          title?: string | null;
+          description?: string | null;
+          status?: ContentStatus;
+          duration_sec?: number | null;
+          storage_path_raw?: string | null;
+          storage_path_processed?: string | null;
+          thumbnail_url?: string | null;
+          error_message?: string | null;
+          metadata?: Json;
+          deleted_at?: string | null;
+          updated_at?: string;
+          completed_at?: string | null;
+          content_type?: ContentType | null;
+          file_type?: FileType | null;
+          original_filename?: string | null;
+          mime_type?: string | null;
+          file_size?: number | null;
+          compression_stats?: CompressionStats | null;
+          storage_tier?: StorageTier | null;
+          storage_provider?: StorageProvider | null;
+          storage_path_r2?: string | null;
+          tier_migrated_at?: string | null;
+          tier_migration_scheduled?: boolean | null;
+          deduplicated_from_content_id?: string | null;
+        };
+      };
+      /** LLM-generated summaries for hierarchical retrieval */
+      content_summaries: {
+        Row: {
+          id: string;
+          content_id: string;
           org_id: string;
           summary_text: string;
           summary_embedding: number[] | null;
@@ -567,7 +679,39 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          recording_id: string;
+          content_id: string;
+          org_id: string;
+          summary_text: string;
+          summary_embedding?: number[] | null;
+          model?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          summary_text?: string;
+          summary_embedding?: number[] | null;
+          model?: string | null;
+          metadata?: Json;
+          updated_at?: string;
+        };
+      };
+      /** @deprecated Use content_summaries instead */
+      recording_summaries: {
+        Row: {
+          id: string;
+          content_id: string;
+          org_id: string;
+          summary_text: string;
+          summary_embedding: number[] | null;
+          model: string | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          content_id: string;
           org_id: string;
           summary_text: string;
           summary_embedding?: number[] | null;
@@ -587,7 +731,7 @@ export interface Database {
       transcripts: {
         Row: {
           id: string;
-          recording_id: string;
+          content_id: string;
           language: string;
           text: string;
           words_json: Json | null;
@@ -599,7 +743,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          recording_id: string;
+          content_id: string;
           language?: string;
           text: string;
           words_json?: Json | null;
@@ -619,7 +763,7 @@ export interface Database {
       documents: {
         Row: {
           id: string;
-          recording_id: string;
+          content_id: string;
           org_id: string;
           markdown: string;
           html: string | null;
@@ -633,7 +777,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          recording_id: string;
+          content_id: string;
           org_id: string;
           markdown: string;
           html?: string | null;
@@ -658,7 +802,7 @@ export interface Database {
       transcript_chunks: {
         Row: {
           id: string;
-          recording_id: string;
+          content_id: string;
           org_id: string;
           chunk_index: number;
           chunk_text: string;
@@ -675,7 +819,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          recording_id: string;
+          content_id: string;
           org_id: string;
           chunk_index: number;
           chunk_text: string;
@@ -1060,14 +1204,29 @@ export interface Database {
           updated_at?: string;
         };
       };
-      recording_tags: {
+      /** Junction table linking content to tags */
+      content_tags: {
         Row: {
-          recording_id: string;
+          content_id: string;
           tag_id: string;
           created_at: string;
         };
         Insert: {
-          recording_id: string;
+          content_id: string;
+          tag_id: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+      };
+      /** @deprecated Use content_tags instead */
+      recording_tags: {
+        Row: {
+          content_id: string;
+          tag_id: string;
+          created_at: string;
+        };
+        Insert: {
+          content_id: string;
           tag_id: string;
           created_at?: string;
         };
@@ -1116,7 +1275,7 @@ export interface Database {
       video_frames: {
         Row: {
           id: string;
-          recording_id: string;
+          content_id: string;
           org_id: string;
           frame_time_sec: number;
           frame_url: string | null;
@@ -1128,7 +1287,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          recording_id: string;
+          content_id: string;
           org_id: string;
           frame_time_sec: number;
           frame_url?: string | null;

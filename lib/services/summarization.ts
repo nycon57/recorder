@@ -1,16 +1,17 @@
 /**
- * Recording Summarization Service
+ * Content Summarization Service
  *
- * Generates high-quality summaries of recordings by combining transcript and document content.
+ * Generates high-quality summaries of content by combining transcript and document content.
  * Uses Google Gemini 2.5 Flash for summarization.
  */
 
 import { getGoogleAI, GOOGLE_CONFIG } from '@/lib/google/client';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { withTimeout } from '@/lib/utils/timeout';
 
 export interface SummarizationInput {
-  recordingId: string;
+  contentId: string;
   orgId: string;
 }
 
@@ -21,34 +22,34 @@ export interface SummarizationResult {
 }
 
 /**
- * Generate a comprehensive summary of a recording
+ * Generate a comprehensive summary of content
  * Combines transcript and document to create a 500-1000 word summary
  */
 export async function generateRecordingSummary(
-  recordingId: string,
+  contentId: string,
   orgId: string
 ): Promise<SummarizationResult> {
-  console.log(`[Summarization] Starting summary generation for recording ${recordingId}`);
+  console.log(`[Summarization] Starting summary generation for content ${contentId}`);
 
   const supabase = createAdminClient();
 
-  // Fetch recording metadata
-  const { data: recording, error: recordingError } = await supabase
-    .from('recordings')
+  // Fetch content metadata
+  const { data: content, error: contentError } = await supabase
+    .from('content')
     .select('title, description, duration_sec, metadata')
-    .eq('id', recordingId)
+    .eq('id', contentId)
     .eq('org_id', orgId)
     .single();
 
-  if (recordingError || !recording) {
-    throw new Error(`Failed to fetch recording: ${recordingError?.message || 'Not found'}`);
+  if (contentError || !content) {
+    throw new Error(`Failed to fetch content: ${contentError?.message || 'Not found'}`);
   }
 
   // Fetch transcript
   const { data: transcript, error: transcriptError } = await supabase
     .from('transcripts')
     .select('text, visual_events, video_metadata, provider')
-    .eq('recording_id', recordingId)
+    .eq('content_id', contentId)
     .single();
 
   if (transcriptError || !transcript) {
@@ -59,7 +60,7 @@ export async function generateRecordingSummary(
   const { data: document, error: documentError } = await supabase
     .from('documents')
     .select('markdown')
-    .eq('recording_id', recordingId)
+    .eq('content_id', contentId)
     .eq('org_id', orgId)
     .single();
 
@@ -74,13 +75,13 @@ export async function generateRecordingSummary(
   const targetWords = Math.min(1000, Math.max(500, Math.floor(totalContentLength / 10)));
 
   // Build context for summary
-  const title = recording.title || 'Untitled Recording';
-  const duration = recording.duration_sec
-    ? `${Math.floor(recording.duration_sec / 60)}:${String(Math.floor(recording.duration_sec % 60)).padStart(2, '0')}`
+  const title = content.title || 'Untitled Content';
+  const duration = content.duration_sec
+    ? `${Math.floor(content.duration_sec / 60)}:${String(Math.floor(content.duration_sec % 60)).padStart(2, '0')}`
     : 'Unknown';
 
   const hasVisualEvents = transcript.visual_events && (transcript.visual_events as any[]).length > 0;
-  const recordingType = hasVisualEvents ? 'screen recording with visual interactions' : 'audio recording';
+  const contentType = hasVisualEvents ? 'screen recording with visual interactions' : 'audio recording';
 
   // Format visual context if available
   let visualContext = '';
@@ -94,20 +95,20 @@ export async function generateRecordingSummary(
   }
 
   // Build summarization prompt
-  const prompt = `You are an expert at creating concise, informative summaries of recordings.
+  const prompt = `You are an expert at creating concise, informative summaries of content.
 
-Your task is to create a comprehensive summary of this recording by analyzing both the transcript and the structured document.
+Your task is to create a comprehensive summary of this content by analyzing both the transcript and the structured document.
 
-## Recording Information
+## Content Information
 - **Title**: ${title}
-- **Type**: ${recordingType}
+- **Type**: ${contentType}
 - **Duration**: ${duration}
-${recording.description ? `- **Description**: ${recording.description}` : ''}
+${content.description ? `- **Description**: ${content.description}` : ''}
 
 ## Instructions
 Create a ${targetWords}-word summary that includes:
 
-1. **Overview** (2-3 sentences): What is this recording about? What's the main purpose or topic?
+1. **Overview** (2-3 sentences): What is this content about? What's the main purpose or topic?
 
 2. **Key Topics & Themes**: List the 5-7 most important topics discussed or demonstrated
 
@@ -117,7 +118,7 @@ Create a ${targetWords}-word summary that includes:
    - Key decisions, conclusions, or outcomes mentioned
 
 4. **Timeline of Events** (if applicable):
-   - Major sections or phases of the recording
+   - Major sections or phases of the content
    - What happened in what order
    - Key transitions or turning points
 
@@ -156,20 +157,20 @@ Generate the summary now:`;
     model: GOOGLE_CONFIG.DOCIFY_MODEL, // Use same model as document generation
     safetySettings: [
       {
-        category: 'HARM_CATEGORY_HARASSMENT',
-        threshold: 'BLOCK_NONE',
+        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
       },
       {
-        category: 'HARM_CATEGORY_HATE_SPEECH',
-        threshold: 'BLOCK_NONE',
+        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
       },
       {
-        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        threshold: 'BLOCK_NONE',
+        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
       },
       {
-        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-        threshold: 'BLOCK_NONE',
+        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
       },
     ],
   });

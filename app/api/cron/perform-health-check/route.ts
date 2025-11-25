@@ -5,8 +5,8 @@
  * Creates a job that will be processed by the background worker.
  */
 
-import { NextRequest } from 'next/server';
-import { apiHandler, successResponse } from '@/lib/utils/api';
+import { NextRequest, NextResponse } from 'next/server';
+import { apiHandler, successResponse, errorResponse } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/admin';
 
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -17,7 +17,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const cronSecret = process.env.CRON_SECRET;
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return new Response('Unauthorized', { status: 401 });
+    return errorResponse('Unauthorized', 'UNAUTHORIZED', 401);
   }
 
   // Create a job to perform health check

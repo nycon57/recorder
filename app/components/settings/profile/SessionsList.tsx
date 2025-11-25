@@ -75,7 +75,7 @@ export function SessionsList() {
         const currentSessionId = clerkSession?.id;
 
         // Transform API response to match component's Session interface
-        const formattedSessions: Session[] = (data.data?.sessions || []).map((session) => ({
+        const formattedSessions: Session[] = (data.data?.sessions || []).map((session: ApiSession) => ({
           id: session.id,
           device_name: `${session.browser} on ${session.os}`,
           device_type: session.deviceType || 'unknown',

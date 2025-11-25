@@ -1,6 +1,6 @@
 'use client';
 
-import { useRecording, type RecordingLayout, type CameraShape } from '../contexts/RecordingContext';
+import { useRecording, type RecordingLayout, type CameraShape } from '@/app/(dashboard)/record/contexts/RecordingContext';
 
 export function RecordingControls() {
   const {

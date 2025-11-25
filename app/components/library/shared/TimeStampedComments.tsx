@@ -94,7 +94,7 @@ export default function TimeStampedComments({
     setIsLoading(true);
     try {
       const response = await fetch(
-        `/api/comments?recording_id=${recordingId}&limit=100`
+        `/api/comments?content_id=${recordingId}&limit=100`
       );
 
       if (!response.ok) {
@@ -122,7 +122,7 @@ export default function TimeStampedComments({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          recording_id: recordingId,
+          content_id: recordingId,
           text: newCommentText.trim(),
           timestamp_sec:
             supportsTimestamps && includeTimestamp && currentTime !== undefined

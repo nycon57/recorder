@@ -22,7 +22,7 @@ export const DELETE = apiHandler(
       .from('favorites')
       .select('user_id, recording_id')
       .eq('user_id', userId)
-      .eq('recording_id', recordingId)
+      .eq('content_id', recordingId)
       .single();
 
     if (fetchError || !existing) {
@@ -31,7 +31,7 @@ export const DELETE = apiHandler(
 
     // Get recording title for activity log
     const { data: recording } = await supabase
-      .from('recordings')
+      .from('content')
       .select('title')
       .eq('id', recordingId)
       .single();
@@ -41,7 +41,7 @@ export const DELETE = apiHandler(
       .from('favorites')
       .delete()
       .eq('user_id', userId)
-      .eq('recording_id', recordingId);
+      .eq('content_id', recordingId);
 
     if (deleteError) {
       console.error('[DELETE /api/favorites/[recordingId]] Error removing favorite:', deleteError);

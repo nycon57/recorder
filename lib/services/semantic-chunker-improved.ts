@@ -23,7 +23,7 @@ import type {
 
 // Configure Xenova transformers
 env.allowLocalModels = false; // Always use remote models
-env.remoteURL = 'https://huggingface.co/';
+(env as any).remoteURL = 'https://huggingface.co/';
 
 // Type for the Xenova pipeline
 type FeatureExtractionPipeline = Awaited<ReturnType<typeof pipeline>>;
@@ -277,9 +277,9 @@ export class SemanticChunker {
           batch.map(async (sentence) => {
             const output = await model(sentence, {
               pooling: 'mean',
-              normalize: true,
-            });
-            return Array.from(output.data as Float32Array);
+              normalize: true as unknown as any,
+            } as any);
+            return Array.from((output as any).data as Float32Array);
           })
         );
 

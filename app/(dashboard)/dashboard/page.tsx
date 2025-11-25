@@ -4,8 +4,8 @@ import { redirect } from 'next/navigation';
 import { DashboardContent } from '@/app/components/dashboard';
 
 export const metadata = {
-  title: 'Dashboard - Record',
-  description: 'Your knowledge management hub',
+  title: 'Dashboard - Tribora',
+  description: 'Your knowledge intelligence hub',
 };
 
 export default async function DashboardPage() {

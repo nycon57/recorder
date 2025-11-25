@@ -40,7 +40,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   if (cronSecret !== expectedSecret) {
-    throw errors.unauthorized('Invalid cron secret');
+    return errors.unauthorized();
   }
 
   // Parse and validate request body
@@ -196,7 +196,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   if (cronSecret !== expectedSecret) {
-    throw errors.unauthorized('Invalid cron secret');
+    return errors.unauthorized();
   }
 
   const supabase = createClient();
@@ -208,7 +208,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .is('deleted_at', null);
 
   const { data: pendingMigrations } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id', { count: 'exact' })
     .eq('tier_migration_scheduled', true)
     .is('deleted_at', null);

@@ -50,14 +50,14 @@ export const GET = apiHandler(
       return errors.notFound('Collection', undefined);
     }
 
-    // Build query for collection items with recordings
+    // Build query for collection items with content
     let itemsQuery = supabase
       .from('collection_items')
       .select(
         `
-        recording_id,
-        created_at as added_at,
-        recordings!inner(
+        content_id,
+        added_at,
+        content!inner(
           id,
           title,
           content_type,
@@ -68,29 +68,29 @@ export const GET = apiHandler(
         { count: 'exact' }
       )
       .eq('collection_id', collectionId)
-      .is('recordings.deleted_at', null);
+      .is('content.deleted_at', null);
 
     // Apply content_type filter
     if (query.content_type) {
-      itemsQuery = itemsQuery.eq('recordings.content_type', query.content_type);
+      itemsQuery = itemsQuery.eq('content.content_type', query.content_type);
     }
 
     // Apply sorting
     switch (query.sort) {
       case 'created_asc':
-        itemsQuery = itemsQuery.order('recordings(created_at)', { ascending: true });
+        itemsQuery = itemsQuery.order('content(created_at)', { ascending: true });
         break;
       case 'created_desc':
-        itemsQuery = itemsQuery.order('recordings(created_at)', { ascending: false });
+        itemsQuery = itemsQuery.order('content(created_at)', { ascending: false });
         break;
       case 'title_asc':
-        itemsQuery = itemsQuery.order('recordings(title)', { ascending: true });
+        itemsQuery = itemsQuery.order('content(title)', { ascending: true });
         break;
       case 'title_desc':
-        itemsQuery = itemsQuery.order('recordings(title)', { ascending: false });
+        itemsQuery = itemsQuery.order('content(title)', { ascending: false });
         break;
       default:
-        itemsQuery = itemsQuery.order('created_at', { ascending: false });
+        itemsQuery = itemsQuery.order('added_at', { ascending: false });
     }
 
     // Apply pagination
@@ -106,10 +106,10 @@ export const GET = apiHandler(
 
     // Transform the data
     const formattedItems = (items || []).map((item: any) => ({
-      id: item.recordings.id,
-      title: item.recordings.title,
-      content_type: item.recordings.content_type,
-      created_at: item.recordings.created_at,
+      id: item.content.id,
+      title: item.content.title,
+      content_type: item.content.content_type,
+      created_at: item.content.created_at,
       added_at: item.added_at,
     }));
 
@@ -153,7 +153,7 @@ export const POST = apiHandler(
 
     // Verify all recordings exist and belong to this org
     const { data: recordings, error: recordingsError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id')
       .in('id', body.item_ids)
       .eq('org_id', orgId)
@@ -169,16 +169,16 @@ export const POST = apiHandler(
     }
 
     // Insert collection items (ignore duplicates)
-    const itemsToInsert = body.item_ids.map((recordingId) => ({
+    const itemsToInsert = body.item_ids.map((contentId) => ({
       collection_id: collectionId,
-      recording_id: recordingId,
+      content_id: contentId,
       added_by: userId,
     }));
 
     const { data: inserted, error: insertError } = await supabase
       .from('collection_items')
       .upsert(itemsToInsert, {
-        onConflict: 'collection_id,recording_id',
+        onConflict: 'collection_id,content_id',
         ignoreDuplicates: true,
       })
       .select();
@@ -239,7 +239,7 @@ export const DELETE = apiHandler(
       .from('collection_items')
       .delete()
       .eq('collection_id', collectionId)
-      .in('recording_id', body.item_ids);
+      .in('content_id', body.item_ids);
 
     if (deleteError) {
       console.error('[DELETE /api/collections/[id]/items] Error removing items:', deleteError);

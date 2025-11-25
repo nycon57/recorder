@@ -19,11 +19,11 @@ interface DashboardStats {
   processingCount: number;
 }
 
-interface RecentItem {
+interface DashboardRecentItem {
   id: string;
   title: string | null;
   description: string | null;
-  content_type: string | null;
+  content_type: 'recording' | 'video' | 'audio' | 'document' | 'text' | 'imported' | null;
   thumbnail_url: string | null;
   status: string;
   created_at: string;
@@ -34,7 +34,7 @@ interface RecentItem {
 export function DashboardContent() {
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
+  const [recentItems, setRecentItems] = useState<DashboardRecentItem[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -155,7 +155,7 @@ export function DashboardContent() {
               onUploadClick={handleUploadClick}
             />
           ) : (
-            <RecentItems items={recentItems} isLoading={isLoadingItems} />
+            <RecentItems items={recentItems as any} isLoading={isLoadingItems} />
           )}
         </section>
       </div>

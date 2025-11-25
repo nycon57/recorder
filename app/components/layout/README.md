@@ -1,6 +1,6 @@
 # Layout Components
 
-Professional, responsive layout components for the Record marketing site, adapted from the Zippay template design patterns.
+Professional, responsive layout components for the Tribora marketing site, adapted from the Zippay template design patterns.
 
 ## Components
 
@@ -48,7 +48,7 @@ A professional footer with dark background, structured navigation, and legal lin
 
 **Props:**
 
-- `brandName?: string` - Brand name (default: "Record")
+- `brandName?: string` - Brand name (default: "Tribora")
 - `nav?: NavSection[]` - Navigation sections
 - `legal?: NavLink[]` - Legal links
 
@@ -61,7 +61,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <main>{children}</main>
-      <Footer brandName="Record" />
+      <Footer brandName="Tribora" />
     </>
   );
 }

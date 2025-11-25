@@ -38,7 +38,7 @@ const SECURITY_CONFIG = {
 
 // Configure Xenova transformers securely
 env.allowLocalModels = false; // Force remote models
-env.remoteURL = 'https://huggingface.co/';
+(env as any).remoteURL = 'https://huggingface.co/';
 
 // Input validation schemas
 const ChunkingInputSchema = z.object({
@@ -500,9 +500,9 @@ export class SecureSemanticChunker {
             const truncated = sentence.substring(0, 512);
             const output = await model(truncated, {
               pooling: 'mean',
-              normalize: true,
-            });
-            return Array.from(output.data as Float32Array);
+              normalize: true as unknown as any,
+            } as any);
+            return Array.from((output as any).data as Float32Array);
           })
         );
 

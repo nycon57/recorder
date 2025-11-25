@@ -58,7 +58,7 @@ export async function handleDeduplicateFile(
     const supabase = createClient();
 
     const { data: recording } = await supabase
-      .from('recordings')
+      .from('content')
       .select('storage_path, storage_path_r2')
       .eq('id', recordingId)
       .single();

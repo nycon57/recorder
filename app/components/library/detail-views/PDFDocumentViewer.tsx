@@ -94,7 +94,7 @@ export default function PDFDocumentViewer({
         const renderContext = {
           canvasContext: context,
           viewport: viewport,
-        };
+        } as any;
 
         renderTask.current = page.render(renderContext);
         await renderTask.current.promise;

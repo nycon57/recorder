@@ -25,8 +25,8 @@ export interface ChatMessage {
 }
 
 export interface CitedSource {
-  recordingId: string;
-  recordingTitle: string;
+  contentId: string;
+  contentTitle: string;
   chunkId: string;
   chunkText: string;
   similarity: number;
@@ -36,7 +36,7 @@ export interface CitedSource {
   hasVisualContext?: boolean;
   visualDescription?: string;
   contentType?: 'audio' | 'visual' | 'combined' | 'document';
-  url?: string; // URL to the recording detail page for clickable citations
+  url?: string; // URL to the content detail page for clickable citations
 }
 
 export interface RAGContext {
@@ -61,7 +61,7 @@ export async function retrieveContext(
   options?: {
     maxChunks?: number;
     threshold?: number;
-    recordingIds?: string[];
+    contentIds?: string[];
     rerank?: boolean;
     useAgentic?: boolean;
     maxIterations?: number;
@@ -73,7 +73,7 @@ export async function retrieveContext(
   const {
     maxChunks = 5,
     threshold = 0.7,
-    recordingIds,
+    contentIds,
     rerank = false,
     useAgentic = false,
     maxIterations = 3,
@@ -103,7 +103,7 @@ export async function retrieveContext(
       enableSelfReflection,
       enableReranking: rerank,
       chunksPerQuery: Math.ceil(maxChunks * 1.5),
-      recordingIds,
+      contentIds,
       logResults: false, // Don't log for chat context retrieval
     });
     searchResults = agenticResult.finalResults.slice(0, maxChunks);
@@ -125,7 +125,7 @@ export async function retrieveContext(
       orgId,
       limit: initialLimit,
       threshold,
-      recordingIds,
+      contentIds,
     });
 
     console.log('[RAG] Vector search results:', searchResults.length);
@@ -143,11 +143,11 @@ export async function retrieveContext(
 
   // Format results as cited sources with visual context
   const sources: CitedSource[] = searchResults.map((result) => ({
-    recordingId: result.recordingId,
-    recordingTitle: result.recordingTitle,
+    contentId: result.contentId,
+    contentTitle: result.contentTitle,
     chunkId: result.id,
     chunkText: result.chunkText,
-    similarity: result.similarity,
+    similarity: result.similarity ?? 0, // Default to 0 if null
     timestamp: result.metadata.startTime,
     timestampRange: result.metadata.timestampRange,
     source: result.metadata.source,
@@ -155,13 +155,13 @@ export async function retrieveContext(
     visualDescription: result.metadata.visualDescription,
     contentType: result.metadata.contentType || 'audio',
     // Add URL for clickable citations
-    url: `/library/${result.recordingId}`,
+    url: `/library/${result.contentId}`,
   }));
 
   // Build context string from chunks with visual descriptions
   const context = sources
     .map((source, index) => {
-      const citation = `[${index + 1}] ${source.recordingTitle}`;
+      const citation = `[${index + 1}] ${source.contentTitle}`;
       const timeInfo = source.timestampRange
         ? ` (${source.timestampRange})`
         : source.timestamp
@@ -208,7 +208,7 @@ export async function generateRAGResponse(
     conversationHistory?: ChatMessage[];
     maxChunks?: number;
     threshold?: number;
-    recordingIds?: string[];
+    contentIds?: string[];
     stream?: boolean;
     rerank?: boolean;
     useAgentic?: boolean;
@@ -236,7 +236,7 @@ export async function generateRAGResponse(
     conversationHistory = [],
     maxChunks = 5,
     threshold = 0.7,
-    recordingIds,
+    contentIds,
     rerank = false,
     useAgentic = false,
     maxIterations = 3,
@@ -247,7 +247,7 @@ export async function generateRAGResponse(
   const ragContext = await retrieveContext(query, orgId, {
     maxChunks,
     threshold,
-    recordingIds,
+    contentIds,
     rerank,
     useAgentic,
     maxIterations,
@@ -305,7 +305,7 @@ export async function* generateStreamingRAGResponse(
     conversationHistory?: ChatMessage[];
     maxChunks?: number;
     threshold?: number;
-    recordingIds?: string[];
+    contentIds?: string[];
     rerank?: boolean;
   }
 ): AsyncGenerator<{
@@ -316,7 +316,7 @@ export async function* generateStreamingRAGResponse(
     conversationHistory = [],
     maxChunks = 5,
     threshold = 0.7,
-    recordingIds,
+    contentIds,
     rerank = false,
   } = options || {};
 
@@ -324,7 +324,7 @@ export async function* generateStreamingRAGResponse(
   const ragContext = await retrieveContext(query, orgId, {
     maxChunks,
     threshold,
-    recordingIds,
+    contentIds,
     rerank,
   });
 

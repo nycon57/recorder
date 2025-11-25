@@ -124,7 +124,7 @@ async function analyzeUsagePatterns(orgId: string): Promise<UsagePattern> {
 
   // Get upload frequency from last 30 days
   const { data: recentUploads } = await supabase
-    .from('recordings')
+    .from('content')
     .select('created_at')
     .eq('org_id', orgId)
     .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
@@ -137,7 +137,7 @@ async function analyzeUsagePatterns(orgId: string): Promise<UsagePattern> {
   // Analyze access patterns (would need access logs in production)
   // For now, use tier distribution as proxy
   const { data: recordings } = await supabase
-    .from('recordings')
+    .from('content')
     .select('storage_tier, created_at')
     .eq('org_id', orgId)
     .is('deleted_at', null);

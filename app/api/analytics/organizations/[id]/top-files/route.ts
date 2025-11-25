@@ -39,7 +39,8 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
 
   const { id: orgId } = await context.params;
   const queryParams = parseSearchParams(request, organizationTopFilesQuerySchema);
-  const { limit, sortBy } = queryParams;
+  // Type assertion for parsed params
+  const { limit, sortBy } = queryParams as { limit: number; sortBy: string };
 
   // Validate organization exists
   const { data: org, error: orgError } = await supabaseAdmin
@@ -54,7 +55,7 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
 
   // Get top files with user information
   let query = supabaseAdmin
-    .from('recordings')
+    .from('content')
     .select(
       `
       id,

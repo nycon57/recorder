@@ -19,7 +19,15 @@ import {
   PopoverTrigger,
 } from '@/app/components/ui/popover';
 
-import type { AuditLogFilter } from '../types';
+interface AuditLogFilter {
+  search: string;
+  actions: string[];
+  resourceTypes: string[];
+  userIds: string[];
+  dateRange: string;
+  startDate?: Date;
+  endDate?: Date;
+}
 
 interface AuditLogFiltersProps {
   filters: AuditLogFilter;
@@ -67,14 +75,14 @@ export function AuditLogFilters({ filters, onFiltersChange }: AuditLogFiltersPro
 
   const toggleAction = (action: string) => {
     const newActions = filters.actions.includes(action)
-      ? filters.actions.filter((a) => a !== action)
+      ? filters.actions.filter((a: string) => a !== action)
       : [...filters.actions, action];
     onFiltersChange({ ...filters, actions: newActions });
   };
 
   const toggleResourceType = (type: string) => {
     const newTypes = filters.resourceTypes.includes(type)
-      ? filters.resourceTypes.filter((t) => t !== type)
+      ? filters.resourceTypes.filter((t: string) => t !== type)
       : [...filters.resourceTypes, type];
     onFiltersChange({ ...filters, resourceTypes: newTypes });
   };
@@ -219,7 +227,7 @@ export function AuditLogFilters({ filters, onFiltersChange }: AuditLogFiltersPro
       {hasActiveFilters && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground">Active filters:</span>
-          {filters.actions.map((action) => (
+          {filters.actions.map((action: string) => (
             <Badge key={action} variant="secondary" className="gap-1">
               {ACTION_TYPES.find((a) => a.value === action)?.label || action}
               <button
@@ -230,7 +238,7 @@ export function AuditLogFilters({ filters, onFiltersChange }: AuditLogFiltersPro
               </button>
             </Badge>
           ))}
-          {filters.resourceTypes.map((type) => (
+          {filters.resourceTypes.map((type: string) => (
             <Badge key={type} variant="secondary" className="gap-1">
               {RESOURCE_TYPES.find((t) => t.value === type)?.label || type}
               <button

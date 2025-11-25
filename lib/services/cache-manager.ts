@@ -233,7 +233,7 @@ export async function invalidateCache(pattern: string): Promise<number> {
         count: 100,
       });
 
-      cursor = result[0];
+      cursor = typeof result[0] === 'string' ? parseInt(result[0], 10) : result[0];
       keys.push(...(result[1] || []));
     } while (cursor !== 0);
 

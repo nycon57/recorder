@@ -20,7 +20,7 @@ import {
   ConversationScrollButton,
 } from '@/app/components/ai-elements/conversation';
 import { MessageItem, type MessageItemProps } from './MessageItem';
-import { TypingIndicator } from './LoadingSkeletons';
+import { TypingIndicator, MessageSkeleton, ShimmerSkeleton } from './LoadingSkeletons';
 import type { ExtendedMessage } from '../types';
 import { cn } from '@/lib/utils';
 
@@ -159,10 +159,10 @@ export function MessageList({
             </AnimatePresence>
           )}
 
-          {/* Loading Indicator */}
+          {/* Loading Indicator - Shows skeleton while generating response */}
           {isLoading && (
             <div
-              className="flex gap-3 justify-start"
+              className="flex gap-3 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300"
               role="status"
               aria-live="polite"
               aria-label="Assistant is typing"
@@ -173,8 +173,15 @@ export function MessageList({
               >
                 <Bot className="w-5 h-5 text-primary" />
               </div>
-              <div className="max-w-3xl rounded-lg px-4 py-3 bg-card border border-border">
-                <TypingIndicator text={loadingMessage} />
+              <div className="max-w-3xl space-y-2 flex-1">
+                {/* Status indicator */}
+                <div className="rounded-lg px-4 py-3 bg-card border border-border dark:border-border/50">
+                  <TypingIndicator text={loadingMessage} />
+                </div>
+                {/* Content skeleton preview */}
+                <div className="rounded-lg px-4 py-3 bg-muted/50 dark:bg-muted/30 border border-border/50 space-y-2">
+                  <ShimmerSkeleton lines={3} />
+                </div>
               </div>
             </div>
           )}

@@ -13,6 +13,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import { apiHandler, requireOrg, requireAdmin, successResponse, errors , parseBody } from '@/lib/utils/api';
 import {
@@ -93,7 +94,7 @@ export const GET = apiHandler(async (
     throw new Error('Failed to fetch department members');
   }
 
-  const formattedMembers = (members || []).map(member => {
+  const formattedMembers = (members || []).map((member: any) => {
     const base: DepartmentMember = {
       userId: member.user_id,
       departmentId: member.department_id,
@@ -149,7 +150,7 @@ export const POST = apiHandler(async (
     return errors.badRequest('Department ID is required');
   }
 
-  const body = await parseBody(request, addUserToDepartmentSchema);
+  const bodyData = await parseBody<z.infer<typeof addUserToDepartmentSchema>>(request, addUserToDepartmentSchema);
 
   const supabase = supabaseAdmin;
 
@@ -169,7 +170,7 @@ export const POST = apiHandler(async (
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('id, org_id, email, name')
-    .eq('id', body.userId)
+    .eq('id', bodyData.userId)
     .eq('org_id', orgId)
     .single();
 
@@ -181,7 +182,7 @@ export const POST = apiHandler(async (
   const { data: existing } = await supabase
     .from('user_departments')
     .select('user_id')
-    .eq('user_id', body.userId)
+    .eq('user_id', bodyData.userId)
     .eq('department_id', id)
     .single();
 
@@ -193,7 +194,7 @@ export const POST = apiHandler(async (
   const { data: membership, error: insertError } = await supabase
     .from('user_departments')
     .insert({
-      user_id: body.userId,
+      user_id: bodyData.userId,
       department_id: id,
     })
     .select('user_id, department_id, created_at')
@@ -242,7 +243,7 @@ export const DELETE = apiHandler(async (
     return errors.badRequest('Department ID is required');
   }
 
-  const body = await parseBody(request, removeUserFromDepartmentSchema);
+  const bodyData = await parseBody<z.infer<typeof removeUserFromDepartmentSchema>>(request, removeUserFromDepartmentSchema);
 
   const supabase = supabaseAdmin;
 
@@ -262,7 +263,7 @@ export const DELETE = apiHandler(async (
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('id, org_id, email')
-    .eq('id', body.userId)
+    .eq('id', bodyData.userId)
     .eq('org_id', orgId)
     .single();
 
@@ -274,7 +275,7 @@ export const DELETE = apiHandler(async (
   const { data: existing } = await supabase
     .from('user_departments')
     .select('user_id')
-    .eq('user_id', body.userId)
+    .eq('user_id', bodyData.userId)
     .eq('department_id', id)
     .single();
 
@@ -286,7 +287,7 @@ export const DELETE = apiHandler(async (
   const { error: deleteError } = await supabase
     .from('user_departments')
     .delete()
-    .eq('user_id', body.userId)
+    .eq('user_id', bodyData.userId)
     .eq('department_id', id);
 
   if (deleteError) {

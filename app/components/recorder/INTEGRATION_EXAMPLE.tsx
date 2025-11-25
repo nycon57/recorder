@@ -19,7 +19,6 @@ import {
   MicrophoneSelect,
   TeleprompterSelect,
   MainRecordButton,
-  RecordingModal,
   Teleprompter,
   PiPWindow,
 } from '@/app/components/recorder';
@@ -148,7 +147,7 @@ export function RecordingPageExample() {
       </div>
 
       {/* Modals and Overlays (rendered conditionally) */}
-      <RecordingModal onUploadComplete={handleUploadComplete} />
+      {/* <RecordingModal onUploadComplete={handleUploadComplete} /> */}
 
       <Teleprompter
         isOpen={showTeleprompter}
@@ -188,7 +187,7 @@ export function MinimalRecordingExample() {
       </div>
 
       {/* Required modals */}
-      <RecordingModal />
+      {/* <RecordingModal /> */}
       <Teleprompter
         isOpen={showTeleprompter}
         onClose={() => setShowTeleprompter(false)}
@@ -261,7 +260,7 @@ export function CompactRecordingExample() {
       </div>
 
       {/* Modals */}
-      <RecordingModal />
+      {/* <RecordingModal /> */}
       <Teleprompter
         isOpen={showTeleprompter}
         onClose={() => setShowTeleprompter(false)}

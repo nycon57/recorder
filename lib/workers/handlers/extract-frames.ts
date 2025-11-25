@@ -65,7 +65,7 @@ export async function handleExtractFrames(
   try {
     // Update status
     await supabase
-      .from('recordings')
+      .from('content')
       .update({ visual_indexing_status: 'processing' })
       .eq('id', recordingId);
 
@@ -81,7 +81,7 @@ export async function handleExtractFrames(
         context: { recordingId, videoUrl },
       });
       const { data: videoData, error: downloadError } = await supabase.storage
-        .from('recordings')
+        .from('content')
         .download(videoUrl);
 
       if (downloadError || !videoData) {
@@ -112,7 +112,7 @@ export async function handleExtractFrames(
 
     // Step 2: Store frame metadata
     const frameRecords = extraction.frames.map((frame) => ({
-      recording_id: recordingId,
+      content_id: recordingId,
       org_id: orgId,
       frame_number: frame.frameNumber,
       frame_time_sec: frame.timeSec,
@@ -150,7 +150,7 @@ export async function handleExtractFrames(
 
     // Update recording
     await supabase
-      .from('recordings')
+      .from('content')
       .update({
         frames_extracted: true,
         frame_count: extraction.totalFrames,
@@ -190,7 +190,7 @@ export async function handleExtractFrames(
     });
 
     await supabase
-      .from('recordings')
+      .from('content')
       .update({ visual_indexing_status: 'failed' })
       .eq('id', recordingId);
 
@@ -217,7 +217,7 @@ async function performOCR(
   const { data: dbFrames, error: fetchError } = await supabase
     .from('video_frames')
     .select('id, frame_number, frame_url')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .eq('org_id', orgId)
     .order('frame_number');
 

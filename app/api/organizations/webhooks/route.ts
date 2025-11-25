@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
 import { createSupabaseClient } from '@/lib/supabase/server';
@@ -91,11 +92,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
     throw new Error('Unauthorized: Admin access required');
   }
 
-  const body = await parseBody(request, createWebhookSchema);
+  const bodyData = await parseBody<z.infer<typeof createWebhookSchema>>(request, createWebhookSchema);
   const supabase = await createSupabaseClient();
 
   // Validate URL is HTTPS
-  if (!body.url.startsWith('https://')) {
+  if (!bodyData.url.startsWith('https://')) {
     throw new Error('Webhook URL must use HTTPS');
   }
 
@@ -108,16 +109,16 @@ export const POST = apiHandler(async (request: NextRequest) => {
     .insert({
       org_id: orgId,
       created_by: userId,
-      name: body.name,
-      description: body.description,
-      url: body.url,
-      events: body.events,
-      headers: body.headers || {},
+      name: bodyData.name,
+      description: bodyData.description,
+      url: bodyData.url,
+      events: bodyData.events,
+      headers: bodyData.headers || {},
       secret,
       enabled: true,
-      retry_enabled: body.retry_enabled,
-      max_retries: body.max_retries,
-      timeout_ms: body.timeout_ms,
+      retry_enabled: bodyData.retry_enabled,
+      max_retries: bodyData.max_retries,
+      timeout_ms: bodyData.timeout_ms,
     })
     .select()
     .single();
@@ -132,8 +133,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
     resource_type: 'webhook',
     resource_id: webhook.id,
     metadata: {
-      webhook_name: body.name,
-      events: body.events,
+      webhook_name: bodyData.name,
+      events: bodyData.events,
     },
   });
 

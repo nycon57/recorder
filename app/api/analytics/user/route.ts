@@ -146,7 +146,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Top recordings - fetch with real view counts
   const { data: recordings } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, title, duration_sec, created_at')
     .eq('created_by', internalUserId)
     .order('created_at', { ascending: false })
@@ -158,7 +158,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     ? await supabase
         .from('recording_view_counts')
         .select('recording_id, total_views, last_viewed_at')
-        .in('recording_id', recordingIds)
+        .in('content_id', recordingIds)
     : { data: null };
 
   // Create a map of view counts

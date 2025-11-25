@@ -101,7 +101,7 @@ export async function expandShortQuery(
   try {
     // Search for recordings with matching titles
     const { data: recordings } = await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .select('title, description')
       .eq('org_id', orgId)
       .ilike('title', `%${query}%`)
@@ -123,10 +123,10 @@ export async function expandShortQuery(
       // Extract meaningful words from titles (skip common words)
       const words = r.title
         .split(/[\s\-_]+/)
-        .filter(w => w.length > 3)
-        .filter(w => !stopWords.has(w.toLowerCase()));
+        .filter((w: string) => w.length > 3)
+        .filter((w: string) => !stopWords.has(w.toLowerCase()));
 
-      words.forEach(w => titleWords.add(w));
+      words.forEach((w: string) => titleWords.add(w));
     });
 
     // Limit expansion to avoid too long queries

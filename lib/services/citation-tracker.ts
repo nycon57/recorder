@@ -11,8 +11,8 @@ import type { SubQuery } from '@/lib/types/agentic-rag';
 export interface CitationEntry {
   chunkId: string;
   chunkText: string;
-  recordingId: string;
-  recordingTitle?: string;
+  contentId: string;
+  contentTitle?: string;
   subQueryIds: string[];
   subQueryTexts: string[];
   timestamp?: number;
@@ -120,11 +120,11 @@ export class CitationTracker {
       citations.push({
         chunkId,
         chunkText: chunk.chunkText,
-        recordingId: chunk.recordingId,
-        recordingTitle: chunk.recordingTitle,
+        contentId: chunk.contentId,
+        contentTitle: chunk.contentTitle,
         subQueryIds: Array.from(subQueryIds),
         subQueryTexts: subQueries.map((sq) => sq.text),
-        timestamp: chunk.timestamp,
+        timestamp: chunk.metadata.startTime,
       });
     }
 
@@ -169,19 +169,19 @@ export class CitationTracker {
     );
     lines.push('');
 
-    // Group by recording
-    const byRecording = new Map<string, CitationEntry[]>();
+    // Group by content
+    const byContent = new Map<string, CitationEntry[]>();
     for (const citation of this.getAllCitations()) {
-      if (!byRecording.has(citation.recordingId)) {
-        byRecording.set(citation.recordingId, []);
+      if (!byContent.has(citation.contentId)) {
+        byContent.set(citation.contentId, []);
       }
-      byRecording.get(citation.recordingId)!.push(citation);
+      byContent.get(citation.contentId)!.push(citation);
     }
 
-    for (const [recordingId, citations] of byRecording.entries()) {
-      const recordingTitle =
-        citations[0]?.recordingTitle || `Recording ${recordingId.slice(0, 8)}`;
-      lines.push(`Recording: ${recordingTitle}`);
+    for (const [contentId, citations] of byContent.entries()) {
+      const contentTitle =
+        citations[0]?.contentTitle || `Content ${contentId.slice(0, 8)}`;
+      lines.push(`Content: ${contentTitle}`);
       lines.push(`  Chunks: ${citations.length}`);
 
       for (const citation of citations.slice(0, 3)) {

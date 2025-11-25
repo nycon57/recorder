@@ -28,7 +28,7 @@ type PricingPlan = {
   id: string;
   name: string;
   tagline: string;
-  icon: React.ElementType;
+  icon: React.ElementType<{ className?: string }>;
   monthlyPrice: number | string;
   yearlyPrice: number | string;
   description: string;
@@ -280,7 +280,7 @@ export default function ModernPricing({
                         <div className="text-4xl font-bold">{price}</div>
                       ) : (
                         <div className="flex items-baseline gap-1">
-                          <span className="text-4xl font-bold">${price}</span>
+                          <span className="text-4xl font-bold">${typeof price === 'number' ? price : 0}</span>
                           <span className={cn(
                             "text-sm",
                             plan.popular ? "text-white/80" : "text-muted-foreground"
@@ -294,7 +294,7 @@ export default function ModernPricing({
                           "text-sm mt-1",
                           plan.popular ? "text-white/80" : "text-muted-foreground"
                         )}>
-                          Billed ${price * 12} annually
+                          Billed ${typeof price === 'number' ? price * 12 : 0} annually
                         </p>
                       )}
                     </motion.div>

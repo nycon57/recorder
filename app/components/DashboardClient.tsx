@@ -73,7 +73,7 @@ export default function DashboardClient({ recordings }: DashboardClientProps) {
     original_filename: recording.original_filename || null,
     created_by: recording.created_by || '',
     org_id: recording.org_id || '',
-    metadata: null,
+    metadata: undefined,
   });
 
   // State

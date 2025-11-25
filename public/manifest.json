@@ -1,11 +1,11 @@
 {
-  "name": "Record - AI Knowledge Platform",
-  "short_name": "Record",
-  "description": "AI-powered knowledge management platform with screen recording, transcription, and semantic search",
+  "name": "Tribora - AI Knowledge Platform",
+  "short_name": "Tribora",
+  "description": "The Knowledge Intelligence Layer — capture tacit expertise through screen recordings and transform it into searchable documentation",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#3b82f6",
+  "theme_color": "#00df82",
   "icons": [
     {
       "src": "/icon-128.png",

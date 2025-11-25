@@ -82,7 +82,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const body = await parseBody(request, forecastSchema);
 
     try {
-      const forecast = await generateCostForecast(orgId, body.period);
+      // Type assertion for parsed body
+      const { period } = body as { period: '30d' | '90d' | '180d' | '365d' };
+      const forecast = await generateCostForecast(orgId, period);
 
       return successResponse({
         forecast,

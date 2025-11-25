@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { useRecording } from '../contexts/RecordingContext';
+import { useRecording } from '@/app/(dashboard)/record/contexts/RecordingContext';
 
 export function DeviceSelector() {
   const {
@@ -50,6 +50,8 @@ export function DeviceSelector() {
 
   // Get camera stream
   useEffect(() => {
+    let currentStream: MediaStream | null = null;
+
     if (!selectedCamera || !cameraEnabled || layout === 'screenOnly') {
       setCameraStream(null);
       return;
@@ -60,6 +62,7 @@ export function DeviceSelector() {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { deviceId: selectedCamera },
         });
+        currentStream = stream;
         setCameraStream(stream);
       } catch (error) {
         console.error('Error accessing camera:', error);
@@ -69,15 +72,17 @@ export function DeviceSelector() {
     getCamera();
 
     return () => {
-      setCameraStream(prevStream => {
-        prevStream?.getTracks().forEach(track => track.stop());
-        return null;
-      });
+      if (currentStream) {
+        currentStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+      }
+      setCameraStream(null);
     };
   }, [selectedCamera, cameraEnabled, layout, setCameraStream]);
 
   // Get microphone stream
   useEffect(() => {
+    let currentStream: MediaStream | null = null;
+
     if (!selectedMicrophone || !microphoneEnabled) {
       setMicrophoneStream(null);
       return;
@@ -88,6 +93,7 @@ export function DeviceSelector() {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: { deviceId: selectedMicrophone },
         });
+        currentStream = stream;
         setMicrophoneStream(stream);
       } catch (error) {
         console.error('Error accessing microphone:', error);
@@ -97,10 +103,10 @@ export function DeviceSelector() {
     getMicrophone();
 
     return () => {
-      setMicrophoneStream(prevStream => {
-        prevStream?.getTracks().forEach(track => track.stop());
-        return null;
-      });
+      if (currentStream) {
+        currentStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+      }
+      setMicrophoneStream(null);
     };
   }, [selectedMicrophone, microphoneEnabled, setMicrophoneStream]);
 

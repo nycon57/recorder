@@ -118,7 +118,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   if (resourcesByType['recording']?.size > 0) {
     try {
       const { data: recordings } = await supabase
-        .from('recordings')
+        .from('content')
         .select('id, title')
         .in('id', Array.from(resourcesByType['recording']));
 

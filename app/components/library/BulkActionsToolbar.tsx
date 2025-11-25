@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/components/ui/dialog';
+import { KeyboardHint } from '@/app/components/keyboard/KeyboardShortcutsDialog';
 import { cn } from '@/lib/utils';
 
 interface BulkActionsToolbarProps {
@@ -152,10 +153,11 @@ export function BulkActionsToolbar({
             variant="ghost"
             size="sm"
             onClick={onClearSelection}
-            className="h-7 w-7 p-0"
-            aria-label="Clear selection"
+            className="h-7 px-2 gap-1"
+            aria-label="Clear selection (Escape)"
           >
             <X className="h-4 w-4" />
+            <KeyboardHint keys={['Esc']} className="ml-0" />
           </Button>
         </div>
 
@@ -174,6 +176,7 @@ export function BulkActionsToolbar({
                   onClick={handleRestore}
                   disabled={isRestoring}
                   className="h-8 gap-2"
+                  aria-label="Restore selected items"
                 >
                   <RotateCcw className="h-4 w-4" />
                   {isRestoring ? 'Restoring...' : 'Restore'}
@@ -187,6 +190,7 @@ export function BulkActionsToolbar({
                   size="sm"
                   onClick={() => setShowPermanentDeleteDialog(true)}
                   className="h-8 gap-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                  aria-label="Permanently delete selected items"
                 >
                   <Trash2 className="h-4 w-4" />
                   Delete Forever
@@ -201,9 +205,11 @@ export function BulkActionsToolbar({
                 size="sm"
                 onClick={() => setShowDeleteDialog(true)}
                 className="h-8 gap-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                aria-label="Move selected items to trash (Delete)"
               >
                 <Trash2 className="h-4 w-4" />
-                Move to Trash
+                <span>Move to Trash</span>
+                <KeyboardHint keys={['Del']} className="ml-0" />
               </Button>
 
               {/* Add Tags */}
@@ -213,9 +219,11 @@ export function BulkActionsToolbar({
                   size="sm"
                   onClick={onAddTags}
                   className="h-8 gap-2"
+                  aria-label="Add tags to selected items (T)"
                 >
                   <Tag className="h-4 w-4" />
-                  Add Tags
+                  <span>Add Tags</span>
+                  <KeyboardHint keys={['T']} className="ml-0" />
                 </Button>
               )}
 
@@ -226,9 +234,11 @@ export function BulkActionsToolbar({
                   size="sm"
                   onClick={onAddToCollection}
                   className="h-8 gap-2"
+                  aria-label="Add selected items to collection (C)"
                 >
                   <FolderPlus className="h-4 w-4" />
-                  Add to Collection
+                  <span>Add to Collection</span>
+                  <KeyboardHint keys={['C']} className="ml-0" />
                 </Button>
               )}
 
@@ -240,6 +250,7 @@ export function BulkActionsToolbar({
                   onClick={handleDownload}
                   disabled={isDownloading}
                   className="h-8 gap-2"
+                  aria-label="Download selected items"
                 >
                   <Download className="h-4 w-4" />
                   {isDownloading ? 'Downloading...' : 'Download'}
@@ -253,6 +264,7 @@ export function BulkActionsToolbar({
                   size="sm"
                   onClick={onShare}
                   className="h-8 gap-2"
+                  aria-label="Share selected items"
                 >
                   <Share2 className="h-4 w-4" />
                   Share

@@ -13,8 +13,8 @@ import type { Database } from '@/lib/types/database';
 
 export interface HierarchicalSearchResult {
   id: string;
-  recordingId: string;
-  recordingTitle: string;
+  contentId: string;
+  contentTitle: string;
   chunkText: string;
   similarity: number;
   summarySimilarity: number;
@@ -68,6 +68,7 @@ export async function generateDualEmbeddings(
       // 1536-dim embedding (for chunks)
       Promise.race([
         genai.getGenerativeModel({ model: 'models/text-embedding-004' })
+          // @ts-expect-error - Google AI SDK typing incompatibility
           .embedContent({
             content: { parts: [{ text }] },
             taskType: 'RETRIEVAL_QUERY',
@@ -80,6 +81,7 @@ export async function generateDualEmbeddings(
       // 3072-dim embedding (for summaries)
       Promise.race([
         genai.getGenerativeModel({ model: 'models/text-embedding-004' })
+          // @ts-expect-error - Google AI SDK typing incompatibility
           .embedContent({
             content: { parts: [{ text }] },
             taskType: 'RETRIEVAL_QUERY',
@@ -170,8 +172,8 @@ export async function hierarchicalSearch(
     // Step 3: Transform and deduplicate results with proper typing
     const results: HierarchicalSearchResult[] = data.map((row: any) => ({
       id: row.id,
-      recordingId: row.recording_id,
-      recordingTitle: row.recording_title,
+      contentId: row.content_id,
+      contentTitle: row.content_title,
       chunkText: row.chunk_text,
       similarity: row.similarity,
       summarySimilarity: row.summary_similarity,
@@ -183,12 +185,12 @@ export async function hierarchicalSearch(
     const uniqueResults = deduplicateResults(results);
 
     console.log(
-      `[Hierarchical Search] Returning ${uniqueResults.length} results from ${new Set(uniqueResults.map(r => r.recordingId)).size} documents`
+      `[Hierarchical Search] Returning ${uniqueResults.length} results from ${new Set(uniqueResults.map(r => r.contentId)).size} documents`
     );
 
     // Log document distribution
     const documentDistribution = uniqueResults.reduce((acc, result) => {
-      acc[result.recordingId] = (acc[result.recordingId] || 0) + 1;
+      acc[result.contentId] = (acc[result.contentId] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
@@ -231,7 +233,7 @@ function deduplicateResults(
  * Search within a specific recording using hierarchical search
  */
 export async function hierarchicalSearchRecording(
-  recordingId: string,
+  contentId: string,
   query: string,
   orgId: string,
   options?: Partial<HierarchicalSearchOptions>
@@ -248,7 +250,7 @@ export async function hierarchicalSearchRecording(
   });
 
   // Filter to only the target recording
-  return results.filter((r) => r.recordingId === recordingId);
+  return results.filter((r) => r.contentId === contentId);
 }
 
 /**
@@ -258,12 +260,12 @@ export async function hierarchicalSearchRecording(
 export async function getRecordingSummaries(
   orgId: string,
   limit: number = 10
-): Promise<Array<{ recordingId: string; summaryText: string }>> {
+): Promise<Array<{ contentId: string; summaryText: string }>> {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from('recording_summaries')
-    .select('recording_id, summary_text')
+    .from('content_summaries')
+    .select('content_id, summary_text')
     .eq('org_id', orgId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -274,7 +276,7 @@ export async function getRecordingSummaries(
   }
 
   return (data || []).map((row) => ({
-    recordingId: row.recording_id,
+    contentId: row.content_id,
     summaryText: row.summary_text,
   }));
 }

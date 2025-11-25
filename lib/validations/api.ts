@@ -158,17 +158,15 @@ export const frameRetrievalSchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(300).optional().default(50),
   includeDescriptions: z
-    .string()
-    .transform((val) => val === 'true')
-    .pipe(z.boolean())
-    .optional()
-    .default(false),
+    .preprocess(
+      (val) => (typeof val === 'string' ? val === 'true' : val),
+      z.boolean().default(false)
+    ),
   includeOcr: z
-    .string()
-    .transform((val) => val === 'true')
-    .pipe(z.boolean())
-    .optional()
-    .default(false),
+    .preprocess(
+      (val) => (typeof val === 'string' ? val === 'true' : val),
+      z.boolean().default(false)
+    ),
   startTime: z.coerce.number().min(0).optional(),
   endTime: z.coerce.number().min(0).optional(),
 });

@@ -20,7 +20,7 @@ export const GET = apiHandler(
 
     // Verify recording belongs to org
     const { data: recording } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id')
       .eq('id', recordingId)
       .eq('org_id', orgId)
@@ -30,9 +30,9 @@ export const GET = apiHandler(
       return errors.notFound('Recording');
     }
 
-    // Fetch tags for this recording
+    // Fetch tags for this content
     const { data: recordingTags, error: fetchError } = await supabase
-      .from('recording_tags')
+      .from('content_tags')
       .select(`
         tag_id,
         tags (
@@ -43,7 +43,7 @@ export const GET = apiHandler(
           updated_at
         )
       `)
-      .eq('recording_id', recordingId);
+      .eq('content_id', recordingId);
 
     if (fetchError) {
       console.error('[GET /tags] Error fetching tags:', fetchError);
@@ -78,9 +78,9 @@ export const POST = apiHandler(
 
     const tagName = name.trim();
 
-    // Verify recording belongs to org
+    // Verify content belongs to org
     const { data: recording } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id')
       .eq('id', recordingId)
       .eq('org_id', orgId)
@@ -120,11 +120,11 @@ export const POST = apiHandler(
       tag = newTag;
     }
 
-    // Check if tag is already associated with recording
+    // Check if tag is already associated with content
     const { data: existingAssociation } = await supabase
-      .from('recording_tags')
+      .from('content_tags')
       .select('*')
-      .eq('recording_id', recordingId)
+      .eq('content_id', recordingId)
       .eq('tag_id', tag!.id)
       .single();
 
@@ -132,11 +132,11 @@ export const POST = apiHandler(
       return successResponse({ tag });
     }
 
-    // Associate tag with recording
+    // Associate tag with content
     const { error: associateError } = await supabase
-      .from('recording_tags')
+      .from('content_tags')
       .insert({
-        recording_id: recordingId,
+        content_id: recordingId,
         tag_id: tag!.id,
       });
 

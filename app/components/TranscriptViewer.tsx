@@ -13,7 +13,7 @@ import { Separator } from '@/app/components/ui/separator';
 
 interface Transcript {
   id: string;
-  recording_id: string;
+  content_id: string;
   text: string;
   language: string | null;
   words_json: any;

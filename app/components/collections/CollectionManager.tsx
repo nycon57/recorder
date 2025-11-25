@@ -72,7 +72,7 @@ export function CollectionManager({
   React.useEffect(() => {
     if (open) {
       setName(collection?.name || '');
-      setDescription(collection?.description || '');
+      setDescription(''); // Collection type doesn't have description field
       setSelectedParentId(parentId || collection?.parent_id || null);
     }
   }, [open, collection, parentId]);

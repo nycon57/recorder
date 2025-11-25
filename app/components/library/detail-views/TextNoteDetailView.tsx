@@ -26,6 +26,7 @@ import ShareControls from '../shared/ShareControls';
 import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
 import InlineEditableField from '../shared/InlineEditableField';
 import InlineTagsEditor from '../shared/InlineTagsEditor';
+import AIDocumentPanel from '../shared/AIDocumentPanel';
 
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
@@ -34,7 +35,7 @@ import type { Tag } from '@/lib/types/database';
 
 interface Transcript {
   id: string;
-  recording_id: string;
+  content_id: string;
   text: string;
   words_json?: any;
   language?: string | null;
@@ -44,7 +45,7 @@ interface Transcript {
 
 interface Document {
   id: string;
-  recording_id: string;
+  content_id: string;
   markdown: string;
   html?: string | null;
   summary?: string | null;
@@ -75,11 +76,15 @@ interface Recording {
   file_size: number | null;
 }
 
-interface TextNoteDetailViewProps {
+export interface TextNoteDetailViewProps {
   recording: Recording;
   transcript: Transcript | null; // For text notes, the content is stored in transcript.text
   document: Document | null; // AI-enhanced summary/document
   initialTags: Tag[];
+  /** Cache key for fetching highlight sources */
+  sourceKey?: string;
+  /** ID of transcript chunk to highlight (from search) */
+  initialHighlightId?: string;
 }
 
 export default function TextNoteDetailView({

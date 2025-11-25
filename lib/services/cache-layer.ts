@@ -15,7 +15,10 @@
 
 import crypto from 'crypto';
 
-import Redis from 'ioredis';
+// Note: ioredis is not installed - this file is kept for reference but not used
+// If Redis caching is needed, install ioredis: npm install ioredis @types/ioredis
+
+type RedisClient = any; // Placeholder type since ioredis isn't installed
 
 // Redis client configuration
 const redisConfig = {
@@ -29,22 +32,15 @@ const redisConfig = {
 };
 
 // Create Redis client
-let redis: Redis | null = null;
+let redis: RedisClient | null = null;
 
 /**
  * Get or create Redis client
  */
-function getRedisClient(): Redis {
+function getRedisClient(): RedisClient {
   if (!redis) {
-    redis = new Redis(redisConfig);
-
-    redis.on('error', (err) => {
-      console.error('[Cache] Redis error:', err);
-    });
-
-    redis.on('connect', () => {
-      console.log('[Cache] Redis connected');
-    });
+    // Note: This would require ioredis to be installed
+    throw new Error('Redis (ioredis) is not installed. Install with: npm install ioredis @types/ioredis');
   }
 
   return redis;
@@ -54,7 +50,7 @@ function getRedisClient(): Redis {
  * Frame Cache for video processing
  */
 export class FrameCache {
-  private redis: Redis;
+  private redis: RedisClient;
   private readonly TTL_DESCRIPTION = 3600; // 1 hour for descriptions
   private readonly TTL_OCR = 3600; // 1 hour for OCR
   private readonly TTL_EMBEDDING = 7200; // 2 hours for embeddings
@@ -159,10 +155,10 @@ export class FrameCache {
     try {
       if (frameBuffers.length === 0) return [];
 
-      const keys = frameBuffers.map(b => `frame:desc:${this.hashFrame(b)}`);
+      const keys = frameBuffers.map((b: Buffer) => `frame:desc:${this.hashFrame(b)}`);
       const values = await this.redis.mget(...keys);
 
-      return values.map(v => (v ? JSON.parse(v) : null));
+      return values.map((v: string | null) => (v ? JSON.parse(v) : null));
     } catch (error) {
       console.error('[Cache] Error batch getting descriptions:', error);
       return frameBuffers.map(() => null);
@@ -349,7 +345,7 @@ export const frameCache = new FrameCache();
  * Performance Cache for metrics
  */
 export class PerformanceCache {
-  private redis: Redis;
+  private redis: RedisClient;
   private readonly TTL = 3600; // 1 hour
 
   constructor() {
@@ -386,7 +382,7 @@ export class PerformanceCache {
         const times = await this.redis.zrange(key, 0, -1);
         if (times.length === 0) return 0;
 
-        const sum = times.reduce((acc, t) => acc + parseFloat(t), 0);
+        const sum = times.reduce((acc: number, t: string) => acc + parseFloat(t), 0);
         return Math.round(sum / times.length);
       } else {
         // Get average across all recordings
@@ -398,7 +394,7 @@ export class PerformanceCache {
 
         for (const k of keys) {
           const times = await this.redis.zrange(k, 0, -1);
-          const sum = times.reduce((acc, t) => acc + parseFloat(t), 0);
+          const sum = times.reduce((acc: number, t: string) => acc + parseFloat(t), 0);
           totalSum += sum;
           totalCount += times.length;
         }

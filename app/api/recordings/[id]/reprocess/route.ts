@@ -23,11 +23,12 @@ export const POST = apiHandler(
 
     // Validate request body
     const body = await parseBody(request, reprocessRecordingSchema);
-    const { step } = body;
+    // Type assertion for parsed body
+    const { step } = body as { step: string };
 
     // Verify recording belongs to org
     const { data: recording, error: recordingError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, org_id, status, storage_path_raw')
       .eq('id', id)
       .eq('org_id', orgId)
@@ -52,7 +53,7 @@ export const POST = apiHandler(
       const { error: deleteTranscriptError } = await supabase
         .from('transcripts')
         .delete()
-        .eq('recording_id', id);
+        .eq('content_id', id);
 
       if (deleteTranscriptError) {
         console.error('[POST /reprocess] Error deleting transcript:', deleteTranscriptError);
@@ -72,7 +73,7 @@ export const POST = apiHandler(
 
       // Update recording status
       await supabase
-        .from('recordings')
+        .from('content')
         .update({
           status: 'uploaded',
           error_message: null,
@@ -86,7 +87,7 @@ export const POST = apiHandler(
       const { data: transcript } = await supabase
         .from('transcripts')
         .select('id')
-        .eq('recording_id', id)
+        .eq('content_id', id)
         .single();
 
       if (!transcript && step === 'document') {
@@ -103,7 +104,7 @@ export const POST = apiHandler(
             status: 'generating',
             updated_at: new Date().toISOString(),
           })
-          .eq('recording_id', id);
+          .eq('content_id', id);
 
         jobs.push({
           type: 'doc_generate',
@@ -122,13 +123,13 @@ export const POST = apiHandler(
       const { data: transcript } = await supabase
         .from('transcripts')
         .select('id')
-        .eq('recording_id', id)
+        .eq('content_id', id)
         .single();
 
       const { data: document } = await supabase
         .from('documents')
         .select('id')
-        .eq('recording_id', id)
+        .eq('content_id', id)
         .eq('org_id', orgId)
         .single();
 
@@ -149,7 +150,7 @@ export const POST = apiHandler(
         const { error: deleteChunksError } = await supabase
           .from('transcript_chunks')
           .delete()
-          .eq('recording_id', id);
+          .eq('content_id', id);
 
         if (deleteChunksError) {
           console.error('[POST /reprocess] Error deleting chunks:', deleteChunksError);

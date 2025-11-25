@@ -40,7 +40,7 @@ import type { Tag } from '@/lib/types/database';
 
 interface Transcript {
   id: string;
-  recording_id: string;
+  content_id: string;
   text: string;
   words_json?: any;
   language?: string | null;
@@ -50,7 +50,7 @@ interface Transcript {
 
 interface Document {
   id: string;
-  recording_id: string;
+  content_id: string;
   markdown: string;
   html?: string | null;
   summary?: string | null;

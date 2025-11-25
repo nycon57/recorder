@@ -13,6 +13,7 @@ import {
 
 import { Badge } from '@/app/components/ui/badge';
 import { cn } from '@/lib/utils/cn';
+import { statusColors, badgeSize, badgeIconSize } from '@/lib/design-tokens';
 
 /**
  * Status type definitions
@@ -27,65 +28,51 @@ export type RecordingStatus =
 
 /**
  * Status Configuration
- * Centralized status indicators with icons and colors
+ * Uses centralized design tokens for consistent colors
  */
 const statusConfig: Record<
   RecordingStatus,
   {
     label: string;
     icon: LucideIcon;
-    bg: string;
-    text: string;
-    border: string;
+    colorKey: keyof typeof statusColors;
     animate?: boolean;
   }
 > = {
   uploading: {
     label: 'Uploading',
     icon: Upload,
-    bg: 'bg-blue-500/10 dark:bg-blue-500/20',
-    text: 'text-blue-700 dark:text-blue-400',
-    border: 'border-blue-500/20',
+    colorKey: 'info',
     animate: true,
   },
   transcribing: {
     label: 'Transcribing',
     icon: Sparkles,
-    bg: 'bg-violet-500/10 dark:bg-violet-500/20',
-    text: 'text-violet-700 dark:text-violet-400',
-    border: 'border-violet-500/20',
+    colorKey: 'processing',
     animate: true,
   },
   processing: {
     label: 'Processing',
     icon: Loader2,
-    bg: 'bg-amber-500/10 dark:bg-amber-500/20',
-    text: 'text-amber-700 dark:text-amber-400',
-    border: 'border-amber-500/20',
+    colorKey: 'warning',
     animate: true,
   },
   pending: {
     label: 'Pending',
     icon: Clock,
-    bg: 'bg-muted',
-    text: 'text-muted-foreground',
-    border: 'border-muted-foreground/20',
+    colorKey: 'neutral',
     animate: false,
   },
   completed: {
     label: 'Completed',
     icon: CheckCircle2,
-    bg: 'bg-emerald-500/10 dark:bg-emerald-500/20',
-    text: 'text-emerald-700 dark:text-emerald-400',
-    border: 'border-emerald-500/20',
+    colorKey: 'success',
     animate: false,
   },
   failed: {
     label: 'Failed',
     icon: XCircle,
-    bg: 'bg-destructive/10',
-    text: 'text-destructive',
-    border: 'border-destructive/20',
+    colorKey: 'error',
     animate: false,
   },
 };
@@ -121,31 +108,20 @@ export function StatusBadge({
 }: StatusBadgeProps) {
   const config = statusConfig[status];
   const Icon = config.icon;
-
-  const sizeClasses = {
-    sm: 'text-xs px-2 py-0.5',
-    default: 'text-sm px-2.5 py-1',
-    lg: 'text-base px-3 py-1.5',
-  };
-
-  const iconSizes = {
-    sm: 'h-3 w-3',
-    default: 'h-3.5 w-3.5',
-    lg: 'h-4 w-4',
-  };
+  const colors = statusColors[config.colorKey];
 
   const baseClasses = cn(
     'inline-flex items-center gap-1.5 font-medium rounded-full transition-colors duration-200',
-    config.text,
+    colors.text,
     variant === 'outline'
-      ? `border ${config.border} bg-transparent`
-      : `${config.bg} border border-transparent`,
-    sizeClasses[size],
+      ? `border ${colors.border} bg-transparent`
+      : `${colors.bg} border border-transparent`,
+    badgeSize[size],
     className
   );
 
   const iconClasses = cn(
-    iconSizes[size],
+    badgeIconSize[size],
     config.animate && (status === 'processing' || status === 'uploading')
       ? 'animate-spin'
       : '',
@@ -183,11 +159,12 @@ export function StatusIndicator({
   className,
 }: StatusIndicatorProps) {
   const config = statusConfig[status];
+  const colors = statusColors[config.colorKey];
 
   const dotSizes = {
-    sm: 'h-2 w-2',
-    default: 'h-2.5 w-2.5',
-    lg: 'h-3 w-3',
+    sm: 'size-2',
+    default: 'size-2.5',
+    lg: 'size-3',
   };
 
   return (
@@ -196,14 +173,14 @@ export function StatusIndicator({
         className={cn(
           'rounded-full',
           dotSizes[size],
-          config.bg.replace('/10', '').replace('/20', ''),
+          colors.solid,
           config.animate && 'animate-pulse'
         )}
         aria-label={config.label}
         title={config.label}
       />
       {showLabel && (
-        <span className={cn('text-sm font-medium', config.text)}>{config.label}</span>
+        <span className={cn('text-sm font-medium', colors.text)}>{config.label}</span>
       )}
     </div>
   );
@@ -240,16 +217,16 @@ export function ProcessingSteps({ steps, className }: ProcessingStepsProps) {
     }
   };
 
-  const getStepColor = (status: ProcessingStep['status']) => {
+  const getStepColors = (status: ProcessingStep['status']) => {
     switch (status) {
       case 'completed':
-        return 'text-emerald-600 dark:text-emerald-400';
+        return statusColors.success;
       case 'active':
-        return 'text-primary';
+        return { ...statusColors.info, text: 'text-primary' };
       case 'failed':
-        return 'text-destructive';
+        return statusColors.error;
       default:
-        return 'text-muted-foreground';
+        return statusColors.neutral;
     }
   };
 
@@ -257,7 +234,7 @@ export function ProcessingSteps({ steps, className }: ProcessingStepsProps) {
     <div className={cn('space-y-3', className)}>
       {steps.map((step, index) => {
         const Icon = getStepIcon(step.status);
-        const color = getStepColor(step.status);
+        const colors = getStepColors(step.status);
         const isLast = index === steps.length - 1;
 
         return (
@@ -270,20 +247,20 @@ export function ProcessingSteps({ steps, className }: ProcessingStepsProps) {
             {/* Icon */}
             <div
               className={cn(
-                'flex items-center justify-center h-6 w-6 rounded-full border-2 bg-background z-10',
+                'flex items-center justify-center size-6 rounded-full border-2 bg-background z-10',
                 step.status === 'completed'
-                  ? 'border-emerald-500 bg-emerald-500/10'
+                  ? 'border-emerald-500 bg-emerald-500/10 dark:bg-emerald-500/20'
                   : step.status === 'active'
-                  ? 'border-primary bg-primary/10'
+                  ? 'border-primary bg-primary/10 dark:bg-primary/20'
                   : step.status === 'failed'
-                  ? 'border-destructive bg-destructive/10'
-                  : 'border-muted-foreground/30'
+                  ? 'border-destructive bg-destructive/10 dark:bg-destructive/20'
+                  : 'border-muted-foreground/30 dark:border-muted-foreground/20'
               )}
             >
               <Icon
                 className={cn(
-                  'h-3.5 w-3.5',
-                  color,
+                  badgeIconSize.default,
+                  colors.text,
                   step.status === 'active' && 'animate-spin'
                 )}
               />
@@ -291,7 +268,7 @@ export function ProcessingSteps({ steps, className }: ProcessingStepsProps) {
 
             {/* Content */}
             <div className="flex-1 pb-4">
-              <p className={cn('text-sm font-medium', color)}>{step.label}</p>
+              <p className={cn('text-sm font-medium', colors.text)}>{step.label}</p>
               {step.description && (
                 <p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
               )}
@@ -306,8 +283,16 @@ export function ProcessingSteps({ steps, className }: ProcessingStepsProps) {
 /**
  * getStatusConfig
  *
- * Utility function to get status configuration
+ * Utility function to get status configuration with colors from design tokens
  */
 export function getStatusConfig(status: RecordingStatus) {
-  return statusConfig[status];
+  const config = statusConfig[status];
+  const colors = statusColors[config.colorKey];
+  return {
+    ...config,
+    bg: colors.bg,
+    text: colors.text,
+    border: colors.border,
+    solid: colors.solid,
+  };
 }

@@ -30,7 +30,7 @@ async function checkStorageHealth(): Promise<number> {
   try {
     const start = Date.now();
     // Check if we can query storage metrics
-    await supabaseAdmin.from('recordings').select('id').limit(1);
+    await supabaseAdmin.from('content').select('id').limit(1);
     const latency = Date.now() - start;
 
     // Score based on latency: <100ms = 100, 100-300ms = 90, 300-600ms = 70, >600ms = 50
@@ -140,7 +140,7 @@ async function measureJobProcessingTime(): Promise<number> {
  */
 async function measureStorageLatency(): Promise<number> {
   const start = Date.now();
-  await supabaseAdmin.from('recordings').select('id').limit(1);
+  await supabaseAdmin.from('content').select('id').limit(1);
   return Date.now() - start;
 }
 

@@ -7,11 +7,25 @@
 
 import { createClient } from '@/lib/supabase/admin';
 import { getStorageMetrics, getStorageTrends, detectAnomalies, type StorageAnomaly } from './storage-metrics';
-import type { Database } from '@/lib/types/database';
 
-type AlertType = Database['public']['Tables']['storage_alerts']['Row']['alert_type'];
-type AlertSeverity = Database['public']['Tables']['storage_alerts']['Row']['alert_severity'];
-type AlertStatus = Database['public']['Tables']['storage_alerts']['Row']['alert_status'];
+// TODO: These types should match the storage_alerts table schema once it's created
+type AlertType =
+  | 'storage_growth'
+  | 'cost_increase'
+  | 'failed_jobs'
+  | 'processing_delay'
+  | 'deduplication'
+  | 'compression'
+  | 'anomaly_detected'
+  | 'spike'
+  | 'drop'
+  | 'unusual_growth'
+  | 'unusual_shrinkage'
+  | 'cost_spike'
+  | 'processing_failure'
+  | 'optimization_needed';
+type AlertSeverity = 'info' | 'warning' | 'error' | 'critical' | 'low' | 'medium' | 'high';
+type AlertStatus = 'active' | 'acknowledged' | 'resolved' | 'dismissed';
 
 /**
  * Alert configuration
@@ -469,12 +483,16 @@ export async function getAlertSummary(orgId: string): Promise<{
     medium: 0,
     high: 0,
     critical: 0,
+    info: 0,
+    warning: 0,
+    error: 0,
   };
 
   const byType: Record<string, number> = {};
 
   alerts.forEach((alert) => {
-    bySeverity[alert.severity] = (bySeverity[alert.severity] || 0) + 1;
+    const severity = alert.severity as AlertSeverity;
+    bySeverity[severity] = (bySeverity[severity] || 0) + 1;
     byType[alert.alert_type] = (byType[alert.alert_type] || 0) + 1;
   });
 

@@ -44,7 +44,7 @@ export default function AdminDashboard() {
 
   // ✅ Set document title once (legitimate side effect)
   useEffect(() => {
-    document.title = 'System Admin Dashboard - Record';
+    document.title = 'System Admin Dashboard - Tribora';
   }, []);
 
   // ✅ Use interval-based fetch with abort controller (prevents race conditions)

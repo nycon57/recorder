@@ -40,6 +40,7 @@ import type { ContentType, FileType, RecordingStatus } from '@/lib/types/databas
 import type { Tag } from '@/lib/types/database';
 import TagBadge from '@/app/components/TagBadge';
 import ContentTypeBadge from './ContentTypeBadge';
+import { Skeleton } from '@/app/components/ui/skeleton';
 
 interface MetadataSidebarProps {
   recordingId: string;
@@ -459,5 +460,103 @@ export default function MetadataSidebar({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+/**
+ * MetadataSidebarSkeleton
+ *
+ * Skeleton loading state for the metadata sidebar.
+ * Matches the structure of MetadataSidebar for smooth transitions.
+ */
+export function MetadataSidebarSkeleton() {
+  return (
+    <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
+      {/* Content Info Card */}
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-4 w-24" />
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* Type */}
+          <div>
+            <Skeleton className="h-3 w-8 mb-1.5" />
+            <Skeleton className="h-6 w-full rounded-full" />
+          </div>
+
+          {/* Status */}
+          <div>
+            <Skeleton className="h-3 w-12 mb-1.5" />
+            <Skeleton className="h-6 w-full rounded-full" />
+          </div>
+
+          {/* Format */}
+          <div>
+            <Skeleton className="h-3 w-14 mb-1.5" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-4" />
+              <Skeleton className="h-4 w-12" />
+            </div>
+          </div>
+
+          {/* Duration */}
+          <div>
+            <Skeleton className="h-3 w-16 mb-1.5" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-4" />
+              <Skeleton className="h-4 w-14" />
+            </div>
+          </div>
+
+          {/* File Size */}
+          <div>
+            <Skeleton className="h-3 w-16 mb-1.5" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-4" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Created Date */}
+          <div>
+            <Skeleton className="h-3 w-14 mb-1.5" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-4" />
+              <Skeleton className="h-4 w-28" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tags Card */}
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-4 w-10" />
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-1.5">
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-5 w-20 rounded-full" />
+            <Skeleton className="h-5 w-14 rounded-full" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Quick Actions Card */}
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-4 w-24" />
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Separator />
+          <Skeleton className="h-9 w-full" />
+        </CardContent>
+      </Card>
+    </div>
   );
 }

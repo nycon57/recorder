@@ -127,14 +127,20 @@ async function handleTranscriptionCompleted(data: {
   }
 
   // Update recording status
-  await supabase
-    .from('recordings')
+  const { error: statusError } = await supabase
+    .from('content')
     .update({ status: 'transcribed' })
     .eq('id', data.recordingId);
 
+  if (statusError) {
+    throw new Error(
+      `Failed to update content status for recording ${data.recordingId}: ${statusError.message}`
+    );
+  }
+
   // Get org_id for the recording
   const { data: recording } = await supabase
-    .from('recordings')
+    .from('content')
     .select('org_id')
     .eq('id', data.recordingId)
     .single();
@@ -169,11 +175,17 @@ async function handleTranscriptionFailed(data: {
   console.log(`[Webhook] Transcription failed for recording ${data.recordingId}: ${data.error}`);
 
   // Update recording status
-  await supabase
-    .from('recordings')
+  const { error: statusError } = await supabase
+    .from('content')
     .update({
       status: 'error',
       metadata: { error: data.error },
     })
     .eq('id', data.recordingId);
+
+  if (statusError) {
+    throw new Error(
+      `Failed to update content status for recording ${data.recordingId}: ${statusError.message}`
+    );
+  }
 }

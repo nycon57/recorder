@@ -47,7 +47,7 @@ export async function visualSearch(
     orgId: string;
     limit?: number;
     threshold?: number;
-    recordingIds?: string[];
+    contentIds?: string[];
     includeOcr?: boolean;
     dateFrom?: Date;
     dateTo?: Date;
@@ -57,7 +57,7 @@ export async function visualSearch(
     orgId,
     limit = 20,
     threshold = 0.7,
-    recordingIds,
+    contentIds,
     includeOcr = true,
     dateFrom,
     dateTo,
@@ -70,7 +70,7 @@ export async function visualSearch(
   let sql = `
     SELECT
       vf.id,
-      vf.recording_id,
+      vf.content_id,
       vf.frame_time_sec,
       vf.frame_url,
       vf.visual_description,
@@ -83,7 +83,7 @@ export async function visualSearch(
       r.created_at as "recording.created_at",
       1 - (vf.visual_embedding <=> $1::vector) as similarity
     FROM video_frames vf
-    INNER JOIN recordings r ON vf.recording_id = r.id
+    INNER JOIN recordings r ON vf.content_id = r.id
     WHERE vf.org_id = $2
       AND r.deleted_at IS NULL
       AND vf.visual_embedding IS NOT NULL
@@ -98,9 +98,9 @@ export async function visualSearch(
   let paramIndex = 4;
 
   // Filter by recording IDs
-  if (recordingIds && recordingIds.length > 0) {
-    sql += ` AND vf.recording_id = ANY($${paramIndex}::uuid[])`;
-    params.push(recordingIds);
+  if (contentIds && contentIds.length > 0) {
+    sql += ` AND vf.content_id = ANY($${paramIndex}::uuid[])`;
+    params.push(contentIds);
     paramIndex++;
   }
 
@@ -138,7 +138,7 @@ export async function visualSearch(
   // Transform results
   const results: VisualSearchResult[] = (data || []).map((row: any) => ({
     id: row.id,
-    recordingId: row.recording_id,
+    contentId: row.content_id,
     frameTimeSec: row.frame_time_sec,
     frameUrl: row.frame_url || '',
     visualDescription: row.visual_description,
@@ -196,7 +196,6 @@ export async function multimodalSearch(
     orgId,
     limit = 10,
     threshold = 0.7,
-    recordingIds,
     includeVisual = true,
     audioWeight = 0.7,
     visualWeight = 0.3,
@@ -209,6 +208,9 @@ export async function multimodalSearch(
     collectionId,
     favoritesOnly,
   } = options;
+
+  // Extract contentIds if provided
+  const contentIds: string[] | undefined = 'contentIds' in options ? (options as { contentIds?: string[] }).contentIds : undefined;
 
   // Validate weights sum to 1
   if (Math.abs(audioWeight + visualWeight - 1) > 0.001) {
@@ -226,7 +228,7 @@ export async function multimodalSearch(
     orgId,
     limit: Math.ceil(limit * 1.5), // Get extra for merging
     threshold,
-    recordingIds,
+    contentIds,
     dateFrom,
     dateTo,
     contentTypes,
@@ -245,7 +247,7 @@ export async function multimodalSearch(
       orgId,
       limit: Math.ceil(limit * 1.5),
       threshold,
-      recordingIds,
+      contentIds: contentIds as string[] | undefined,
       includeOcr,
       dateFrom,
       dateTo,
@@ -266,7 +268,21 @@ export async function multimodalSearch(
   return {
     query,
     mode,
-    audioResults: mode === 'multimodal' ? audioResults : audioResults.slice(0, limit),
+    audioResults: mode === 'multimodal' ? audioResults.map(r => ({
+      id: r.id,
+      recordingId: r.content_id,
+      chunkText: r.chunk_text,
+      similarity: r.similarity ?? 0,
+      startTimeSec: r.start_time_sec,
+      endTimeSec: r.end_time_sec,
+    })) : audioResults.slice(0, limit).map(r => ({
+      id: r.id,
+      recordingId: r.content_id,
+      chunkText: r.chunk_text,
+      similarity: r.similarity ?? 0,
+      startTimeSec: r.start_time_sec,
+      endTimeSec: r.end_time_sec,
+    })),
     visualResults: mode === 'multimodal' ? visualResults : undefined,
     combinedResults: mode === 'multimodal' ? combinedResults : undefined,
     metadata: {
@@ -299,7 +315,7 @@ async function searchTranscriptChunks(
     orgId: string;
     limit: number;
     threshold: number;
-    recordingIds?: string[];
+    contentIds?: string[];
     dateFrom?: Date;
     dateTo?: Date;
     contentTypes?: ('recording' | 'video' | 'audio' | 'document' | 'text')[];
@@ -313,7 +329,7 @@ async function searchTranscriptChunks(
     orgId,
     limit,
     threshold,
-    recordingIds,
+    contentIds,
     dateFrom,
     dateTo,
     contentTypes,
@@ -328,7 +344,7 @@ async function searchTranscriptChunks(
     orgId,
     limit,
     threshold,
-    recordingIds,
+    contentIds,
     dateFrom,
     dateTo,
     contentTypes,
@@ -341,7 +357,7 @@ async function searchTranscriptChunks(
   // Map to multimodal format
   return results.map((result) => ({
     id: result.id,
-    recording_id: result.recordingId,
+    content_id: result.contentId,
     chunk_text: result.chunkText,
     start_time_sec: result.metadata.startTime,
     end_time_sec: result.metadata.endTime,
@@ -387,13 +403,13 @@ function combineAndRerankResults(
  * Get frame count for a recording
  */
 export async function getFrameCount(
-  recordingId: string,
+  contentId: string,
   orgId: string
 ): Promise<number> {
   const { count, error } = await supabaseAdmin
     .from('video_frames')
     .select('*', { count: 'exact', head: true })
-    .eq('recording_id', recordingId)
+    .eq('content_id', contentId)
     .eq('org_id', orgId);
 
   if (error) {
@@ -408,9 +424,9 @@ export async function getFrameCount(
  * Check if frames have been extracted for a recording
  */
 export async function hasExtractedFrames(
-  recordingId: string,
+  contentId: string,
   orgId: string
 ): Promise<boolean> {
-  const count = await getFrameCount(recordingId, orgId);
+  const count = await getFrameCount(contentId, orgId);
   return count > 0;
 }

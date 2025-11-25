@@ -21,8 +21,8 @@ export interface ChatMessage {
 }
 
 export interface CitedSource {
-  recordingId: string;
-  recordingTitle: string;
+  contentId: string;
+  contentTitle: string;
   chunkId: string;
   chunkText: string;
   similarity: number;
@@ -46,23 +46,23 @@ export async function retrieveContext(
   options?: {
     maxChunks?: number;
     threshold?: number;
-    recordingIds?: string[];
+    contentIds?: string[];
   }
 ): Promise<RAGContext> {
-  const { maxChunks = 5, threshold = 0.5, recordingIds } = options || {}; // Lowered from 0.7 - balancing precision/recall for knowledge management
+  const { maxChunks = 5, threshold = 0.5, contentIds } = options || {}; // Lowered from 0.7 - balancing precision/recall for knowledge management
 
   // Perform vector search to find relevant chunks
   const searchResults = await vectorSearch(query, {
     orgId,
     limit: maxChunks,
     threshold,
-    recordingIds,
+    contentIds,
   });
 
   // Format results as cited sources
   const sources: CitedSource[] = searchResults.map((result) => ({
-    recordingId: result.recordingId,
-    recordingTitle: result.recordingTitle,
+    contentId: result.contentId,
+    contentTitle: result.contentTitle,
     chunkId: result.id,
     chunkText: result.chunkText,
     similarity: result.similarity,
@@ -73,7 +73,7 @@ export async function retrieveContext(
   // Build context string from chunks
   const context = sources
     .map((source, index) => {
-      const citation = `[${index + 1}] ${source.recordingTitle}`;
+      const citation = `[${index + 1}] ${source.contentTitle}`;
       const timestamp = source.timestamp
         ? ` (at ${formatTimestamp(source.timestamp)})`
         : '';
@@ -99,7 +99,7 @@ export async function generateRAGResponse(
     conversationHistory?: ChatMessage[];
     maxChunks?: number;
     threshold?: number;
-    recordingIds?: string[];
+    contentIds?: string[];
     stream?: boolean;
   }
 ): Promise<{
@@ -111,7 +111,7 @@ export async function generateRAGResponse(
     conversationHistory = [],
     maxChunks = 5,
     threshold = 0.5, // Lowered from 0.7 - balancing precision/recall for knowledge management
-    recordingIds,
+    contentIds,
     stream = false,
   } = options || {};
 
@@ -119,7 +119,7 @@ export async function generateRAGResponse(
   const ragContext = await retrieveContext(query, orgId, {
     maxChunks,
     threshold,
-    recordingIds,
+    contentIds,
   });
 
   // Build messages for GPT-5 Nano
@@ -154,7 +154,7 @@ export async function* generateStreamingRAGResponse(
     conversationHistory?: ChatMessage[];
     maxChunks?: number;
     threshold?: number;
-    recordingIds?: string[];
+    contentIds?: string[];
   }
 ): AsyncGenerator<{
   type: 'context' | 'token' | 'done';
@@ -164,14 +164,14 @@ export async function* generateStreamingRAGResponse(
     conversationHistory = [],
     maxChunks = 5,
     threshold = 0.5, // Lowered from 0.7 - balancing precision/recall for knowledge management
-    recordingIds,
+    contentIds,
   } = options || {};
 
   // Retrieve context first
   const ragContext = await retrieveContext(query, orgId, {
     maxChunks,
     threshold,
-    recordingIds,
+    contentIds,
   });
 
   // Yield context/sources

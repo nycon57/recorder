@@ -123,7 +123,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
   const { data: existingDocument } = await supabase
     .from('documents')
     .select('id, recording_id')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .eq('org_id', orgId)
     .single();
 
@@ -137,7 +137,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
 
     // Ensure recording status is correct
     await supabase
-      .from('recordings')
+      .from('content')
       .update({ status: 'completed' })
       .eq('id', recordingId);
 
@@ -171,7 +171,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
 
   // Update recording status
   await supabase
-    .from('recordings')
+    .from('content')
     .update({ status: 'doc_generating' })
     .eq('id', recordingId);
 
@@ -207,7 +207,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
 
     // Fetch recording metadata for context
     const { data: recording } = await supabase
-      .from('recordings')
+      .from('content')
       .select('title, metadata')
       .eq('id', recordingId)
       .single();
@@ -394,7 +394,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
     const { data: document, error: documentError } = await supabase
       .from('documents')
       .insert({
-        recording_id: recordingId,
+        content_id: recordingId,
         org_id: orgId,
         markdown: generatedContent,
         version: 'v2', // v2 indicates new insights-based generation
@@ -431,7 +431,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
 
     // Update recording status
     await supabase
-      .from('recordings')
+      .from('content')
       .update({ status: 'completed' })
       .eq('id', recordingId);
 
@@ -503,7 +503,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
 
     // Update recording status to error
     await supabase
-      .from('recordings')
+      .from('content')
       .update({
         status: 'error',
         metadata: {

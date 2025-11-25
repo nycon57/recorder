@@ -29,7 +29,7 @@ async function testRAGIntegration() {
     // Test 1: Import all modules
     console.log('✓ Testing module imports...');
     try {
-      const { performSemanticSearch } = await import('@/lib/services/vector-search-google');
+      const { vectorSearch } = await import('@/lib/services/vector-search-google');
       const { searchMonitor } = await import('@/lib/services/search-monitoring');
       const { assignVariant, getExperimentConfig } = await import('@/lib/services/ab-testing');
       results.imports = true;
@@ -97,7 +97,7 @@ async function testRAGIntegration() {
       console.log('  ✅ Search monitoring completed');
 
       // Get summary
-      const summary = searchMonitor.getMetricsSummary();
+      const summary = await searchMonitor.getMetricsSummary();
       console.log('  ✅ Metrics summary retrieved:', {
         totalSearches: summary.totalSearches,
         successRate: summary.successRate.toFixed(2),

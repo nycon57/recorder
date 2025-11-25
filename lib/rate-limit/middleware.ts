@@ -46,17 +46,11 @@ export function withRateLimit<T extends NextRequest>(
         headers.set('Retry-After', retryAfter.toString());
 
         return errorResponse(
-          {
-            code: 'RATE_LIMIT_EXCEEDED',
-            message: 'Too many requests. Please try again later.',
-            details: {
-              limit: result.limit,
-              reset: result.reset,
-              retryAfter,
-            },
-          },
+          'Too many requests. Please try again later.',
+          'RATE_LIMIT_EXCEEDED',
           429,
-          headers
+          { limit: result.limit, reset: result.reset, retryAfter },
+          undefined
         );
       }
 

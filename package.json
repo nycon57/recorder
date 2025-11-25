@@ -126,6 +126,7 @@
     "react-arborist": "^3.4.3",
     "react-day-picker": "^9.11.1",
     "react-dom": "^19.2.0",
+    "react-grab": "^0.0.51",
     "react-h5-audio-player": "^3.10.1",
     "react-hook-form": "^7.65.0",
     "react-hot-toast": "^2.6.0",

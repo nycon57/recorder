@@ -93,7 +93,7 @@ export const PATCH = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
   const { data: updatedUser, error } = await supabase
     .from('users')
     .update({
-      ...body,
+      ...(body as Record<string, any>),
       updated_at: new Date().toISOString(),
     })
     .eq('clerk_id', userId)

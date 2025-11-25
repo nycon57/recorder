@@ -39,7 +39,7 @@ import {
 
 interface Document {
   id: string;
-  recording_id: string;
+  content_id: string;
   markdown: string;
   html?: string | null;
   summary?: string | null;

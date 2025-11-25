@@ -156,7 +156,7 @@ export const POST = withRateLimit(
       enableSelfReflection,
       enableReranking: rerank,
       chunksPerQuery: Math.ceil(limit * 1.5),
-      recordingIds,
+      contentIds: recordingIds, // Map recordingIds to contentIds
       contentTypes,
       tagIds,
       tagFilterMode,
@@ -269,7 +269,6 @@ export const POST = withRateLimit(
         rerankMetadata = {
           originalCount: rerankResult.originalCount,
           rerankedCount: rerankResult.rerankedCount,
-          tokensUsed: rerankResult.tokensUsed,
           costEstimate: rerankResult.costEstimate,
         };
       }
@@ -296,7 +295,7 @@ export const POST = withRateLimit(
   // Track analytics (non-blocking)
   SearchTracker.trackSearch({
     query,
-    mode: mode || 'semantic',
+    mode: (mode || 'semantic') as 'semantic' | 'keyword' | 'agentic',
     resultsCount: cachedResult.results.length,
     latencyMs,
     cacheHit,
@@ -316,7 +315,7 @@ export const POST = withRateLimit(
     query,
     results: cachedResult.results,
     count: cachedResult.results.length,
-    mode,
+    mode: (mode || 'semantic') as 'semantic' | 'keyword' | 'agentic',
     reranked: rerank && isCohereConfigured(),
     cached: cacheHit,
     cacheLayer,

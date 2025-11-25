@@ -85,7 +85,7 @@ export default function AnalyticsPage() {
 
   // Set page title
   useEffect(() => {
-    document.title = 'My Analytics - Record';
+    document.title = 'My Analytics - Tribora';
   }, []);
 
   // ✅ Use memoized URL to trigger refetch when timeRange changes

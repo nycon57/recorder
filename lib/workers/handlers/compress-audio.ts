@@ -38,7 +38,7 @@ export async function handleCompressAudio(
     // 1. Download file from Supabase Storage
     logger.info('Downloading from storage', { context: { inputPath } });
     const { data: fileData, error: downloadError } = await supabaseAdmin.storage
-      .from('recordings')
+      .from('content')
       .download(inputPath);
 
     if (downloadError || !fileData) {
@@ -66,7 +66,7 @@ export async function handleCompressAudio(
 
     // 4. Get recording details
     const { data: recording, error: recordingError } = await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .select('file_size, content_type')
       .eq('id', recordingId)
       .single();
@@ -112,7 +112,7 @@ export async function handleCompressAudio(
       });
 
       await supabaseAdmin
-        .from('recordings')
+        .from('content')
         .update({
           compression_stats: {
             original_size: recording.file_size,
@@ -142,7 +142,7 @@ export async function handleCompressAudio(
     const compressedBuffer = await fs.readFile(tempOutputPath);
 
     const { error: uploadError } = await supabaseAdmin.storage
-      .from('recordings')
+      .from('content')
       .upload(outputPath, compressedBuffer, {
         contentType: 'audio/opus',
         upsert: true,
@@ -159,7 +159,7 @@ export async function handleCompressAudio(
 
     // 8. Update recording with compression stats
     await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .update({
         storage_path_processed: outputPath,
         compression_stats: compressionResult.stats,
@@ -198,7 +198,7 @@ export async function handleCompressAudio(
 
     // Update recording with error
     await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .update({
         error_message: error instanceof Error ? error.message : 'Audio compression failed',
       })

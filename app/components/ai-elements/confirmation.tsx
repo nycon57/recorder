@@ -11,9 +11,19 @@ import {
   useContext,
 } from "react";
 
+// Extended state type to include approval workflow states
+type ExtendedToolState = ToolUIPart["state"] | "approval-requested" | "approval-responded" | "output-denied";
+
+// Extended approval type
+type ApprovalData = {
+  approved: boolean;
+  timestamp?: number;
+  reason?: string;
+};
+
 type ConfirmationContextValue = {
-  approval: ToolUIPart["approval"];
-  state: ToolUIPart["state"];
+  approval: ApprovalData | undefined;
+  state: ExtendedToolState;
 };
 
 const ConfirmationContext = createContext<ConfirmationContextValue | null>(
@@ -31,8 +41,8 @@ const useConfirmation = () => {
 };
 
 export type ConfirmationProps = ComponentProps<typeof Alert> & {
-  approval?: ToolUIPart["approval"];
-  state: ToolUIPart["state"];
+  approval?: ApprovalData;
+  state: ExtendedToolState;
 };
 
 export const Confirmation = ({

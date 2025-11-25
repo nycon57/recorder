@@ -91,7 +91,7 @@ export class OCRWorkerPool {
 
     // Configure for optimal performance
     await worker.setParameters({
-      tessedit_pageseg_mode: '3', // Fully automatic page segmentation
+      tessedit_pageseg_mode: 3 as any, // Fully automatic page segmentation (PSM.AUTO)
       preserve_interword_spaces: '1',
       // Whitelist common characters for better accuracy
       tessedit_char_whitelist: `ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?-_()[]{}/@#$%&*+=<>"'`,

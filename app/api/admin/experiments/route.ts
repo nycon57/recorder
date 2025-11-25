@@ -171,11 +171,29 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   const body = await parseBody(request, adminCreateExperimentSchema);
 
-  const { name, description, feature, variants, trafficAllocation } = body;
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    !('name' in body) ||
+    !('description' in body) ||
+    !('feature' in body) ||
+    !('variants' in body) ||
+    !('trafficAllocation' in body)
+  ) {
+    throw new Error('Invalid request body');
+  }
+
+  const { name, description, feature, variants, trafficAllocation } = body as {
+    name: string;
+    description: string;
+    feature: string;
+    variants: Array<{ name: string; [key: string]: any }>;
+    trafficAllocation: Record<string, number>;
+  };
 
   // Validate traffic allocation sums to 1.0
   const totalAllocation = Object.values(trafficAllocation).reduce(
-    (sum: number, val: any) => sum + val,
+    (sum: number, val: number) => sum + val,
     0
   );
 
@@ -184,12 +202,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   // Validate all variants have allocation
-  const variantNames = variants.map((v) => v.name);
+  const variantNames = variants.map((v: { name: string }) => v.name);
   const allocationKeys = Object.keys(trafficAllocation);
 
   if (
-    !variantNames.every((name) => allocationKeys.includes(name)) ||
-    !allocationKeys.every((name) => variantNames.includes(name))
+    !variantNames.every((name: string) => allocationKeys.includes(name)) ||
+    !allocationKeys.every((name: string) => variantNames.includes(name))
   ) {
     throw new Error(
       'Traffic allocation must match variant names exactly'
@@ -236,7 +254,20 @@ export const PUT = apiHandler(async (request: NextRequest) => {
 
   const body = await parseBody(request, adminUpdateExperimentSchema);
 
-  const { experimentId, status, trafficAllocation, description } = body;
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    !('experimentId' in body)
+  ) {
+    throw new Error('Invalid request body');
+  }
+
+  const { experimentId, status, trafficAllocation, description } = body as {
+    experimentId: string;
+    status?: string;
+    trafficAllocation?: Record<string, number>;
+    description?: string;
+  };
 
   // Build update object
   const updates: any = {};
@@ -255,7 +286,7 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   if (trafficAllocation !== undefined) {
     // Validate traffic allocation sums to 1.0
     const totalAllocation = Object.values(trafficAllocation).reduce(
-      (sum: number, val: any) => sum + val,
+      (sum: number, val: number) => sum + val,
       0
     );
 

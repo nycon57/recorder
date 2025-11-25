@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils/cn';
 
 type Feature = {
   id: string;
-  icon: React.ElementType;
+  icon: React.ElementType<{ className?: string }>;
   title: string;
   description: string;
   highlights: string[];
@@ -116,7 +116,7 @@ const FEATURES: Feature[] = [
   },
 ];
 
-const BENEFITS = [
+const BENEFITS: { icon: React.ElementType<{ className?: string }>; title: string; description: string }[] = [
   {
     icon: Zap,
     title: 'Lightning Fast',

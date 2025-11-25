@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Copy, Check, BookOpen, Clock } from 'lucide-react';
+import { Copy, Check, BookOpen, Clock, Activity } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -224,7 +224,8 @@ export default function StreamingTextDisplay({
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
-                  code({ inline, className, children, ...props }) {
+                  code(props) {
+                    const { inline, className, children, ...rest } = props as any;
                     const match = /language-(\w+)/.exec(className || '');
                     const codeContent = String(children).replace(/\n$/, '');
 
@@ -234,7 +235,6 @@ export default function StreamingTextDisplay({
                         language={match[1]}
                         PreTag="div"
                         className="rounded-md text-sm"
-                        {...props}
                       >
                         {codeContent}
                       </SyntaxHighlighter>
@@ -244,7 +244,7 @@ export default function StreamingTextDisplay({
                           'rounded bg-muted px-1.5 py-0.5 font-mono text-sm',
                           className
                         )}
-                        {...props}
+                        {...rest}
                       >
                         {children}
                       </code>

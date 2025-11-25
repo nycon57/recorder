@@ -54,7 +54,7 @@ export async function handleExtractTextDocx(
 
   // Update recording status
   await supabase
-    .from('recordings')
+    .from('content')
     .update({ status: 'transcribing' })
     .eq('id', recordingId);
 
@@ -75,7 +75,7 @@ export async function handleExtractTextDocx(
     });
 
     const { data: docxBlob, error: downloadError } = await supabase.storage
-      .from('recordings')
+      .from('content')
       .download(docxPath);
 
     if (downloadError || !docxBlob) {
@@ -195,7 +195,7 @@ export async function handleExtractTextDocx(
     const { data: transcript, error: transcriptError } = await supabase
       .from('transcripts')
       .insert({
-        recording_id: recordingId,
+        content_id: recordingId,
         text: cleanedText,
         language: 'en', // Default to English, could be detected
         words_json: {
@@ -220,7 +220,7 @@ export async function handleExtractTextDocx(
 
     // Update recording status
     await supabase
-      .from('recordings')
+      .from('content')
       .update({ status: 'transcribed' })
       .eq('id', recordingId);
 
@@ -280,7 +280,7 @@ export async function handleExtractTextDocx(
 
     // Update recording status to error
     await supabase
-      .from('recordings')
+      .from('content')
       .update({
         status: 'error',
         error_message: error instanceof Error ? error.message : 'DOCX text extraction failed',

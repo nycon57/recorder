@@ -343,9 +343,9 @@ export function TestWebhookModal({ webhook, open, onOpenChange }: TestWebhookMod
           </Button>
           <Button
             onClick={handleTest}
-            disabled={testWebhookMutation.isLoading}
+            disabled={testWebhookMutation.isPending}
           >
-            {testWebhookMutation.isLoading ? (
+            {testWebhookMutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Sending...

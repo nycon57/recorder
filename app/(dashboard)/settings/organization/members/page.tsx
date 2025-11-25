@@ -237,7 +237,7 @@ export default function MembersPage() {
       {showFilters && (
         <MemberFilters
           filters={filters}
-          onFiltersChange={setFilters}
+          onFiltersChange={(f: any) => setFilters(f)}
           onClose={() => setShowFilters(false)}
         />
       )}
@@ -305,7 +305,7 @@ export default function MembersPage() {
       />
 
       <MemberDetailDrawer
-        member={selectedMember}
+        member={selectedMember as any}
         open={!!selectedMember}
         onClose={() => setSelectedMember(null)}
         onUpdate={() => {

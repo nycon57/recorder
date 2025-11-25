@@ -62,13 +62,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
   try {
     // Parse and validate query parameters
     const params = parseSearchParams(request, dashboardRecentQuerySchema);
-    const { limit, types } = params;
+    // Type assertion for parsed params
+    const typedParams = params as { limit: number; types?: string[] };
+    const { limit, types } = typedParams;
 
     const supabase = await createClient();
 
     // Build query for recent items
     let query = supabase
-      .from('recordings')
+      .from('content')
       .select(
         `
         id,

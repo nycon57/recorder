@@ -16,6 +16,12 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+interface Recommendation {
+  type: string;
+  priority: string;
+  description: string;
+}
+
 /**
  * POST /api/analytics/organizations/[id]/actions
  *
@@ -39,7 +45,9 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
   const adminUser = await requireSystemAdmin();
 
   const { id: orgId } = await context.params;
-  const { action } = await parseBody(request, organizationActionSchema);
+  const body = await parseBody(request, organizationActionSchema);
+  // Type assertion for parsed body
+  const { action } = body as { action: string };
 
   // Validate organization exists
   const { data: org, error: orgError } = await supabaseAdmin
@@ -69,7 +77,7 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
     case 'compress': {
       // Find uncompressed files
       const { data: uncompressedFiles } = await supabaseAdmin
-        .from('recordings')
+        .from('content')
         .select('id')
         .eq('org_id', orgId)
         .is('compression_stats', null)
@@ -111,7 +119,7 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
       const { data: oldFiles } = await supabaseAdmin
-        .from('recordings')
+        .from('content')
         .select('id')
         .eq('org_id', orgId)
         .eq('storage_tier', 'hot')
@@ -155,7 +163,7 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
       twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
 
       const { data: oldRecordings } = await supabaseAdmin
-        .from('recordings')
+        .from('content')
         .select('id')
         .eq('org_id', orgId)
         .lt('created_at', twoYearsAgo.toISOString())
@@ -170,7 +178,7 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
 
       // Immediately soft delete recordings (no grace period)
       const { error: updateError } = await supabaseAdmin
-        .from('recordings')
+        .from('content')
         .update({
           deleted_at: new Date().toISOString(),
         })
@@ -194,7 +202,7 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
     case 'report': {
       // Generate comprehensive report data
       const { data: recordings } = await supabaseAdmin
-        .from('recordings')
+        .from('content')
         .select('file_size, storage_tier, compression_stats, created_at, mime_type')
         .eq('org_id', orgId)
         .is('deleted_at', null);
@@ -234,7 +242,7 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
               : 0,
         },
         tierBreakdown,
-        recommendations: [],
+        recommendations: [] as Recommendation[],
       };
 
       // Add recommendations

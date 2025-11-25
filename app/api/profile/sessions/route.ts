@@ -103,7 +103,8 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
 
   // Validate request body
   const body = await parseBody(request, revokeSessionSchema);
-  const { sessionId } = body;
+  // Type assertion for parsed body
+  const { sessionId } = body as { sessionId: string };
 
   // Use admin client to bypass RLS
   const supabase = supabaseAdmin;

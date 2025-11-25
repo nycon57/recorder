@@ -42,7 +42,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     case 'uploads':
       {
         const { data: recordings } = await supabase
-          .from('recordings')
+          .from('content')
           .select('created_at')
           .eq('org_id', orgId)
           .gte('created_at', dateFrom)
@@ -96,7 +96,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     case 'storage':
       {
         const { data: recordings } = await supabase
-          .from('recordings')
+          .from('content')
           .select('created_at, file_size')
           .eq('org_id', orgId)
           .gte('created_at', dateFrom)

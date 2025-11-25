@@ -40,7 +40,7 @@ async function testSSEConnection() {
     console.log();
   };
 
-  eventSource.onmessage = (event) => {
+  eventSource.onmessage = (event: any) => {
     messageCount++;
     console.log(`📨 Message #${messageCount} received at ${new Date().toISOString()}`);
 
@@ -67,7 +67,7 @@ async function testSSEConnection() {
     console.log();
   };
 
-  eventSource.onerror = (error) => {
+  eventSource.onerror = (error: any) => {
     console.error('❌ SSE Error occurred:');
     console.error('   Type:', error.type);
 

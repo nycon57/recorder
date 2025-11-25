@@ -10,7 +10,7 @@ import { TableCell, TableRow } from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
 import { Collapsible, CollapsibleContent } from '@/app/components/ui/collapsible';
 
-import type { AuditLog } from '../types';
+import type { AuditLog } from '@/app/(dashboard)/settings/organization/security/types';
 
 interface AuditLogRowProps {
   log: AuditLog;

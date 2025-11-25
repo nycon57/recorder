@@ -49,6 +49,7 @@ export interface AgenticSearchResult {
   reasoning: string;
   confidence: number;
   totalDurationMs: number;
+  rerankingApplied?: boolean; // Whether reranking was applied to final results
   metadata: {
     iterationCount: number;
     chunksRetrieved: number;

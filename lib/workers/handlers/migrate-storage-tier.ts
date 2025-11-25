@@ -38,7 +38,7 @@ export async function handleMigrateStorageTier(
   try {
     // 1. Verify recording exists and get current state
     const { data: recording, error: recordingError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('*')
       .eq('id', recordingId)
       .single();
@@ -51,7 +51,7 @@ export async function handleMigrateStorageTier(
     const { data: migration, error: migrationInsertError } = await supabase
       .from('storage_migrations')
       .insert({
-        recording_id: recordingId,
+        content_id: recordingId,
         org_id: orgId,
         from_tier: fromTier,
         to_tier: toTier,
@@ -81,8 +81,8 @@ export async function handleMigrateStorageTier(
       const migrationResult = await storageManager.migrateToTier(
         fromProvider,
         sourcePath,
-        toTier,
-        recordingId
+        toTier as 'hot' | 'warm' | 'cold',
+        recordingId || ''
       );
 
       if (!migrationResult.success) {
@@ -114,7 +114,7 @@ export async function handleMigrateStorageTier(
       }
 
       const { error: updateError } = await supabase
-        .from('recordings')
+        .from('content')
         .update(updateData)
         .eq('id', recordingId);
 
@@ -174,7 +174,7 @@ export async function handleMigrateStorageTier(
 
     // Clear migration scheduled flag on error
     await supabase
-      .from('recordings')
+      .from('content')
       .update({ tier_migration_scheduled: false })
       .eq('id', recordingId);
 
@@ -265,7 +265,7 @@ export async function batchMigrateTier(
     // 4. Mark recordings as having scheduled migration
     const recordingIds = filesToMigrate.map((f: any) => f.recording_id);
     await supabase
-      .from('recordings')
+      .from('content')
       .update({ tier_migration_scheduled: true })
       .in('id', recordingIds);
 
@@ -315,7 +315,7 @@ export async function getMigrationStats(orgId: string): Promise<{
   try {
     // Get file counts by tier and provider
     const { data: recordings } = await supabase
-      .from('recordings')
+      .from('content')
       .select('storage_tier, storage_provider')
       .eq('org_id', orgId)
       .is('deleted_at', null);
@@ -332,7 +332,7 @@ export async function getMigrationStats(orgId: string): Promise<{
 
     // Get pending migrations
     const { data: pendingMigrations } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id')
       .eq('org_id', orgId)
       .eq('tier_migration_scheduled', true)

@@ -159,7 +159,7 @@ export function TagList({
       {hiddenCount > 0 && (
         <span
           className={cn(
-            'inline-flex items-center rounded-full bg-gray-100 text-gray-600',
+            'inline-flex items-center rounded-full bg-muted text-muted-foreground',
             size === 'sm' && 'text-xs px-2 py-0.5',
             size === 'md' && 'text-sm px-2.5 py-1',
             size === 'lg' && 'text-base px-3 py-1.5'

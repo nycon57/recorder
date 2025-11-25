@@ -168,7 +168,7 @@ async function runSimulations(): Promise<void> {
   console.log('📊 METRICS SUMMARY');
   console.log('='.repeat(60) + '\n');
 
-  const summary = searchMonitor.getMetricsSummary();
+  const summary = await searchMonitor.getMetricsSummary();
   console.log('Total Searches:', summary.totalSearches);
   console.log('Success Rate:', `${(summary.successRate * 100).toFixed(1)}%`);
   console.log('Avg Similarity:', summary.avgSimilarity.toFixed(3));
@@ -179,8 +179,8 @@ async function runSimulations(): Promise<void> {
   console.log('📋 RECENT METRICS (Last 5 searches)');
   console.log('='.repeat(60) + '\n');
 
-  const recent = searchMonitor.getRecentMetrics(5);
-  recent.forEach((metric, idx) => {
+  const recent = await searchMonitor.getRecentMetrics(undefined, 5);
+  recent.forEach((metric: any, idx: number) => {
     console.log(`${idx + 1}. Query: "${metric.query.substring(0, 40)}..."`);
     console.log(`   Strategy: ${metric.strategy}`);
     console.log(`   Success: ${metric.success ? '✅' : '❌'}`);

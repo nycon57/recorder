@@ -81,7 +81,7 @@ export const GET = apiHandler(
 
       // Fetch content item with related data
       let query = supabase
-        .from('recordings')
+        .from('content')
         .select(
           `
           *,
@@ -110,7 +110,7 @@ export const GET = apiHandler(
       // Text notes don't have file URLs (content is in transcript)
       if (item.content_type !== 'text' && item.storage_path_raw) {
         const { data: signedUrlData } = await supabase.storage
-          .from('recordings')
+          .from('content')
           .createSignedUrl(item.storage_path_raw, 3600); // 1 hour expiry
 
         fileUrl = signedUrlData?.signedUrl || null;
@@ -119,7 +119,7 @@ export const GET = apiHandler(
         // For videos, prefer processed (MP4) if available
         if (item.content_type === 'video' && item.storage_path_processed) {
           const { data: processedUrlData } = await supabase.storage
-            .from('recordings')
+            .from('content')
             .createSignedUrl(item.storage_path_processed, 3600);
 
           if (processedUrlData?.signedUrl) {
@@ -214,7 +214,7 @@ export const PATCH = apiHandler(
 
       // Update content item
       const { data: item, error } = await supabase
-        .from('recordings')
+        .from('content')
         .update(updates)
         .eq('id', id)
         .eq('org_id', orgId)
@@ -310,7 +310,7 @@ export const DELETE = apiHandler(
 
         // Fetch item to get storage paths
         const { data: item, error: fetchError } = await supabase
-          .from('recordings')
+          .from('content')
           .select('storage_path_raw, storage_path_processed, content_type')
           .eq('id', id)
           .eq('org_id', orgId)
@@ -332,7 +332,7 @@ export const DELETE = apiHandler(
 
         // Delete database record (cascades to related tables)
         const { error } = await supabase
-          .from('recordings')
+          .from('content')
           .delete()
           .eq('id', id)
           .eq('org_id', orgId);
@@ -357,7 +357,7 @@ export const DELETE = apiHandler(
 
         // First check if item exists and get current state
         const { data: existingItem, error: fetchError } = await supabase
-          .from('recordings')
+          .from('content')
           .select('id, deleted_at')
           .eq('id', id)
           .eq('org_id', orgId)
@@ -384,7 +384,7 @@ export const DELETE = apiHandler(
         // Perform soft delete
         const deletedAt = new Date().toISOString();
         const { data: item, error } = await supabase
-          .from('recordings')
+          .from('content')
           .update({ deleted_at: deletedAt })
           .eq('id', id)
           .eq('org_id', orgId)

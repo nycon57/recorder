@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { Building2, ChevronRight, Check, AlertCircle, Info } from "lucide-react";
+import { Building2, ChevronRight, Check, AlertCircle, Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -348,7 +348,7 @@ export function EditDepartmentModal({
           {/* Default Visibility */}
           <div className="space-y-2">
             <Label htmlFor="visibility">Default Visibility</Label>
-            <Select value={visibility} onValueChange={setVisibility} disabled={loading}>
+            <Select value={visibility} onValueChange={(value: any) => setVisibility(value)} disabled={loading}>
               <SelectTrigger id="visibility">
                 <SelectValue />
               </SelectTrigger>
@@ -381,11 +381,27 @@ export function EditDepartmentModal({
 
         {/* Footer */}
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose} disabled={loading}>
+          <Button
+            variant="outline"
+            onClick={handleClose}
+            disabled={loading}
+            className={cn(loading && "opacity-50 cursor-not-allowed")}
+          >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={loading}>
-            {loading ? "Updating..." : "Update Department"}
+          <Button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="min-w-[140px]"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Updating...
+              </>
+            ) : (
+              "Update Department"
+            )}
           </Button>
         </div>
       </DialogContent>

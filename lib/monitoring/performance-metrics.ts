@@ -326,7 +326,7 @@ export async function getPerformanceMetrics(): Promise<{
 
         const statusCounts = await redis.hgetall(`metrics:api:aggregate:${endpoint}:status`);
         const totalRequests = Object.values(statusCounts || {})
-          .reduce((sum, count) => sum + Number(count), 0);
+          .reduce((sum: number, count) => sum + Number(count), 0);
 
         const errorCount = Number(statusCounts?.error || 0);
 
@@ -334,14 +334,14 @@ export async function getPerformanceMetrics(): Promise<{
           p50: durValues[p50Index] || 0,
           p95: durValues[p95Index] || 0,
           p99: durValues[p99Index] || 0,
-          errorRate: totalRequests > 0 ? (errorCount / totalRequests) * 100 : 0,
-          requestCount: totalRequests,
+          errorRate: (totalRequests as number) > 0 ? (errorCount / (totalRequests as number)) * 100 : 0,
+          requestCount: totalRequests as number,
         };
       }
     }
 
     // Get slow APIs
-    const slowApis = await redis.zrevrange('metrics:slow:apis', 0, 9, { withScores: true });
+    const slowApis = await redis.zrange('metrics:slow:apis', 0, 9, { rev: true, withScores: true });
     const slowestApis = [];
     for (let i = 0; i < slowApis.length; i += 2) {
       const [endpoint] = (slowApis[i] as string).split(':');
@@ -362,7 +362,7 @@ export async function getPerformanceMetrics(): Promise<{
     // Get cache latency
     const cacheLatencies = await redis.zrange('metrics:cache:latency', -100, -1);
     const avgCacheLatency = cacheLatencies.length > 0
-      ? cacheLatencies.reduce((sum, lat) => sum + Number(lat), 0) / cacheLatencies.length
+      ? cacheLatencies.reduce((sum: number, lat) => sum + Number(lat), 0) / cacheLatencies.length
       : 0;
 
     // Get job throughput (simplified)
@@ -384,7 +384,7 @@ export async function getPerformanceMetrics(): Promise<{
     }
 
     // Get slow queries
-    const slowQueries = await redis.zrevrange('metrics:slow:queries', 0, 9, { withScores: true });
+    const slowQueries = await redis.zrange('metrics:slow:queries', 0, 9, { rev: true, withScores: true });
     const slowestQueries = [];
     for (let i = 0; i < slowQueries.length; i += 2) {
       const [table, operation] = (slowQueries[i] as string).split(':');
@@ -464,7 +464,7 @@ export async function resetMetrics(): Promise<void> {
         count: 100,
       });
 
-      cursor = result[0];
+      cursor = typeof result[0] === 'string' ? parseInt(result[0], 10) : result[0];
       keys.push(...(result[1] || []));
     } while (cursor !== 0);
 

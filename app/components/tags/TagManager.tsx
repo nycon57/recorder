@@ -233,7 +233,7 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                       <button
                         key={color}
                         type="button"
-                        onClick={() => setSelectedColor(color)}
+                        onClick={() => setSelectedColor(color as any)}
                         className={cn(
                           'w-8 h-8 rounded-full transition-all',
                           selectedColor === color &&

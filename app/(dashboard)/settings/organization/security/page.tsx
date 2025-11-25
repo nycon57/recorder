@@ -295,7 +295,7 @@ export default function SecurityPage() {
         const user = row.original.user || { name: 'Unknown User', email: '', avatar_url: null };
         return (
           <div className="flex items-center gap-2">
-            <UserAvatar user={user} size="sm" />
+            <UserAvatar name={user.name || 'Unknown User'} avatarUrl={user.avatar_url} email={user.email} size="sm" />
             <div>
               <div className="font-medium text-sm">
                 {user.name || 'Unknown User'}
@@ -432,7 +432,7 @@ export default function SecurityPage() {
                   <Button
                     size="sm"
                     onClick={() => exportAuditMutation.mutate()}
-                    disabled={exportAuditMutation.isLoading}
+                    disabled={exportAuditMutation.isPending}
                   >
                     <Download className="h-4 w-4 mr-2" />
                     Export CSV

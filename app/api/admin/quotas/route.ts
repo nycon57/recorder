@@ -207,6 +207,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   const body = await parseBody(request, adminUpdateQuotaSchema);
 
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    !('orgId' in body)
+  ) {
+    throw new Error('Invalid request body');
+  }
+
   const {
     orgId,
     planTier,
@@ -217,7 +225,17 @@ export const POST = apiHandler(async (request: NextRequest) => {
     connectorsAllowed,
     apiRateLimit,
     searchRateLimit,
-  } = body;
+  } = body as {
+    orgId: string;
+    planTier?: string;
+    searchesPerMonth?: number;
+    storageGb?: number;
+    recordingsPerMonth?: number;
+    aiRequestsPerMonth?: number;
+    connectorsAllowed?: number;
+    apiRateLimit?: number;
+    searchRateLimit?: number;
+  };
 
   // Build update object
   const updates: any = {

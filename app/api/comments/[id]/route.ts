@@ -91,7 +91,7 @@ export const PATCH = apiHandler(
 
     if (updateError || !updatedComment) {
       console.error('[PATCH /api/comments/[id]] Update error:', updateError);
-      throw errors.internal('Failed to update comment');
+      return errors.internalError();
     }
 
     return successResponse({ comment: updatedComment });
@@ -149,7 +149,7 @@ export const DELETE = apiHandler(
 
     if (deleteError) {
       console.error('[DELETE /api/comments/[id]] Delete error:', deleteError);
-      throw errors.internal('Failed to delete comment');
+      return errors.internalError();
     }
 
     return successResponse({ success: true });

@@ -169,12 +169,12 @@ export function TrendChart({ orgId, className }: TrendChartProps) {
                 <div className="flex items-center gap-2 mt-1">
                   <span>
                     {trend.isPositive ? (
-                      <TrendingUp className="h-4 w-4 text-green-500" />
+                      <TrendingUp className="size-4 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <TrendingDown className="h-4 w-4 text-red-500" />
+                      <TrendingDown className="size-4 text-red-600 dark:text-red-400" />
                     )}
                   </span>
-                  <span className={trend.isPositive ? 'text-green-600' : 'text-red-600'}>
+                  <span className={trend.isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
                     {trend.isPositive ? '+' : ''}{trend.value.toFixed(1)}% vs previous period
                   </span>
                 </div>

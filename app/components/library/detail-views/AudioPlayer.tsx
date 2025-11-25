@@ -160,7 +160,7 @@ function AudioPlayerWithRef({
 
   // Expose the audio element via the forwarded ref
   React.useImperativeHandle(forwardedRef, () => {
-    return player.ref.current ?? null;
+    return player.ref.current!;
   }, [player.ref]);
 
   const handleDownload = async () => {

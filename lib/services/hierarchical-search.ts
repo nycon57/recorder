@@ -13,8 +13,8 @@ import type { Database } from '@/lib/types/database';
 
 export interface HierarchicalSearchResult {
   id: string;
-  recordingId: string;
-  recordingTitle: string;
+  contentId: string;
+  contentTitle: string;
   chunkText: string;
   similarity: number;
   summarySimilarity: number;
@@ -157,8 +157,8 @@ export async function hierarchicalSearch(
     // Step 3: Transform and deduplicate results
     const results: HierarchicalSearchResult[] = data.map((row: any) => ({
       id: row.id,
-      recordingId: row.recording_id,
-      recordingTitle: row.recording_title,
+      contentId: row.content_id,
+      contentTitle: row.content_title,
       chunkText: row.chunk_text,
       similarity: row.similarity,
       summarySimilarity: row.summary_similarity,
@@ -170,12 +170,12 @@ export async function hierarchicalSearch(
     const uniqueResults = deduplicateResults(results);
 
     console.log(
-      `[Hierarchical Search] Returning ${uniqueResults.length} results from ${new Set(uniqueResults.map(r => r.recordingId)).size} documents`
+      `[Hierarchical Search] Returning ${uniqueResults.length} results from ${new Set(uniqueResults.map(r => r.contentId)).size} documents`
     );
 
     // Log document distribution
     const documentDistribution = uniqueResults.reduce((acc, result) => {
-      acc[result.recordingId] = (acc[result.recordingId] || 0) + 1;
+      acc[result.contentId] = (acc[result.contentId] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
@@ -215,27 +215,27 @@ function deduplicateResults(
 }
 
 /**
- * Search within a specific recording using hierarchical search
+ * Search within a specific content item using hierarchical search
  */
 export async function hierarchicalSearchRecording(
-  recordingId: string,
+  contentId: string,
   query: string,
   orgId: string,
   options?: Partial<HierarchicalSearchOptions>
 ): Promise<HierarchicalSearchResult[]> {
-  // For single recording search, we can use a simpler approach
+  // For single content search, we can use a simpler approach
   // since document diversity is not a concern
   // But we still use hierarchical search for consistency
 
   const results = await hierarchicalSearch(query, {
     ...options,
     orgId,
-    topDocuments: 1, // Only one document (the recording)
+    topDocuments: 1, // Only one document (the content)
     chunksPerDocument: options?.chunksPerDocument || 10, // Get more chunks from single doc
   });
 
-  // Filter to only the target recording
-  return results.filter((r) => r.recordingId === recordingId);
+  // Filter to only the target content
+  return results.filter((r) => r.contentId === contentId);
 }
 
 /**
@@ -245,12 +245,12 @@ export async function hierarchicalSearchRecording(
 export async function getRecordingSummaries(
   orgId: string,
   limit: number = 10
-): Promise<Array<{ recordingId: string; summaryText: string }>> {
+): Promise<Array<{ contentId: string; summaryText: string }>> {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from('recording_summaries')
-    .select('recording_id, summary_text')
+    .from('content_summaries')
+    .select('content_id, summary_text')
     .eq('org_id', orgId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -261,7 +261,7 @@ export async function getRecordingSummaries(
   }
 
   return (data || []).map((row) => ({
-    recordingId: row.recording_id,
+    contentId: row.content_id,
     summaryText: row.summary_text,
   }));
 }

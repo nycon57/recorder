@@ -67,9 +67,9 @@ type JobRow = Database['public']['Tables']['jobs']['Row'];
 type JobType = JobRow['type'];
 type JobStatus = JobRow['status'];
 
-// PERF-DB-002: Extended job type with prefetched recording data
-// This eliminates N+1 queries by joining jobs with recordings in the initial fetch
-interface PrefetchedRecording {
+// PERF-DB-002: Extended job type with prefetched content data
+// This eliminates N+1 queries by joining jobs with content in the initial fetch
+interface PrefetchedContent {
   id: string;
   org_id: string;
   title: string | null;
@@ -82,7 +82,7 @@ interface PrefetchedRecording {
 }
 
 type Job = JobRow & {
-  recording?: PrefetchedRecording | null;
+  content?: PrefetchedContent | null;
 };
 
 interface JobHandler {
@@ -117,7 +117,7 @@ function getCompletionMessage(jobType: string): string {
  */
 export async function updateJobProgress(
   jobId: string,
-  recordingId: string,
+  contentId: string,
   percent: number,
   message: string,
   data?: any
@@ -134,10 +134,10 @@ export async function updateJobProgress(
     .eq('id', jobId);
 
   // Stream to connected clients
-  streamingManager.sendProgress(recordingId, 'all', percent, message, data);
+  streamingManager.sendProgress(contentId, 'all', percent, message, data);
 
   processorLogger.debug('Job progress updated', {
-    context: { jobId, recordingId },
+    context: { jobId, contentId },
     data: { percent, message },
   });
 }
@@ -152,7 +152,7 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   doc_generate: generateDocument,
   generate_embeddings: generateEmbeddings,
   generate_summary: generateSummary,
-  extract_frames: handleExtractFrames, // Phase 4 - Video frame extraction and indexing
+  extract_frames: handleExtractFrames as unknown as JobHandler, // Phase 4 - Video frame extraction and indexing
   sync_connector: syncConnector, // Phase 5 - Connector sync
   process_imported_doc: processImportedDocument, // Phase 5 - Process imported documents
   process_webhook: processWebhook, // Phase 5 - Process webhook events
@@ -272,13 +272,13 @@ export async function processJobs(options?: {
   // Main processing loop
   while (true) {
     try {
-      // PERF-DB-002: Fetch pending jobs with recording data (eliminates N+1 queries)
+      // PERF-DB-002: Fetch pending jobs with content data (eliminates N+1 queries)
       // PERF-WK-001: Order by priority (0=critical first), then run_at, then created_at
       const { data: jobs, error } = await supabase
         .from('jobs')
         .select(`
           *,
-          recording:recordings!jobs_recording_id_fkey (
+          content:content!jobs_content_id_fkey (
             id,
             org_id,
             title,
@@ -353,11 +353,12 @@ export async function processJobs(options?: {
  */
 async function processJob(job: Job, maxRetries: number): Promise<void> {
   const supabase = createAdminClient();
-  const recordingId = (job.payload as any)?.recordingId;
+  // Support both old (recordingId) and new (contentId) payload formats for backward compatibility
+  const contentId = (job.payload as any)?.contentId || (job.payload as any)?.recordingId;
 
   try {
     processorLogger.info('Processing job', {
-      context: { jobId: job.id, recordingId, jobType: job.type },
+      context: { jobId: job.id, contentId, jobType: job.type },
     });
 
     // Mark job as processing
@@ -372,8 +373,8 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
       .eq('id', job.id);
 
     // Stream initial progress
-    if (recordingId) {
-      streamingManager.sendProgress(recordingId, 'all', 0, 'Starting job...', {
+    if (contentId) {
+      streamingManager.sendProgress(contentId, 'all', 0, 'Starting job...', {
         jobId: job.id,
         jobType: job.type,
       });
@@ -387,8 +388,8 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
 
     // Create progress callback
     const progressCallback: ProgressCallback = (percent, message, data) => {
-      if (recordingId) {
-        updateJobProgress(job.id, recordingId, percent, message, data);
+      if (contentId) {
+        updateJobProgress(job.id, contentId, percent, message, data);
       }
     };
 
@@ -408,20 +409,20 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
       .eq('id', job.id);
 
     // Stream completion
-    if (recordingId) {
-      streamingManager.sendProgress(recordingId, 'all', 100, 'Job completed successfully', {
+    if (contentId) {
+      streamingManager.sendProgress(contentId, 'all', 100, 'Job completed successfully', {
         jobId: job.id,
         jobType: job.type,
       });
     }
 
     processorLogger.info('Job completed successfully', {
-      context: { jobId: job.id, recordingId },
+      context: { jobId: job.id, contentId },
     });
 
   } catch (error) {
     processorLogger.error('Job processing failed', {
-      context: { jobId: job.id, recordingId },
+      context: { jobId: job.id, contentId },
       error: error as Error,
     });
 
@@ -447,16 +448,16 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
         .eq('id', job.id);
 
       // Stream retry notification
-      if (recordingId) {
+      if (contentId) {
         streamingManager.sendLog(
-          recordingId,
+          contentId,
           `Job failed, scheduling retry ${attemptCount}/${maxRetries} in ${retryDelay}ms`,
           { error: errorMessage }
         );
       }
 
       processorLogger.info('Job retry scheduled', {
-        context: { jobId: job.id, recordingId, attemptCount, maxRetries, retryDelay },
+        context: { jobId: job.id, contentId, attemptCount, maxRetries, retryDelay },
       });
     } else {
       // PERF-WK-002: Determine if job should go to dead letter queue
@@ -476,9 +477,9 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
         .eq('id', job.id);
 
       // Stream error
-      if (recordingId) {
+      if (contentId) {
         streamingManager.sendError(
-          recordingId,
+          contentId,
           isDeadLetter
             ? `Job moved to dead letter queue after ${attemptCount} attempts: ${errorMessage}`
             : `Job failed after ${maxRetries} attempts: ${errorMessage}`
@@ -486,7 +487,7 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
       }
 
       processorLogger.error(isDeadLetter ? 'Job moved to dead letter queue' : 'Job failed permanently', {
-        context: { jobId: job.id, recordingId, attemptCount, maxRetries, isDeadLetter },
+        context: { jobId: job.id, contentId, attemptCount, maxRetries, isDeadLetter },
         error: error as Error,
       });
     }

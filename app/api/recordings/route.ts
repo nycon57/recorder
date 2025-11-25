@@ -22,9 +22,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
   const offset = parseInt(url.searchParams.get('offset') || '0');
 
-  // Query recordings
+  // Query content
   const { data: recordings, error, count } = await supabase
-    .from('recordings')
+    .from('content')
     .select('*', { count: 'exact' })
     .eq('org_id', orgId)
     .order('created_at', { ascending: false })
@@ -71,9 +71,9 @@ export const POST = withRateLimit(
   const body = await request.json();
   const { title, description, metadata } = body;
 
-  // Create recording entry
+  // Create content entry
   const { data: recording, error } = await supabase
-    .from('recordings')
+    .from('content')
     .insert({
       org_id: orgId,
       created_by: userId,

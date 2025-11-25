@@ -8,6 +8,8 @@ import { googleAI } from '@/lib/google/client';
 import { withTimeout } from '@/lib/utils/timeout';
 import type { QueryIntent, IntentClassification } from '@/lib/types/agentic-rag';
 
+export type { IntentClassification, QueryIntent };
+
 /**
  * Classify query intent using LLM
  */

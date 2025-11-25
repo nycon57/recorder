@@ -38,7 +38,7 @@ export async function handleCompressVideo(
     // 1. Download file from Supabase Storage
     logger.info('Downloading from storage', { context: { inputPath } });
     const { data: fileData, error: downloadError } = await supabaseAdmin.storage
-      .from('recordings')
+      .from('content')
       .download(inputPath);
 
     if (downloadError || !fileData) {
@@ -62,7 +62,7 @@ export async function handleCompressVideo(
 
     // 4. Get recording details for file size
     const { data: recording, error: recordingError } = await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .select('file_size, content_type')
       .eq('id', recordingId)
       .single();
@@ -111,7 +111,7 @@ export async function handleCompressVideo(
       });
 
       await supabaseAdmin
-        .from('recordings')
+        .from('content')
         .update({
           compression_stats: {
             original_size: recording.file_size,
@@ -140,7 +140,7 @@ export async function handleCompressVideo(
     const compressedBuffer = await fs.readFile(tempOutputPath);
 
     const { error: uploadError } = await supabaseAdmin.storage
-      .from('recordings')
+      .from('content')
       .upload(outputPath, compressedBuffer, {
         contentType: 'video/mp4',
         upsert: true,
@@ -157,7 +157,7 @@ export async function handleCompressVideo(
 
     // 8. Update recording with compression stats
     await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .update({
         storage_path_processed: outputPath,
         compression_stats: compressionResult.stats,
@@ -197,7 +197,7 @@ export async function handleCompressVideo(
 
     // Update recording with error
     await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .update({
         error_message: error instanceof Error ? error.message : 'Compression failed',
       })

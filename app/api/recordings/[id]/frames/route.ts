@@ -42,7 +42,7 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
 
   // Verify recording exists and user has access
   const { data: recording, error: recordingError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, org_id, title, duration_sec, metadata')
     .eq('id', recordingId)
     .eq('org_id', orgId)
@@ -58,7 +58,7 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
     .select('id, recording_id, frame_number, frame_time_sec, frame_url, visual_description, ocr_text, scene_type, detected_elements, metadata, created_at', {
       count: 'exact',
     })
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .eq('org_id', orgId)
     .order('frame_number', { ascending: true });
 
@@ -149,7 +149,7 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
 
   // Check if recording exists and belongs to org
   const { data: recording, error: recordingError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, video_url')
     .eq('id', recordingId)
     .eq('org_id', orgId)
@@ -163,7 +163,7 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
   const { count: existingCount } = await supabase
     .from('video_frames')
     .select('id', { count: 'exact', head: true })
-    .eq('recording_id', recordingId);
+    .eq('content_id', recordingId);
 
   if (existingCount && existingCount > 0) {
     return successResponse({

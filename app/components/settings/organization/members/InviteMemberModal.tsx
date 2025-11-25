@@ -108,11 +108,11 @@ export function InviteMemberModal({ open, onClose, departments }: InviteMemberMo
           title="Invite Team Member"
           description="Send an invitation to join your organization"
           size="lg"
-          schema={enhancedInviteMemberSchema}
+          schema={enhancedInviteMemberSchema as any}
           defaultValues={{
             email: '',
-            role: 'reader',
-            department_ids: [],
+            role: 'reader' as const,
+            department_ids: [] as string[],
             custom_message: '',
           }}
           mutationFn={handleSubmit}

@@ -31,7 +31,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   // Verify recording exists and belongs to the user's organization
   const { data: recording, error: recordingError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, org_id')
     .eq('id', recordingId)
     .eq('org_id', orgId)
@@ -72,7 +72,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
     // Update the recording with the thumbnail URL
     const { error: updateError } = await supabase
-      .from('recordings')
+      .from('content')
       .update({
         thumbnail_url: thumbnailUrl,
         updated_at: new Date().toISOString(),

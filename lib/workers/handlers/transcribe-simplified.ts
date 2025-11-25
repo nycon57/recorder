@@ -68,7 +68,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
   // Update recording status
   await supabase
-    .from('recordings')
+    .from('content')
     .update({ status: 'transcribing' })
     .eq('id', recordingId);
 
@@ -78,7 +78,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
     // Download video from Supabase Storage
     console.log(`[Transcribe] Downloading video from ${storagePath}`);
     const { data: videoBlob, error: downloadError } = await supabase.storage
-      .from('recordings')
+      .from('content')
       .download(storagePath);
 
     if (downloadError || !videoBlob) {
@@ -110,7 +110,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
     const { data: transcript, error: transcriptError } = await supabase
       .from('transcripts')
       .insert({
-        recording_id: recordingId,
+        content_id: recordingId,
         text: whisperResponse.text,
         language: whisperResponse.language,
         words_json: {
@@ -131,7 +131,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     // Update recording status
     await supabase
-      .from('recordings')
+      .from('content')
       .update({ status: 'transcribed' })
       .eq('id', recordingId);
 
@@ -164,7 +164,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     // Update recording status to error
     await supabase
-      .from('recordings')
+      .from('content')
       .update({
         status: 'error',
         metadata: {

@@ -52,7 +52,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Get all recordings with organization info
   const { data: recordings, error: recordingsError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('org_id, file_size, storage_tier')
     .is('deleted_at', null);
 

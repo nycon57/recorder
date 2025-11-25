@@ -71,8 +71,13 @@ export function ContentCardSkeleton({ listView = false }: ContentCardSkeletonPro
 /**
  * ContentGridSkeleton Component
  *
- * Renders a grid of content card skeletons
+ * Renders a grid of content card skeletons with staggered fade-in animations
  * Used while loading library content
+ *
+ * Features:
+ * - Staggered animation for visual polish
+ * - Responsive grid matching actual content layout
+ * - Animation delay based on item position
  *
  * @param {Object} props
  * @param {number} props.count - Number of skeleton cards to render (default: 8)
@@ -83,9 +88,15 @@ interface ContentGridSkeletonProps {
 
 export function ContentGridSkeleton({ count = 8 }: ContentGridSkeletonProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
       {Array.from({ length: count }).map((_, i) => (
-        <ContentCardSkeleton key={i} />
+        <div
+          key={i}
+          className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+          style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'backwards' }}
+        >
+          <ContentCardSkeleton />
+        </div>
       ))}
     </div>
   );
@@ -94,8 +105,13 @@ export function ContentGridSkeleton({ count = 8 }: ContentGridSkeletonProps) {
 /**
  * ContentListSkeleton Component
  *
- * Renders a list of content card skeletons
+ * Renders a list of content card skeletons with staggered fade-in animations
  * Used while loading library content in list view
+ *
+ * Features:
+ * - Staggered animation for visual polish
+ * - List layout matching actual content
+ * - Animation delay based on item position
  *
  * @param {Object} props
  * @param {number} props.count - Number of skeleton cards to render (default: 8)
@@ -108,7 +124,13 @@ export function ContentListSkeleton({ count = 8 }: ContentListSkeletonProps) {
   return (
     <div className="space-y-4">
       {Array.from({ length: count }).map((_, i) => (
-        <ContentCardSkeleton key={i} listView />
+        <div
+          key={i}
+          className="animate-in fade-in slide-in-from-left-2 duration-300"
+          style={{ animationDelay: `${i * 30}ms`, animationFillMode: 'backwards' }}
+        >
+          <ContentCardSkeleton listView />
+        </div>
       ))}
     </div>
   );

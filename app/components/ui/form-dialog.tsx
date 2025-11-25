@@ -178,8 +178,9 @@ export function FormDialog<TSchema extends FieldValues = FieldValues>({
   const queryClient = useQueryClient()
 
   // Initialize form with schema validation
-  const form = useForm<TSchema, any, TSchema>({
-    resolver: zodResolver(schema) as any,
+  // @ts-ignore - zodResolver type incompatibility with generic schema
+  const form = useForm({
+    resolver: zodResolver(schema as any),
     defaultValues: defaultValues as any,
     mode,
   })

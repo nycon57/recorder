@@ -80,7 +80,7 @@ export const GET = apiHandler(
 
     // Verify recording exists and user has access
     const { data: recording, error: recordingError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, title, duration_sec, status, metadata')
       .eq('id', recordingId)
       .eq('org_id', orgId)
@@ -104,7 +104,7 @@ export const GET = apiHandler(
     const { count: frameCount } = await supabaseAdmin
       .from('video_frames')
       .select('*', { count: 'exact', head: true })
-      .eq('recording_id', recordingId)
+      .eq('content_id', recordingId)
       .eq('org_id', orgId);
 
     const totalFrames = frameCount || 0;

@@ -31,7 +31,7 @@ export const GET = apiHandler(async (request: NextRequest, { params }: RoutePara
 
   // Verify item exists and belongs to org
   const { data: item, error: itemError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id')
     .eq('id', id)
     .eq('org_id', orgId)
@@ -44,7 +44,7 @@ export const GET = apiHandler(async (request: NextRequest, { params }: RoutePara
 
   // Get all tags for this item
   const { data: tags, error } = await supabase
-    .from('recording_tags')
+    .from('content_tags')
     .select(`
       tag_id,
       created_at,
@@ -56,7 +56,7 @@ export const GET = apiHandler(async (request: NextRequest, { params }: RoutePara
         updated_at
       )
     `)
-    .eq('recording_id', id)
+    .eq('content_id', id)
     .is('tags.deleted_at', null);
 
   if (error) {
@@ -89,7 +89,7 @@ export const POST = apiHandler(async (request: NextRequest, { params }: RoutePar
 
   // Verify item exists and belongs to org
   const { data: item, error: itemError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id')
     .eq('id', id)
     .eq('org_id', orgId)
@@ -119,9 +119,9 @@ export const POST = apiHandler(async (request: NextRequest, { params }: RoutePar
 
   // Get existing tag associations to avoid duplicates
   const { data: existingTags } = await supabase
-    .from('recording_tags')
+    .from('content_tags')
     .select('tag_id')
-    .eq('recording_id', id)
+    .eq('content_id', id)
     .in('tag_id', body.tagIds);
 
   const existingTagIds = new Set(existingTags?.map(t => t.tag_id) || []);
@@ -141,7 +141,7 @@ export const POST = apiHandler(async (request: NextRequest, { params }: RoutePar
   }));
 
   const { error: insertError } = await supabase
-    .from('recording_tags')
+    .from('content_tags')
     .insert(associations);
 
   if (insertError) {
@@ -151,7 +151,7 @@ export const POST = apiHandler(async (request: NextRequest, { params }: RoutePar
 
   // Fetch updated tags
   const { data: updatedTags, error: fetchError } = await supabase
-    .from('recording_tags')
+    .from('content_tags')
     .select(`
       tags!inner (
         id,
@@ -159,7 +159,7 @@ export const POST = apiHandler(async (request: NextRequest, { params }: RoutePar
         color
       )
     `)
-    .eq('recording_id', id)
+    .eq('content_id', id)
     .is('tags.deleted_at', null);
 
   if (fetchError) {
@@ -187,7 +187,7 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
 
   // Verify item exists and belongs to org
   const { data: item, error: itemError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id')
     .eq('id', id)
     .eq('org_id', orgId)
@@ -219,9 +219,9 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
 
   // Remove all existing tag associations
   const { error: deleteError } = await supabase
-    .from('recording_tags')
+    .from('content_tags')
     .delete()
-    .eq('recording_id', id);
+    .eq('content_id', id);
 
   if (deleteError) {
     console.error('[PUT /api/library/[id]/tags] Error removing existing tags:', deleteError);
@@ -236,7 +236,7 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
     }));
 
     const { error: insertError } = await supabase
-      .from('recording_tags')
+      .from('content_tags')
       .insert(associations);
 
     if (insertError) {
@@ -247,7 +247,7 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
 
   // Fetch updated tags
   const { data: updatedTags, error: fetchError } = await supabase
-    .from('recording_tags')
+    .from('content_tags')
     .select(`
       tags!inner (
         id,
@@ -255,7 +255,7 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
         color
       )
     `)
-    .eq('recording_id', id)
+    .eq('content_id', id)
     .is('tags.deleted_at', null);
 
   if (fetchError) {

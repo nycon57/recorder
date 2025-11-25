@@ -41,8 +41,8 @@ export interface RAGOptions {
   enableReranking?: boolean;
   /** Use agentic search for complex queries (default: false) */
   useAgentic?: boolean;
-  /** Specific recording IDs to search within */
-  recordingIds?: string[];
+  /** Specific content IDs to search within */
+  contentIds?: string[];
   /** Maximum iterations for agentic search (default: 3) */
   maxIterations?: number;
   /** Enable caching (default: true) */
@@ -83,8 +83,8 @@ export interface SourceCitation {
   excerpt: string;
   /** Relevance score (0-1) */
   relevanceScore: number;
-  /** Associated recording ID */
-  recordingId?: string;
+  /** Associated content ID */
+  contentId?: string;
   /** Timestamp in seconds (for transcripts) */
   timestamp?: number;
   /** URL to view the source */
@@ -132,7 +132,7 @@ function generateCacheKey(query: string, orgId: string, options?: RAGOptions): s
     includeTranscripts: options?.includeTranscripts !== false,
     includeDocuments: options?.includeDocuments !== false,
     useHierarchical: options?.useHierarchical !== false,
-    recordingIds: options?.recordingIds?.sort() || [],
+    contentIds: options?.contentIds?.sort() || [],
   };
 
   const keyData = JSON.stringify({
@@ -176,7 +176,7 @@ export async function injectRAGContext(
     useHierarchical = true,
     enableReranking = false,
     useAgentic = false,
-    recordingIds,
+    contentIds,
     maxIterations = 3,
     enableCache = true,
   } = options || {};
@@ -199,9 +199,11 @@ export async function injectRAGContext(
       return {
         ...cached,
         metadata: {
-          ...cached.metadata,
+          searchMode: cached.metadata?.searchMode || 'vector',
           searchTimeMs,
           cacheHit: true,
+          rerankingApplied: cached.metadata?.rerankingApplied,
+          agenticIterations: cached.metadata?.agenticIterations,
         },
       };
     }
@@ -223,7 +225,7 @@ export async function injectRAGContext(
         enableSelfReflection: true,
         enableReranking,
         chunksPerQuery: Math.ceil(limit * 1.5),
-        recordingIds,
+        contentIds,
         logResults: false,
       });
 
@@ -249,8 +251,8 @@ export async function injectRAGContext(
       } else {
         searchResults = hierarchicalResults.map((r) => ({
           id: r.id,
-          recordingId: r.recordingId,
-          recordingTitle: r.recordingTitle,
+          contentId: r.contentId,
+          contentTitle: r.contentTitle,
           chunkText: r.chunkText,
           similarity: r.similarity,
           metadata: r.metadata,
@@ -258,9 +260,9 @@ export async function injectRAGContext(
         }));
 
         // Apply filters
-        if (recordingIds && recordingIds.length > 0) {
+        if (contentIds && contentIds.length > 0) {
           searchResults = searchResults.filter((r) =>
-            recordingIds.includes(r.recordingId)
+            contentIds.includes(r.contentId)
           );
         }
       }
@@ -274,7 +276,7 @@ export async function injectRAGContext(
         orgId,
         limit: searchLimit,
         threshold: minRelevance,
-        recordingIds,
+        contentIds,
         source: getSourceFilter(includeTranscripts, includeDocuments),
       });
     }
@@ -295,7 +297,7 @@ export async function injectRAGContext(
       console.error('[ChatRAG] searchResults is not an array before filter:', typeof searchResults);
       searchResults = [];
     } else {
-      searchResults = searchResults.filter((r) => r.similarity >= minRelevance);
+      searchResults = searchResults.filter((r) => r.similarity !== null && r.similarity >= minRelevance);
       // Limit results
       searchResults = searchResults.slice(0, limit);
     }
@@ -372,7 +374,7 @@ export function formatSourcesForPrompt(sources: SearchResult[]): string {
     const citation = `[${i + 1}]`;
 
     // Build source header
-    let header = `${citation} ${source.recordingTitle}`;
+    let header = `${citation} ${source.contentTitle}`;
 
     // Add timestamp if available
     if (source.metadata.startTime) {
@@ -385,7 +387,7 @@ export function formatSourcesForPrompt(sources: SearchResult[]): string {
     header += ` ${sourceType}`;
 
     // Add relevance indicator
-    const relevance = Math.round(source.similarity * 100);
+    const relevance = Math.round((source.similarity ?? 0) * 100);
     header += ` [${relevance}% relevant]`;
 
     // Truncate chunk text if needed
@@ -431,8 +433,8 @@ export function extractSourceCitations(sources: SearchResult[]): SourceCitation[
   return sources.map((source) => {
     // Generate URL based on source type
     const url = source.metadata.source === 'transcript'
-      ? `/recordings/${source.recordingId}?t=${source.metadata.startTime || 0}`
-      : `/recordings/${source.recordingId}/document`;
+      ? `/recordings/${source.contentId}?t=${source.metadata.startTime || 0}`
+      : `/recordings/${source.contentId}/document`;
 
     // Create excerpt (truncate if too long)
     const maxExcerptLength = 200;
@@ -443,10 +445,10 @@ export function extractSourceCitations(sources: SearchResult[]): SourceCitation[
     return {
       id: source.id,
       type: source.metadata.source,
-      title: source.recordingTitle,
+      title: source.contentTitle,
       excerpt,
-      relevanceScore: source.similarity,
-      recordingId: source.recordingId,
+      relevanceScore: source.similarity ?? 0,
+      contentId: source.contentId,
       timestamp: source.metadata.startTime,
       url,
       metadata: {
@@ -498,8 +500,7 @@ export async function cacheSearchResults(
 
     await redis.zadd(
       `rag:queries:${orgId}`,
-      Date.now(),
-      queryHash
+      { score: Date.now(), member: queryHash }
     );
 
     console.log('[ChatRAG] Cached search results:', {
@@ -624,8 +625,8 @@ export async function getCacheStats(orgId: string): Promise<{
     const recentQueries = await redis.zcount(key, oneHourAgo, '+inf');
 
     // Get oldest and newest
-    const oldest = await redis.zrange(key, 0, 0, { withScores: true });
-    const newest = await redis.zrange(key, -1, -1, { withScores: true });
+    const oldest = await redis.zrange(key, 0, 0, { withScores: true }) as Array<{ score: number; member: string }>;
+    const newest = await redis.zrange(key, -1, -1, { withScores: true }) as Array<{ score: number; member: string }>;
 
     return {
       totalQueries,

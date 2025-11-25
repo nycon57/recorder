@@ -29,8 +29,8 @@ const ENABLE_QUERY_EXPANSION = process.env.SEARCH_ENABLE_QUERY_EXPANSION !== 'fa
 
 export interface SearchResult {
   id: string;
-  recordingId: string;
-  recordingTitle: string;
+  contentId: string;
+  contentTitle: string;
   chunkText: string;
   /** Similarity score 0-1. null when similarity calculation fails (indicates unknown relevance) */
   similarity: number | null;
@@ -43,6 +43,10 @@ export interface SearchResult {
     endTime?: number;
     startChar?: number;
     endChar?: number;
+    timestampRange?: string;
+    hasVisualContext?: boolean;
+    visualDescription?: string;
+    contentType?: 'audio' | 'visual' | 'combined' | 'document';
   };
   createdAt: string;
 }
@@ -80,8 +84,8 @@ export interface SearchOptions {
   limit?: number;
   /** Similarity threshold 0-1 (default: 0.7) */
   threshold?: number;
-  /** Filter by recording IDs */
-  recordingIds?: string[];
+  /** Filter by content IDs */
+  contentIds?: string[];
   /** Filter by source type */
   source?: 'transcript' | 'document';
   /** Filter by date range */
@@ -128,7 +132,7 @@ export async function vectorSearch(
     orgId,
     limit = 10,
     threshold,
-    recordingIds,
+    contentIds,
     source,
     dateFrom,
     dateTo,
@@ -201,8 +205,8 @@ export async function vectorSearch(
     // Convert hierarchical results to standard format
     const results: SearchResult[] = hierarchicalResults.map((r) => ({
       id: r.id,
-      recordingId: r.recordingId,
-      recordingTitle: r.recordingTitle,
+      contentId: r.contentId,
+      contentTitle: r.contentTitle,
       chunkText: r.chunkText,
       similarity: r.similarity,
       metadata: r.metadata,
@@ -212,9 +216,9 @@ export async function vectorSearch(
     // Apply additional filters if specified
     let filteredResults = results;
 
-    if (recordingIds && recordingIds.length > 0) {
+    if (contentIds && contentIds.length > 0) {
       filteredResults = filteredResults.filter((r) =>
-        recordingIds.includes(r.recordingId)
+        contentIds.includes(r.contentId)
       );
     }
 
@@ -269,8 +273,8 @@ export async function vectorSearch(
     // Convert to SearchResult format
     let results: SearchResult[] = data.map((row: any) => ({
       id: row.id,
-      recordingId: row.recording_id,
-      recordingTitle: row.recording_title,
+      contentId: row.content_id,
+      contentTitle: row.content_title,
       chunkText: row.chunk_text,
       similarity: row.final_score, // Use final_score which includes recency
       metadata: row.metadata || {},
@@ -278,8 +282,8 @@ export async function vectorSearch(
     }));
 
     // Apply additional filters
-    if (recordingIds && recordingIds.length > 0) {
-      results = results.filter((r) => recordingIds.includes(r.recordingId));
+    if (contentIds && contentIds.length > 0) {
+      results = results.filter((r) => contentIds.includes(r.contentId));
     }
 
     if (source) {
@@ -304,23 +308,23 @@ export async function vectorSearch(
   console.log('[Vector Search] Query:', processedQuery.substring(0, 100));
 
   // For complex filters (tags, collections, favorites), we need pre-filtering
-  // to get eligible recording IDs first
+  // to get eligible content IDs first
   const needsPreFiltering = (tagIds && tagIds.length > 0) || collectionId || favoritesOnly;
-  let eligibleRecordingIds: string[] | undefined = recordingIds;
+  let eligibleContentIds: string[] | undefined = contentIds;
 
   if (needsPreFiltering) {
-    // Get eligible recording IDs based on complex filters (tags, collections, favorites)
-    eligibleRecordingIds = await getEligibleRecordingIds(supabase, orgId, {
-      recordingIds,
+    // Get eligible content IDs based on complex filters (tags, collections, favorites)
+    eligibleContentIds = await getEligibleContentIds(supabase, orgId, {
+      contentIds,
       tagIds,
       tagFilterMode,
       collectionId,
       favoritesOnly,
     });
 
-    // Short-circuit if no eligible recordings found
-    if (eligibleRecordingIds !== undefined && eligibleRecordingIds.length === 0) {
-      console.log('[Vector Search] No recordings match complex filters');
+    // Short-circuit if no eligible content found
+    if (eligibleContentIds !== undefined && eligibleContentIds.length === 0) {
+      console.log('[Vector Search] No content matches complex filters');
       return [];
     }
   }
@@ -331,7 +335,7 @@ export async function vectorSearch(
 
   console.log('[Vector Search] Calling enhanced match_chunks with filters:', {
     threshold: adaptiveThreshold,
-    hasRecordingIds: !!eligibleRecordingIds,
+    hasContentIds: !!eligibleContentIds,
     source,
     dateFrom: dateFrom?.toISOString(),
     dateTo: dateTo?.toISOString(),
@@ -343,7 +347,7 @@ export async function vectorSearch(
     match_threshold: adaptiveThreshold,
     match_count: limit * 2, // Get extra for any edge case filtering
     filter_org_id: orgId,
-    filter_recording_ids: eligibleRecordingIds || null,
+    filter_content_ids: eligibleContentIds || null,
     filter_source: source || null,
     filter_date_from: dateFrom?.toISOString() || null,
     filter_date_to: dateTo?.toISOString() || null,
@@ -384,8 +388,8 @@ export async function vectorSearch(
     .slice(0, limit)
     .map((match: any) => ({
       id: match.id,
-      recordingId: match.recording_id,
-      recordingTitle: match.recording_title || 'Untitled',
+      contentId: match.content_id,
+      contentTitle: match.content_title || 'Untitled',
       chunkText: match.chunk_text,
       similarity: match.similarity,
       metadata: match.metadata || {},
@@ -397,31 +401,31 @@ export async function vectorSearch(
 }
 
 /**
- * Get eligible recording IDs based on complex filters (tags, collections, favorites)
+ * Get eligible content IDs based on complex filters (tags, collections, favorites)
  * Encapsulates tag (AND/OR), collection, and favorites filtering logic
  *
- * @returns Array of eligible recording IDs, or undefined if no filtering needed
+ * @returns Array of eligible content IDs, or undefined if no filtering needed
  */
-async function getEligibleRecordingIds(
-  supabase: ReturnType<typeof supabaseAdmin>,
+async function getEligibleContentIds(
+  supabase: typeof supabaseAdmin,
   orgId: string,
   filters: {
-    recordingIds?: string[];
+    contentIds?: string[];
     tagIds?: string[];
     tagFilterMode?: 'AND' | 'OR';
     collectionId?: string;
     favoritesOnly?: boolean;
   }
 ): Promise<string[] | undefined> {
-  const { recordingIds, tagIds, tagFilterMode = 'OR', collectionId, favoritesOnly } = filters;
+  const { contentIds, tagIds, tagFilterMode = 'OR', collectionId, favoritesOnly } = filters;
 
-  let eligibleRecordingIds = recordingIds ? [...recordingIds] : undefined;
+  let eligibleContentIds = contentIds ? [...contentIds] : undefined;
 
   // Filter by tags
   if (tagIds && tagIds.length > 0) {
-    const { data: taggedRecordings, error: tagError } = await supabase
-      .from('recording_tags')
-      .select('recording_id')
+    const { data: taggedContent, error: tagError } = await supabase
+      .from('content_tags')
+      .select('content_id')
       .in('tag_id', tagIds)
       .eq('org_id', orgId);
 
@@ -430,33 +434,33 @@ async function getEligibleRecordingIds(
       return [];
     }
 
-    const taggedIds = taggedRecordings?.map(r => r.recording_id) || [];
+    const taggedIds = taggedContent?.map((r: { content_id: string }) => r.content_id) || [];
 
     if (tagFilterMode === 'AND') {
-      // For AND mode: count how many tags each recording has
-      const recordingTagCounts = taggedIds.reduce((acc, id) => {
+      // For AND mode: count how many tags each content item has
+      const contentTagCounts = taggedIds.reduce((acc: Record<string, number>, id: string) => {
         acc[id] = (acc[id] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
 
-      // Only keep recordings that have ALL the specified tags
-      const fullyTaggedIds = Object.entries(recordingTagCounts)
+      // Only keep content items that have ALL the specified tags
+      const fullyTaggedIds = Object.entries(contentTagCounts)
         .filter(([_, count]) => count === tagIds.length)
         .map(([id]) => id);
 
-      eligibleRecordingIds = eligibleRecordingIds
-        ? eligibleRecordingIds.filter(id => fullyTaggedIds.includes(id))
+      eligibleContentIds = eligibleContentIds
+        ? eligibleContentIds.filter((id: string) => fullyTaggedIds.includes(id))
         : fullyTaggedIds;
     } else {
-      // For OR mode: recording must have ANY of the tags
+      // For OR mode: content must have ANY of the tags
       const uniqueTaggedIds = [...new Set(taggedIds)];
-      eligibleRecordingIds = eligibleRecordingIds
-        ? eligibleRecordingIds.filter(id => uniqueTaggedIds.includes(id))
+      eligibleContentIds = eligibleContentIds
+        ? eligibleContentIds.filter((id: string) => uniqueTaggedIds.includes(id))
         : uniqueTaggedIds;
     }
 
-    if (eligibleRecordingIds && eligibleRecordingIds.length === 0) {
-      return []; // No recordings match tag filter
+    if (eligibleContentIds && eligibleContentIds.length === 0) {
+      return []; // No content matches tag filter
     }
   }
 
@@ -473,14 +477,14 @@ async function getEligibleRecordingIds(
       return [];
     }
 
-    const collectionRecordingIds = collectionItems?.map(i => i.item_id) || [];
+    const collectionContentIds = collectionItems?.map((i: { item_id: string }) => i.item_id) || [];
 
-    eligibleRecordingIds = eligibleRecordingIds
-      ? eligibleRecordingIds.filter(id => collectionRecordingIds.includes(id))
-      : collectionRecordingIds;
+    eligibleContentIds = eligibleContentIds
+      ? eligibleContentIds.filter((id: string) => collectionContentIds.includes(id))
+      : collectionContentIds;
 
-    if (eligibleRecordingIds && eligibleRecordingIds.length === 0) {
-      return []; // No recordings in collection
+    if (eligibleContentIds && eligibleContentIds.length === 0) {
+      return []; // No content in collection
     }
   }
 
@@ -488,7 +492,7 @@ async function getEligibleRecordingIds(
   if (favoritesOnly) {
     const { data: favorites, error: favoritesError } = await supabase
       .from('favorites')
-      .select('recording_id')
+      .select('content_id')
       .eq('org_id', orgId);
 
     if (favoritesError) {
@@ -496,18 +500,18 @@ async function getEligibleRecordingIds(
       return [];
     }
 
-    const favoriteRecordingIds = favorites?.map(f => f.recording_id) || [];
+    const favoriteContentIds = favorites?.map((f: { content_id: string }) => f.content_id) || [];
 
-    eligibleRecordingIds = eligibleRecordingIds
-      ? eligibleRecordingIds.filter(id => favoriteRecordingIds.includes(id))
-      : favoriteRecordingIds;
+    eligibleContentIds = eligibleContentIds
+      ? eligibleContentIds.filter((id: string) => favoriteContentIds.includes(id))
+      : favoriteContentIds;
 
-    if (eligibleRecordingIds && eligibleRecordingIds.length === 0) {
-      return []; // No favorite recordings
+    if (eligibleContentIds && eligibleContentIds.length === 0) {
+      return []; // No favorite content
     }
   }
 
-  return eligibleRecordingIds;
+  return eligibleContentIds;
 }
 
 /**
@@ -518,7 +522,7 @@ async function executeComplexFilteredSearch(
   queryEmbedding: number[],
   orgId: string,
   filters: {
-    recordingIds?: string[];
+    contentIds?: string[];
     source?: 'transcript' | 'document';
     dateFrom?: Date;
     dateTo?: Date;
@@ -532,7 +536,7 @@ async function executeComplexFilteredSearch(
 ): Promise<SearchResult[]> {
   const supabase = supabaseAdmin;
   const {
-    recordingIds,
+    contentIds,
     source,
     dateFrom,
     dateTo,
@@ -543,32 +547,32 @@ async function executeComplexFilteredSearch(
     favoritesOnly,
   } = filters;
 
-  // Step 1: Get eligible recording IDs based on complex filters
-  const eligibleRecordingIds = await getEligibleRecordingIds(supabase, orgId, {
-    recordingIds,
+  // Step 1: Get eligible content IDs based on complex filters
+  const eligibleContentIds = await getEligibleContentIds(supabase, orgId, {
+    contentIds,
     tagIds,
     tagFilterMode,
     collectionId,
     favoritesOnly,
   });
 
-  // Short-circuit if no eligible recordings found
-  if (eligibleRecordingIds !== undefined && eligibleRecordingIds.length === 0) {
+  // Short-circuit if no eligible content found
+  if (eligibleContentIds !== undefined && eligibleContentIds.length === 0) {
     return [];
   }
 
-  // Step 2: Query chunks for eligible recordings
+  // Step 2: Query chunks for eligible content
   let dbQuery = supabase
     .from('transcript_chunks')
     .select(
       `
       id,
-      recording_id,
+      content_id,
       chunk_text,
       metadata,
       created_at,
       org_id,
-      recordings!inner (
+      content!inner (
         title,
         created_at,
         org_id,
@@ -578,11 +582,11 @@ async function executeComplexFilteredSearch(
     `
     )
     .eq('org_id', orgId)
-    .is('recordings.deleted_at', null); // Exclude trashed items
+    .is('content.deleted_at', null); // Exclude trashed items
 
-  // Apply recording ID filter if we have one
-  if (eligibleRecordingIds && eligibleRecordingIds.length > 0) {
-    dbQuery = dbQuery.in('recording_id', eligibleRecordingIds);
+  // Apply content ID filter if we have one
+  if (eligibleContentIds && eligibleContentIds.length > 0) {
+    dbQuery = dbQuery.in('content_id', eligibleContentIds);
   }
 
   // Apply remaining simple filters
@@ -599,7 +603,7 @@ async function executeComplexFilteredSearch(
   }
 
   if (contentTypes && contentTypes.length > 0) {
-    dbQuery = dbQuery.in('recordings.content_type', contentTypes);
+    dbQuery = dbQuery.in('content.content_type', contentTypes);
   }
 
   dbQuery = dbQuery.order('created_at', { ascending: false }).limit(limit);
@@ -633,8 +637,8 @@ async function executeComplexFilteredSearch(
     // Return chunks with null similarity to indicate calculation failure
     return chunks.map((chunk: any) => ({
       id: chunk.id,
-      recordingId: chunk.recording_id,
-      recordingTitle: chunk.recordings?.title || 'Untitled',
+      contentId: chunk.content_id,
+      contentTitle: chunk.content?.title || 'Untitled',
       chunkText: chunk.chunk_text,
       similarity: null, // null indicates unknown relevance (calculation failed)
       metadata: chunk.metadata || {},
@@ -643,19 +647,19 @@ async function executeComplexFilteredSearch(
   }
 
   // Filter match_chunks results to only include chunks from our filtered set
-  // This ensures trashed recordings are excluded
+  // This ensures trashed content is excluded
   return matches
     .filter((match: any) => allowedChunkIds.has(match.id))
     .map((match: any) => ({
       id: match.id,
-      recordingId: match.recording_id,
-      recordingTitle: match.recording_title,
+      contentId: match.content_id,
+      contentTitle: match.content_title,
       chunkText: match.chunk_text,
       similarity: match.similarity,
       metadata: match.metadata || {},
       createdAt: match.created_at,
     }))
-    .sort((a, b) => {
+    .sort((a: SearchResult, b: SearchResult) => {
       // Handle null similarities: push null values to the end
       if (a.similarity === null && b.similarity === null) return 0;
       if (a.similarity === null) return 1;
@@ -760,8 +764,8 @@ async function calculateSimilarities(
     return chunks
       .map((chunk) => ({
         id: chunk.id,
-        recordingId: chunk.recording_id,
-        recordingTitle: chunk.recordings?.title || 'Untitled',
+        contentId: chunk.content_id,
+        contentTitle: chunk.content?.title || 'Untitled',
         chunkText: chunk.chunk_text,
         similarity: 0.8, // Placeholder
         metadata: chunk.metadata || {},
@@ -771,13 +775,13 @@ async function calculateSimilarities(
   }
 
   // Filter match_chunks results to only include chunks from our filtered set
-  // This ensures trashed recordings are excluded
+  // This ensures trashed content is excluded
   return data
     .filter((match: any) => allowedChunkIds.has(match.id))
     .map((match: any) => ({
       id: match.id,
-      recordingId: match.recording_id,
-      recordingTitle: match.recording_title,
+      contentId: match.content_id,
+      contentTitle: match.content_title,
       chunkText: match.chunk_text,
       similarity: match.similarity,
       metadata: match.metadata || {},
@@ -786,10 +790,10 @@ async function calculateSimilarities(
 }
 
 /**
- * Search within a specific recording
+ * Search within specific content
  */
-export async function searchRecording(
-  recordingId: string,
+export async function searchContent(
+  contentId: string,
   query: string,
   orgId: string,
   options?: Partial<SearchOptions>
@@ -797,9 +801,12 @@ export async function searchRecording(
   return vectorSearch(query, {
     ...options,
     orgId,
-    recordingIds: [recordingId],
+    contentIds: [contentId],
   });
 }
+
+/** @deprecated Use searchContent instead */
+export const searchRecording = searchContent;
 
 /**
  * Get similar chunks to a given chunk (for "related content" features)
@@ -872,7 +879,7 @@ async function keywordSearch(
   const {
     orgId,
     limit = 10,
-    recordingIds,
+    contentIds,
     source,
     dateFrom,
     dateTo,
@@ -886,21 +893,21 @@ async function keywordSearch(
   // Use admin client since API route already validates auth
   const supabase = supabaseAdmin;
 
-  // Get eligible recording IDs based on complex filters (tags, collections, favorites)
-  let eligibleRecordingIds: string[] | undefined = recordingIds;
+  // Get eligible content IDs based on complex filters (tags, collections, favorites)
+  let eligibleContentIds: string[] | undefined = contentIds;
 
   const needsPreFiltering = (tagIds && tagIds.length > 0) || collectionId || favoritesOnly;
   if (needsPreFiltering) {
-    eligibleRecordingIds = await getEligibleRecordingIds(supabase, orgId, {
-      recordingIds,
+    eligibleContentIds = await getEligibleContentIds(supabase, orgId, {
+      contentIds,
       tagIds,
       tagFilterMode,
       collectionId,
       favoritesOnly,
     });
 
-    // Short-circuit if no eligible recordings found
-    if (eligibleRecordingIds !== undefined && eligibleRecordingIds.length === 0) {
+    // Short-circuit if no eligible content found
+    if (eligibleContentIds !== undefined && eligibleContentIds.length === 0) {
       return [];
     }
   }
@@ -910,7 +917,7 @@ async function keywordSearch(
     search_query: query,
     filter_org_id: orgId,
     match_count: limit,
-    filter_recording_ids: eligibleRecordingIds || null,
+    filter_content_ids: eligibleContentIds || null,
     filter_source: source || null,
     filter_date_from: dateFrom?.toISOString() || null,
     filter_date_to: dateTo?.toISOString() || null,
@@ -924,8 +931,8 @@ async function keywordSearch(
 
   return results.map((match: any) => ({
     id: match.id,
-    recordingId: match.recording_id,
-    recordingTitle: match.recording_title || 'Untitled',
+    contentId: match.content_id,
+    contentTitle: match.content_title || 'Untitled',
     chunkText: match.chunk_text,
     similarity: Math.min(0.95, 0.7 + match.rank * 0.3), // Convert rank to similarity score
     metadata: match.metadata || {},
@@ -952,7 +959,7 @@ function mergeSearchResults(
   // Add keyword results, boosting score if already present
   keywordResults.forEach((result) => {
     const existing = resultMap.get(result.id);
-    if (existing) {
+    if (existing && existing.similarity !== null) {
       // Boost similarity score for items found in both searches
       existing.similarity = Math.min(1.0, existing.similarity * 1.2);
     } else {
@@ -963,7 +970,7 @@ function mergeSearchResults(
   // Apply keyword boosting: if title/text contains query terms, boost score
   const boostedResults = Array.from(resultMap.values()).map((result) => {
     let boost = 1.0;
-    const titleLower = result.recordingTitle.toLowerCase();
+    const titleLower = result.contentTitle.toLowerCase();
     const textLower = result.chunkText.toLowerCase();
 
     // Check if title or text contains any query terms
@@ -977,7 +984,7 @@ function mergeSearchResults(
     }
 
     // Apply boost but cap at 1.0
-    if (boost > 1.0) {
+    if (boost > 1.0 && result.similarity !== null) {
       result.similarity = Math.min(1.0, result.similarity * boost);
     }
 
@@ -986,6 +993,6 @@ function mergeSearchResults(
 
   // Convert back to array and sort by similarity
   return boostedResults.sort(
-    (a, b) => b.similarity - a.similarity
+    (a, b) => (b.similarity ?? 0) - (a.similarity ?? 0)
   );
 }

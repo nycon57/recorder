@@ -58,7 +58,7 @@ export const POST = withRateLimit(
       orgId,
       limit,
       threshold,
-      recordingIds,
+      contentIds: recordingIds, // Map recordingIds to contentIds
       includeOcr,
       dateFrom: dateFrom ? new Date(dateFrom) : undefined,
       dateTo: dateTo ? new Date(dateTo) : undefined,

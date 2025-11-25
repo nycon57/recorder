@@ -238,13 +238,13 @@ export async function POST(req: Request) {
 
       // Get recording count and summaries status for routing
       const { count: recordingsCount } = await supabaseAdmin
-        .from('recordings')
+        .from('content')
         .select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
         .eq('status', 'completed');
 
       const { count: summariesCount } = await supabaseAdmin
-        .from('recording_summaries')
+        .from('content_summaries')
         .select('id', { count: 'exact', head: true })
         .eq('org_id', orgId);
 
@@ -316,7 +316,6 @@ export async function POST(req: Request) {
           retrievalConfig = {
             ...retrievalConfig,
             threshold: experimentConfig.threshold,
-            useHybrid: experimentConfig.useHybrid,
             useAgentic: ENABLE_AGENTIC_RAG && experimentConfig.useAgentic,
             maxChunks: experimentConfig.maxChunks,
           };
@@ -329,7 +328,6 @@ export async function POST(req: Request) {
           searchMonitor.updateConfig(queryId, {
             strategy: selectedStrategy,
             threshold: finalThreshold,
-            useHybrid: retrievalConfig.useHybrid || false,
             useAgentic: retrievalConfig.useAgentic || false,
           });
         }
@@ -339,7 +337,7 @@ export async function POST(req: Request) {
           // Use searchable query for RAG context retrieval
           ragContext = await retrieveContext(searchableQuery, orgId, {
             ...retrievalConfig,
-            recordingIds,
+            contentIds: recordingIds,
             // Force disable agentic if globally disabled
             useAgentic: ENABLE_AGENTIC_RAG && retrievalConfig.useAgentic,
             rerank: ENABLE_RERANKING && retrievalConfig.rerank,
@@ -370,7 +368,7 @@ export async function POST(req: Request) {
                 ragContext = await retrieveContext(searchableQuery, orgId, {
                   ...retrievalConfig,
                   threshold: 0.5,
-                  recordingIds,
+                  contentIds: recordingIds,
                   useAgentic: ENABLE_AGENTIC_RAG && retrievalConfig.useAgentic,
                   rerank: ENABLE_RERANKING && retrievalConfig.rerank,
                 });
@@ -400,14 +398,14 @@ export async function POST(req: Request) {
                   orgId,
                   limit: retrievalConfig.maxChunks || 10,
                   threshold: 0.5,
-                  recordingIds,
+                  contentIds: recordingIds,
                 });
 
                 if (hybridResults && hybridResults.length > 0) {
                   // Convert hybrid results to RAG context format
                   const sources = hybridResults.map((result) => ({
-                    recordingId: result.recordingId,
-                    recordingTitle: result.recordingTitle,
+                    contentId: result.contentId,
+                    contentTitle: result.contentTitle,
                     chunkId: result.id,
                     chunkText: result.chunkText,
                     similarity: result.similarity,
@@ -417,12 +415,12 @@ export async function POST(req: Request) {
                     hasVisualContext: result.metadata.hasVisualContext || false,
                     visualDescription: result.metadata.visualDescription,
                     contentType: result.metadata.contentType || 'audio',
-                    url: `/library/${result.recordingId}`,
+                    url: `/library/${result.contentId}`,
                   }));
 
                   const context = sources
                     .map((source, index) => {
-                      const citation = `[${index + 1}] ${source.recordingTitle}`;
+                      const citation = `[${index + 1}] ${source.contentTitle}`;
                       const timeInfo = source.timestampRange
                         ? ` (${source.timestampRange})`
                         : source.timestamp
@@ -466,14 +464,14 @@ export async function POST(req: Request) {
                   orgId,
                   limit: retrievalConfig.maxChunks || 10,
                   threshold: 0.3, // Even lower threshold for keyword fallback
-                  recordingIds,
+                  contentIds: recordingIds,
                 });
 
                 if (keywordResults && keywordResults.length > 0) {
                   // Convert to RAG context format
                   const sources = keywordResults.map((result) => ({
-                    recordingId: result.recordingId,
-                    recordingTitle: result.recordingTitle,
+                    contentId: result.contentId,
+                    contentTitle: result.contentTitle,
                     chunkId: result.id,
                     chunkText: result.chunkText,
                     similarity: result.similarity,
@@ -483,12 +481,12 @@ export async function POST(req: Request) {
                     hasVisualContext: result.metadata.hasVisualContext || false,
                     visualDescription: result.metadata.visualDescription,
                     contentType: result.metadata.contentType || 'audio',
-                    url: `/library/${result.recordingId}`,
+                    url: `/library/${result.contentId}`,
                   }));
 
                   const context = sources
                     .map((source, index) => {
-                      const citation = `[${index + 1}] ${source.recordingTitle}`;
+                      const citation = `[${index + 1}] ${source.contentTitle}`;
                       const timeInfo = source.timestampRange
                         ? ` (${source.timestampRange})`
                         : source.timestamp
@@ -520,7 +518,7 @@ export async function POST(req: Request) {
           if (ragContext?.sources && ragContext.sources.length > 0) {
             const similarities = ragContext.sources
               .map(s => s.similarity)
-              .filter(s => s != null && !isNaN(s));
+              .filter((s): s is number => s != null && !isNaN(s));
             averageSimilarity = similarities.length > 0
               ? similarities.reduce((a, b) => a + b, 0) / similarities.length
               : 0;
@@ -704,8 +702,8 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
       console.log('[Chat API] ===== RAG CONTEXT DEBUG =====');
       console.log('[Chat API] Sources:');
       ragContext.sources.forEach((source, idx) => {
-        console.log(`  [${idx + 1}] ${source.recordingTitle}`);
-        console.log(`      Recording ID: ${source.recordingId}`);
+        console.log(`  [${idx + 1}] ${source.contentTitle}`);
+        console.log(`      Content ID: ${source.contentId}`);
         console.log(`      Chunk: ${source.chunkText.substring(0, 100)}...`);
         console.log(`      Similarity: ${source.similarity}`);
       });
@@ -829,8 +827,8 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
         if (process.env.DEBUG_CHAT_STREAM === 'true') {
           console.log('[Chat API] 🔥 CHUNK RECEIVED:', {
             type: chunk.type,
-            deltaLength: chunk.type === 'text-delta' ? chunk.textDelta?.length : 0,
-            textPreview: chunk.type === 'text-delta' ? chunk.textDelta?.substring(0, 50) : '',
+            deltaLength: chunk.type === 'text-delta' ? chunk.text?.length : 0,
+            textPreview: chunk.type === 'text-delta' ? chunk.text?.substring(0, 50) : '',
           });
         }
       },
@@ -900,9 +898,9 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
     // Convert sources to SourceCitation format for frontend
     const sourceCitations = ragContext?.sources?.map((source, index) => ({
       id: `source-${index + 1}`,
-      recordingId: source.recordingId,
-      title: source.recordingTitle,
-      url: source.url || `/library/${source.recordingId}`,
+      recordingId: source.contentId,
+      title: source.contentTitle,
+      url: source.url || `/library/${source.contentId}`,
       snippet: source.chunkText.substring(0, 200),
       relevanceScore: source.similarity,
       timestamp: source.timestampRange || (source.timestamp ? `${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')}` : undefined),

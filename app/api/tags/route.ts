@@ -111,7 +111,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     // Get usage counts for all tags
     const { data: counts, error: countError } = await supabase
-      .from('recording_tags')
+      .from('content_tags')
       .select('tag_id')
       .in('tag_id', tagIds);
 

@@ -37,7 +37,7 @@ const RichTextViewer = dynamic(
 
 interface Transcript {
   id: string;
-  recording_id: string;
+  content_id: string;
   text: string;
   words_json?: any;
   language?: string | null;

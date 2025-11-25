@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 
-import { useRecording } from '../contexts/RecordingContext';
+import { useRecording } from '@/app/(dashboard)/record/contexts/RecordingContext';
 
 export function StreamPreview() {
   const {
@@ -72,7 +72,7 @@ export function StreamPreview() {
       )}
 
       {/* Camera preview - only show in camera-only mode or if no screen */}
-      {(!showScreen || layout === 'cameraOnly') && showCamera && cameraStream && (
+      {(layout === 'cameraOnly' || !showScreen) && showCamera && cameraStream && (
         <video
           ref={cameraVideoRef}
           autoPlay

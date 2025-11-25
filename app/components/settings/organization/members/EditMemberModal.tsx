@@ -189,9 +189,9 @@ export function EditMemberModal({
                   </FormLabel>
                   <FormControl>
                     <DepartmentSelector
-                      departments={departments}
+                      departments={departments as any}
                       value={field.value || []}
-                      onChange={field.onChange}
+                      onValueChange={field.onChange}
                       placeholder="Select departments..."
                       multiple={true}
                     />

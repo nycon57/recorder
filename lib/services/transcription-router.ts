@@ -110,9 +110,9 @@ export function routeTranscription(params: {
   };
 
   // 1. Check duration limits
-  const viableProviders = (Object.keys(PROVIDER_CONFIG) as TranscriptionProvider[]).filter(
+  type ValidProvider = keyof typeof PROVIDER_CONFIG;
+  const viableProviders = (Object.keys(PROVIDER_CONFIG) as ValidProvider[]).filter(
     (provider) => {
-      if (provider === 'none') return false;
       const config = PROVIDER_CONFIG[provider];
       return duration <= config.maxDuration;
     }
@@ -136,7 +136,7 @@ export function routeTranscription(params: {
 
   // 2. Check budget constraints
   if (budget !== undefined) {
-    const affordableProviders = viableProviders.filter((p) => costs[p] <= budget);
+    const affordableProviders = viableProviders.filter((p: ValidProvider) => costs[p] <= budget);
     if (affordableProviders.length === 0) {
       return {
         provider: 'none',
@@ -215,13 +215,29 @@ export function routeTranscription(params: {
   }
   // 9. Fallback to cheapest available
   if (selectedProvider === 'whisper' && !viableProviders.includes('whisper')) {
-    selectedProvider = viableProviders.sort((a, b) => costs[a] - costs[b])[0];
+    selectedProvider = viableProviders.sort((a: ValidProvider, b: ValidProvider) => costs[a] - costs[b])[0] as TranscriptionProvider;
     confidence = 0.5;
     reasoning.push('Fallback to cheapest available provider');
   }
 
-  // Determine features
-  const providerConfig = PROVIDER_CONFIG[selectedProvider];
+  // Determine features - ensure selectedProvider is valid
+  if (selectedProvider === 'none') {
+    return {
+      provider: 'none',
+      confidence: 0,
+      estimatedCost: 0,
+      estimatedAccuracy: 0,
+      features: {
+        speakerDiarization: false,
+        punctuation: false,
+        timestamps: false,
+        visualContext: false,
+      },
+      reasoning: 'No viable provider available',
+    };
+  }
+
+  const providerConfig = PROVIDER_CONFIG[selectedProvider as ValidProvider];
   const features = {
     speakerDiarization: needsSpeakerDiarization && providerConfig.supportsSpeakerDiarization,
     punctuation: true, // All providers support this
@@ -239,7 +255,7 @@ export function routeTranscription(params: {
   return {
     provider: selectedProvider,
     confidence,
-    estimatedCost: costs[selectedProvider],
+    estimatedCost: costs[selectedProvider as ValidProvider],
     estimatedAccuracy,
     features,
     reasoning: reasoning.join('. '),

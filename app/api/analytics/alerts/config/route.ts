@@ -99,33 +99,46 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
   const body = await parseBody(request, alertConfigSchema);
 
+  if (!body || typeof body !== 'object') {
+    throw new Error('Invalid request body');
+  }
+
+  const validatedBody = body as {
+    storageThreshold?: number;
+    costThreshold?: number;
+    enableEmailNotifications?: boolean;
+    enableSlackNotifications?: boolean;
+    slackWebhookUrl?: string;
+    checkInterval?: number;
+  };
+
   // Build update object with only provided fields
   const updateData: Record<string, any> = {
     updated_at: new Date().toISOString(),
   };
 
-  if (body.storageThreshold !== undefined) {
-    updateData.storage_threshold = body.storageThreshold;
+  if (validatedBody.storageThreshold !== undefined) {
+    updateData.storage_threshold = validatedBody.storageThreshold;
   }
 
-  if (body.costThreshold !== undefined) {
-    updateData.cost_threshold = body.costThreshold;
+  if (validatedBody.costThreshold !== undefined) {
+    updateData.cost_threshold = validatedBody.costThreshold;
   }
 
-  if (body.enableEmailNotifications !== undefined) {
-    updateData.enable_email_notifications = body.enableEmailNotifications;
+  if (validatedBody.enableEmailNotifications !== undefined) {
+    updateData.enable_email_notifications = validatedBody.enableEmailNotifications;
   }
 
-  if (body.enableSlackNotifications !== undefined) {
-    updateData.enable_slack_notifications = body.enableSlackNotifications;
+  if (validatedBody.enableSlackNotifications !== undefined) {
+    updateData.enable_slack_notifications = validatedBody.enableSlackNotifications;
   }
 
-  if (body.slackWebhookUrl !== undefined) {
-    updateData.slack_webhook_url = body.slackWebhookUrl;
+  if (validatedBody.slackWebhookUrl !== undefined) {
+    updateData.slack_webhook_url = validatedBody.slackWebhookUrl;
   }
 
-  if (body.checkInterval !== undefined) {
-    updateData.check_interval = body.checkInterval;
+  if (validatedBody.checkInterval !== undefined) {
+    updateData.check_interval = validatedBody.checkInterval;
   }
 
   // Update config using upsert to handle missing config row

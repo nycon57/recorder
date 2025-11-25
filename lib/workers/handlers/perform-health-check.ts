@@ -128,7 +128,7 @@ async function checkStorageHealth(
 
   try {
     // Try to list files in storage
-    const { data, error } = await supabase.storage.from('recordings').list('', { limit: 1 });
+    const { data, error } = await supabase.storage.from('content').list('', { limit: 1 });
 
     if (error) {
       logger.error('Storage health check failed', { error: new Error(error.message) });

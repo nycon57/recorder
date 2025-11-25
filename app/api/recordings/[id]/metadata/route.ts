@@ -79,10 +79,10 @@ export const POST = apiHandler(async (
       },
     });
 
-    // Verify recording exists and belongs to org
+    // Verify content exists and belongs to org
     const { data: recording, error: fetchError } = await supabase
-      .from('recordings')
-      .select('id, org_id, status, content_type, file_type')
+      .from('content')
+      .select('id, org_id, status, content_type, file_type, metadata')
       .eq('id', recordingId)
       .eq('org_id', orgId)
       .single();
@@ -106,9 +106,9 @@ export const POST = apiHandler(async (
       );
     }
 
-    // Update recording with metadata
+    // Update content with metadata
     const { error: updateError } = await supabase
-      .from('recordings')
+      .from('content')
       .update({
         title,
         description: description || null,
@@ -190,13 +190,13 @@ export const POST = apiHandler(async (
       // Associate tags with recording
       if (tagIds.length > 0) {
         const tagAssociations = tagIds.map((tagId) => ({
-          recording_id: recordingId,
+          content_id: recordingId,
           tag_id: tagId,
           created_by: userId,
         }));
 
         const { error: assocError } = await supabase
-          .from('recording_tags')
+          .from('content_tags')
           .insert(tagAssociations);
 
         if (assocError) {
@@ -268,7 +268,7 @@ export const POST = apiHandler(async (
       }
 
       const { error: statusUpdateError } = await supabase
-        .from('recordings')
+        .from('content')
         .update({ status: newStatus })
         .eq('id', recordingId);
 

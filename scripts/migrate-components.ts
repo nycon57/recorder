@@ -208,9 +208,11 @@ function verifyMigrations() {
 }
 
 // Export utilities for migration rules
-export {
+export type {
   MigrationRule,
   MigrationResult,
+};
+export {
   runMigrations,
   printSummary,
   verifyMigrations,

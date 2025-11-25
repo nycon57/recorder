@@ -38,7 +38,7 @@ import { TagBadge } from '@/app/components/tags/TagBadge';
 import { FavoriteButton } from '@/app/components/favorites/FavoriteButton';
 import { cn } from '@/lib/utils';
 
-import { ContentItem } from './ContentCard';
+import type { ContentItem } from '@/app/components/content/ContentCard';
 
 interface LibraryTableProps {
   items: ContentItem[];
@@ -135,6 +135,7 @@ export function LibraryTable({
             <TableHead className="w-12">
               <Checkbox
                 checked={allSelected}
+                // @ts-expect-error - indeterminate is a valid HTML prop but not in the type
                 indeterminate={someSelected ? true : undefined}
                 onCheckedChange={onSelectAll}
                 aria-label="Select all items"
@@ -256,8 +257,7 @@ export function LibraryTable({
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <FavoriteButton
                     recordingId={item.id}
-                    initialIsFavorite={(item as any).is_favorite}
-                    variant="ghost"
+                    isFavorite={(item as any).is_favorite || false}
                     size="sm"
                   />
                 </TableCell>

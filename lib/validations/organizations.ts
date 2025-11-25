@@ -54,15 +54,13 @@ export const updateMemberSchema = z.object({
 // Organization stats query schema
 export const organizationStatsQuerySchema = z.object({
   include_quotas: z
-    .string()
-    .transform((val) => val === 'true')
-    .pipe(z.boolean())
-    .optional()
-    .default(true),
+    .preprocess(
+      (val) => (typeof val === 'string' ? val === 'true' : val),
+      z.boolean().default(true)
+    ),
   include_usage: z
-    .string()
-    .transform((val) => val === 'true')
-    .pipe(z.boolean())
-    .optional()
-    .default(true),
+    .preprocess(
+      (val) => (typeof val === 'string' ? val === 'true' : val),
+      z.boolean().default(true)
+    ),
 });

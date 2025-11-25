@@ -29,31 +29,35 @@ const RegistryHero = () => {
         />
       </div>
 
-      <div className="relative z-10 container px-6">
+      <div className="relative z-10 container px-6 pt-24">
         <div className="mx-auto max-w-5xl text-center">
           {/* Badge */}
           <div className="mb-8 flex justify-center">
             <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full
               glass-caribbean border border-accent/30">
               <Sparkles className="h-4 w-4 text-accent animate-pulse" />
-              <span className="text-sm font-medium text-accent">AI-Powered Knowledge Management</span>
+              <span className="text-sm font-medium text-accent">The Knowledge Intelligence Layer</span>
             </span>
           </div>
 
           {/* Main headline */}
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-light leading-tight tracking-tight mb-6">
-            <span className="text-foreground">Capture. </span>
             <span className="bg-gradient-to-r from-[#00df82] via-[#2cc295] to-[#17876e]
               bg-clip-text text-transparent animate-gradient-x bg-[length:200%_auto]
               drop-shadow-[0_0_40px_rgba(0,223,130,0.6)]">
-              Transform.
+              Illuminate
             </span>
-            <span className="text-foreground"> Discover.</span>
+            <span className="text-foreground"> your tribe's </span>
+            <span className="bg-gradient-to-r from-[#00df82] via-[#2cc295] to-[#17876e]
+              bg-clip-text text-transparent animate-gradient-x bg-[length:200%_auto]
+              drop-shadow-[0_0_40px_rgba(0,223,130,0.6)]">
+              knowledge.
+            </span>
           </h1>
 
           {/* Subtitle */}
           <p className="text-xl md:text-2xl text-muted-foreground font-light leading-relaxed max-w-3xl mx-auto mb-12">
-            Stop losing expertise when team members leave. Record once, search forever—your team's knowledge, instantly accessible.
+            Capture once, understand forever. Transform screen recordings into structured, searchable documentation that compounds in value over time.
           </p>
 
           {/* CTA Buttons */}

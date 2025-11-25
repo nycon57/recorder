@@ -12,6 +12,7 @@ import {
   Mail,
   Shield,
   Check,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -272,9 +273,18 @@ export function DepartmentMembersModal({
 
             <Popover open={addUserOpen} onOpenChange={setAddUserOpen}>
               <PopoverTrigger asChild>
-                <Button size="sm">
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  Add Member
+                <Button size="sm" disabled={addingUser}>
+                  {addingUser ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Add Member
+                    </>
+                  )}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[300px] p-0" align="end">
@@ -353,7 +363,7 @@ export function DepartmentMembersModal({
                     className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors"
                   >
                     <Avatar>
-                      <AvatarImage src={member.user?.avatarUrl} />
+                      <AvatarImage src={(member.user as any)?.avatarUrl} />
                       <AvatarFallback>
                         {getInitials(member.user?.name || null, member.user?.email || "")}
                       </AvatarFallback>
@@ -385,27 +395,32 @@ export function DepartmentMembersModal({
                       </p>
                     </div>
 
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          disabled={removingUserId === member.userId}
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => handleRemoveUser(member.userId)}
-                          className="text-destructive"
-                        >
-                          <UserMinus className="w-4 h-4 mr-2" />
-                          Remove from Department
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {removingUserId === member.userId ? (
+                      <div className="h-8 w-8 flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleRemoveUser(member.userId)}
+                            className="text-destructive"
+                          >
+                            <UserMinus className="w-4 h-4 mr-2" />
+                            Remove from Department
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 ))}
               </div>

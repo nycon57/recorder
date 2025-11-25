@@ -72,11 +72,8 @@ export default function Navbar() {
             href="/"
             className="group flex items-center gap-2 py-4 transition-all duration-300 hover:scale-105"
           >
-            <span className="text-2xl transition-transform duration-300 group-hover:rotate-12">
-              🎬
-            </span>
             <span className="text-lg font-bold tracking-tight transition-colors duration-300 group-hover:text-primary">
-              Record
+              Tribora
             </span>
           </a>
 
@@ -136,11 +133,8 @@ export default function Navbar() {
               href="/"
               className="group flex items-center gap-2 transition-all duration-300"
             >
-              <span className="text-2xl transition-transform duration-300 group-hover:rotate-12">
-                🎬
-              </span>
               <span className="text-lg font-bold tracking-tight transition-colors duration-300 group-hover:text-primary">
-                Record
+                Tribora
               </span>
             </a>
             <Sheet>
@@ -157,9 +151,8 @@ export default function Navbar() {
                 <SheetHeader>
                   <SheetTitle>
                     <a href="/" className="flex items-center gap-2">
-                      <span className="text-2xl">🎬</span>
                       <span className="text-lg font-bold tracking-tight">
-                        Record
+                        Tribora
                       </span>
                     </a>
                   </SheetTitle>

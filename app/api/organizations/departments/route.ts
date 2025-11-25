@@ -12,6 +12,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import { apiHandler, requireOrg, requireAdmin, successResponse, errors , parseBody } from '@/lib/utils/api';
 import {
@@ -72,14 +73,25 @@ export const GET = apiHandler(async (request: NextRequest) => {
     throw new Error('Failed to fetch departments');
   }
 
-  let result: Department[] = departments || [];
+  let result: Department[] = (departments || []).map((dept: any) => ({
+    id: dept.id,
+    orgId: dept.org_id,
+    parentId: dept.parent_id,
+    name: dept.name,
+    description: dept.description,
+    slug: dept.slug,
+    defaultVisibility: dept.default_visibility as 'private' | 'department' | 'org' | 'public',
+    createdAt: dept.created_at,
+    updatedAt: dept.updated_at,
+    createdBy: dept.created_by,
+  }));
 
   // Add member counts if requested
-  if (query.includeMembers && departments && departments.length > 0) {
+  if (query.includeMembers && result.length > 0) {
     const { data: memberCounts } = await supabase
       .from('user_departments')
       .select('department_id')
-      .in('department_id', departments.map(d => d.id));
+      .in('department_id', result.map(d => d.id));
 
     if (memberCounts) {
       const countMap = memberCounts.reduce((acc, { department_id }) => {
@@ -87,7 +99,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
         return acc;
       }, {} as Record<string, number>);
 
-      result = departments.map(dept => ({
+      result = result.map(dept => ({
         ...dept,
         memberCount: countMap[dept.id] || 0,
       }));
@@ -122,19 +134,19 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = apiHandler(async (request: NextRequest) => {
   const { orgId, userId } = await requireAdmin();
 
-  const body = await parseBody(request, createDepartmentSchema);
+  const bodyData = await parseBody<z.infer<typeof createDepartmentSchema>>(request, createDepartmentSchema);
 
   const supabase = supabaseAdmin;
 
   // Generate slug if not provided
-  const slug = body.slug || generateSlug(body.name);
+  const slug = bodyData.slug || generateSlug(bodyData.name);
 
   // Validate parent department exists if provided
-  if (body.parentId) {
+  if (bodyData.parentId) {
     const { data: parentDept, error: parentError } = await supabase
       .from('departments')
       .select('id, org_id')
-      .eq('id', body.parentId)
+      .eq('id', bodyData.parentId)
       .eq('org_id', orgId)
       .single();
 
@@ -160,11 +172,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
     .from('departments')
     .insert({
       org_id: orgId,
-      name: body.name,
-      description: body.description,
+      name: bodyData.name,
+      description: bodyData.description,
       slug,
-      parent_id: body.parentId || null,
-      default_visibility: body.defaultVisibility || 'department',
+      parent_id: bodyData.parentId || null,
+      default_visibility: bodyData.defaultVisibility || 'department',
       created_by: userId,
     })
     .select()
@@ -175,12 +187,23 @@ export const POST = apiHandler(async (request: NextRequest) => {
     throw new Error('Failed to create department');
   }
 
+  const formattedDepartment: Department = {
+    id: department.id,
+    orgId: department.org_id,
+    parentId: department.parent_id,
+    name: department.name,
+    description: department.description,
+    slug: department.slug,
+    defaultVisibility: department.default_visibility as 'private' | 'department' | 'org' | 'public',
+    createdAt: department.created_at,
+    updatedAt: department.updated_at,
+    createdBy: department.created_by,
+    memberCount: 0,
+  };
+
   return successResponse(
     {
-      department: {
-        ...department,
-        memberCount: 0,
-      },
+      department: formattedDepartment,
     },
     undefined,
     201
@@ -203,8 +226,8 @@ function buildDepartmentTree(departments: Department[]): Department[] {
   departments.forEach(dept => {
     const node = deptMap.get(dept.id)!;
 
-    if (dept.parent_id) {
-      const parent = deptMap.get(dept.parent_id);
+    if (dept.parentId) {
+      const parent = deptMap.get(dept.parentId);
       if (parent) {
         parent.children = parent.children || [];
         parent.children.push(node);

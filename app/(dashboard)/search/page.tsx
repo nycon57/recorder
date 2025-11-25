@@ -405,12 +405,12 @@ function SearchPageContent() {
                 )}
               </Button>
             </SheetTrigger>
-            <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
+            <SheetContent className="w-full max-w-[400px] sm:max-w-[540px] overflow-y-auto">
               <SheetHeader>
-                <SheetTitle>Advanced Filters</SheetTitle>
+                <SheetTitle className="text-lg sm:text-xl">Advanced Filters</SheetTitle>
               </SheetHeader>
 
-              <div className="space-y-6 mt-6">
+              <div className="space-y-5 sm:space-y-6 mt-4 sm:mt-6">
                 {/* Search Mode */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
@@ -446,12 +446,12 @@ function SearchPageContent() {
 
                 {/* Content Types */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="block text-sm sm:text-base font-medium mb-2">
                     Content Types
                   </label>
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     {(['recording', 'video', 'audio', 'document', 'text'] as ContentType[]).map((type) => (
-                      <label key={type} className="flex items-center gap-2 cursor-pointer">
+                      <label key={type} className="flex items-center gap-2 sm:gap-3 cursor-pointer py-1.5 min-h-[44px]">
                         <input
                           type="checkbox"
                           checked={filters.contentTypes.includes(type)}
@@ -465,9 +465,9 @@ function SearchPageContent() {
                               removeContentTypeFilter(type);
                             }
                           }}
-                          className="rounded"
+                          className="rounded w-4 h-4 sm:w-5 sm:h-5"
                         />
-                        <span className="text-sm capitalize">{type}s</span>
+                        <span className="text-sm sm:text-base capitalize">{type}s</span>
                       </label>
                     ))}
                   </div>
@@ -507,8 +507,8 @@ function SearchPageContent() {
                     Date Range
                   </label>
                   <DateRangePicker
-                    from={filters.dateFrom}
-                    to={filters.dateTo}
+                    from={filters.dateFrom || undefined}
+                    to={filters.dateTo || undefined}
                     onSelect={(range) => setFilters(prev => ({
                       ...prev,
                       dateFrom: range?.from || null,
@@ -518,15 +518,15 @@ function SearchPageContent() {
                 </div>
 
                 {/* Favorites Only */}
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="flex items-center gap-2 sm:gap-3 cursor-pointer py-1.5 min-h-[44px]">
                   <input
                     type="checkbox"
                     checked={filters.favoritesOnly}
                     onChange={(e) => setFilters(prev => ({ ...prev, favoritesOnly: e.target.checked }))}
-                    className="rounded"
+                    className="rounded w-4 h-4 sm:w-5 sm:h-5"
                   />
-                  <Bookmark className="w-4 h-4" />
-                  <span className="text-sm">Favorites only</span>
+                  <Bookmark className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="text-sm sm:text-base">Favorites only</span>
                 </label>
 
                 {/* Clear Filters */}

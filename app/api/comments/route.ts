@@ -62,7 +62,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Verify user has access to the recording
   const { data: recording, error: recordingError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id')
     .eq('id', query.recording_id)
     .eq('org_id', orgId)
@@ -85,19 +85,19 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   if (commentsError) {
     console.error('[GET /api/comments] Database error:', commentsError);
-    throw errors.internal('Failed to fetch comments');
+    return errors.internalError();
   }
 
   // Get total count for pagination
   const { count, error: countError } = await supabase
     .from('comments')
     .select('*', { count: 'exact', head: true })
-    .eq('recording_id', query.recording_id)
+    .eq('content_id', query.recording_id)
     .is('deleted_at', null);
 
   if (countError) {
     console.error('[GET /api/comments] Count error:', countError);
-    throw errors.internal('Failed to count comments');
+    return errors.internalError();
   }
 
   return successResponse({
@@ -134,7 +134,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   // Verify user has access to the recording
   const { data: recording, error: recordingError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, content_type')
     .eq('id', body.recording_id)
     .eq('org_id', orgId)
@@ -190,7 +190,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   if (insertError || !newComment) {
     console.error('[POST /api/comments] Insert error:', insertError);
-    throw errors.internal('Failed to create comment');
+    return errors.internalError();
   }
 
   // Fetch the comment with user details
@@ -207,7 +207,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (fetchError || !commentWithUser || commentWithUser.length === 0) {
     console.error('[POST /api/comments] Fetch error:', fetchError);
     // Return the comment without user details as fallback
-    return successResponse({ comment: newComment }, { status: 201 });
+    return successResponse({ comment: newComment }, undefined, 201);
   }
 
   // Find the created comment in the results
@@ -217,6 +217,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   return successResponse(
     { comment: createdComment || newComment },
-    { status: 201 }
+    undefined,
+    201
   );
 });

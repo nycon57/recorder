@@ -18,13 +18,10 @@ interface ContentCardProps {
  * Usage:
  * <ContentCard item={contentItem} onDelete={handleDelete} />
  */
-export function ContentCard({ item, onDelete, onShare, onDownload }: ContentCardProps) {
+export function ContentCard({ item }: ContentCardProps) {
   return (
     <BaseContentCard
       item={item}
-      onDelete={onDelete}
-      onShare={onShare}
-      onDownload={onDownload}
     />
   );
 }

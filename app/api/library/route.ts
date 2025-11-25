@@ -47,7 +47,7 @@ const libraryHandler = async (request: NextRequest) => {
 
   // Build query
   let query = supabase
-    .from('recordings')
+    .from('content')
     .select('*', { count: 'exact' })
     .eq('org_id', orgId)
     .order('created_at', { ascending: false });

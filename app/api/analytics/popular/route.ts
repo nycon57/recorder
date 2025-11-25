@@ -170,7 +170,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
         const { data: favorites } = await supabase
           .from('favorites')
-          .select('recording_id');
+          .select('content_id');
 
         const combinedMetrics = [...(shares || []), ...(favorites || [])].reduce((acc: any, item: any) => {
           const recId = item.target_id || item.recording_id;
@@ -185,7 +185,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
         const recordingIds = Object.keys(combinedMetrics);
         if (recordingIds.length > 0) {
           let recQuery = supabase
-            .from('recordings')
+            .from('content')
             .select('id, title, content_type, created_at')
             .in('id', recordingIds)
             .eq('org_id', orgId)

@@ -63,7 +63,7 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   doc_generate: generateDocument,
   generate_embeddings: generateEmbeddings,
   generate_summary: generateSummary,
-  extract_frames: handleExtractFrames,
+  extract_frames: handleExtractFrames as unknown as JobHandler,
   sync_connector: syncConnector,
   process_imported_doc: processImportedDocument,
   process_webhook: processWebhook,
@@ -134,16 +134,17 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 /**
  * Execute a single job with streaming progress updates
  * This is designed to be called from the streaming reprocess endpoint
+ * @param contentId - The content ID (supports both old recordingId and new contentId naming)
  */
 export async function executeJobWithStreaming(
   jobId: string,
-  recordingId: string,
+  contentId: string,
   maxRetries: number = 3
 ): Promise<void> {
   const supabase = createAdminClient();
 
   logger.info('Starting streaming job execution', {
-    context: { jobId, recordingId },
+    context: { jobId, contentId },
   });
 
   // Fetch job details
@@ -156,16 +157,16 @@ export async function executeJobWithStreaming(
   if (jobError || !job) {
     const errorMsg = `Job not found: ${jobId}`;
     logger.error(errorMsg, {
-      context: { jobId, recordingId },
+      context: { jobId, contentId },
       error: jobError as Error | undefined,
     });
-    streamingManager.sendError(recordingId, errorMsg);
+    streamingManager.sendError(contentId, errorMsg);
     throw new Error(errorMsg);
   }
 
   try {
     logger.info('Executing job handler', {
-      context: { jobId, recordingId, jobType: job.type },
+      context: { jobId, contentId, jobType: job.type },
     });
 
     // Mark job as processing
@@ -180,7 +181,7 @@ export async function executeJobWithStreaming(
       .eq('id', jobId);
 
     // Stream initial progress
-    streamingManager.sendProgress(recordingId, 'all', 0, `Starting ${job.type}...`, {
+    streamingManager.sendProgress(contentId, 'all', 0, `Starting ${job.type}...`, {
       jobId,
       jobType: job.type,
     });
@@ -194,23 +195,23 @@ export async function executeJobWithStreaming(
     // Create streaming progress callback
     const progressCallback: ProgressCallback = (percent, message, data) => {
       logger.debug('Job progress update', {
-        context: { jobId, recordingId },
+        context: { jobId, contentId },
         data: { percent, message },
       });
 
       // Update database
-      updateJobProgress(jobId, recordingId, percent, message, data);
+      updateJobProgress(jobId, contentId, percent, message, data);
     };
 
     // Execute handler with progress callback
     logger.info('Calling job handler', {
-      context: { jobId, recordingId, jobType: job.type },
+      context: { jobId, contentId, jobType: job.type },
     });
 
     await handler(job, progressCallback);
 
     logger.info('Job handler completed successfully', {
-      context: { jobId, recordingId, jobType: job.type },
+      context: { jobId, contentId, jobType: job.type },
     });
 
     // Mark job as completed
@@ -225,20 +226,20 @@ export async function executeJobWithStreaming(
       .eq('id', jobId);
 
     // Stream completion
-    streamingManager.sendProgress(recordingId, 'all', 100, `${job.type} completed successfully`, {
+    streamingManager.sendProgress(contentId, 'all', 100, `${job.type} completed successfully`, {
       jobId,
       jobType: job.type,
     });
 
     logger.info('Job completed successfully', {
-      context: { jobId, recordingId, jobType: job.type },
+      context: { jobId, contentId, jobType: job.type },
     });
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     logger.error('Job execution failed', {
-      context: { jobId, recordingId },
+      context: { jobId, contentId },
       error: error as Error,
     });
 
@@ -264,13 +265,13 @@ export async function executeJobWithStreaming(
 
       // Stream retry notification
       streamingManager.sendLog(
-        recordingId,
+        contentId,
         `Job failed, scheduling retry ${attemptCount}/${maxRetries} in ${retryDelay}ms`,
         { error: errorMessage }
       );
 
       logger.info('Job retry scheduled', {
-        context: { jobId, recordingId, attemptCount, maxRetries, retryDelay },
+        context: { jobId, contentId, attemptCount, maxRetries, retryDelay },
       });
     } else {
       // Mark as failed
@@ -287,12 +288,12 @@ export async function executeJobWithStreaming(
 
       // Stream error
       streamingManager.sendError(
-        recordingId,
+        contentId,
         `Job failed after ${maxRetries} attempts: ${errorMessage}`
       );
 
       logger.error('Job failed permanently', {
-        context: { jobId, recordingId, attemptCount, maxRetries },
+        context: { jobId, contentId, attemptCount, maxRetries },
         error: error as Error,
       });
     }
@@ -304,19 +305,20 @@ export async function executeJobWithStreaming(
 /**
  * Execute multiple jobs sequentially with streaming updates
  * Used for processing entire pipelines (transcribe -> document -> embeddings)
+ * @param contentId - The content ID (supports both old recordingId and new contentId naming)
  */
 export async function executeJobPipelineWithStreaming(
   jobIds: string[],
-  recordingId: string,
+  contentId: string,
   maxRetries: number = 3
 ): Promise<void> {
   logger.info('Starting job pipeline execution', {
-    context: { recordingId, jobCount: jobIds.length },
+    context: { contentId, jobCount: jobIds.length },
     data: { jobIds },
   });
 
   streamingManager.sendLog(
-    recordingId,
+    contentId,
     `Starting pipeline with ${jobIds.length} jobs`,
     { jobIds }
   );
@@ -325,20 +327,20 @@ export async function executeJobPipelineWithStreaming(
     const jobId = jobIds[i];
 
     logger.info(`Executing pipeline job ${i + 1}/${jobIds.length}`, {
-      context: { recordingId, jobId },
+      context: { contentId, jobId },
     });
 
     streamingManager.sendLog(
-      recordingId,
+      contentId,
       `Processing step ${i + 1}/${jobIds.length}`,
       { jobId }
     );
 
     try {
-      await executeJobWithStreaming(jobId, recordingId, maxRetries);
+      await executeJobWithStreaming(jobId, contentId, maxRetries);
     } catch (error) {
       logger.error('Pipeline job failed', {
-        context: { recordingId, jobId, step: i + 1 },
+        context: { contentId, jobId, step: i + 1 },
         error: error as Error,
       });
 
@@ -346,7 +348,7 @@ export async function executeJobPipelineWithStreaming(
       // (some jobs like embeddings are non-critical)
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       streamingManager.sendLog(
-        recordingId,
+        contentId,
         `Step ${i + 1} failed: ${errorMsg}, continuing with next step`,
         { jobId, error: errorMsg }
       );
@@ -354,11 +356,11 @@ export async function executeJobPipelineWithStreaming(
   }
 
   logger.info('Job pipeline execution completed', {
-    context: { recordingId, jobCount: jobIds.length },
+    context: { contentId, jobCount: jobIds.length },
   });
 
   streamingManager.sendComplete(
-    recordingId,
+    contentId,
     'Pipeline completed',
     { totalJobs: jobIds.length }
   );

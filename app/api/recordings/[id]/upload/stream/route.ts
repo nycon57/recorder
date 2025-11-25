@@ -41,7 +41,7 @@ export const GET = apiHandler(async (request: NextRequest, context: StreamParams
 
   // Verify recording exists and belongs to org
   const { data: recording, error: recordingError } = await supabaseAdmin
-    .from('recordings')
+    .from('content')
     .select('id, org_id, status, title, content_type, file_type')
     .eq('id', recordingId)
     .eq('org_id', orgId)

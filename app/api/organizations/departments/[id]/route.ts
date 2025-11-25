@@ -13,6 +13,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import { apiHandler, requireOrg, requireAdmin, successResponse, errors , parseBody } from '@/lib/utils/api';
 import {
@@ -78,12 +79,23 @@ export const GET = apiHandler(async (
   const { data: pathData } = await supabase
     .rpc('get_department_path', { dept_id: id });
 
+  const formattedDepartment: Department = {
+    id: department.id,
+    orgId: department.org_id,
+    parentId: department.parent_id,
+    name: department.name,
+    description: department.description,
+    slug: department.slug,
+    defaultVisibility: department.default_visibility as 'private' | 'department' | 'org' | 'public',
+    createdAt: department.created_at,
+    updatedAt: department.updated_at,
+    createdBy: department.created_by,
+    memberCount: memberCount || 0,
+    path: pathData || [],
+  };
+
   return successResponse({
-    department: {
-      ...department,
-      memberCount: memberCount || 0,
-      path: pathData || [],
-    } as Department,
+    department: formattedDepartment,
   });
 });
 
@@ -112,7 +124,7 @@ export const PATCH = apiHandler(async (
     return errors.badRequest('Department ID is required');
   }
 
-  const body = await parseBody(request, updateDepartmentSchema);
+  const bodyData = await parseBody<z.infer<typeof updateDepartmentSchema>>(request, updateDepartmentSchema);
 
   const supabase = supabaseAdmin;
 
@@ -129,18 +141,18 @@ export const PATCH = apiHandler(async (
   }
 
   // Validate parent department if being changed
-  if (body.parentId !== undefined) {
+  if (bodyData.parentId !== undefined) {
     // Prevent setting self as parent
-    if (body.parentId === id) {
+    if (bodyData.parentId === id) {
       return errors.badRequest('Department cannot be its own parent');
     }
 
     // Validate parent exists if not null
-    if (body.parentId) {
+    if (bodyData.parentId) {
       const { data: parentDept, error: parentError } = await supabase
         .from('departments')
         .select('id, org_id')
-        .eq('id', body.parentId)
+        .eq('id', bodyData.parentId)
         .eq('org_id', orgId)
         .single();
 
@@ -151,7 +163,7 @@ export const PATCH = apiHandler(async (
       // Prevent circular references using is_descendant_of function
       const { data: isDescendant } = await supabase
         .rpc('is_descendant_of', {
-          child_id: body.parentId,
+          child_id: bodyData.parentId,
           ancestor_id: id,
         });
 
@@ -166,10 +178,10 @@ export const PATCH = apiHandler(async (
     updated_at: new Date().toISOString(),
   };
 
-  if (body.name !== undefined) updateData.name = body.name;
-  if (body.description !== undefined) updateData.description = body.description;
-  if (body.parentId !== undefined) updateData.parent_id = body.parentId;
-  if (body.defaultVisibility !== undefined) updateData.default_visibility = body.defaultVisibility;
+  if (bodyData.name !== undefined) updateData.name = bodyData.name;
+  if (bodyData.description !== undefined) updateData.description = bodyData.description;
+  if (bodyData.parentId !== undefined) updateData.parent_id = bodyData.parentId;
+  if (bodyData.defaultVisibility !== undefined) updateData.default_visibility = bodyData.defaultVisibility;
 
   const { data: updatedDepartment, error: updateError } = await supabase
     .from('departments')

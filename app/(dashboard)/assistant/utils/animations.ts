@@ -6,22 +6,22 @@
  */
 
 import { useState, useEffect } from 'react';
-import type { Variants, Transition } from 'framer-motion';
+import type { Variants, Transition, Easing } from 'framer-motion';
 
 /**
- * Easing presets
+ * Easing presets - typed as tuples for framer-motion compatibility
  */
 export const easings = {
   // Standard easing for most animations
-  standard: [0.4, 0, 0.2, 1],
+  standard: [0.4, 0, 0.2, 1] as Easing,
   // Emphasized easing for important elements
-  emphasized: [0.4, 0, 0, 1],
+  emphasized: [0.4, 0, 0, 1] as Easing,
   // Decelerated easing for exit animations
-  decelerated: [0, 0, 0.2, 1],
+  decelerated: [0, 0, 0.2, 1] as Easing,
   // Accelerated easing for entrance animations
-  accelerated: [0.4, 0, 1, 1],
+  accelerated: [0.4, 0, 1, 1] as Easing,
   // Spring-like bounce
-  bounce: [0.68, -0.55, 0.265, 1.55],
+  bounce: [0.68, -0.55, 0.265, 1.55] as Easing,
 };
 
 /**
@@ -432,7 +432,7 @@ export const springTransition = (
  */
 export const customDuration = (
   duration: number,
-  ease: number[] | string = easings.emphasized
+  ease: Easing = easings.emphasized
 ): Transition => ({
   duration,
   ease,

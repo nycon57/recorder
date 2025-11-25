@@ -21,7 +21,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Get recordings for this organization only
   const { data: recordings, error: recordingsError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('storage_tier, storage_provider, file_size, org_id, organizations!inner(name)')
     .eq('org_id', orgId)
     .is('deleted_at', null);
@@ -160,7 +160,7 @@ async function calculateTierTrend(tier: string): Promise<number> {
 
   // Get recordings in current period
   const { data: currentData } = await supabase
-    .from('recordings')
+    .from('content')
     .select('file_size, storage_tier')
     .eq('storage_tier', tier)
     .gte('created_at', thirtyDaysAgo.toISOString())
@@ -168,7 +168,7 @@ async function calculateTierTrend(tier: string): Promise<number> {
 
   // Get recordings in previous period
   const { data: previousData } = await supabase
-    .from('recordings')
+    .from('content')
     .select('file_size, storage_tier')
     .eq('storage_tier', tier)
     .gte('created_at', sixtyDaysAgo.toISOString())
@@ -201,7 +201,7 @@ async function calculateProviderTrend(provider: string): Promise<number> {
 
   // Get recordings in current period
   const { data: currentData } = await supabase
-    .from('recordings')
+    .from('content')
     .select('file_size, storage_tier, storage_provider')
     .eq('storage_provider', provider)
     .gte('created_at', thirtyDaysAgo.toISOString())
@@ -209,7 +209,7 @@ async function calculateProviderTrend(provider: string): Promise<number> {
 
   // Get recordings in previous period
   const { data: previousData } = await supabase
-    .from('recordings')
+    .from('content')
     .select('file_size, storage_tier, storage_provider')
     .eq('storage_provider', provider)
     .gte('created_at', sixtyDaysAgo.toISOString())

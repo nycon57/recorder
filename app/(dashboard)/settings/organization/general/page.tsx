@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Upload, Loader2, X, Users, HardDrive, Activity, Badge as BadgeIcon } from "lucide-react";
+import { Upload, Loader2, X, Users, HardDrive, Activity, Badge as BadgeIcon, Check } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -510,19 +510,31 @@ export default function GeneralSettingsPage() {
             <Button
               type="submit"
               disabled={updateMutation.isPending || !form.formState.isDirty}
+              className="relative overflow-hidden"
             >
               {updateMutation.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Saving...
                 </>
+              ) : updateMutation.isSuccess && !form.formState.isDirty ? (
+                <span className="inline-flex items-center gap-2 animate-in fade-in slide-in-from-bottom-1 duration-200">
+                  <Check className="w-4 h-4 text-green-500" />
+                  Saved
+                </span>
               ) : (
                 "Save Changes"
               )}
             </Button>
             {form.formState.isDirty && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground animate-in fade-in slide-in-from-left-2 duration-200">
                 You have unsaved changes
+              </p>
+            )}
+            {updateMutation.isSuccess && !form.formState.isDirty && (
+              <p className="text-sm text-green-600 animate-in fade-in slide-in-from-left-2 duration-200 flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5" />
+                Changes saved successfully
               </p>
             )}
           </div>

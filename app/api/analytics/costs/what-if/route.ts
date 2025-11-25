@@ -56,7 +56,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const body = await parseBody(request, whatIfSchema);
 
   try {
-    const scenario = await runWhatIfScenario(orgId, body);
+    // Type assertion for parsed body - runWhatIfScenario expects WhatIfScenario['assumptions']
+    const scenario = await runWhatIfScenario(orgId, body as any);
 
     return successResponse({
       scenario,

@@ -23,7 +23,7 @@ export const DELETE = apiHandler(
 
     // Verify recording belongs to org
     const { data: recording } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id')
       .eq('id', recordingId)
       .eq('org_id', orgId)
@@ -47,9 +47,9 @@ export const DELETE = apiHandler(
 
     // Remove association
     const { error: deleteError } = await supabase
-      .from('recording_tags')
+      .from('content_tags')
       .delete()
-      .eq('recording_id', recordingId)
+      .eq('content_id', recordingId)
       .eq('tag_id', tagId);
 
     if (deleteError) {

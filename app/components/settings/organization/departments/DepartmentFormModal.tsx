@@ -176,7 +176,7 @@ export function DepartmentFormModal({
   const availableParents = getAvailableParents();
 
   // Build parent options with indentation
-  const buildParentOptions = (parents: Department[], parentId: string | null = null, level = 0): JSX.Element[] => {
+  const buildParentOptions = (parents: Department[], parentId: string | null = null, level = 0): React.ReactElement[] => {
     return parents
       .filter((d) => d.parent_id === parentId)
       .flatMap((dept) => [

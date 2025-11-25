@@ -20,7 +20,7 @@ import {
 
 interface Document {
   id: string;
-  recording_id: string;
+  content_id: string;
   markdown: string;
   html: string | null;
   summary: string | null;
@@ -145,13 +145,15 @@ export default function DocumentViewer({ document, recordingId }: DocumentViewer
           });
         }
 
-        const isActive = matchIdx === currentMatchIndex;
+        // TypeScript assertion - matchIdx is now guaranteed to be a number
+        const finalMatchIdx: number = matchIdx;
+        const isActive = finalMatchIdx === currentMatchIndex;
         return (
           <mark
             key={index}
             ref={(el) => {
-              if (el && matchRefs.current[matchIdx] !== el) {
-                matchRefs.current[matchIdx] = el;
+              if (el && matchRefs.current[finalMatchIdx] !== el) {
+                matchRefs.current[finalMatchIdx] = el;
                 console.log('[DocumentViewer] Ref assigned:', { matchIdx, part, hasElement: !!el });
               }
             }}
@@ -393,8 +395,9 @@ export default function DocumentViewer({ document, recordingId }: DocumentViewer
                         {processChildren(children)}
                       </p>
                     ),
-                    code: ({ inline, children }) =>
-                      inline ? (
+                    code: (props) => {
+                      const { inline, children } = props as any;
+                      return inline ? (
                         <code className="bg-muted px-2 py-0.5 rounded text-sm font-mono">
                           {processChildren(children)}
                         </code>
@@ -402,7 +405,8 @@ export default function DocumentViewer({ document, recordingId }: DocumentViewer
                         <code className="block bg-muted p-3 rounded text-sm font-mono overflow-x-auto">
                           {processChildren(children)}
                         </code>
-                      ),
+                      );
+                    },
                     strong: ({ children }) => (
                       <strong className="font-bold text-foreground">
                         {processChildren(children)}
@@ -455,8 +459,9 @@ export default function DocumentViewer({ document, recordingId }: DocumentViewer
                     {processChildren(children)}
                   </p>
                 ),
-                code: ({ inline, children }) =>
-                  inline ? (
+                code: (props) => {
+                  const { inline, children } = props as any;
+                  return inline ? (
                     <code className="bg-muted px-2 py-0.5 rounded text-sm font-mono">
                       {processChildren(children)}
                     </code>
@@ -464,7 +469,8 @@ export default function DocumentViewer({ document, recordingId }: DocumentViewer
                     <code className="block bg-muted p-3 rounded text-sm font-mono overflow-x-auto">
                       {processChildren(children)}
                     </code>
-                  ),
+                  );
+                },
                 strong: ({ children }) => (
                   <strong className="font-bold text-foreground">
                     {processChildren(children)}

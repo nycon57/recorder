@@ -55,7 +55,7 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
 
   // Get org metrics
   const { data: recordings } = await supabaseAdmin
-    .from('recordings')
+    .from('content')
     .select('file_size, storage_tier, compression_stats, created_at')
     .eq('org_id', orgId)
     .is('deleted_at', null);

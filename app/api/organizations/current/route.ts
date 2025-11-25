@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import {
   apiHandler,
@@ -60,24 +61,24 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * Update current organization (admin+ only)
  */
 export const PATCH = apiHandler(async (request: NextRequest) => {
-  const { orgId, role } = await requireAdmin();
+  const { orgId } = await requireAdmin();
 
   // Parse and validate request body
-  const body = await parseBody(request, updateOrganizationSchema);
+  const bodyData = await parseBody<z.infer<typeof updateOrganizationSchema>>(request, updateOrganizationSchema);
 
   // Build update object (only include provided fields)
   const updates: Record<string, any> = {
     updated_at: new Date().toISOString(),
   };
 
-  if (body.name !== undefined) updates.name = body.name;
-  if (body.logo_url !== undefined) updates.logo_url = body.logo_url;
-  if (body.primary_color !== undefined) updates.primary_color = body.primary_color;
-  if (body.domain !== undefined) updates.domain = body.domain;
-  if (body.billing_email !== undefined) updates.billing_email = body.billing_email;
+  if (bodyData.name !== undefined) updates.name = bodyData.name;
+  if (bodyData.logo_url !== undefined) updates.logo_url = bodyData.logo_url;
+  if (bodyData.primary_color !== undefined) updates.primary_color = bodyData.primary_color;
+  if (bodyData.domain !== undefined) updates.domain = bodyData.domain;
+  if (bodyData.billing_email !== undefined) updates.billing_email = bodyData.billing_email;
 
   // Handle features - merge with existing
-  if (body.features) {
+  if (bodyData.features) {
     const { data: currentOrg } = await supabaseAdmin
       .from('organizations')
       .select('features')
@@ -86,12 +87,12 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
 
     updates.features = {
       ...(currentOrg?.features || {}),
-      ...body.features,
+      ...bodyData.features,
     };
   }
 
   // Handle settings - merge with existing
-  if (body.settings) {
+  if (bodyData.settings) {
     const { data: currentOrg } = await supabaseAdmin
       .from('organizations')
       .select('settings')
@@ -100,16 +101,16 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
 
     updates.settings = {
       ...(currentOrg?.settings || {}),
-      ...body.settings,
+      ...bodyData.settings,
     };
   }
 
   // Check if domain is already taken by another org
-  if (body.domain) {
+  if (bodyData.domain) {
     const { data: existingOrg, error: domainCheckError } = await supabaseAdmin
       .from('organizations')
       .select('id')
-      .eq('domain', body.domain)
+      .eq('domain', bodyData.domain)
       .neq('id', orgId)
       .is('deleted_at', null)
       .single();

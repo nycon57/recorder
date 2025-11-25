@@ -275,11 +275,11 @@ async function generateOptimizationReport() {
   console.log('\nExisting Indexes:');
   console.log('-'.repeat(80));
 
-  const indexesByTable = indexes.reduce((acc, idx) => {
+  const indexesByTable = indexes.reduce<Record<string, IndexInfo[]>>((acc, idx) => {
     if (!acc[idx.tablename]) acc[idx.tablename] = [];
     acc[idx.tablename].push(idx);
     return acc;
-  }, {} as Record<string, IndexInfo[]>);
+  }, {});
 
   Object.entries(indexesByTable).forEach(([table, tableIndexes]) => {
     console.log(`\n${table}: (${tableIndexes.length} indexes)`);
@@ -329,15 +329,17 @@ async function generateOptimizationReport() {
     with_check: string | null;
   }
 
-  const policiesByTable = policies.reduce((acc, policy) => {
-    if (!acc[policy.tablename]) acc[policy.tablename] = [];
-    acc[policy.tablename].push(policy);
-    return acc;
-  }, {} as Record<string, RLSPolicy[]>);
+  const policiesByTable: Record<string, RLSPolicy[]> = {};
+  policies.forEach((policy: any) => {
+    if (!policiesByTable[policy.tablename]) {
+      policiesByTable[policy.tablename] = [];
+    }
+    policiesByTable[policy.tablename].push(policy as RLSPolicy);
+  });
 
   Object.entries(policiesByTable).forEach(([table, tablePolicies]) => {
-    console.log(`\n${table}: (${tablePolicies.length} policies)`);
-    tablePolicies.forEach(policy => {
+    console.log(`\n${table}: (${(tablePolicies as RLSPolicy[]).length} policies)`);
+    (tablePolicies as RLSPolicy[]).forEach((policy: RLSPolicy) => {
       console.log(`  - ${policy.policyname} (${policy.cmd})`);
       const roles = Array.isArray(policy.roles) ? policy.roles.join(', ') : 'public';
       console.log(`    Roles: ${roles}`);

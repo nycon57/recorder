@@ -123,7 +123,7 @@ export function EditWebhookModal({ webhook, open, onOpenChange }: EditWebhookMod
       name: webhook.name,
       description: webhook.description || '',
       url: webhook.url,
-      events: webhook.events,
+      events: webhook.events as any,
       enabled: webhook.enabled,
       retry_enabled: webhook.retry_enabled,
       max_retries: webhook.max_retries,
@@ -299,13 +299,13 @@ export function EditWebhookModal({ webhook, open, onOpenChange }: EditWebhookMod
                         className="flex items-start space-x-3 space-y-0"
                       >
                         <Checkbox
-                          checked={field.value?.includes(event.value)}
+                          checked={field.value?.includes(event.value as any)}
                           onCheckedChange={(checked) => {
                             if (checked) {
-                              field.onChange([...field.value, event.value]);
+                              field.onChange([...(field.value || []), event.value]);
                             } else {
                               field.onChange(
-                                field.value?.filter((v) => v !== event.value)
+                                field.value?.filter((v: string) => v !== event.value)
                               );
                             }
                           }}
@@ -461,8 +461,8 @@ export function EditWebhookModal({ webhook, open, onOpenChange }: EditWebhookMod
               <Button type="button" variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={updateWebhookMutation.isLoading}>
-                {updateWebhookMutation.isLoading ? 'Saving...' : 'Save Changes'}
+              <Button type="submit" disabled={updateWebhookMutation.isPending}>
+                {updateWebhookMutation.isPending ? 'Saving...' : 'Save Changes'}
               </Button>
             </DialogFooter>
           </form>

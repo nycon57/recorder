@@ -58,7 +58,7 @@ const DEFAULT_LEGAL: NavLink[] = [
  * - Dark mode support
  */
 export default function Footer({
-  brandName = 'Record',
+  brandName = 'Tribora',
   nav = DEFAULT_NAV,
   legal = DEFAULT_LEGAL,
 }: FooterProps) {
@@ -77,12 +77,11 @@ export default function Footer({
                 className="inline-flex items-center gap-2 transition-opacity hover:opacity-80"
               >
                 <span className="text-heading-5 flex items-center gap-2 text-foreground">
-                  <span className="text-2xl">🎥</span>
                   <span className="font-bold">{brandName}</span>
                 </span>
               </Link>
               <p className="text-body-sm mt-4 text-muted-foreground">
-                AI-powered screen recording and knowledge management platform
+                The Knowledge Intelligence Layer — illuminate your team's expertise
               </p>
             </div>
 

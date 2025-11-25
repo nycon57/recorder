@@ -43,9 +43,9 @@ export const POST = apiHandler(
       return errors.badRequest('raw.webm file not found');
     }
 
-    // Update recording status and metadata
+    // Update content status and metadata
     const { data: recording, error: updateError } = await supabase
-      .from('recordings')
+      .from('content')
       .update({
         storage_path_raw: storagePath,
         status: startProcessing ? 'uploaded' : 'uploaded',

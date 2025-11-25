@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
+import { User, ImageIcon, Settings2, Smartphone, Shield, AlertTriangle } from 'lucide-react';
 
 import {
   Tabs,
@@ -18,6 +19,7 @@ import {
   SecuritySettings,
   DangerZone,
 } from '@/app/components/settings';
+import { cn } from '@/lib/utils';
 
 export default function ProfilePage() {
   const { userId } = useAuth();
@@ -26,6 +28,15 @@ export default function ProfilePage() {
   if (!userId) {
     return null;
   }
+
+  const tabs = [
+    { value: 'general', label: 'General', icon: User, description: 'Personal details' },
+    { value: 'avatar', label: 'Avatar', icon: ImageIcon, description: 'Profile picture' },
+    { value: 'preferences', label: 'Preferences', icon: Settings2, description: 'App settings' },
+    { value: 'sessions', label: 'Sessions', icon: Smartphone, description: 'Active devices' },
+    { value: 'security', label: 'Security', icon: Shield, description: 'Authentication' },
+    { value: 'danger', label: 'Danger', icon: AlertTriangle, description: 'Delete account' },
+  ];
 
   return (
     <div className="space-y-6">
@@ -37,13 +48,24 @@ export default function ProfilePage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="avatar">Avatar</TabsTrigger>
-          <TabsTrigger value="preferences">Preferences</TabsTrigger>
-          <TabsTrigger value="sessions">Sessions</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="danger">Danger Zone</TabsTrigger>
+        <TabsList className="flex flex-wrap justify-start gap-1 h-auto p-1 bg-muted/50">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2 text-sm data-[state=active]:bg-background",
+                  tab.value === 'danger' && "data-[state=active]:text-destructive"
+                )}
+              >
+                <Icon className="size-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.label}</span>
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">

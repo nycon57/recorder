@@ -115,13 +115,13 @@ export function CreateWebhookModal({ open, onOpenChange }: CreateWebhookModalPro
       title="Create Webhook"
       description="Configure a webhook endpoint to receive real-time notifications about events in your organization."
       size="2xl"
-      schema={createWebhookSchema}
+      schema={createWebhookSchema as any}
       defaultValues={{
         name: '',
         description: '',
         url: '',
-        events: [],
-        headers: {},
+        events: [] as any,
+        headers: {} as Record<string, string>,
         retry_enabled: true,
         max_retries: 3,
         timeout_ms: 5000,
@@ -219,14 +219,13 @@ export function CreateWebhookModal({ open, onOpenChange }: CreateWebhookModalPro
                         className="flex items-start space-x-3 space-y-0"
                       >
                         <Checkbox
-                          checked={field.value?.includes(event.value)}
+                          checked={(field.value as string[])?.includes(event.value)}
                           onCheckedChange={(checked) => {
                             if (checked) {
-                              // TYPE SAFETY: No cast needed - event.value is string
-                              field.onChange([...field.value, event.value]);
+                              field.onChange([...(field.value as string[]), event.value]);
                             } else {
                               field.onChange(
-                                field.value?.filter((v) => v !== event.value)
+                                (field.value as string[])?.filter((v) => v !== event.value)
                               );
                             }
                           }}

@@ -23,7 +23,7 @@ export const GET = apiHandler(async () => {
   try {
     // Fetch all non-deleted recordings
     const { data: recordings, error: recordingsError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('storage_tier, storage_provider, file_size')
       .is('deleted_at', null);
 

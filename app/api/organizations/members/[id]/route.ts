@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import {
   apiHandler,
@@ -87,7 +88,7 @@ export const PATCH = apiHandler(async (request: NextRequest, context: RouteConte
   }
 
   // Parse and validate request body
-  const body = await parseBody(request, updateMemberSchema);
+  const bodyData = await parseBody<z.infer<typeof updateMemberSchema>>(request, updateMemberSchema);
 
   // Fetch current member details
   const { data: currentMember, error: fetchError } = await supabaseAdmin
@@ -104,14 +105,14 @@ export const PATCH = apiHandler(async (request: NextRequest, context: RouteConte
   }
 
   // Prevent self-modification of role
-  if (requesterId === memberId && body.role) {
+  if (requesterId === memberId && bodyData.role) {
     return errors.forbidden('You cannot change your own role');
   }
 
   // Role hierarchy validation
-  if (body.role) {
+  if (bodyData.role) {
     // Only owner can change someone's role to owner
-    if (body.role === 'owner' && requesterRole !== 'owner') {
+    if (bodyData.role === 'owner' && requesterRole !== 'owner') {
       return errors.forbidden('Only organization owners can assign the owner role');
     }
 
@@ -121,7 +122,7 @@ export const PATCH = apiHandler(async (request: NextRequest, context: RouteConte
     }
 
     // Ensure at least one owner remains
-    if (currentMember.role === 'owner' && body.role !== 'owner') {
+    if (currentMember.role === 'owner' && bodyData.role !== 'owner') {
       const { count: ownerCount, error: countError } = await supabaseAdmin
         .from('users')
         .select('id', { count: 'exact', head: true })
@@ -146,13 +147,13 @@ export const PATCH = apiHandler(async (request: NextRequest, context: RouteConte
     updated_at: new Date().toISOString(),
   };
 
-  if (body.role !== undefined) updates.role = body.role;
-  if (body.status !== undefined) updates.status = body.status;
-  if (body.title !== undefined) updates.title = body.title;
-  if (body.department_ids !== undefined && body.department_ids.length > 0) {
+  if (bodyData.role !== undefined) updates.role = bodyData.role;
+  if (bodyData.status !== undefined) updates.status = bodyData.status;
+  if (bodyData.title !== undefined) updates.title = bodyData.title;
+  if (bodyData.department_ids !== undefined && bodyData.department_ids.length > 0) {
     // For now, we'll just store the first department
     // In the future, you might want a junction table for multiple departments
-    updates.department_id = body.department_ids[0];
+    updates.department_id = bodyData.department_ids[0];
   }
 
   // Update member

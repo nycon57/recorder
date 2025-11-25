@@ -85,8 +85,8 @@ export async function handleDetectSimilarity(
 
       for (const match of matches) {
         await supabase.from('similarity_matches').insert({
-          recording_id: recordingId,
-          similar_recording_id: match.recordingId,
+          content_id: recordingId,
+          similar_content_id: match.contentId,
           video_similarity: match.videoSimilarity,
           audio_similarity: match.audioSimilarity,
           overall_similarity: match.overallSimilarity,

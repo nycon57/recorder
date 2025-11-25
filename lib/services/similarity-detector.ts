@@ -30,7 +30,7 @@ export interface PerceptualHash {
   videoHash: string; // 64-character hex string (256-bit dHash)
   audioHash: string; // 64-character hex string (256-bit audio fingerprint)
   duration: number; // Duration in seconds
-  recordingId: string;
+  contentId: string;
   createdAt: Date;
 }
 
@@ -38,7 +38,7 @@ export interface PerceptualHash {
  * Similarity match result
  */
 export interface SimilarityMatch {
-  recordingId: string;
+  contentId: string;
   originalRecordingId: string;
   videoSimilarity: number; // 0-100 (percentage)
   audioSimilarity: number; // 0-100 (percentage)
@@ -304,7 +304,7 @@ export async function calculateAudioHash(filePath: string): Promise<string> {
  * Calculate perceptual hashes for a recording
  */
 export async function calculatePerceptualHash(
-  recordingId: string,
+  contentId: string,
   storagePath: string,
   storageProvider: StorageProvider
 ): Promise<PerceptualHash | null> {
@@ -312,7 +312,7 @@ export async function calculatePerceptualHash(
 
   try {
     // Download file to temp location
-    const storageManager = StorageManager.getInstance();
+    const storageManager = new StorageManager();
     const supabase = createClient();
 
     // Prefer the provided storagePath, fall back to DB query if not provided
@@ -321,9 +321,9 @@ export async function calculatePerceptualHash(
 
     if (!storagePath) {
       const { data: recording } = await supabase
-        .from('recordings')
+        .from('content')
         .select('storage_path, storage_path_r2, duration')
-        .eq('id', recordingId)
+        .eq('id', contentId)
         .single();
 
       if (!recording) {
@@ -335,9 +335,9 @@ export async function calculatePerceptualHash(
     } else {
       // If storagePath is provided, still get duration from DB
       const { data: recording } = await supabase
-        .from('recordings')
+        .from('content')
         .select('duration')
-        .eq('id', recordingId)
+        .eq('id', contentId)
         .single();
 
       duration = recording?.duration || 0;
@@ -354,7 +354,7 @@ export async function calculatePerceptualHash(
       throw new Error(downloadResult.error || 'Failed to download file');
     }
 
-    tempPath = downloadResult.data as string;
+    tempPath = downloadResult.data as unknown as string;
 
     // Calculate hashes
     const timestamp = Math.min(10, duration / 2); // 10s or midpoint
@@ -365,7 +365,7 @@ export async function calculatePerceptualHash(
       videoHash,
       audioHash,
       duration,
-      recordingId,
+      contentId,
       createdAt: new Date(),
     };
   } catch (error) {
@@ -428,7 +428,7 @@ export async function findSimilarRecordings(
 
   // Get all recordings with perceptual hashes in the organization
   let query = supabase
-    .from('recordings')
+    .from('content')
     .select('id, title, duration, file_size, video_hash, audio_hash')
     .eq('org_id', orgId)
     .not('video_hash', 'is', null)
@@ -471,7 +471,7 @@ export async function findSimilarRecordings(
         avgDistance <= config.maxHammingDistance
       ) {
         matches.push({
-          recordingId: recording.id,
+          contentId: recording.id,
           originalRecordingId: recording.id,
           videoSimilarity: Math.round(videoSimilarity * 100) / 100,
           audioSimilarity: Math.round(audioSimilarity * 100) / 100,
@@ -502,13 +502,13 @@ export async function storePerceptualHash(hash: PerceptualHash): Promise<boolean
 
   try {
     const { error } = await supabase
-      .from('recordings')
+      .from('content')
       .update({
         video_hash: hash.videoHash,
         audio_hash: hash.audioHash,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', hash.recordingId);
+      .eq('id', hash.contentId);
 
     if (error) {
       console.error('[SimilarityDetector] Error storing hash:', error);
@@ -537,7 +537,7 @@ export async function batchProcessSimilarity(
 
   // Get recordings without perceptual hashes
   const { data: recordings, error } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, storage_path, storage_path_r2, storage_provider')
     .eq('org_id', orgId)
     .is('video_hash', null)

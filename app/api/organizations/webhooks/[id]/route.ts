@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
 import { createSupabaseClient } from '@/lib/supabase/server';
@@ -16,7 +17,7 @@ export const PATCH = apiHandler(async (
     throw new Error('Unauthorized: Admin access required');
   }
 
-  const body = await parseBody(request, updateWebhookSchema);
+  const bodyData = await parseBody<z.infer<typeof updateWebhookSchema>>(request, updateWebhookSchema);
   const supabase = await createSupabaseClient();
 
   // Verify webhook belongs to this org
@@ -32,7 +33,7 @@ export const PATCH = apiHandler(async (
   }
 
   // Validate URL is HTTPS if being updated
-  if (body.url && !body.url.startsWith('https://')) {
+  if (bodyData.url && !bodyData.url.startsWith('https://')) {
     throw new Error('Webhook URL must use HTTPS');
   }
 
@@ -40,15 +41,15 @@ export const PATCH = apiHandler(async (
   const { data: updatedWebhook, error: updateError } = await supabase
     .from('org_webhooks')
     .update({
-      name: body.name !== undefined ? body.name : webhook.name,
-      description: body.description !== undefined ? body.description : webhook.description,
-      url: body.url !== undefined ? body.url : webhook.url,
-      events: body.events !== undefined ? body.events : webhook.events,
-      headers: body.headers !== undefined ? body.headers : webhook.headers,
-      enabled: body.enabled !== undefined ? body.enabled : webhook.enabled,
-      retry_enabled: body.retry_enabled !== undefined ? body.retry_enabled : webhook.retry_enabled,
-      max_retries: body.max_retries !== undefined ? body.max_retries : webhook.max_retries,
-      timeout_ms: body.timeout_ms !== undefined ? body.timeout_ms : webhook.timeout_ms,
+      name: bodyData.name !== undefined ? bodyData.name : webhook.name,
+      description: bodyData.description !== undefined ? bodyData.description : webhook.description,
+      url: bodyData.url !== undefined ? bodyData.url : webhook.url,
+      events: bodyData.events !== undefined ? bodyData.events : webhook.events,
+      headers: bodyData.headers !== undefined ? bodyData.headers : webhook.headers,
+      enabled: bodyData.enabled !== undefined ? bodyData.enabled : webhook.enabled,
+      retry_enabled: bodyData.retry_enabled !== undefined ? bodyData.retry_enabled : webhook.retry_enabled,
+      max_retries: bodyData.max_retries !== undefined ? bodyData.max_retries : webhook.max_retries,
+      timeout_ms: bodyData.timeout_ms !== undefined ? bodyData.timeout_ms : webhook.timeout_ms,
       updated_at: new Date().toISOString(),
     })
     .eq('id', params.id)
@@ -67,7 +68,7 @@ export const PATCH = apiHandler(async (
     resource_id: params.id,
     metadata: {
       webhook_name: webhook.name,
-      changes: body,
+      changes: bodyData,
     },
   });
 

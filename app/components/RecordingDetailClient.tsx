@@ -39,8 +39,8 @@ import {
   AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
 import AudioPlayer from '@/app/components/library/detail-views/AudioPlayer';
-import PDFDocumentViewer from '@/app/(dashboard)/library/[id]/components/PDFDocumentViewer';
-import TextNoteViewer from '@/app/(dashboard)/library/[id]/components/TextNoteViewer';
+import PDFDocumentViewer from '@/app/components/library/detail-views/PDFDocumentViewer';
+import TextNoteViewer from '@/app/components/library/detail-views/TextNoteViewer';
 import type { Tag, ContentType, FileType } from '@/lib/types/database';
 
 import RecordingPlayer from './RecordingPlayer';
@@ -74,7 +74,7 @@ interface Recording {
 
 interface Transcript {
   id: string;
-  recording_id: string;
+  content_id: string;
   text: string;
   language: string | null;
   words_json: any;
@@ -84,7 +84,7 @@ interface Transcript {
 
 interface Document {
   id: string;
-  recording_id: string;
+  content_id: string;
   markdown: string;
   html: string | null;
   summary: string | null;

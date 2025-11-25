@@ -57,7 +57,7 @@ export const GET = apiHandler(async (request: NextRequest, context: FinalizePara
 
   // Verify recording exists and belongs to org
   const { data: recording, error: recordingError } = await supabaseAdmin
-    .from('recordings')
+    .from('content')
     .select('id, org_id, status, title, storage_path_raw')
     .eq('id', recordingId)
     .eq('org_id', orgId)
@@ -84,13 +84,13 @@ export const GET = apiHandler(async (request: NextRequest, context: FinalizePara
   });
 
   const { data: fileData, error: fileError } = await supabaseAdmin.storage
-    .from('recordings')
+    .from('content')
     .list(`org_${orgId}/recordings/${recordingId}`);
 
   if (fileError || !fileData || fileData.length === 0) {
     logger.error('File not found in storage', {
       context: { recordingId, storagePath },
-      error: fileError,
+      error: fileError as Error | undefined,
     });
     throw new Error('File not found in storage. Please ensure the recording was uploaded successfully.');
   }
@@ -134,7 +134,7 @@ export const GET = apiHandler(async (request: NextRequest, context: FinalizePara
   });
 
   const { data: updatedRecording, error: updateError } = await supabaseAdmin
-    .from('recordings')
+    .from('content')
     .update({
       storage_path_raw: storagePath,
       status: newStatus,
@@ -153,7 +153,7 @@ export const GET = apiHandler(async (request: NextRequest, context: FinalizePara
   if (updateError || !updatedRecording) {
     logger.error('Failed to update recording', {
       context: { recordingId, orgId },
-      error: updateError,
+      error: updateError as Error | undefined,
     });
     streamingManager.sendError(
       recordingId,

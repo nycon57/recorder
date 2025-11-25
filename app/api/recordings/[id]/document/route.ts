@@ -22,7 +22,7 @@ export const GET = apiHandler(
 
     // Verify recording belongs to org
     const { data: recording, error: recordingError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, org_id, status')
       .eq('id', id)
       .eq('org_id', orgId)
@@ -37,7 +37,7 @@ export const GET = apiHandler(
     const { data: document, error: documentError } = await supabase
       .from('documents')
       .select('*')
-      .eq('recording_id', id)
+      .eq('content_id', id)
       .eq('org_id', orgId)
       .single();
 
@@ -87,11 +87,13 @@ export const PUT = apiHandler(
 
     // Validate request body
     const body = await parseBody(request, updateDocumentMarkdownSchema);
-    const refreshEmbeddings = body.refreshEmbeddings ?? false;
+    // Type assertion for parsed body
+    const typedBody = body as { refreshEmbeddings?: boolean };
+    const refreshEmbeddings = typedBody.refreshEmbeddings ?? false;
 
     // Verify recording belongs to org
     const { data: recording, error: recordingError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, org_id')
       .eq('id', id)
       .eq('org_id', orgId)
@@ -106,7 +108,7 @@ export const PUT = apiHandler(
     const { data: existingDocument, error: checkError } = await supabase
       .from('documents')
       .select('id, version')
-      .eq('recording_id', id)
+      .eq('content_id', id)
       .eq('org_id', orgId)
       .single();
 
@@ -124,14 +126,14 @@ export const PUT = apiHandler(
     const { data: document, error: updateError } = await supabase
       .from('documents')
       .update({
-        markdown: body.markdown,
+        markdown: (body as { markdown: string }).markdown,
         html: null, // Clear HTML cache - can be regenerated if needed
         version: newVersion,
         status: 'edited',
         needs_embeddings_refresh: !refreshEmbeddings, // Mark stale if not auto-refreshing
         updated_at: new Date().toISOString(),
       })
-      .eq('recording_id', id)
+      .eq('content_id', id)
       .eq('org_id', orgId)
       .select()
       .single();
@@ -150,7 +152,7 @@ export const PUT = apiHandler(
       const { data: transcript } = await supabase
         .from('transcripts')
         .select('id')
-        .eq('recording_id', id)
+        .eq('content_id', id)
         .eq('superseded', false)
         .single();
 
@@ -159,7 +161,7 @@ export const PUT = apiHandler(
         await supabase
           .from('transcript_chunks')
           .delete()
-          .eq('recording_id', id);
+          .eq('content_id', id);
 
         // Enqueue embeddings job
         const { data: job } = await supabase
@@ -220,7 +222,7 @@ export const POST = apiHandler(
 
     // Verify recording belongs to org and has a transcript
     const { data: recording, error: recordingError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, org_id, status')
       .eq('id', id)
       .eq('org_id', orgId)
@@ -235,7 +237,7 @@ export const POST = apiHandler(
     const { data: transcript, error: transcriptError } = await supabase
       .from('transcripts')
       .select('id')
-      .eq('recording_id', id)
+      .eq('content_id', id)
       .single();
 
     if (transcriptError || !transcript) {
@@ -248,7 +250,7 @@ export const POST = apiHandler(
     const { data: existingDocument } = await supabase
       .from('documents')
       .select('id')
-      .eq('recording_id', id)
+      .eq('content_id', id)
       .eq('org_id', orgId)
       .single();
 

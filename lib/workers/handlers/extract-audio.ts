@@ -63,7 +63,7 @@ export async function handleExtractAudio(
 
   // Update recording status
   await supabase
-    .from('recordings')
+    .from('content')
     .update({ status: 'transcribing' })
     .eq('id', recordingId);
 
@@ -85,7 +85,7 @@ export async function handleExtractAudio(
     });
 
     const { data: videoBlob, error: downloadError } = await supabase.storage
-      .from('recordings')
+      .from('content')
       .download(videoPath);
 
     if (downloadError || !videoBlob) {
@@ -174,7 +174,7 @@ export async function handleExtractAudio(
     const audioStoragePath = videoPath.replace(/\.[^.]+$/, '.mp3');
 
     const { error: uploadError } = await supabase.storage
-      .from('recordings')
+      .from('content')
       .upload(audioStoragePath, audioBuffer, {
         contentType: 'audio/mpeg',
         upsert: true,
@@ -190,7 +190,7 @@ export async function handleExtractAudio(
 
     // Fetch existing metadata to preserve it
     const { data: recording } = await supabase
-      .from('recordings')
+      .from('content')
       .select('metadata')
       .eq('id', recordingId)
       .single();
@@ -199,7 +199,7 @@ export async function handleExtractAudio(
 
     // Update recording with audio path, preserving existing metadata
     await supabase
-      .from('recordings')
+      .from('content')
       .update({
         metadata: {
           ...existingMetadata,
@@ -264,7 +264,7 @@ export async function handleExtractAudio(
 
     // Fetch existing metadata to preserve it
     const { data: recording } = await supabase
-      .from('recordings')
+      .from('content')
       .select('metadata')
       .eq('id', recordingId)
       .maybeSingle();
@@ -273,7 +273,7 @@ export async function handleExtractAudio(
 
     // Update recording status to error, preserving existing metadata
     await supabase
-      .from('recordings')
+      .from('content')
       .update({
         status: 'error',
         error_message: error instanceof Error ? error.message : 'Audio extraction failed',

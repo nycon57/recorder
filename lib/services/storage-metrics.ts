@@ -140,7 +140,7 @@ export async function getStorageMetrics(orgId: string): Promise<StorageMetrics> 
 
   // Get all recordings for the organization
   const { data: recordings, error } = await supabase
-    .from('recordings')
+    .from('content')
     .select('*')
     .eq('org_id', orgId)
     .is('deleted_at', null);
@@ -259,14 +259,14 @@ export async function getStorageMetrics(orgId: string): Promise<StorageMetrics> 
   const processedForSimilarity = recordings.filter((r) => r.similarity_processed_at !== null).length;
 
   // Get all recording IDs for this organization
-  const recordingIds = recordings.map((r) => r.id);
+  const contentIds = recordings.map((r) => r.id);
 
   // Fetch similarity matches for all recordings in this organization
-  const { data: similarityMatches } = recordingIds.length > 0
+  const { data: similarityMatches } = contentIds.length > 0
     ? await supabase
         .from('similarity_matches')
         .select('*')
-        .in('recording_id', recordingIds)
+        .in('content_id', contentIds)
     : { data: [] };
 
   const totalMatches = similarityMatches?.length || 0;

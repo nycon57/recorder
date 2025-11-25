@@ -27,7 +27,7 @@ export interface AgenticSearchOptions {
   enableSelfReflection?: boolean;
   enableReranking?: boolean;
   chunksPerQuery?: number;
-  recordingIds?: string[];
+  contentIds?: string[];
   contentTypes?: ('recording' | 'video' | 'audio' | 'document' | 'text')[];
   tagIds?: string[];
   tagFilterMode?: 'AND' | 'OR';
@@ -52,7 +52,7 @@ export async function agenticSearch(
     enableSelfReflection = process.env.ENABLE_SELF_REFLECTION !== 'false',
     enableReranking = isCohereConfigured(),
     chunksPerQuery = 15,
-    recordingIds,
+    contentIds,
     contentTypes,
     tagIds,
     tagFilterMode,
@@ -111,7 +111,7 @@ export async function agenticSearch(
           limit: chunksPerQuery,
           threshold: 0.55, // Lowered from 0.70 - agentic search needs high recall for reasoning
           searchMode: 'standard',
-          recordingIds,
+          contentIds,
           contentTypes,
           tagIds,
           tagFilterMode,
@@ -192,7 +192,7 @@ export async function agenticSearch(
 
   // Step 5: Compile final results
   const finalResults = Array.from(allResults.values())
-    .sort((a, b) => b.similarity - a.similarity)
+    .sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0))
     .slice(0, 20); // Top 20 chunks
 
   const totalDuration = Date.now() - startTime;

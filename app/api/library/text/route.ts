@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import {
   apiHandler,
@@ -58,7 +59,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const body = await parseBody(request, createTextNoteSchema);
 
   try {
-    const { title, content, format, description, metadata } = body;
+    // Type assertion for parsed body
+    const typedBody = body as z.infer<typeof createTextNoteSchema>;
+    const { title, content, format, description, metadata } = typedBody;
 
     // Determine file type based on format
     const fileType = format === 'markdown' ? 'md' : 'txt';
@@ -69,7 +72,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
     // Create recording entry for the text note
     const { data: recording, error: dbError } = await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .insert({
         org_id: orgId,
         created_by: userId,
@@ -112,7 +115,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
       // Clean up recording
       await supabaseAdmin
-        .from('recordings')
+        .from('content')
         .delete()
         .eq('id', recording.id);
 
@@ -121,7 +124,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
     // Update recording status to transcribed
     await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .update({ status: 'transcribed' })
       .eq('id', recording.id);
 
@@ -140,7 +143,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
     // Update status to indicate doc generation in progress
     await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .update({ status: 'doc_generating' })
       .eq('id', recording.id);
 

@@ -61,7 +61,7 @@ interface DeduplicationConfig {
  * @param config - Deduplication configuration
  * @returns Wrapped handler with deduplication
  */
-export function withDeduplication<T extends (request: NextRequest, ...args: any[]) => Promise<NextResponse>>(
+export function withDeduplication<T extends (request: NextRequest, ...args: any[]) => Promise<NextResponse | Response>>(
   handler: T,
   config: DeduplicationConfig
 ): T {

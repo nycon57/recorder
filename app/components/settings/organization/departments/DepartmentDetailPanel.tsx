@@ -211,11 +211,9 @@ export function DepartmentDetailPanel({
               {department.members.map((member) => (
                 <div key={member.id} className="flex items-center gap-3 py-2">
                   <UserAvatar
-                    user={{
-                      name: member.name,
-                      email: member.email,
-                      avatar_url: member.avatar_url,
-                    }}
+                    name={member.name || 'Unknown'}
+                    avatarUrl={member.avatar_url}
+                    email={member.email}
                     size="sm"
                   />
                   <div className="flex-1 min-w-0">

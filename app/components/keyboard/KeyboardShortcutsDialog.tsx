@@ -12,7 +12,9 @@ import {
 import { Badge } from '@/app/components/ui/badge';
 import { Separator } from '@/app/components/ui/separator';
 import { useKeyboardShortcutsContext } from '@/app/contexts/KeyboardShortcutsContext';
-import { formatShortcut, isMac } from '@/app/hooks/useKeyboardShortcuts';
+import { formatShortcut, Shortcut } from '@/app/hooks/useKeyboardShortcuts';
+
+const isMac = () => typeof window !== 'undefined' && navigator?.platform?.toUpperCase().indexOf('MAC') >= 0;
 
 /**
  * Keyboard Shortcuts Help Dialog
@@ -70,15 +72,11 @@ export function KeyboardShortcutsDialog() {
                           </Badge>
                         )}
                         <kbd className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted rounded border border-border">
-                          {formatShortcut(
-                            shortcut.keys.map((key) => {
-                              // Replace 'cmd' with platform-appropriate key
-                              if (key === 'cmd') {
-                                return isMac() ? 'cmd' : 'ctrl';
-                              }
-                              return key;
-                            })
-                          )}
+                          {shortcut.keys.map((key, i) => {
+                            // Replace 'cmd' with platform-appropriate key
+                            const displayKey = key === 'cmd' ? (isMac() ? '⌘' : 'Ctrl') : key;
+                            return i > 0 ? ` + ${displayKey}` : displayKey;
+                          }).join('')}
                         </kbd>
                       </div>
                     </div>
@@ -117,14 +115,10 @@ interface KeyboardHintProps {
 }
 
 export function KeyboardHint({ keys, className = '' }: KeyboardHintProps) {
-  const formattedKeys = formatShortcut(
-    keys.map((key) => {
-      if (key === 'cmd') {
-        return isMac() ? 'cmd' : 'ctrl';
-      }
-      return key;
-    })
-  );
+  const formattedKeys = keys.map((key, i) => {
+    const displayKey = key === 'cmd' ? (isMac() ? '⌘' : 'Ctrl') : key;
+    return i > 0 ? ` + ${displayKey}` : displayKey;
+  }).join('');
 
   return (
     <kbd

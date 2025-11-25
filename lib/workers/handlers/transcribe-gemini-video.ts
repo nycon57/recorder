@@ -175,7 +175,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
   const { data: existingTranscript } = await supabase
     .from('transcripts')
     .select('id, recording_id')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .single();
 
   if (existingTranscript) {
@@ -188,7 +188,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     // Ensure recording status is correct
     await supabase
-      .from('recordings')
+      .from('content')
       .update({ status: 'transcribed' })
       .eq('id', recordingId);
 
@@ -221,7 +221,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
   // Update recording status
   await supabase
-    .from('recordings')
+    .from('content')
     .update({ status: 'transcribing' })
     .eq('id', recordingId);
 
@@ -238,7 +238,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
     }
 
     const { data: videoBlob, error: downloadError } = await supabase.storage
-      .from('recordings')
+      .from('content')
       .download(storagePath);
 
     if (downloadError || !videoBlob) {
@@ -521,7 +521,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
     const { data: transcript, error: transcriptError } = await supabase
       .from('transcripts')
       .insert({
-        recording_id: recordingId,
+        content_id: recordingId,
         text: fullTranscript,
         language: GOOGLE_CONFIG.SPEECH_LANGUAGE,
         words_json,
@@ -556,7 +556,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
 
     // Update recording status
     await supabase
-      .from('recordings')
+      .from('content')
       .update({ status: 'transcribed' })
       .eq('id', recordingId);
 
@@ -564,7 +564,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
     // Previously, jobs were created sequentially which added unnecessary latency
     // Get recording info first for compression job preparation
     const { data: recording } = await supabase
-      .from('recordings')
+      .from('content')
       .select('content_type, file_type, file_size, storage_path_raw')
       .eq('id', recordingId)
       .single();
@@ -572,7 +572,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
     // Build array of jobs to create in parallel
     const jobPromises: Promise<any>[] = [
       // Document generation job
-      supabase.from('jobs').insert({
+      Promise.resolve(supabase.from('jobs').insert({
         type: 'doc_generate',
         status: 'pending',
         payload: {
@@ -581,9 +581,9 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
           orgId,
         },
         dedupe_key: `doc_generate:${recordingId}`,
-      }),
+      })).then(res => res.data),
       // Embeddings generation job - can start in parallel with doc generation
-      supabase.from('jobs').insert({
+      Promise.resolve(supabase.from('jobs').insert({
         type: 'generate_embeddings',
         status: 'pending',
         payload: {
@@ -592,7 +592,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
           orgId,
         },
         dedupe_key: `generate_embeddings:${recordingId}`,
-      }),
+      })).then(res => res.data),
     ];
 
     // Add compression job if applicable
@@ -603,7 +603,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       // Only compress video/audio content types
       if (['recording', 'video', 'audio'].includes(contentType)) {
         jobPromises.push(
-          supabase.from('jobs').insert({
+          Promise.resolve(supabase.from('jobs').insert({
             type: contentType === 'audio' ? 'compress_audio' : 'compress_video',
             status: 'pending',
             payload: {
@@ -616,7 +616,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
               fileType: recording.file_type || 'mp4',
             },
             dedupe_key: `compress_${contentType}:${recordingId}`,
-          })
+          })).then(res => res.data)
         );
       }
     }
@@ -684,7 +684,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
 
     // Update recording status to error
     await supabase
-      .from('recordings')
+      .from('content')
       .update({
         status: 'error',
         metadata: {

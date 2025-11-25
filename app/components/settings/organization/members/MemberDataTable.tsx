@@ -26,7 +26,7 @@ import {
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { Checkbox } from '@/app/components/ui/checkbox';
 
-import type { OrganizationMember } from '../types';
+import type { OrganizationMember } from '@/app/(dashboard)/settings/organization/members/types';
 import { MemberRowActions } from './MemberRowActions';
 
 interface MemberDataTableProps {
@@ -88,7 +88,6 @@ export function MemberDataTable({
       header: ({ table }) => (
         <Checkbox
           checked={table.getIsAllPageRowsSelected()}
-          indeterminate={table.getIsSomePageRowsSelected()}
           onCheckedChange={(value) => {
             if (value) {
               onSelectionChange(members.map((m) => m.id));
@@ -138,7 +137,7 @@ export function MemberDataTable({
             <AvatarFallback>
               {row.original.name
                 ?.split(' ')
-                .map((n) => n[0])
+                .map((n: string) => n[0])
                 .join('')
                 .toUpperCase() || (row.original.email?.[0] || '?').toUpperCase()}
             </AvatarFallback>
@@ -180,7 +179,7 @@ export function MemberDataTable({
         if (row.original.departments && row.original.departments.length > 0) {
           return (
             <div className="flex flex-wrap gap-1">
-              {row.original.departments.slice(0, 2).map((dept) => (
+              {row.original.departments.slice(0, 2).map((dept: { id: string; name: string }) => (
                 <Badge key={dept.id} variant="outline" className="text-xs">
                   {dept.name}
                 </Badge>

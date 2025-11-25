@@ -59,7 +59,7 @@ export const POST = apiHandler(async (request: NextRequest, context: any) => {
 
   // Verify recording exists and belongs to user's organization
   const { data: recording, error: recordingError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, org_id')
     .eq('id', recordingId)
     .single();
@@ -78,6 +78,9 @@ export const POST = apiHandler(async (request: NextRequest, context: any) => {
              null;
   const userAgent = request.headers.get('user-agent') || null;
 
+  // Type assertion for parsed body
+  const typedBody = body as TrackViewInput;
+
   // Track the view using the database function
   const { data: viewId, error: trackError } = await supabase.rpc(
     'track_recording_view',
@@ -85,11 +88,11 @@ export const POST = apiHandler(async (request: NextRequest, context: any) => {
       p_recording_id: recordingId,
       p_user_id: user.id,
       p_org_id: user.org_id,
-      p_source: body.source || null,
-      p_session_id: body.session_id || null,
+      p_source: typedBody.source || null,
+      p_session_id: typedBody.session_id || null,
       p_ip_address: ip,
       p_user_agent: userAgent,
-      p_referrer: body.referrer || null,
+      p_referrer: typedBody.referrer || null,
     }
   );
 
@@ -99,12 +102,12 @@ export const POST = apiHandler(async (request: NextRequest, context: any) => {
   }
 
   // Optionally update view duration if provided
-  if (body.duration_sec && viewId) {
+  if (typedBody.duration_sec && viewId) {
     const { error: updateError } = await supabase.rpc(
       'update_view_duration',
       {
         p_view_id: viewId,
-        p_duration_sec: body.duration_sec,
+        p_duration_sec: typedBody.duration_sec,
       }
     );
 
@@ -151,7 +154,7 @@ export const GET = apiHandler(async (request: NextRequest, context: any) => {
 
   // Verify recording exists and belongs to user's organization
   const { data: recording, error: recordingError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, org_id')
     .eq('id', recordingId)
     .single();
@@ -179,7 +182,7 @@ export const GET = apiHandler(async (request: NextRequest, context: any) => {
   const { data: viewStats } = await supabase
     .from('recording_view_counts')
     .select('total_views, unique_viewers, last_viewed_at, avg_view_duration_sec')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .single();
 
   return successResponse({

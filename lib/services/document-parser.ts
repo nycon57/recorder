@@ -133,6 +133,7 @@ export class DocumentParser {
     options: ParserOptions
   ): Promise<ParsedDocument> {
     try {
+      // @ts-ignore - pdf-parse has incorrect type definitions
       const data = await pdfParse(buffer);
 
       let content = data.text;

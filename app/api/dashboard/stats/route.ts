@@ -68,7 +68,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
   try {
     // Parse and validate query parameters
     const params = parseSearchParams(request, dashboardStatsQuerySchema);
-    const { period, includeStorage, includeBreakdown } = params;
+    // Type assertion for parsed params
+    const typedParams = params as { period: string; includeStorage?: boolean; includeBreakdown?: boolean };
+    const { period, includeStorage, includeBreakdown } = typedParams;
 
     // PERFORMANCE OPTIMIZATION: Check cache first
     // Dashboard stats are expensive to compute, cache for 1 minute
@@ -89,7 +91,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     // Get total items count
     const { count: totalItems, error: countError } = await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .select('id', { count: 'exact', head: true })
       .eq('org_id', orgId)
       .is('deleted_at', null);
@@ -100,7 +102,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     // Get total storage used (sum of file sizes)
     const { data: storageData, error: storageError } = await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .select('file_size, content_type')
       .eq('org_id', orgId)
       .is('deleted_at', null);
@@ -116,7 +118,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const { count: itemsThisWeek, error: weekError } = await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .select('id', { count: 'exact', head: true })
       .eq('org_id', orgId)
       .is('deleted_at', null)
@@ -133,7 +135,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const { count: monthCount, error: monthError } = await supabaseAdmin
-        .from('recordings')
+        .from('content')
         .select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
         .is('deleted_at', null)
@@ -190,7 +192,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     // Get status breakdown
     const { data: statusData, error: statusError } = await supabaseAdmin
-      .from('recordings')
+      .from('content')
       .select('status')
       .eq('org_id', orgId)
       .is('deleted_at', null);

@@ -43,7 +43,7 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
 
   // Get current metrics from recordings
   const { data: recordings } = await supabaseAdmin
-    .from('recordings')
+    .from('content')
     .select('file_size, storage_tier, storage_provider, compression_stats, mime_type')
     .eq('org_id', orgId)
     .is('deleted_at', null);
@@ -91,7 +91,7 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
   const oneMonthAgo = subMonths(new Date(), 1);
 
   const { data: historicalMetrics } = await supabaseAdmin
-    .from('recordings')
+    .from('content')
     .select('file_size, created_at')
     .eq('org_id', orgId)
     .lt('created_at', oneMonthAgo.toISOString())

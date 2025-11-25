@@ -52,16 +52,14 @@ export function AppSidebar({ role, isSystemAdmin = false, ...props }: AppSidebar
             className="group flex items-center gap-2 rounded-lg p-2 transition-all duration-300 hover:bg-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2"
           >
             <div className="relative flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-sm">
-              <span className="relative text-xl">
-                🎥
-              </span>
+              <span className="relative text-sm font-bold">T</span>
             </div>
             <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
               <span className="truncate font-semibold transition-colors duration-300 group-hover:text-primary">
-                Record
+                Tribora
               </span>
               <span className="truncate text-xs text-muted-foreground transition-colors duration-300 group-hover:text-primary/60">
-                AI Knowledge
+                Knowledge Intelligence
               </span>
             </div>
           </Link>

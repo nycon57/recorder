@@ -326,8 +326,8 @@ export default function TextNoteViewer({
                     <div className="prose dark:prose-invert max-w-3xl mx-auto prose-sm sm:prose-base prose-headings:font-semibold prose-p:leading-relaxed">
                       <ReactMarkdown
                         components={{
-                          code(props: Parameters<NonNullable<Components['code']>>[0]) {
-                            const { inline, className, children, ...rest } = props;
+                          code(props) {
+                            const { node, inline, className, children, ...rest } = props as any;
                             const match = /language-(\w+)/.exec(className || '');
                             const language = match ? match[1] : '';
 
@@ -336,7 +336,6 @@ export default function TextNoteViewer({
                                 style={theme === 'dark' ? oneDark : oneLight}
                                 language={language}
                                 PreTag="div"
-                                {...rest}
                               >
                                 {String(children).replace(/\n$/, '')}
                               </SyntaxHighlighter>
@@ -365,8 +364,8 @@ export default function TextNoteViewer({
                 <div className="prose dark:prose-invert max-w-3xl mx-auto prose-sm sm:prose-base prose-headings:font-semibold prose-p:leading-relaxed">
                   <ReactMarkdown
                     components={{
-                      code(props: Parameters<NonNullable<Components['code']>>[0]) {
-                        const { inline, className, children, ...rest } = props;
+                      code(props) {
+                        const { node, inline, className, children, ...rest } = props as any;
                         const match = /language-(\w+)/.exec(className || '');
                         const language = match ? match[1] : '';
 
@@ -375,7 +374,6 @@ export default function TextNoteViewer({
                             style={theme === 'dark' ? oneDark : oneLight}
                             language={language}
                             PreTag="div"
-                            {...rest}
                           >
                             {String(children).replace(/\n$/, '')}
                           </SyntaxHighlighter>

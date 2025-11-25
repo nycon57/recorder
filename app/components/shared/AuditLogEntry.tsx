@@ -24,7 +24,13 @@ import {
 
 import { UserAvatar } from './UserAvatar';
 
-interface AuditLog {
+export interface AuditLogUser {
+  name: string | null;
+  email: string;
+  avatar_url: string | null;
+}
+
+export interface AuditLogEntryData {
   id: string;
   org_id: string;
   user_id: string | null;
@@ -38,15 +44,11 @@ interface AuditLog {
   request_id: string | null;
   metadata: any;
   created_at: string;
-  user?: {
-    name: string | null;
-    email: string;
-    avatar_url: string | null;
-  };
+  user?: AuditLogUser;
 }
 
-interface AuditLogEntryProps {
-  log: AuditLog;
+export interface AuditLogEntryProps {
+  log: AuditLogEntryData;
   expanded?: boolean;
   onToggle?: () => void;
 }
@@ -164,7 +166,9 @@ export function AuditLogEntry({ log, expanded = false, onToggle }: AuditLogEntry
           {log.user ? (
             <>
               <UserAvatar
-                user={log.user}
+                name={log.user.name || 'Unknown User'}
+                avatarUrl={log.user.avatar_url}
+                email={log.user.email}
                 size="sm"
               />
               <div className="flex flex-col">

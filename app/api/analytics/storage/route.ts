@@ -30,7 +30,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Base query
   let recordingsQuery = supabase
-    .from('recordings')
+    .from('content')
     .select('content_type, file_size, created_by, created_at')
     .eq('org_id', orgId)
     .is('deleted_at', null)

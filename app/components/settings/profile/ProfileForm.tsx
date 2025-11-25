@@ -12,6 +12,15 @@ import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Label } from '@/app/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/app/components/ui/form';
 import { updateProfileSchema, type UpdateProfileInput } from '@/lib/validations/api';
 
 // Timezone list
@@ -135,110 +144,157 @@ export function ProfileForm() {
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="name">Name *</Label>
-          <Input
-            id="name"
-            placeholder="John Doe"
-            {...form.register('name')}
-            disabled={isLoading}
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Name *</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="John Doe"
+                    {...field}
+                    disabled={isLoading}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Your display name across the platform
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-          {form.formState.errors.name && (
-            <p className="text-sm text-destructive">
-              {form.formState.errors.name.message}
+
+          {/* Email is read-only, not part of form schema */}
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled
+              className="bg-muted"
+              readOnly
+            />
+            <p className="text-[0.8rem] text-muted-foreground">
+              Email cannot be changed here
             </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="title"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Title</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="Software Engineer"
+                    {...field}
+                    value={field.value || ''}
+                    disabled={isLoading}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Your job title or role
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="phone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Phone</FormLabel>
+                <FormControl>
+                  <Input
+                    type="tel"
+                    placeholder="+1234567890"
+                    {...field}
+                    value={field.value || ''}
+                    disabled={isLoading}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Optional contact number
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name="timezone"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Timezone</FormLabel>
+              <Select
+                value={field.value}
+                onValueChange={field.onChange}
+                disabled={isLoading}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select timezone" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {TIMEZONES.map((tz) => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Your local timezone for scheduling
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
           )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled
-            className="bg-muted"
-            readOnly
-          />
-          <p className="text-xs text-muted-foreground">
-            Email cannot be changed here
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="title">Title</Label>
-          <Input
-            id="title"
-            placeholder="Software Engineer"
-            {...form.register('title')}
-            disabled={isLoading}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="phone">Phone</Label>
-          <Input
-            id="phone"
-            type="tel"
-            placeholder="+1234567890"
-            {...form.register('phone')}
-            disabled={isLoading}
-          />
-          {form.formState.errors.phone && (
-            <p className="text-sm text-destructive">
-              {form.formState.errors.phone.message}
-            </p>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="timezone">Timezone</Label>
-        <Select
-          value={form.watch('timezone')}
-          onValueChange={(value) => form.setValue('timezone', value)}
-          disabled={isLoading}
-        >
-          <SelectTrigger id="timezone">
-            <SelectValue placeholder="Select timezone" />
-          </SelectTrigger>
-          <SelectContent>
-            {TIMEZONES.map((tz) => (
-              <SelectItem key={tz.value} value={tz.value}>
-                {tz.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="bio">Bio</Label>
-        <Textarea
-          id="bio"
-          placeholder="Tell us about yourself..."
-          rows={4}
-          {...form.register('bio')}
-          disabled={isLoading}
         />
-        {form.formState.errors.bio && (
-          <p className="text-sm text-destructive">
-            {form.formState.errors.bio.message}
-          </p>
-        )}
-      </div>
 
-      <div className="flex justify-end">
-        <Button type="submit" disabled={isLoading}>
-          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Save Changes
-        </Button>
-      </div>
-    </form>
+        <FormField
+          control={form.control}
+          name="bio"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Bio</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Tell us about yourself..."
+                  rows={4}
+                  {...field}
+                  value={field.value || ''}
+                  disabled={isLoading}
+                />
+              </FormControl>
+              <FormDescription>
+                A brief description about yourself (max 500 characters)
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="flex justify-end">
+          <Button type="submit" disabled={isLoading}>
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Save Changes
+          </Button>
+        </div>
+      </form>
+    </Form>
   );
 }

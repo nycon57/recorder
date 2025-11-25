@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import {
   apiHandler,
@@ -124,14 +125,14 @@ export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
   const { orgId, userId: inviterId } = await requireAdmin();
 
   // Parse and validate request body
-  const body = await parseBody(request, inviteMemberSchema);
+  const bodyData = await parseBody<z.infer<typeof inviteMemberSchema>>(request, inviteMemberSchema);
 
   // Check if email is already a member
   const { data: existingUser, error: existingUserError } = await supabaseAdmin
     .from('users')
     .select('id, email, status')
     .eq('org_id', orgId)
-    .eq('email', body.email)
+    .eq('email', bodyData.email)
     .is('deleted_at', null)
     .maybeSingle();
 
@@ -153,7 +154,7 @@ export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
     .from('user_invitations')
     .select('id, status')
     .eq('org_id', orgId)
-    .eq('email', body.email)
+    .eq('email', bodyData.email)
     .eq('status', 'pending')
     .maybeSingle();
 
@@ -209,12 +210,12 @@ export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
     .from('user_invitations')
     .insert({
       org_id: orgId,
-      email: body.email,
-      role: body.role,
+      email: bodyData.email,
+      role: bodyData.role,
       token,
       invited_by: inviterId,
-      department_ids: body.department_ids || [],
-      custom_message: body.custom_message,
+      department_ids: bodyData.department_ids || [],
+      custom_message: bodyData.custom_message,
       expires_at: expiresAt.toISOString(),
       status: 'pending',
       sent_at: new Date().toISOString(),

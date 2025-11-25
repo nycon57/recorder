@@ -472,7 +472,7 @@ export function selectTranscriptionProvider(
 
   // Use higher quality for code demos (need accuracy)
   if (category === 'code_demo' || category === 'tutorial') {
-    return audioClassification.quality === 'low' ? 'assemblyai' : 'gemini';
+    return audioClassification?.quality === 'low' ? 'assemblyai' : 'gemini';
   }
 
   // Use Gemini for video understanding

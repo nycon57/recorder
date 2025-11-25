@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Briefcase, Check } from 'lucide-react';
+import { Briefcase, Check, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
@@ -18,7 +18,7 @@ import { Label } from '@/app/components/ui/label';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 
-import type { OrganizationMember, Department } from '../types';
+import type { OrganizationMember, Department } from '@/app/(dashboard)/settings/organization/members/types';
 
 interface AssignDepartmentsModalProps {
   member: OrganizationMember;
@@ -34,7 +34,7 @@ export function AssignDepartmentsModal({
   onSuccess,
 }: AssignDepartmentsModalProps) {
   const [selectedDepts, setSelectedDepts] = useState<string[]>(
-    member.departments?.map((d) => d.id) || []
+    member.departments?.map((d: Department) => d.id) || []
   );
 
   // Fetch available departments
@@ -52,7 +52,7 @@ export function AssignDepartmentsModal({
   // Update selected departments when modal opens
   useEffect(() => {
     if (open) {
-      setSelectedDepts(member.departments?.map((d) => d.id) || []);
+      setSelectedDepts(member.departments?.map((d: Department) => d.id) || []);
     }
   }, [open, member.departments]);
 
@@ -147,8 +147,16 @@ export function AssignDepartmentsModal({
             <Button
               type="submit"
               disabled={updateDepartmentsMutation.isPending || departments.length === 0}
+              className="min-w-[140px]"
             >
-              {updateDepartmentsMutation.isPending ? 'Updating...' : 'Update Departments'}
+              {updateDepartmentsMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                'Update Departments'
+              )}
             </Button>
           </DialogFooter>
         </form>

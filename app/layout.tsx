@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { ThemeProvider } from 'next-themes';
+import Script from 'next/script';
 
 import { Toaster } from '@/app/components/ui/sonner';
 import { ClerkProviderWrapper } from '@/app/components/providers/clerk-provider-wrapper';
@@ -15,34 +16,34 @@ export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   ),
-  title: 'Record - AI-Powered Knowledge Management',
+  title: 'Tribora - Illuminate Your Team\'s Knowledge',
   description:
-    'Record your screen and camera, automatically transcribe and generate documentation with AI.',
-  keywords: 'screen recording, transcription, AI documentation, knowledge management',
-  authors: [{ name: 'Record Team' }],
+    'The Knowledge Intelligence Layer — capture tacit expertise through screen recordings and transform it into structured, searchable documentation.',
+  keywords: 'knowledge management, screen recording, transcription, AI documentation, tacit knowledge, workflow extraction',
+  authors: [{ name: 'Tribora Team' }],
   icons: {
     icon: '/icon.svg',
   },
   openGraph: {
-    title: 'Record - AI-Powered Knowledge Management',
+    title: 'Tribora - Illuminate Your Team\'s Knowledge',
     description:
-      'Record your screen and camera, automatically transcribe and generate documentation with AI.',
+      'The Knowledge Intelligence Layer — capture tacit expertise through screen recordings and transform it into structured, searchable documentation.',
     type: 'website',
-    url: 'https://record.addy.ie',
+    url: 'https://tribora.com',
     images: [
       {
         url: '/screenshot-02.jpg',
         width: 1200,
         height: 630,
-        alt: 'Record Screenshot',
+        alt: 'Tribora - Knowledge Intelligence Platform',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Record - AI-Powered Knowledge Management',
+    title: 'Tribora - Illuminate Your Team\'s Knowledge',
     description:
-      'Record your screen and camera, automatically transcribe and generate documentation with AI.',
+      'The Knowledge Intelligence Layer — capture tacit expertise through screen recordings and transform it into structured, searchable documentation.',
     images: ['/screenshot-02.jpg'],
   },
 };
@@ -60,6 +61,13 @@ export default function RootLayout({
         {/* Outfit (Axiforma alternative) for headers, Inter for body */}
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
         <link rel="manifest" href="/manifest.json" />
+        {process.env.NODE_ENV === 'development' && (
+          <Script
+            src="https://cdn.jsdelivr.net/npm/react-grab@latest/dist/index.js"
+            strategy="afterInteractive"
+            type="module"
+          />
+        )}
       </head>
       <body className="bg-background text-foreground antialiased" suppressHydrationWarning>
         <ClerkProviderWrapper>

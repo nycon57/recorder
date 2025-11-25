@@ -65,7 +65,7 @@ export const GET = apiHandler(async (
 
     // Verify recording exists and belongs to org
     const { data: recording, error: fetchError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, org_id, status')
       .eq('id', recordingId)
       .eq('org_id', orgId)
@@ -94,7 +94,7 @@ export const GET = apiHandler(async (
     const thumbnailPath = `${orgId}/uploads/${recordingId}/thumbnail.${extension}`;
 
     const { data: thumbnailUploadData, error: uploadUrlError } = await supabase.storage
-      .from('recordings')
+      .from('content')
       .createSignedUploadUrl(thumbnailPath, {
         upsert: true, // Allow overwriting existing thumbnail
       });

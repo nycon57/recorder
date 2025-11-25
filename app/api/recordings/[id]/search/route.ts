@@ -32,7 +32,7 @@ export const POST = apiHandler(
     // Verify recording exists and belongs to org
     const supabase = await createClient();
     const { data: recording, error: recordingError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, title, status')
       .eq('id', recordingId)
       .eq('org_id', orgId)

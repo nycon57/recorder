@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 
 import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
-import { createApiKeySchema } from '@/lib/validations/api';
+import { createApiKeySchema, CreateApiKeyInput } from '@/lib/validations/api';
 import { rateLimit, RateLimitTier, extractUserIdFromAuth } from '@/lib/middleware/rate-limit';
 
 /**
@@ -66,7 +66,7 @@ export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
     throw new Error('Unauthorized: Admin access required');
   }
 
-  const body = await parseBody(request, createApiKeySchema);
+  const bodyData = await parseBody<CreateApiKeyInput>(request, createApiKeySchema);
   const supabase = await createClient();
 
   // Generate a secure API key
@@ -88,14 +88,14 @@ export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
     .insert({
       org_id: orgId,
       created_by: userId,
-      name: body.name,
-      description: body.description,
+      name: bodyData.name,
+      description: bodyData.description,
       key_hash: keyHash,
       key_prefix: keyPrefix,
-      scopes: body.scopes,
-      rate_limit: body.rate_limit,
-      ip_whitelist: body.ip_whitelist || null,
-      expires_at: body.expires_at || null,
+      scopes: bodyData.scopes,
+      rate_limit: bodyData.rate_limit,
+      ip_whitelist: bodyData.ip_whitelist || null,
+      expires_at: bodyData.expires_at || null,
       status: 'active',
     })
     .select()
@@ -111,8 +111,8 @@ export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
     resource_type: 'api_key',
     resource_id: newKey.id,
     metadata: {
-      key_name: body.name,
-      scopes: body.scopes,
+      key_name: bodyData.name,
+      scopes: bodyData.scopes,
     },
   });
 

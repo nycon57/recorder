@@ -279,11 +279,11 @@ export class NotionConnector implements Connector {
         // Process each result
         for (const item of searchResult.results) {
           try {
-            if (item.object === 'page') {
-              await this.processPage(item as NotionPage);
+            if ((item as any).object === 'page') {
+              await this.processPage(item as any);
               result.filesProcessed++;
-            } else if (item.object === 'database') {
-              await this.processDatabase(item as NotionDatabase);
+            } else if ((item as any).object === 'database') {
+              await this.processDatabase(item as any);
               result.filesProcessed++;
             }
 
@@ -542,7 +542,7 @@ export class NotionConnector implements Connector {
         queryParams.start_cursor = startCursor;
       }
 
-      const response = await this.notion.databases.query(queryParams);
+      const response = await (this.notion.databases as any).query(queryParams);
       pages.push(...response.results);
 
       hasMore = response.has_more;
@@ -961,7 +961,7 @@ export class NotionConnector implements Connector {
               file_size: Buffer.byteLength(doc.content, 'utf8'),
               source_metadata: doc.sourceMetadata,
               last_synced_at: now,
-              sync_count: existing.sync_count + 1,
+              sync_count: ((existing as any).sync_count || 0) + 1,
               processing_status: 'pending',
               chunks_generated: false,
               embeddings_generated: false,
@@ -975,7 +975,7 @@ export class NotionConnector implements Connector {
             .from('imported_documents')
             .update({
               last_synced_at: now,
-              sync_count: existing.sync_count + 1,
+              sync_count: ((existing as any).sync_count || 0) + 1,
             })
             .eq('id', existing.id);
         }

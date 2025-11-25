@@ -163,7 +163,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Check storage tier distribution using server-side aggregation
   const { data: tierStats, error: tierError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('storage_tier')
     .eq('org_id', orgId)
     .is('deleted_at', null);

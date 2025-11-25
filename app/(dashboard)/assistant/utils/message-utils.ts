@@ -400,8 +400,16 @@ export function parseCitationsToMarkdown(
 
     // Add highlight query parameters if available
     if (sourceKey && source.metadata?.chunkId) {
-      const separator = url.includes('?') ? '&' : '?';
-      url = `${url}${separator}sourceKey=${encodeURIComponent(sourceKey)}&highlight=${encodeURIComponent(source.metadata.chunkId)}`;
+      const chunkId = source.metadata.chunkId;
+      // Ensure chunkId is a valid type (string, number, or boolean)
+      const chunkIdValue = typeof chunkId === 'string' || typeof chunkId === 'number' || typeof chunkId === 'boolean'
+        ? String(chunkId)
+        : '';
+
+      if (chunkIdValue) {
+        const separator = url.includes('?') ? '&' : '?';
+        url = `${url}${separator}sourceKey=${encodeURIComponent(sourceKey)}&highlight=${encodeURIComponent(chunkIdValue)}`;
+      }
     }
 
     citationMap.set(index + 1, url);

@@ -34,7 +34,8 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
 
   const { id: recommendationId } = await context.params;
   const body = await parseBody(request, recommendationProgressSchema);
-  const { progress } = body;
+  // Type assertion for parsed body
+  const { progress } = body as { progress: number };
 
   // Update recommendation progress
   const { data: recommendation, error } = await supabaseAdmin

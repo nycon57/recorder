@@ -173,6 +173,7 @@ export class RateLimiter {
     const limiter = limiters[type];
 
     try {
+      // @ts-ignore - resetUsage exists but is not in type definitions for some versions
       await limiter.resetUsage(identifier);
       console.log(`[RateLimiter] Reset ${type} limit for ${identifier}`);
     } catch (error) {

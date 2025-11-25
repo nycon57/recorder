@@ -28,7 +28,3 @@ export type { UsageProgressBarProps } from './UsageProgressBar';
 // Audit Log Entry Component
 export { AuditLogEntry } from './AuditLogEntry';
 export type { AuditLogEntryProps, AuditLogEntryData, AuditLogUser } from './AuditLogEntry';
-
-// Data Table Component
-export { DataTable } from './DataTable';
-export type { DataTableProps, Column } from './DataTable';

@@ -377,7 +377,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       // 1. Camera-only mode
       // 2. Screen-only mode with entire screen shared (PiP would be disruptive)
       beginRecordingWithCountdown();
-    } else if (layout !== 'cameraOnly' && !pipWindow) {
+    } else if (layout === 'screenAndCamera' && !pipWindow) {
       // Open PiP for screen-based layouts that need it:
       // 1. Screen+camera mode (always needs PiP for camera display)
       // 2. Screen-only mode with tab/window share (not entire screen)
@@ -468,7 +468,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         // CRITICAL: Clear recording timer to prevent duration incrementing after abort
         if (recordingTimerRef.current) {
           clearInterval(recordingTimerRef.current);
-          recordingTimerRef.current = undefined;
+          recordingTimerRef.current = null;
         }
         recordingStartTimeRef.current = null;
         setRecordingDuration(0);

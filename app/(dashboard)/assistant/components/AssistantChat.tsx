@@ -13,6 +13,7 @@
 
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
 import { toast } from 'sonner';
 import {
   PromptInputProvider,
@@ -116,12 +117,8 @@ function AssistantChatInner({
     error,
     stop,
   } = useChat({
-    api: apiEndpoint,
-    streamProtocol: 'data',
-    onResponse: (response) => {
-      // Stream started
-    },
-    onFinish: async (message) => {
+    transport: new DefaultChatTransport({ api: apiEndpoint }),
+    onFinish: async (message: any) => {
       console.log('[AssistantChat] onFinish called with message:', {
         hasId: 'id' in message,
         id: (message as any).id,
@@ -229,9 +226,19 @@ function AssistantChatInner({
               hasMetadata: !!(msg as any).metadata,
             });
 
+            // Extract content from UIMessage (AI SDK v5 uses .parts array)
+            const textContent = 'parts' in msg && Array.isArray((msg as any).parts)
+              ? (msg as any).parts.find((p: any) => p.type === 'text')?.text || ''
+              : '';
+
             const extendedMessage: ExtendedMessage = {
-              ...msg,
+              id: msg.id,
+              role: msg.role,
+              parts: (msg as any).parts || [],
+              content: textContent,
               createdAt: new Date(),
+              // Only include metadata if it matches our type
+              ...(msg.metadata && typeof msg.metadata === 'object' ? { metadata: msg.metadata as any } : {}),
             };
             addMessage(extendedMessage);
           }
@@ -273,7 +280,7 @@ function AssistantChatInner({
           id: messageId,
           role: 'user',
           content: text,
-        });
+        } as any);
       } catch (error) {
         console.error('[AssistantChat] sendMessage() failed:', error);
         toast.error('Failed to send message', {

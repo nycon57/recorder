@@ -40,7 +40,7 @@ export type UserSession = {
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
-  const filters = parseSearchParams(request, sessionFiltersSchema);
+  const filtersData: SessionFilters = parseSearchParams(request, sessionFiltersSchema);
   const supabase = supabaseAdmin;
 
   // Build base query
@@ -58,27 +58,27 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .order('last_active_at', { ascending: false });
 
   // Apply filters
-  if (filters.userId) {
-    query = query.eq('user_id', filters.userId);
+  if (filtersData.userId) {
+    query = query.eq('user_id', filtersData.userId);
   }
 
-  if (filters.deviceType) {
-    query = query.eq('device_type', filters.deviceType);
+  if (filtersData.deviceType) {
+    query = query.eq('device_type', filtersData.deviceType);
   }
 
-  if (filters.active === 'true') {
+  if (filtersData.active === 'true') {
     // Active sessions: not revoked and not expired
     query = query
       .is('revoked_at', null)
       .gte('expires_at', new Date().toISOString());
-  } else if (filters.active === 'false') {
+  } else if (filtersData.active === 'false') {
     // Inactive sessions: either revoked or expired
     query = query.or(`revoked_at.not.is.null,expires_at.lt.${new Date().toISOString()}`);
   }
 
   // Apply pagination
-  const offset = (filters.page - 1) * filters.limit;
-  query = query.range(offset, offset + filters.limit - 1);
+  const offset = (filtersData.page - 1) * filtersData.limit;
+  query = query.range(offset, offset + filtersData.limit - 1);
 
   const { data: sessions, error: sessionsError, count } = await query;
 
@@ -116,10 +116,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
   return successResponse({
     sessions: processedSessions,
     pagination: {
-      page: filters.page,
-      limit: filters.limit,
+      page: filtersData.page,
+      limit: filtersData.limit,
       total: count || 0,
-      totalPages: Math.ceil((count || 0) / filters.limit),
+      totalPages: Math.ceil((count || 0) / filtersData.limit),
     },
     stats: {
       activeCount: activeSessionCount,

@@ -48,7 +48,7 @@ export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteP
 
   // Verify recordings exist and belong to org
   const { data: recordings, error: recordingsError } = await supabaseAdmin
-    .from('recordings')
+    .from('content')
     .select('id, title')
     .in('id', body.recording_ids)
     .eq('org_id', orgId);
@@ -64,11 +64,11 @@ export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteP
 
   // Remove tag associations
   const { data: deleted, error: deleteError } = await supabaseAdmin
-    .from('recording_tags')
+    .from('content_tags')
     .delete()
     .eq('tag_id', tagId)
-    .in('recording_id', body.recording_ids)
-    .select('recording_id');
+    .in('content_id', body.recording_ids)
+    .select('content_id');
 
   if (deleteError) {
     console.error('[DELETE /api/tags/[id]/remove] Error removing tags:', deleteError);
@@ -77,7 +77,7 @@ export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteP
 
   // Log activity for each recording
   const activityLogs = recordings
-    .filter(recording => deleted?.some(d => d.recording_id === recording.id))
+    .filter(recording => deleted?.some(d => d.content_id === recording.id))
     .map(recording => ({
       org_id: orgId,
       user_id: userId,

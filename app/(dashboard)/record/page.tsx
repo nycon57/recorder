@@ -4,8 +4,8 @@ import { redirect } from 'next/navigation';
 import RecorderApp from '@/app/components/RecorderApp';
 
 export const metadata = {
-  title: 'New Recording - Record',
-  description: 'Create a new screen and camera recording',
+  title: 'New Recording - Tribora',
+  description: 'Capture your expertise with a new screen recording',
 };
 
 export default async function RecordPage() {

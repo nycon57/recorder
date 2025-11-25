@@ -392,7 +392,7 @@ export class URLImportConnector implements Connector {
         '';
 
       // Extract main content
-      let contentHtml: string;
+      let contentHtml: string = '';
 
       if (options?.mainContentSelector) {
         contentHtml = $(options.mainContentSelector).html() || '';

@@ -21,9 +21,9 @@ export const GET = apiHandler(
     const url = new URL(request.url);
     const includeDeleted = url.searchParams.get('includeDeleted') === 'true';
 
-    // Fetch recording with related data
+    // Fetch content with related data
     let query = supabase
-      .from('recordings')
+      .from('content')
       .select(
         `
       *,
@@ -88,9 +88,9 @@ export const PUT = apiHandler(
     const body = await request.json();
     const { title, description, metadata } = body;
 
-    // Update recording
+    // Update content
     const { data: recording, error } = await supabase
-      .from('recordings')
+      .from('content')
       .update({
         title,
         description,
@@ -136,9 +136,9 @@ export const DELETE = apiHandler(
       },
     });
 
-    // Check if recording exists and belongs to org
+    // Check if content exists and belongs to org
     const { data: recording, error: fetchError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, org_id, storage_path_raw, storage_path_processed, deleted_at')
       .eq('id', id)
       .eq('org_id', orgId)
@@ -199,7 +199,7 @@ export const DELETE = apiHandler(
       // This ensures we never leave orphaned DB rows if storage deletion fails
       logger.debug('DELETE Recording - About to execute DELETE query');
       const { data: deletedData, error: dbError } = await supabase
-        .from('recordings')
+        .from('content')
         .delete()
         .eq('id', id)
         .eq('org_id', orgId)
@@ -292,7 +292,7 @@ export const DELETE = apiHandler(
     console.log('[DELETE Recording] Performing soft delete');
 
     const { error } = await supabase
-      .from('recordings')
+      .from('content')
       .update({
         deleted_at: new Date().toISOString(),
         deleted_by: userId,

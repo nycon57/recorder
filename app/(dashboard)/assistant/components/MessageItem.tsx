@@ -208,7 +208,7 @@ export function MessageItem({
         {/* Tool Calls */}
         {isAssistant && hasToolCalls && message.toolInvocations && (
           <div className="space-y-2">
-            {message.toolInvocations.map((tool, idx) => (
+            {message.toolInvocations.map((tool: any, idx) => (
               <Tool key={idx} defaultOpen={false}>
                 <ToolHeader
                   title={tool.toolName}

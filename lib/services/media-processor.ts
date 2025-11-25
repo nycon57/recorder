@@ -158,7 +158,7 @@ export class MediaProcessor {
       const inputPath = tempInputFile || input;
 
       await new Promise<void>((resolve, reject) => {
-        let command = ffmpeg(inputPath);
+        let command = ffmpeg(inputPath as string);
 
         // Set output format
         if (options.format) {
@@ -246,7 +246,7 @@ export class MediaProcessor {
       const inputPath = tempInputFile || input;
 
       await new Promise<void>((resolve, reject) => {
-        let command = ffmpeg(inputPath);
+        let command = ffmpeg(inputPath as string);
 
         // Set timestamp (default to 1 second)
         const timestamp = options.timestamp !== undefined ? options.timestamp : 1;
@@ -299,7 +299,7 @@ export class MediaProcessor {
       const timestamps = Array.from({ length: count }, (_, i) => (i + 1) * interval);
 
       await new Promise<void>((resolve, reject) => {
-        let command = ffmpeg(inputPath);
+        let command = ffmpeg(inputPath as string);
 
         command = command.screenshots({
           timestamps,
@@ -346,7 +346,7 @@ export class MediaProcessor {
       const inputPath = tempInputFile || input;
 
       await new Promise<void>((resolve, reject) => {
-        let command = ffmpeg(inputPath);
+        let command = ffmpeg(inputPath as string);
 
         // Remove video stream
         command = command.noVideo();
@@ -414,7 +414,7 @@ export class MediaProcessor {
       const inputPath = tempInputFile || input;
 
       await new Promise<void>((resolve, reject) => {
-        let command = ffmpeg(inputPath);
+        let command = ffmpeg(inputPath as string);
 
         // Set dimensions
         if (options.width || options.height) {

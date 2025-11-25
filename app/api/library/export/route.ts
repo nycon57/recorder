@@ -37,15 +37,22 @@ type ExportRequest = z.infer<typeof exportRequestSchema>;
  * POST /api/library/export
  * Create an export of library content
  */
-export const POST = apiHandler(async (request: NextRequest) => {
+export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
-  const { orgId } = await requireOrg();
-  const body = await parseBody(request, exportRequestSchema);
 
   try {
+    const { orgId } = await requireOrg();
+    const body = await parseBody(request, exportRequestSchema);
+
+    if (!body || typeof body !== 'object') {
+      return errors.badRequest('Invalid request body', undefined, requestId);
+    }
+
+    const exportData = body as ExportRequest;
+
     // Get recordings to export
     let query = supabaseAdmin
-      .from('recordings')
+      .from('content')
       .select(`
         *,
         transcripts!recording_id (*),
@@ -55,8 +62,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
       .is('deleted_at', null);
 
     // Filter by specific IDs if provided
-    if (body.recordingIds && body.recordingIds.length > 0) {
-      query = query.in('id', body.recordingIds);
+    if (exportData.recordingIds && exportData.recordingIds.length > 0) {
+      query = query.in('id', exportData.recordingIds);
     }
 
     const { data: recordings, error } = await query;
@@ -71,21 +78,30 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
 
     // Handle different export formats
-    switch (body.format) {
+    switch (exportData.format) {
       case 'json':
-        return await exportAsJSON(recordings, body.options, requestId);
+        return await exportAsJSON(recordings, exportData.options, requestId);
       case 'csv':
         return await exportAsCSV(recordings, requestId);
       case 'zip':
-        return await exportAsZIP(recordings, body.options, orgId, requestId);
+        return await exportAsZIP(recordings, exportData.options, orgId, requestId);
       default:
         return errors.badRequest('Invalid export format', undefined, requestId);
     }
   } catch (error: any) {
     console.error('[Export] Request error:', error);
+
+    if (error.message === 'Unauthorized') {
+      return errors.unauthorized(requestId);
+    }
+
+    if (error.message === 'Organization context required') {
+      return errors.forbidden(requestId);
+    }
+
     return errors.internalError(requestId);
   }
-});
+}
 
 /**
  * Export as JSON
@@ -238,7 +254,7 @@ async function exportAsZIP(recordings: any[], options: any, orgId: string, reque
         try {
           // Download file from Supabase Storage
           const { data: fileData, error } = await supabaseAdmin.storage
-            .from('recordings')
+            .from('content')
             .download(recording.storage_path_raw);
 
           if (!error && fileData) {
@@ -285,7 +301,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   try {
     // Get recordings to estimate size
     let query = supabaseAdmin
-      .from('recordings')
+      .from('content')
       .select('file_size')
       .eq('org_id', orgId)
       .is('deleted_at', null);

@@ -130,7 +130,7 @@ export const POST = withRateLimit(
 
       // Create recording entry with uploading status
       const { data: recording, error: dbError } = await supabase
-        .from('recordings')
+        .from('content')
         .insert({
           org_id: orgId,
           created_by: userId,
@@ -184,7 +184,7 @@ export const POST = withRateLimit(
 
       // Generate presigned upload URL for main file
       const { data: fileUploadData, error: fileUploadError } = await supabase.storage
-        .from('recordings')
+        .from('content')
         .createSignedUploadUrl(filePath, {
           upsert: false,
         });
@@ -210,14 +210,14 @@ export const POST = withRateLimit(
         }
 
         // Cleanup: delete the recording
-        await supabase.from('recordings').delete().eq('id', recording.id);
+        await supabase.from('content').delete().eq('id', recording.id);
 
         return errors.internalError(requestId);
       }
 
       // Generate presigned upload URL for thumbnail (optional)
       const { data: thumbnailUploadData } = await supabase.storage
-        .from('recordings')
+        .from('content')
         .createSignedUploadUrl(thumbnailPath, {
           upsert: true, // Allow override
         });

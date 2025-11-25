@@ -125,7 +125,7 @@ export async function generateEmbeddings(job: Job): Promise<void> {
         const embedding = response.data[j].embedding;
 
         embeddingRecords.push({
-          recording_id: recordingId,
+          content_id: recordingId,
           org_id: orgId,
           chunk_text: chunk.text,
           embedding: JSON.stringify(embedding), // Supabase expects string for vector type

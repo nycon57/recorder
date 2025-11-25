@@ -48,7 +48,7 @@ export const POST = apiHandler(async (request: NextRequest, { params }: RoutePar
 
   // Verify recordings exist and belong to org
   const { data: recordings, error: recordingsError } = await supabaseAdmin
-    .from('recordings')
+    .from('content')
     .select('id, title')
     .in('id', body.recording_ids)
     .eq('org_id', orgId);
@@ -70,9 +70,9 @@ export const POST = apiHandler(async (request: NextRequest, { params }: RoutePar
   }));
 
   const { data: inserted, error: insertError } = await supabaseAdmin
-    .from('recording_tags')
+    .from('content_tags')
     .upsert(associations, { onConflict: 'recording_id,tag_id', ignoreDuplicates: true })
-    .select('recording_id');
+    .select('content_id');
 
   if (insertError) {
     console.error('[POST /api/tags/[id]/apply] Error applying tags:', insertError);

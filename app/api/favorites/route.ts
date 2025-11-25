@@ -120,7 +120,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   // Verify recording exists and belongs to this org
   const { data: recording, error: recordingError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, title')
     .eq('id', body.recording_id)
     .eq('org_id', orgId)

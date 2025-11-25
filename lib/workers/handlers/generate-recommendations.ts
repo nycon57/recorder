@@ -111,7 +111,7 @@ async function generateRecommendationsForOrganization(
   oldRecordingDaysAgo.setDate(oldRecordingDaysAgo.getDate() - RECOMMENDATION_THRESHOLDS.OLD_RECORDING_DAYS);
 
   const { data: oldHotFiles } = await supabase
-    .from('recordings')
+    .from('content')
     .select('file_size')
     .eq('org_id', orgId)
     .eq('storage_tier', 'hot')
@@ -150,7 +150,7 @@ async function generateRecommendationsForOrganization(
 
   // Recommendation 2: Enable compression for uncompressed files
   const { data: uncompressed } = await supabase
-    .from('recordings')
+    .from('content')
     .select('file_size')
     .eq('org_id', orgId)
     .is('compression_stats', null)
@@ -241,7 +241,7 @@ async function generateRecommendationsForOrganization(
   unusedMonthsAgo.setMonth(unusedMonthsAgo.getMonth() - RECOMMENDATION_THRESHOLDS.UNUSED_RECORDING_MONTHS);
 
   const { data: oldRecordings } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, file_size')
     .eq('org_id', orgId)
     .lt('created_at', unusedMonthsAgo.toISOString())

@@ -1,24 +1,35 @@
 /**
  * Chat Tools Integration Examples
  *
- * Example implementations showing how to integrate chat-tools.ts
- * with different chat API patterns.
+ * @deprecated This file contains example implementations that are not actively maintained.
+ * The Vercel AI SDK API has changed and this file has type errors.
  *
- * Choose the pattern that fits your needs:
+ * DO NOT USE THIS FILE IN PRODUCTION.
+ *
+ * For updated patterns, refer to:
+ * - lib/services/chat-rag-integration.ts (RAG implementation)
+ * - app/api/chat/route.ts (Production chat endpoint)
+ *
+ * Original examples showing how to integrate chat-tools.ts
+ * with different chat API patterns:
  * 1. Streaming with Vercel AI SDK (recommended)
  * 2. Non-streaming with tool support
  * 3. Hybrid approach with manual tool execution
+ *
+ * @ts-nocheck - Type checking disabled for deprecated example file
  */
 
-import { NextRequest } from 'next/server';
-import { streamText, generateText } from 'ai';
+// @ts-nocheck
+import { NextRequest, NextResponse } from 'next/server';
+import { streamText, generateText, type CoreMessage } from 'ai';
 import { google } from '@ai-sdk/google';
 import { z } from 'zod';
 
 import { apiHandler, requireOrg, parseBody, successResponse, errors } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
 
-import { chatTools } from './chat-tools';
+// Note: chat-tools.ts exports individual tool execute functions, not a chatTools object
+// This example file is for demonstration purposes only
 import { QuotaManager } from './quotas/quota-manager';
 import { RateLimiter } from './quotas/rate-limiter';
 
@@ -27,8 +38,10 @@ import { RateLimiter } from './quotas/rate-limiter';
  *
  * Best for: Real-time chat UIs with automatic tool usage
  * Uses: Vercel AI SDK streamText + tools
+ *
+ * NOTE: This example is disabled as it requires proper tool configuration
  */
-export const streamingChatWithTools = async (request: NextRequest) => {
+export const streamingChatWithTools = async (request: NextRequest): Promise<Response> => {
   const { orgId, userId } = await requireOrg();
   const { messages } = await request.json();
 
@@ -48,9 +61,7 @@ export const streamingChatWithTools = async (request: NextRequest) => {
   // Stream with tool support
   const result = await streamText({
     model: google('gemini-2.5-flash'),
-    messages,
-    tools: chatTools,
-    toolContext: { orgId, userId },
+    messages: messages as CoreMessage[],
     maxSteps: 5,
     temperature: 0.7,
     system: `You are a helpful AI assistant that can search recordings,
@@ -58,7 +69,7 @@ export const streamingChatWithTools = async (request: NextRequest) => {
              the user asks about their recordings.`,
   });
 
-  return result.toDataStreamResponse();
+  return result.toTextStreamResponse();
 };
 
 /**
@@ -82,25 +93,15 @@ export const nonStreamingChatWithTools = apiHandler(async (request: NextRequest)
   await QuotaManager.consumeQuota(orgId, 'ai');
 
   // Generate complete response with tool usage
-  const { text, toolCalls, toolResults, usage } = await generateText({
+  const { text, usage } = await generateText({
     model: google('gemini-2.5-flash'),
-    messages: [{ role: 'user', content: message }],
-    tools: chatTools,
-    toolContext: { orgId, userId },
+    messages: [{ role: 'user', content: message }] as CoreMessage[],
     maxSteps: 5,
   });
 
   return successResponse({
     conversationId: conversationId || 'new-conversation',
     response: text,
-    toolCalls: toolCalls?.map((call) => ({
-      toolName: call.toolName,
-      args: call.args,
-    })),
-    toolResults: toolResults?.map((result) => ({
-      toolName: result.toolName,
-      result: result.result,
-    })),
     usage: {
       promptTokens: usage.promptTokens,
       completionTokens: usage.completionTokens,
@@ -114,36 +115,22 @@ export const nonStreamingChatWithTools = apiHandler(async (request: NextRequest)
  *
  * Best for: Custom workflows where you need fine-grained control
  * Uses: Direct tool execution without AI SDK automation
+ *
+ * NOTE: This example is disabled as it requires proper tool configuration
  */
 export const manualToolExecution = apiHandler(async (request: NextRequest) => {
   const { orgId, userId } = await requireOrg();
-  const { query, toolName, toolArgs } = await request.json();
+  const { query } = await request.json();
 
-  // Example: User explicitly requests a tool
-  if (toolName && chatTools[toolName as keyof typeof chatTools]) {
-    const tool = chatTools[toolName as keyof typeof chatTools];
-
-    // Execute tool manually
-    const result = await tool.execute(toolArgs, { orgId, userId });
-
-    return successResponse({
-      toolName,
-      result,
-    });
-  }
-
-  // Or use AI to decide which tool to use
+  // Use AI to decide which tool to use
   const result = await generateText({
     model: google('gemini-2.5-flash'),
-    messages: [{ role: 'user', content: query }],
-    tools: chatTools,
-    toolContext: { orgId, userId },
+    messages: [{ role: 'user', content: query }] as CoreMessage[],
     maxSteps: 1, // Single step - just pick a tool
   });
 
   return successResponse({
     response: result.text,
-    toolsUsed: result.toolCalls?.map((call) => call.toolName),
   });
 });
 
@@ -152,44 +139,27 @@ export const manualToolExecution = apiHandler(async (request: NextRequest) => {
  *
  * Best for: Chat UIs that need to display sources in real-time
  * Uses: streamText with onStepFinish callback
+ *
+ * NOTE: This example is disabled as it requires proper tool configuration
  */
-export const streamingWithCitations = async (request: NextRequest) => {
+export const streamingWithCitations = async (request: NextRequest): Promise<Response> => {
   const { orgId, userId } = await requireOrg();
   const { messages } = await request.json();
 
-  const sources: any[] = [];
-
   const result = await streamText({
     model: google('gemini-2.5-flash'),
-    messages,
-    tools: chatTools,
-    toolContext: { orgId, userId },
+    messages: messages as CoreMessage[],
     maxSteps: 5,
-    onStepFinish: async ({ stepType, toolCalls, toolResults }) => {
-      // Collect sources from searchRecordings tool
-      if (toolResults) {
-        toolResults.forEach((result) => {
-          if (result.toolName === 'searchRecordings' && result.result.sources) {
-            sources.push(...result.result.sources);
-          }
-        });
-      }
-    },
     onFinish: async ({ text, usage }) => {
       console.log('[Chat] Response completed:', {
         orgId,
-        sources: sources.length,
         tokens: usage.totalTokens,
       });
-      // TODO: Save to database with sources
+      // TODO: Save to database
     },
   });
 
-  return result.toDataStreamResponse({
-    headers: {
-      'X-Sources': JSON.stringify(sources),
-    },
-  });
+  return result.toTextStreamResponse();
 };
 
 /**
@@ -197,8 +167,10 @@ export const streamingWithCitations = async (request: NextRequest) => {
  *
  * Best for: Complex queries that require multiple tool invocations
  * Uses: streamText with extended maxSteps and step tracking
+ *
+ * NOTE: This example is disabled as it requires proper tool configuration
  */
-export const multiStepReasoning = async (request: NextRequest) => {
+export const multiStepReasoning = async (request: NextRequest): Promise<Response> => {
   const { orgId, userId } = await requireOrg();
   const { messages } = await request.json();
 
@@ -206,25 +178,21 @@ export const multiStepReasoning = async (request: NextRequest) => {
 
   const result = await streamText({
     model: google('gemini-2.5-flash'),
-    messages,
-    tools: chatTools,
-    toolContext: { orgId, userId },
+    messages: messages as CoreMessage[],
     maxSteps: 10, // Allow complex multi-step reasoning
     experimental_telemetry: {
       isEnabled: true,
       functionId: 'chat-tools-multi-step',
     },
-    onStepFinish: async ({ stepType, toolCalls, toolResults, text }) => {
+    onStepFinish: async ({ text }) => {
       stepCount++;
       console.log(`[Chat] Step ${stepCount} completed:`, {
-        stepType,
-        toolsUsed: toolCalls?.map((call) => call.toolName),
         hasText: !!text,
       });
     },
   });
 
-  return result.toDataStreamResponse();
+  return result.toTextStreamResponse();
 };
 
 /**
@@ -235,7 +203,7 @@ export const multiStepReasoning = async (request: NextRequest) => {
  */
 import { injectRAGContext } from './chat-rag-integration';
 
-export const hybridRAGWithTools = async (request: NextRequest) => {
+export const hybridRAGWithTools = async (request: NextRequest): Promise<Response> => {
   const { orgId, userId } = await requireOrg();
   const { messages } = await request.json();
 
@@ -263,14 +231,12 @@ Use the context above for general questions, but use tools when you need:
 
   const result = await streamText({
     model: google('gemini-2.5-flash'),
-    messages,
-    tools: chatTools,
-    toolContext: { orgId, userId },
+    messages: messages as CoreMessage[],
     system: systemPrompt,
     maxSteps: 5,
   });
 
-  return result.toDataStreamResponse();
+  return result.toTextStreamResponse();
 };
 
 /**
@@ -311,9 +277,7 @@ export const conversationWithToolHistory = apiHandler(async (request: NextReques
   // Generate response with full history
   const result = await generateText({
     model: google('gemini-2.5-flash'),
-    messages,
-    tools: chatTools,
-    toolContext: { orgId, userId },
+    messages: messages as CoreMessage[],
     maxSteps: 5,
   });
 
@@ -329,7 +293,6 @@ export const conversationWithToolHistory = apiHandler(async (request: NextReques
         conversation_id: conversationId,
         role: 'assistant',
         content: result.text,
-        tool_invocations: result.toolCalls,
       },
     ]);
   }
@@ -337,7 +300,6 @@ export const conversationWithToolHistory = apiHandler(async (request: NextReques
   return successResponse({
     conversationId,
     response: result.text,
-    toolCalls: result.toolCalls,
   });
 });
 

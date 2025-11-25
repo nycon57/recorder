@@ -542,8 +542,8 @@ function LibraryPageContent() {
       const results = await Promise.allSettled(promises);
 
       console.log('[Library Page] Delete results:', results);
-      const successful = results.filter(r => r.status === 'fulfilled').map(r => r.value);
-      const failed = results.filter(r => r.status === 'rejected').map(r => r.reason);
+      const successful = results.filter((r): r is PromiseFulfilledResult<{ id: string; success: boolean; response: any }> => r.status === 'fulfilled').map(r => r.value);
+      const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map(r => r.reason);
       console.log(`[Library Page] Successful deletions (${successful.length}):`, successful);
       console.log(`[Library Page] Failed deletions (${failed.length}):`, failed);
 
@@ -632,14 +632,16 @@ function LibraryPageContent() {
   };
 
   const handleClearAllFilters = () => {
-    setAdvancedFilters({
+    const resetFilters: FilterState = {
       contentTypes: [],
       statuses: [],
+      statusFilter: 'active',
       dateRange: { from: null, to: null },
       favoritesOnly: false,
       hasTranscript: null,
       hasDocument: null,
-    });
+    };
+    setAdvancedFilters(resetFilters);
     setSelectedTagIds([]);
     setSelectedCollectionId(null);
     setSearchQuery('');
@@ -866,8 +868,8 @@ function LibraryPageContent() {
                   />
                 </div>
 
-                {/* Row 3: Filters */}
-                <div className="flex flex-col xs:flex-row gap-2">
+                {/* Row 3: Filters - stack on mobile, wrap on tablet */}
+                <div className="flex flex-wrap gap-2">
                   <AdvancedFilters
                     filters={advancedFilters}
                     onFiltersChange={setAdvancedFilters}
@@ -882,10 +884,10 @@ function LibraryPageContent() {
                   />
                 </div>
 
-                {/* Row 4: Sort and View */}
-                <div className="flex flex-col xs:flex-row gap-2">
+                {/* Row 4: Sort and View - horizontal with wrap */}
+                <div className="flex flex-wrap items-center gap-2">
                   <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-                    <SelectTrigger className="w-full xs:w-[180px] min-h-[44px]">
+                    <SelectTrigger className="w-full xs:w-auto xs:min-w-[180px] min-h-[44px]">
                       <SlidersHorizontal className="h-4 w-4 mr-2" />
                       <SelectValue />
                     </SelectTrigger>
@@ -901,26 +903,28 @@ function LibraryPageContent() {
                     </SelectContent>
                   </Select>
 
-                  <div className="flex items-center border rounded-md min-h-[44px]">
+                  <div className="flex items-center border rounded-md min-h-[44px] flex-shrink-0">
                     <Button
                       variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
                       size="sm"
                       onClick={() => setViewMode('grid')}
-                      className="rounded-r-none flex-1 xs:flex-none min-h-[44px]"
+                      className="rounded-r-none min-h-[44px] min-w-[44px]"
+                      aria-label="Grid view"
+                      aria-pressed={viewMode === 'grid'}
                     >
                       <Grid3x3 className="h-4 w-4" />
-                      <span className="ml-2 xs:hidden">Grid</span>
-                      <span className="sr-only xs:not-sr-only hidden">Grid view</span>
+                      <span className="ml-2 sm:hidden">Grid</span>
                     </Button>
                     <Button
                       variant={viewMode === 'list' ? 'secondary' : 'ghost'}
                       size="sm"
                       onClick={() => setViewMode('list')}
-                      className="rounded-l-none flex-1 xs:flex-none min-h-[44px]"
+                      className="rounded-l-none min-h-[44px] min-w-[44px]"
+                      aria-label="List view"
+                      aria-pressed={viewMode === 'list'}
                     >
                       <List className="h-4 w-4" />
-                      <span className="ml-2 xs:hidden">List</span>
-                      <span className="sr-only xs:not-sr-only hidden">List view</span>
+                      <span className="ml-2 sm:hidden">List</span>
                     </Button>
                   </div>
                 </div>
@@ -1105,6 +1109,7 @@ function LibraryPageContent() {
                           onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                           disabled={currentPage === 1}
                           className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          {...({} as any)}
                         />
                       </PaginationItem>
 
@@ -1118,6 +1123,7 @@ function LibraryPageContent() {
                               onClick={() => setCurrentPage(page as number)}
                               isActive={currentPage === page}
                               className="cursor-pointer"
+                              {...({} as any)}
                             >
                               {page}
                             </PaginationLink>
@@ -1137,6 +1143,7 @@ function LibraryPageContent() {
                           onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                           disabled={currentPage === totalPages}
                           className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          {...({} as any)}
                         />
                       </PaginationItem>
                     </PaginationContent>

@@ -60,7 +60,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       console.error('[GET /api/organizations/stats] Error fetching recording stats:', recordingsError);
       // Fallback to basic count if RPC doesn't exist yet
       const { count: totalRecordings } = await supabaseAdmin
-        .from('recordings')
+        .from('content')
         .select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
         .is('deleted_at', null);

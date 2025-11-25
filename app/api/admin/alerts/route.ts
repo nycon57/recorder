@@ -164,7 +164,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const { userId } = await requireAdmin();
 
   const body = await parseBody(request, adminAcknowledgeAlertSchema);
-  const { incidentId, notes } = body;
+  const { incidentId, notes } = body as { incidentId: string; notes?: string };
 
   // Update incident
   const { data, error } = await supabaseAdmin
@@ -208,7 +208,7 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   const { userId } = await requireAdmin();
 
   const body = await parseBody(request, adminResolveAlertSchema);
-  const { incidentId, notes } = body;
+  const { incidentId, notes } = body as { incidentId: string; notes?: string };
 
   // Update incident
   const { data, error } = await supabaseAdmin

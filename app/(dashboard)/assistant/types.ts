@@ -2,8 +2,12 @@
  * Type definitions for the state-of-the-art chat implementation
  */
 
-import { Message } from '@ai-sdk/react';
-import { ToolInvocation } from 'ai';
+import type { UIMessage } from '@ai-sdk/react';
+import type { UIToolInvocation } from 'ai';
+
+// Type aliases for backward compatibility
+type Message = UIMessage;
+type ToolInvocation = UIToolInvocation<any>;
 
 /**
  * Extended message type with additional metadata
@@ -276,7 +280,7 @@ export interface ConversationActions {
   /**
    * Branch conversation from a message
    */
-  branchConversation: (messageId: string) => Conversation;
+  branchConversation: (messageId: string) => Conversation | null;
 
   /**
    * Set search query

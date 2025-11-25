@@ -278,17 +278,19 @@ export class QuotaManager {
 
       // Log usage event (non-blocking)
       if (data === true) {
-        supabase
-          .from('quota_usage_events')
-          .insert({
-            org_id: orgId,
-            quota_type: quotaType,
-            amount,
-          })
+        void Promise.resolve(
+          supabase
+            .from('quota_usage_events')
+            .insert({
+              org_id: orgId,
+              quota_type: quotaType,
+              amount,
+            })
+        )
           .then(() => {
             console.log(`[QuotaManager] Logged usage event for ${orgId}`);
           })
-          .catch((err) => {
+          .catch((err: unknown) => {
             console.error('[QuotaManager] Failed to log usage event:', err);
           });
       }
@@ -342,17 +344,19 @@ export class QuotaManager {
       this.clearCache(orgId);
 
       // Log usage event (non-blocking)
-      supabase
-        .from('quota_usage_events')
-        .insert({
-          org_id: orgId,
-          quota_type: quotaType,
-          amount,
-        })
+      void Promise.resolve(
+        supabase
+          .from('quota_usage_events')
+          .insert({
+            org_id: orgId,
+            quota_type: quotaType,
+            amount,
+          })
+      )
         .then(() => {
           console.log(`[QuotaManager] Logged usage event for ${orgId}`);
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           console.error('[QuotaManager] Failed to log usage event:', err);
         });
 
@@ -407,19 +411,11 @@ export class QuotaManager {
       });
 
       if (error) {
-        // If RPC doesn't exist, fall back to direct update
-        console.warn('[QuotaManager] RPC release_quota not found, using direct update');
-        const { error: updateError } = await supabase
-          .from('org_quotas')
-          .update({
-            [column]: supabase.raw(`GREATEST(0, ${column} - ${amount})`),
-          })
-          .eq('org_id', orgId);
-
-        if (updateError) {
-          console.error('[QuotaManager] Failed to release quota:', updateError);
-          return false;
-        }
+        // If RPC doesn't exist, we cannot safely release quota without a database function
+        // Log warning and return false to indicate the operation wasn't completed
+        console.error('[QuotaManager] RPC release_quota not found - cannot safely release quota without database function');
+        console.error('[QuotaManager] Please create the release_quota database function');
+        return false;
       }
 
       // Clear cache after release to ensure fresh data

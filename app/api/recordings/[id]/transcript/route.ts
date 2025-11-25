@@ -22,7 +22,7 @@ export const GET = apiHandler(
 
     // Verify recording belongs to org
     const { data: recording, error: recordingError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, org_id, status')
       .eq('id', id)
       .eq('org_id', orgId)
@@ -37,7 +37,7 @@ export const GET = apiHandler(
     const { data: transcript, error: transcriptError } = await supabase
       .from('transcripts')
       .select('*')
-      .eq('recording_id', id)
+      .eq('content_id', id)
       .single();
 
     if (transcriptError) {
@@ -84,7 +84,7 @@ export const PUT = apiHandler(
 
     // Verify recording belongs to org
     const { data: recording, error: recordingError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, org_id')
       .eq('id', id)
       .eq('org_id', orgId)
@@ -99,7 +99,7 @@ export const PUT = apiHandler(
     const { data: existingTranscript, error: checkError } = await supabase
       .from('transcripts')
       .select('id')
-      .eq('recording_id', id)
+      .eq('content_id', id)
       .single();
 
     if (checkError || !existingTranscript) {
@@ -111,10 +111,10 @@ export const PUT = apiHandler(
     const { data: transcript, error: updateError } = await supabase
       .from('transcripts')
       .update({
-        text: body.text,
+        text: (body as { text: string }).text,
         updated_at: new Date().toISOString(),
       })
-      .eq('recording_id', id)
+      .eq('content_id', id)
       .select()
       .single();
 

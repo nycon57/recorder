@@ -162,7 +162,7 @@ export function rateLimit(
   tier: RateLimitTier,
   getUserId?: (request: NextRequest) => Promise<string | undefined>
 ) {
-  return function <T extends (request: NextRequest, ...args: any[]) => Promise<NextResponse>>(
+  return function <T extends (request: NextRequest, ...args: any[]) => Promise<NextResponse | Response>>(
     handler: T
   ): T {
     return (async (request: NextRequest, ...args: any[]) => {

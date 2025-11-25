@@ -13,8 +13,8 @@ type TranscriptChunk = Database['public']['Tables']['transcript_chunks']['Row'];
 
 export interface SearchResult {
   id: string;
-  recordingId: string;
-  recordingTitle: string;
+  contentId: string;
+  contentTitle: string;
   chunkText: string;
   similarity: number;
   metadata: {
@@ -37,8 +37,8 @@ export interface SearchOptions {
   limit?: number;
   /** Similarity threshold 0-1 (default: 0.7) */
   threshold?: number;
-  /** Filter by recording IDs */
-  recordingIds?: string[];
+  /** Filter by content IDs */
+  contentIds?: string[];
   /** Filter by source type */
   source?: 'transcript' | 'document';
   /** Filter by date range */
@@ -57,7 +57,7 @@ export async function vectorSearch(
     orgId,
     limit = 10,
     threshold = 0.7,
-    recordingIds,
+    contentIds,
     source,
     dateFrom,
     dateTo,
@@ -74,11 +74,11 @@ export async function vectorSearch(
     .select(
       `
       id,
-      recording_id,
+      content_id,
       chunk_text,
       metadata,
       created_at,
-      recordings!inner (
+      content!inner (
         title,
         created_at
       )
@@ -88,8 +88,8 @@ export async function vectorSearch(
     .order('created_at', { ascending: false });
 
   // Apply filters
-  if (recordingIds && recordingIds.length > 0) {
-    dbQuery = dbQuery.in('recording_id', recordingIds);
+  if (contentIds && contentIds.length > 0) {
+    dbQuery = dbQuery.in('content_id', contentIds);
   }
 
   if (source) {
@@ -165,8 +165,8 @@ async function calculateSimilarities(
     return chunks
       .map((chunk) => ({
         id: chunk.id,
-        recordingId: chunk.recording_id,
-        recordingTitle: chunk.recordings?.title || 'Untitled',
+        contentId: chunk.content_id,
+        contentTitle: chunk.content?.title || 'Untitled',
         chunkText: chunk.chunk_text,
         similarity: 0.8, // Placeholder
         metadata: chunk.metadata || {},
@@ -177,8 +177,8 @@ async function calculateSimilarities(
 
   return data.map((match: any) => ({
     id: match.id,
-    recordingId: match.recording_id,
-    recordingTitle: match.recording_title,
+    contentId: match.content_id,
+    contentTitle: match.content_title,
     chunkText: match.chunk_text,
     similarity: match.similarity,
     metadata: match.metadata || {},
@@ -187,10 +187,10 @@ async function calculateSimilarities(
 }
 
 /**
- * Search within a specific recording
+ * Search within a specific content item
  */
-export async function searchRecording(
-  recordingId: string,
+export async function searchContent(
+  contentId: string,
   query: string,
   orgId: string,
   options?: Partial<SearchOptions>
@@ -198,7 +198,7 @@ export async function searchRecording(
   return vectorSearch(query, {
     ...options,
     orgId,
-    recordingIds: [recordingId],
+    contentIds: [contentId],
   });
 }
 
@@ -267,7 +267,7 @@ async function keywordSearch(
   query: string,
   options: SearchOptions
 ): Promise<SearchResult[]> {
-  const { orgId, limit = 10, recordingIds } = options;
+  const { orgId, limit = 10, contentIds } = options;
   const supabase = await createClient();
 
   let dbQuery = supabase
@@ -275,11 +275,11 @@ async function keywordSearch(
     .select(
       `
       id,
-      recording_id,
+      content_id,
       chunk_text,
       metadata,
       created_at,
-      recordings!inner (
+      content!inner (
         title
       )
     `
@@ -291,8 +291,8 @@ async function keywordSearch(
     })
     .limit(limit);
 
-  if (recordingIds && recordingIds.length > 0) {
-    dbQuery = dbQuery.in('recording_id', recordingIds);
+  if (contentIds && contentIds.length > 0) {
+    dbQuery = dbQuery.in('content_id', contentIds);
   }
 
   const { data: chunks, error } = await dbQuery;
@@ -303,8 +303,8 @@ async function keywordSearch(
 
   return chunks.map((chunk) => ({
     id: chunk.id,
-    recordingId: chunk.recording_id,
-    recordingTitle: chunk.recordings?.title || 'Untitled',
+    contentId: chunk.content_id,
+    contentTitle: (chunk.content as any)?.title || 'Untitled',
     chunkText: chunk.chunk_text,
     similarity: 0.9, // Keyword matches get high score
     metadata: chunk.metadata || {},
@@ -342,3 +342,6 @@ function mergeSearchResults(
     (a, b) => b.similarity - a.similarity
   );
 }
+
+// Export deprecated function names for backward compatibility
+export const searchRecording = searchContent;

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { useKeyboardShortcuts, KeyboardShortcut, formatShortcut, getModifierKey } from '@/app/hooks/useKeyboardShortcuts';
+import { useKeyboardShortcuts, Shortcut, formatShortcut } from '@/app/hooks/useKeyboardShortcuts';
 import { useToast } from '@/app/components/ui/use-toast';
 
 interface ShortcutDefinition {
@@ -259,31 +259,27 @@ export function KeyboardShortcutsProvider({ children }: { children: React.ReactN
   }, [allShortcuts]);
 
   // PERF-FE-004: Memoize keyboard shortcuts conversion
-  const keyboardShortcuts = useMemo<KeyboardShortcut[]>(
+  const keyboardShortcuts = useMemo<Shortcut[]>(
     () => allShortcuts
       .filter((s) => s.handler)
       .map((s) => ({
-        keys: s.keys,
+        key: s.keys[0], // Use first key as the primary key
+        ctrl: s.keys.includes('cmd') || s.keys.includes('ctrl'),
+        shift: s.keys.includes('shift'),
+        alt: s.keys.includes('alt'),
+        meta: s.keys.includes('cmd') || s.keys.includes('meta'),
         handler: s.handler!,
         description: s.description,
-        global: s.global,
-        enabled: true,
+        preventDefault: true,
       })),
     [allShortcuts]
   );
 
   // Use the keyboard shortcuts hook
-  useKeyboardShortcuts(keyboardShortcuts, [
-    handleQuickSearch,
-    handleUpload,
-    handleNewNote,
-    handleStartRecording,
-    handleToggleFavorites,
-    handleGoToDashboard,
-    handleGoToLibrary,
-    handleGoToAssistant,
-    toggleHelp,
-  ]);
+  useKeyboardShortcuts(keyboardShortcuts, {
+    enabled: true,
+    ignoreInputFields: true,
+  });
 
   // PERF-FE-004: Memoize context value to prevent consumer re-renders
   const contextValue = useMemo<KeyboardShortcutsContextType>(

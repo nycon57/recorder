@@ -243,7 +243,10 @@ export async function indexRecordingFramesOptimized(
     const batchStart = Date.now();
 
     const results = await Promise.all(
-      batch.map(async ({ frameId, frameNumber, buffer }) => {
+      batch.map(async (frameData) => {
+        if (!frameData) return null;
+
+        const { frameId, frameNumber, buffer } = frameData;
         try {
           // Add frame context for better descriptions
           const frameContext = `Frame ${frameNumber} from recording`;
@@ -284,7 +287,7 @@ export async function indexRecordingFramesOptimized(
       })
     );
 
-    const validResults = results.filter(r => r !== null);
+    const validResults = results.filter((r): r is { frameId: string; description: VisualDescription } => r !== null);
     allResults.push(...validResults);
 
     console.log(`[Visual Indexing] Batch ${batchNum} complete in ${Date.now() - batchStart}ms (${validResults.length}/${batch.length} successful)`);

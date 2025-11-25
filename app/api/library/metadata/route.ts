@@ -167,7 +167,7 @@ async function fetchTags(
 
     // Get usage counts for all tags in a single query
     const { data: counts, error: countError } = await supabase
-      .from('recording_tags')
+      .from('content_tags')
       .select('tag_id')
       .in('tag_id', tagIds);
 

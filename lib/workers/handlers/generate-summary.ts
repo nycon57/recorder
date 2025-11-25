@@ -35,9 +35,9 @@ export async function generateSummary(job: Job): Promise<void> {
   try {
     // Check if summary already exists (prevent duplicates)
     const { data: existingSummary } = await supabase
-      .from('recording_summaries')
+      .from('content_summaries')
       .select('id')
-      .eq('recording_id', recordingId)
+      .eq('content_id', recordingId)
       .single();
 
     if (existingSummary) {
@@ -85,9 +85,9 @@ export async function generateSummary(job: Job): Promise<void> {
 
     // Store summary and embedding in database
     const { data: summary, error: insertError } = await supabase
-      .from('recording_summaries')
+      .from('content_summaries')
       .insert({
-        recording_id: recordingId,
+        content_id: recordingId,
         org_id: orgId,
         summary_text: summaryText,
         summary_embedding: JSON.stringify(embedding), // Supabase expects string for vector type

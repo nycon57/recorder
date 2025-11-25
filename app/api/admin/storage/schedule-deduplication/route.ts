@@ -39,7 +39,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   if (cronSecret !== expectedSecret) {
-    throw errors.unauthorized('Invalid cron secret');
+    return errors.unauthorized();
   }
 
   // Parse and validate request body
@@ -227,19 +227,19 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .is('deleted_at', null);
 
   const { data: filesWithHash } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id', { count: 'exact' })
     .not('file_hash', 'is', null)
     .is('deleted_at', null);
 
   const { data: filesWithoutHash } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id', { count: 'exact' })
     .is('file_hash', null)
     .is('deleted_at', null);
 
   const { data: deduplicatedFiles } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id', { count: 'exact' })
     .eq('is_deduplicated', true)
     .is('deleted_at', null);

@@ -28,7 +28,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
   await requireAuth();
 
   const params = parseSearchParams(request, recommendationsQuerySchema);
-  const { status, impact, timeframe, limit } = params;
+  // Type assertion for parsed params
+  const typedParams = params as { status?: string; impact?: string; timeframe?: string; limit: number };
+  const { status, impact, timeframe, limit } = typedParams;
 
   // Build query with filters
   let query = supabaseAdmin

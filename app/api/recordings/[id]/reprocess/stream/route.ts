@@ -45,7 +45,8 @@ export const POST = apiHandler(async (request: NextRequest, context: ReprocessPa
 
   // Validate request body
   const body = await parseBody(request, reprocessRecordingSchema);
-  const { step } = body;
+  // Type assertion for parsed body
+  const { step } = body as { step: string };
 
   logger.info('Request body validated', {
     context: { recordingId, step },
@@ -53,7 +54,7 @@ export const POST = apiHandler(async (request: NextRequest, context: ReprocessPa
 
   // Verify recording exists and belongs to org
   const { data: recording, error: recordingError } = await supabaseAdmin
-    .from('recordings')
+    .from('content')
     .select('id, org_id, status, title, storage_path')
     .eq('id', recordingId)
     .eq('org_id', orgId)
@@ -125,7 +126,7 @@ export const POST = apiHandler(async (request: NextRequest, context: ReprocessPa
 
   // Update recording status to processing
   await supabaseAdmin
-    .from('recordings')
+    .from('content')
     .update({
       status: 'transcribing',
       error_message: null,
@@ -196,7 +197,7 @@ export const GET = apiHandler(async (request: NextRequest, context: ReprocessPar
 
   // Verify recording exists and belongs to org
   const { data: recording, error: recordingError } = await supabaseAdmin
-    .from('recordings')
+    .from('content')
     .select('id, org_id, status')
     .eq('id', recordingId)
     .eq('org_id', orgId)

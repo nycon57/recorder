@@ -26,7 +26,7 @@ export function Teleprompter({ isOpen, onClose }: TeleprompterProps) {
   const [showInput, setShowInput] = useState(true);
   const [scrollPosition, setScrollPosition] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
 
   // Auto-scroll logic
   useEffect(() => {

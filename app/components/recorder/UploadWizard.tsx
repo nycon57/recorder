@@ -485,32 +485,49 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
   }, [resetWizard, onClose]);
 
   /**
-   * Get step indicator - Clean, minimal stepper
+   * Get step indicator - Clean, minimal stepper with progress feedback
+   * Shows loading animation when uploading/validating
    */
   const getStepIndicator = () => {
     const steps = [
       {
         label: 'Upload',
-        description: 'Select your file'
+        description: 'Select your file',
+        loadingText: 'Uploading file...'
       },
       {
         label: 'Details',
-        description: 'Add information'
+        description: 'Add information',
+        loadingText: 'Saving metadata...'
       },
       {
         label: 'Processing',
-        description: 'Finalizing upload'
+        description: 'Finalizing upload',
+        loadingText: 'Processing...'
       },
     ];
     const stepIndex = ['file_upload', 'metadata', 'progress'].indexOf(currentStep);
 
     return (
       <div className="w-full max-w-2xl mx-auto mb-8 px-4">
+        {/* Progress feedback bar during upload */}
+        {isUploading && (
+          <div className="mb-4 text-center animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
+              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm font-medium text-primary">
+                {steps[stepIndex]?.loadingText || 'Processing...'}
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-center gap-0">
           {steps.map((step, index) => {
             const isActive = index === stepIndex;
             const isCompleted = index < stepIndex;
             const isPending = index > stepIndex;
+            const isActiveAndLoading = isActive && isUploading;
 
             return (
               <div key={step.label} className="flex items-center">
@@ -519,14 +536,17 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
                   {/* Step Circle */}
                   <div
                     className={cn(
-                      'flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-200',
+                      'relative flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-200',
                       isCompleted && 'bg-muted border-muted',
-                      isActive && 'bg-foreground border-foreground ring-2 ring-foreground/20',
+                      isActive && !isUploading && 'bg-foreground border-foreground ring-2 ring-foreground/20',
+                      isActiveAndLoading && 'bg-primary border-primary ring-2 ring-primary/20',
                       isPending && 'bg-transparent border-border'
                     )}
                   >
                     {isCompleted ? (
                       <Check className="w-4 h-4 text-background" />
+                    ) : isActiveAndLoading ? (
+                      <div className="w-4 h-4 border-2 border-background border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <span
                         className={cn(
@@ -538,6 +558,10 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
                         {index + 1}
                       </span>
                     )}
+                    {/* Pulse animation for active uploading step */}
+                    {isActiveAndLoading && (
+                      <span className="absolute inset-0 rounded-full animate-ping bg-primary/30" />
+                    )}
                   </div>
 
                   {/* Step Label */}
@@ -547,6 +571,7 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
                         'text-sm font-medium transition-colors',
                         isCompleted && 'text-foreground',
                         isActive && 'text-foreground',
+                        isActiveAndLoading && 'text-primary',
                         isPending && 'text-muted-foreground'
                       )}
                     >
@@ -558,17 +583,24 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
                   </div>
                 </div>
 
-                {/* Connector Line */}
+                {/* Connector Line - animated fill during upload */}
                 {index < steps.length - 1 && (
-                  <div className="w-16 -mt-6 sm:w-20">
+                  <div className="w-16 -mt-6 sm:w-20 relative">
+                    {/* Background line */}
+                    <div className="h-0.5 w-full bg-border" />
+                    {/* Filled line for completed steps */}
                     <div
                       className={cn(
-                        'h-0.5 w-full transition-all duration-200',
-                        index < stepIndex
-                          ? 'bg-muted'
-                          : 'bg-border'
+                        'absolute top-0 left-0 h-0.5 transition-all duration-500',
+                        index < stepIndex ? 'w-full bg-muted' : 'w-0'
                       )}
                     />
+                    {/* Animated fill for current step when uploading */}
+                    {isActiveAndLoading && index === stepIndex && (
+                      <div className="absolute top-0 left-0 h-0.5 w-full overflow-hidden">
+                        <div className="h-full w-full bg-primary/50 animate-pulse origin-left" />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -42,7 +42,7 @@ export const GET = apiHandler(async (request: NextRequest, { params }: RoutePara
 
   // Get usage count
   const { count } = await supabase
-    .from('recording_tags')
+    .from('content_tags')
     .select('*', { count: 'exact', head: true })
     .eq('tag_id', id);
 
@@ -157,7 +157,7 @@ export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteP
   // Start a transaction by performing both operations
   // 1. Remove all tag associations
   const { error: deleteAssociationsError } = await supabase
-    .from('recording_tags')
+    .from('content_tags')
     .delete()
     .eq('tag_id', id);
 

@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
             conversationHistory: history,
             maxChunks,
             threshold,
-            recordingIds,
+            contentIds: recordingIds, // Map recordingIds to contentIds
             rerank,
           });
 

@@ -109,7 +109,7 @@ export async function validateApiKey(
       }
 
       // Check if IP is in whitelist
-      const isWhitelisted = matchedKey.ip_whitelist.some((whitelistedIp) => {
+      const isWhitelisted = matchedKey.ip_whitelist.some((whitelistedIp: string) => {
         // Support CIDR notation in the future - for now, exact match
         return whitelistedIp === ipAddress;
       });
@@ -142,7 +142,7 @@ export async function validateApiKey(
       .from('api_keys')
       .update({
         last_used_at: new Date().toISOString(),
-        usage_count: matchedKey.usage_count ? matchedKey.usage_count + 1 : 1,
+        usage_count: ((matchedKey as any).usage_count || 0) + 1,
       })
       .eq('id', matchedKey.id)
       .then(({ error }) => {

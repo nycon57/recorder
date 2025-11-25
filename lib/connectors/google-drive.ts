@@ -411,8 +411,8 @@ export class GoogleDriveConnector implements Connector {
     const response = await this.drive.about.get({ fields: 'user' });
 
     return {
-      emailAddress: response.data.user?.emailAddress,
-      displayName: response.data.user?.displayName,
+      emailAddress: response.data.user?.emailAddress || undefined,
+      displayName: response.data.user?.displayName || undefined,
     };
   }
 
@@ -425,8 +425,8 @@ export class GoogleDriveConnector implements Connector {
       size: file.size ? parseInt(file.size) : undefined,
       modifiedAt: new Date(file.modifiedTime!),
       createdAt: file.createdTime ? new Date(file.createdTime) : undefined,
-      url: file.webViewLink,
-      parentId: file.parents?.[0],
+      url: file.webViewLink || undefined,
+      parentId: file.parents?.[0] || undefined,
       metadata: {
         owners: file.owners,
         isGoogleWorkspace: file.mimeType?.startsWith('application/vnd.google-apps.'),

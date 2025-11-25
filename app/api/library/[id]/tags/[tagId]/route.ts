@@ -25,7 +25,7 @@ export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteP
 
   // Verify item exists and belongs to org
   const { data: item, error: itemError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id')
     .eq('id', id)
     .eq('org_id', orgId)
@@ -51,9 +51,9 @@ export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteP
 
   // Remove the tag association
   const { error: deleteError } = await supabase
-    .from('recording_tags')
+    .from('content_tags')
     .delete()
-    .eq('recording_id', id)
+    .eq('content_id', id)
     .eq('tag_id', tagId);
 
   if (deleteError) {

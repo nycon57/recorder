@@ -40,7 +40,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Build query for deleted items only
   let query = supabase
-    .from('recordings')
+    .from('content')
     .select('id, title, content_type, file_type, file_size, deleted_at, deleted_by, deletion_reason, created_at', { count: 'exact' })
     .eq('org_id', orgId)
     .not('deleted_at', 'is', null) // Only soft-deleted items
@@ -84,7 +84,7 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
 
   // Find all soft-deleted recordings for this org
   const { data: deletedRecordings, error: fetchError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, storage_path_raw, storage_path_processed')
     .eq('org_id', orgId)
     .not('deleted_at', 'is', null);
@@ -109,7 +109,7 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
 
   if (filesToDelete.length > 0) {
     const { error: storageError } = await supabase.storage
-      .from('recordings')
+      .from('content')
       .remove(filesToDelete);
 
     if (storageError) {
@@ -120,7 +120,7 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
 
   // Permanently delete all soft-deleted recordings
   const { error: deleteError } = await supabase
-    .from('recordings')
+    .from('content')
     .delete()
     .eq('org_id', orgId)
     .not('deleted_at', 'is', null);

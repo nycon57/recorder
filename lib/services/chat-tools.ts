@@ -2,7 +2,7 @@
  * Chat Tool Definitions for AI Assistant
  *
  * Provides tool definitions for the Vercel AI SDK to enable the AI assistant
- * to search recordings, retrieve documents, access transcripts, and fetch metadata.
+ * to search content, retrieve documents, access transcripts, and fetch metadata.
  *
  * Security:
  * - All tools enforce organization-level data isolation via orgId
@@ -10,11 +10,11 @@
  * - Proper error handling with user-friendly messages
  *
  * Tools:
- * 1. searchRecordings - RAG-powered semantic search across recordings
+ * 1. searchRecordings - RAG-powered semantic search across content
  * 2. getDocument - Retrieve full document content by ID
  * 3. getTranscript - Get transcript with timestamps
- * 4. getRecordingMetadata - Fetch recording metadata
- * 5. listRecordings - List recent recordings
+ * 4. getRecordingMetadata - Fetch content metadata
+ * 5. listRecordings - List recent content items
  */
 
 import { tool } from 'ai';
@@ -78,7 +78,7 @@ function formatDuration(seconds: number): string {
  * Returns relevant excerpts with source citations.
  */
 export async function executeSearchRecordings(
-  { query, limit, recordingIds, includeTranscripts, includeDocuments, minRelevance }: any,
+  { query, limit, contentIds, includeTranscripts, includeDocuments, minRelevance }: any,
   { orgId }: ToolContext
 ): Promise<ToolResponse> {
     try {
@@ -96,7 +96,7 @@ export async function executeSearchRecordings(
         minRelevance: minRelevance || 0.7,
         includeTranscripts: includeTranscripts !== false,
         includeDocuments: includeDocuments !== false,
-        recordingIds,
+        contentIds,
         useHierarchical: true,
         enableCache: true,
       });
@@ -106,7 +106,7 @@ export async function executeSearchRecordings(
         return {
           success: true,
           data: {
-            message: 'No relevant recordings found for your query. Try different keywords or check if you have any recordings.',
+            message: 'No relevant content found for your query. Try different keywords or check if you have any content.',
             results: [],
             searchMetadata: ragContext.metadata,
           },
@@ -121,7 +121,7 @@ export async function executeSearchRecordings(
         excerpt: source.excerpt,
         relevanceScore: Math.round(source.relevanceScore * 100),
         type: source.type,
-        recordingId: source.recordingId,
+        contentId: source.contentId,
         timestamp: source.timestamp ? formatTimestamp(source.timestamp) : undefined,
         url: source.url,
         hasVisualContext: source.metadata?.hasVisualContext || false,
@@ -147,7 +147,7 @@ export async function executeSearchRecordings(
       error:
         error instanceof Error
           ? `Search failed: ${error.message}`
-          : 'An unexpected error occurred while searching recordings',
+          : 'An unexpected error occurred while searching content',
     };
   }
 }
@@ -169,7 +169,7 @@ export async function executeGetDocument(
         .select(
           `
           id,
-          recording_id,
+          content_id,
           org_id,
           markdown,
           summary,
@@ -178,7 +178,7 @@ export async function executeGetDocument(
           status,
           created_at,
           updated_at,
-          recordings!inner (
+          content!inner (
             id,
             title,
             description,
@@ -202,25 +202,25 @@ export async function executeGetDocument(
       }
 
       // Format response
-      const recording = Array.isArray(document.recordings)
-        ? document.recordings[0]
-        : document.recordings;
+      const content = Array.isArray(document.content)
+        ? document.content[0]
+        : document.content;
 
       const result: any = {
         documentId: document.id,
         content: document.markdown,
         summary: document.summary,
-        recordingTitle: recording?.title || 'Untitled Recording',
+        contentTitle: content?.title || 'Untitled Content',
         status: document.status,
       };
 
       if (includeMetadata !== false) {
         result.metadata = {
-          recordingId: document.recording_id,
+          contentId: document.content_id,
           version: document.version,
           model: document.model,
-          duration: recording?.duration_sec
-            ? formatDuration(recording.duration_sec)
+          duration: content?.duration_sec
+            ? formatDuration(content.duration_sec)
             : undefined,
           createdAt: new Date(document.created_at).toLocaleString(),
           updatedAt: new Date(document.updated_at).toLocaleString(),
@@ -246,11 +246,11 @@ export async function executeGetDocument(
 /**
  * Get Transcript Execute Function
  *
- * Retrieves the full transcript with timestamps for a recording.
+ * Retrieves the full transcript with timestamps for content.
  * Returns formatted transcript with word-level timing information.
  */
 export async function executeGetTranscript(
-  { recordingId, includeTimestamps, formatTimestamps }: any,
+  { contentId, includeTimestamps, formatTimestamps }: any,
   { orgId }: ToolContext
 ): Promise<ToolResponse> {
     try {
@@ -260,14 +260,14 @@ export async function executeGetTranscript(
         .select(
           `
           id,
-          recording_id,
+          content_id,
           language,
           text,
           words_json,
           confidence,
           provider,
           created_at,
-          recordings!inner (
+          content!inner (
             id,
             org_id,
             title,
@@ -277,7 +277,7 @@ export async function executeGetTranscript(
           )
         `
         )
-        .eq('recording_id', recordingId)
+        .eq('content_id', contentId)
         .single();
 
       if (error || !transcript) {
@@ -285,16 +285,16 @@ export async function executeGetTranscript(
           success: false,
           error: error
             ? 'Transcript not found or you do not have permission to access it'
-            : 'Transcript not found for this recording',
+            : 'Transcript not found for this content',
         };
       }
 
       // Verify organization access
-      const recording = Array.isArray(transcript.recordings)
-        ? transcript.recordings[0]
-        : transcript.recordings;
+      const content = Array.isArray(transcript.content)
+        ? transcript.content[0]
+        : transcript.content;
 
-      if (recording.org_id !== orgId) {
+      if (content.org_id !== orgId) {
         return {
           success: false,
           error: 'You do not have permission to access this transcript',
@@ -355,18 +355,18 @@ export async function executeGetTranscript(
       }
 
       const result = {
-        recordingId: transcript.recording_id,
-        recordingTitle: recording.title || 'Untitled Recording',
+        contentId: transcript.content_id,
+        contentTitle: content.title || 'Untitled Content',
         transcript: formattedText,
         language: transcript.language || 'en',
         confidence: transcript.confidence
           ? Math.round(transcript.confidence * 100)
           : undefined,
         provider: transcript.provider,
-        duration: recording.duration_sec
-          ? formatDuration(recording.duration_sec)
+        duration: content.duration_sec
+          ? formatDuration(content.duration_sec)
           : undefined,
-        status: recording.status,
+        status: content.status,
         createdAt: new Date(transcript.created_at).toLocaleString(),
       };
 
@@ -387,19 +387,19 @@ export async function executeGetTranscript(
 }
 
 /**
- * Get Recording Metadata Execute Function
+ * Get Content Metadata Execute Function
  *
- * Retrieves metadata about a specific recording including title, duration,
+ * Retrieves metadata about a specific content item including title, duration,
  * status, and creation date.
  */
 export async function executeGetRecordingMetadata(
-  { recordingId, includeStats }: any,
+  { contentId, includeStats }: any,
   { orgId }: ToolContext
 ): Promise<ToolResponse> {
     try {
       // Use admin client - auth already verified in API route
-      const { data: recording, error } = await supabaseAdmin
-        .from('recordings')
+      const { data: content, error } = await supabaseAdmin
+        .from('content')
         .select(
           `
           id,
@@ -414,46 +414,46 @@ export async function executeGetRecordingMetadata(
           metadata
         `
         )
-        .eq('id', recordingId)
+        .eq('id', contentId)
         .eq('org_id', orgId)
         .single();
 
-      if (error || !recording) {
+      if (error || !content) {
         return {
           success: false,
           error: error
-            ? 'Recording not found or you do not have permission to access it'
-            : 'Recording not found',
+            ? 'Content not found or you do not have permission to access it'
+            : 'Content not found',
         };
       }
 
       const result: any = {
-        recordingId: recording.id,
-        title: recording.title || 'Untitled Recording',
-        description: recording.description,
-        status: recording.status,
-        duration: recording.duration_sec
-          ? formatDuration(recording.duration_sec)
+        contentId: content.id,
+        title: content.title || 'Untitled Content',
+        description: content.description,
+        status: content.status,
+        duration: content.duration_sec
+          ? formatDuration(content.duration_sec)
           : undefined,
-        thumbnailUrl: recording.thumbnail_url,
-        createdAt: new Date(recording.created_at).toLocaleString(),
-        lastUpdated: new Date(recording.updated_at).toLocaleString(),
-        completedAt: recording.completed_at
-          ? new Date(recording.completed_at).toLocaleString()
+        thumbnailUrl: content.thumbnail_url,
+        createdAt: new Date(content.created_at).toLocaleString(),
+        lastUpdated: new Date(content.updated_at).toLocaleString(),
+        completedAt: content.completed_at
+          ? new Date(content.completed_at).toLocaleString()
           : undefined,
       };
 
       // Include additional stats if requested
       if (includeStats !== false) {
         const stats: any = {
-          durationSeconds: recording.duration_sec,
+          durationSeconds: content.duration_sec,
         };
 
         // Get transcript word count if available
         const { data: transcript } = await supabaseAdmin
           .from('transcripts')
           .select('text')
-          .eq('recording_id', recordingId)
+          .eq('content_id', contentId)
           .single();
 
         if (transcript?.text) {
@@ -464,7 +464,7 @@ export async function executeGetRecordingMetadata(
         const { count: chunkCount } = await supabaseAdmin
           .from('transcript_chunks')
           .select('*', { count: 'exact', head: true })
-          .eq('recording_id', recordingId);
+          .eq('content_id', contentId);
 
         if (chunkCount !== null) {
           stats.chunks = chunkCount;
@@ -474,7 +474,7 @@ export async function executeGetRecordingMetadata(
         const { data: document } = await supabaseAdmin
           .from('documents')
           .select('status, version')
-          .eq('recording_id', recordingId)
+          .eq('content_id', contentId)
           .single();
 
         if (document) {
@@ -502,9 +502,9 @@ export async function executeGetRecordingMetadata(
 }
 
 /**
- * List Recordings Execute Function
+ * List Content Execute Function
  *
- * Lists recent recordings with optional filtering and sorting.
+ * Lists recent content items with optional filtering and sorting.
  * Useful for browsing available content.
  */
 export async function executeListRecordings(
@@ -515,7 +515,7 @@ export async function executeListRecordings(
       // Use admin client - auth already verified in API route
       // Build query
       let query = supabaseAdmin
-        .from('recordings')
+        .from('content')
         .select(
           `
           id,
@@ -544,45 +544,45 @@ export async function executeListRecordings(
       // Apply limit
       query = query.limit(limit || 10);
 
-      const { data: recordings, error, count } = await query;
+      const { data: contentItems, error, count } = await query;
 
       if (error) {
         return {
           success: false,
-          error: `Failed to retrieve recordings: ${error.message}`,
+          error: `Failed to retrieve content: ${error.message}`,
         };
       }
 
-      if (!recordings || recordings.length === 0) {
+      if (!contentItems || contentItems.length === 0) {
         return {
           success: true,
           data: {
             message: status
-              ? `No recordings found with status "${status}"`
-              : 'No recordings found. Create your first recording to get started.',
-            recordings: [],
+              ? `No content found with status "${status}"`
+              : 'No content found. Create your first content item to get started.',
+            content: [],
             total: 0,
           },
         };
       }
 
-      // Format recordings
-      const formattedRecordings = recordings.map((rec) => ({
-        id: rec.id,
-        title: rec.title || 'Untitled Recording',
-        description: rec.description,
-        status: rec.status,
-        duration: rec.duration_sec ? formatDuration(rec.duration_sec) : undefined,
-        thumbnailUrl: rec.thumbnail_url,
-        createdAt: new Date(rec.created_at).toLocaleString(),
-        lastUpdated: new Date(rec.updated_at).toLocaleString(),
+      // Format content items
+      const formattedContent = contentItems.map((item) => ({
+        id: item.id,
+        title: item.title || 'Untitled Content',
+        description: item.description,
+        status: item.status,
+        duration: item.duration_sec ? formatDuration(item.duration_sec) : undefined,
+        thumbnailUrl: item.thumbnail_url,
+        createdAt: new Date(item.created_at).toLocaleString(),
+        lastUpdated: new Date(item.updated_at).toLocaleString(),
       }));
 
       return {
         success: true,
         data: {
-          recordings: formattedRecordings,
-          total: count || recordings.length,
+          content: formattedContent,
+          total: count || contentItems.length,
           limit: limit || 10,
           sortedBy: `${sortField} (${sortOrder || 'desc'})`,
         },
@@ -593,8 +593,8 @@ export async function executeListRecordings(
       success: false,
       error:
         error instanceof Error
-          ? `Failed to list recordings: ${error.message}`
-          : 'An unexpected error occurred while listing recordings',
+          ? `Failed to list content: ${error.message}`
+          : 'An unexpected error occurred while listing content',
     };
   }
 }

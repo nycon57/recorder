@@ -66,16 +66,16 @@ export async function createRecordingShare(
 ): Promise<ShareLink> {
   const supabase = createAdminClient();
 
-  // Verify recording exists and belongs to org
-  const { data: recording, error: recordingError } = await supabase
-    .from('recordings')
+  // Verify content exists and belongs to org
+  const { data: content, error: contentError } = await supabase
+    .from('content')
     .select('id')
     .eq('id', recordingId)
     .eq('org_id', orgId)
     .single();
 
-  if (recordingError || !recording) {
-    throw new Error('Recording not found');
+  if (contentError || !content) {
+    throw new Error('Content not found');
   }
 
   // Generate share ID
@@ -288,10 +288,10 @@ export async function validateShareAccess(
 export async function incrementShareView(shareId: string): Promise<void> {
   const supabase = createAdminClient();
 
-  await supabase
-    .from('shares')
-    .update({ view_count: supabase.raw('view_count + 1') as any })
-    .eq('share_id', shareId);
+  // Use RPC for atomic increment to avoid race conditions
+  await supabase.rpc('increment_share_view_count', {
+    p_share_id: shareId,
+  });
 }
 
 /**

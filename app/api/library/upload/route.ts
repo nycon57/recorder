@@ -141,7 +141,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
           // Create recording entry in database
           const { data: recording, error: dbError } = await supabaseAdmin
-            .from('recordings')
+            .from('content')
             .insert({
               org_id: orgId,
               created_by: userId,
@@ -189,7 +189,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
           // Upload file to Supabase Storage
           const fileBuffer = await file.arrayBuffer();
           const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-            .from('recordings')
+            .from('content')
             .upload(storagePath, fileBuffer, {
               contentType: file.type,
               upsert: false,
@@ -203,7 +203,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
             // Clean up database record
             await supabaseAdmin
-              .from('recordings')
+              .from('content')
               .delete()
               .eq('id', recording.id);
 
@@ -211,10 +211,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
             let errorMessage = `Storage upload failed: ${uploadError.message}`;
 
             // Check for common error scenarios
-            // Handle statusCode as both string and number
-            const statusCode = typeof uploadError.statusCode === 'string'
-              ? parseInt(uploadError.statusCode, 10)
-              : uploadError.statusCode;
+            // Handle statusCode as both string and number (if it exists on the error object)
+            const statusCode = 'statusCode' in uploadError && typeof uploadError.statusCode === 'number'
+              ? uploadError.statusCode
+              : undefined;
 
             if (uploadError.message?.includes('exceeded') || statusCode === 413) {
               // Use shared constants for file size limits
@@ -236,7 +236,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
           // Update recording with storage path
           await supabaseAdmin
-            .from('recordings')
+            .from('content')
             .update({
               storage_path_raw: storagePath,
               status: 'uploaded',
@@ -290,7 +290,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
             }
 
             await supabaseAdmin
-              .from('recordings')
+              .from('content')
               .update({ status: newStatus })
               .eq('id', recording.id);
 
@@ -302,7 +302,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
           // Generate signed URL for immediate access
           const { data: signedUrlData } = await supabaseAdmin.storage
-            .from('recordings')
+            .from('content')
             .createSignedUrl(storagePath, 3600); // 1 hour expiry
 
           return {

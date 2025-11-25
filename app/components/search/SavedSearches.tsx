@@ -125,84 +125,89 @@ export function SavedSearches({
 
   return (
     <div className={cn('space-y-3', className)}>
-      {/* Header with save button */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bookmark className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Saved Searches</span>
-        </div>
+      {/* Prominent Save Button - Always visible */}
+      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <DialogTrigger asChild>
+          <Button
+            variant={hasActiveSearch ? "default" : "outline"}
+            size="sm"
+            className={cn(
+              "w-full gap-2 transition-all",
+              hasActiveSearch && "bg-primary hover:bg-primary/90 shadow-sm",
+              !hasActiveSearch && "opacity-60"
+            )}
+            disabled={!hasActiveSearch}
+          >
+            <Bookmark className="size-4" />
+            <span>Save Current Search</span>
+            {hasActiveSearch && (
+              <span className="ml-auto text-xs bg-primary-foreground/20 px-1.5 py-0.5 rounded">
+                New
+              </span>
+            )}
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save Search</DialogTitle>
+            <DialogDescription>
+              Save this search configuration for quick access later.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="search-name">Name</Label>
+              <Input
+                id="search-name"
+                placeholder="e.g., Meeting recordings this week"
+                value={newSearchName}
+                onChange={(e) => setNewSearchName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSaveSearch();
+                  }
+                }}
+              />
+            </div>
 
-        {hasActiveSearch && (
-          <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
-            <DialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7">
-                <Plus className="h-3 w-3 mr-1" />
-                Save
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Save Search</DialogTitle>
-                <DialogDescription>
-                  Save this search configuration for quick access later.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="search-name">Name</Label>
-                  <Input
-                    id="search-name"
-                    placeholder="e.g., Meeting recordings this week"
-                    value={newSearchName}
-                    onChange={(e) => setNewSearchName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleSaveSearch();
-                      }
-                    }}
-                  />
-                </div>
-
-                {/* Preview */}
-                <div className="space-y-2">
-                  <Label>Preview</Label>
-                  <div className="p-3 border border-border rounded-md bg-muted/50 space-y-2">
-                    {currentQuery && (
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Query: </span>
-                        <span className="font-medium">{currentQuery}</span>
-                      </div>
-                    )}
-                    {currentFilters.contentTypes.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {currentFilters.contentTypes.map(type => (
-                          <Badge key={type} variant="secondary" className="text-xs">
-                            {type}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
+            {/* Preview */}
+            <div className="space-y-2">
+              <Label>Preview</Label>
+              <div className="p-3 border border-border rounded-md bg-muted/50 space-y-2">
+                {currentQuery && (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Query: </span>
+                    <span className="font-medium">{currentQuery}</span>
                   </div>
-                </div>
+                )}
+                {currentFilters.contentTypes.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {currentFilters.contentTypes.map(type => (
+                      <Badge key={type} variant="secondary" className="text-xs">
+                        {type}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowSaveDialog(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSaveSearch}
-                  disabled={!newSearchName.trim()}
-                >
-                  Save Search
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
-      </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowSaveDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveSearch}
+              disabled={!newSearchName.trim()}
+            >
+              Save Search
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Saved searches list */}
       {savedSearches.length === 0 ? (

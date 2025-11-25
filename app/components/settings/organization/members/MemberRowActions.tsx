@@ -25,7 +25,7 @@ import {
 } from '@/app/components/ui/dropdown-menu';
 import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 
-import type { OrganizationMember } from '../types';
+import type { OrganizationMember } from '@/app/(dashboard)/settings/organization/members/types';
 
 import { EditRoleModal } from './EditRoleModal';
 import { AssignDepartmentsModal } from './AssignDepartmentsModal';
@@ -150,7 +150,7 @@ export function MemberRowActions({ member }: MemberRowActionsProps) {
 
       {/* Edit Role Modal */}
       <EditRoleModal
-        member={member}
+        member={member as any}
         open={showEditRole}
         onClose={() => setShowEditRole(false)}
         onSuccess={() => {

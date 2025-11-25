@@ -67,7 +67,7 @@ export const DELETE = apiHandler(
       .eq('org_id', orgId);
 
     if (error) {
-      return errors.internal('Failed to delete conversation');
+      return errors.internalError();
     }
 
     return successResponse({ deleted: true });
@@ -100,7 +100,7 @@ export const PATCH = apiHandler(
       .single();
 
     if (error || !conversation) {
-      return errors.internal('Failed to update conversation');
+      return errors.internalError();
     }
 
     return successResponse({ conversation });

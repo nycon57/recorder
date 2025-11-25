@@ -19,7 +19,7 @@ import type { StorageProvider, StorageTier } from '@/lib/types/database';
 export interface FileHash {
   hash: string;
   fileSize: number;
-  recordingId: string;
+  contentId: string;
   storagePath: string;
   storageProvider: StorageProvider;
   storageTier: StorageTier;
@@ -30,7 +30,7 @@ export interface FileHash {
  * Deduplication result
  */
 export interface DeduplicationResult {
-  recordingId: string;
+  contentId: string;
   isDuplicate: boolean;
   originalRecordingId?: string;
   referenceCreated: boolean;
@@ -71,7 +71,7 @@ export async function findDuplicateByHash(
   const supabase = createClient();
 
   let query = supabase
-    .from('recordings')
+    .from('content')
     .select('id, file_hash, file_size, storage_path, storage_path_r2, storage_provider, storage_tier, created_at')
     .eq('org_id', orgId)
     .eq('file_hash', hash)
@@ -92,7 +92,7 @@ export async function findDuplicateByHash(
   return {
     hash: data.file_hash,
     fileSize: data.file_size,
-    recordingId: data.id,
+    contentId: data.id,
     storagePath: data.storage_path_r2 || data.storage_path,
     storageProvider: data.storage_provider || 'supabase',
     storageTier: data.storage_tier || 'hot',
@@ -104,7 +104,7 @@ export async function findDuplicateByHash(
  * Create file reference for duplicate
  */
 export async function createFileReference(
-  recordingId: string,
+  contentId: string,
   originalRecordingId: string,
   fileSize: number
 ): Promise<{ success: boolean; error?: string }> {
@@ -113,8 +113,8 @@ export async function createFileReference(
   try {
     // 1. Create reference record
     const { error: refError } = await supabase.from('file_references').insert({
-      recording_id: recordingId,
-      original_recording_id: originalRecordingId,
+      content_id: contentId,
+      original_content_id: originalRecordingId,
       file_size: fileSize,
       created_at: new Date().toISOString(),
     });
@@ -125,7 +125,7 @@ export async function createFileReference(
 
     // 2. Update reference count on original
     const { error: updateError } = await supabase.rpc('increment_reference_count', {
-      recording_id: originalRecordingId,
+      content_id: originalRecordingId,
     });
 
     if (updateError) {
@@ -134,13 +134,13 @@ export async function createFileReference(
 
     // 3. Mark recording as deduplicated
     const { error: markError } = await supabase
-      .from('recordings')
+      .from('content')
       .update({
         is_deduplicated: true,
         deduplicated_from: originalRecordingId,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', recordingId);
+      .eq('id', contentId);
 
     if (markError) {
       throw markError;
@@ -160,7 +160,7 @@ export async function createFileReference(
  * Process file for deduplication
  */
 export async function deduplicateFile(
-  recordingId: string,
+  contentId: string,
   orgId: string,
   fileData: Buffer,
   currentPath: string,
@@ -174,21 +174,21 @@ export async function deduplicateFile(
     // 2. Update recording with hash
     const supabase = createClient();
     await supabase
-      .from('recordings')
+      .from('content')
       .update({
         file_hash: hash,
         file_size: fileSize,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', recordingId);
+      .eq('id', contentId);
 
     // 3. Check for existing file with same hash
-    const duplicate = await findDuplicateByHash(hash, orgId, recordingId);
+    const duplicate = await findDuplicateByHash(hash, orgId, contentId);
 
     if (!duplicate) {
       // No duplicate found - this is a unique file
       return {
-        recordingId,
+        contentId,
         isDuplicate: false,
         referenceCreated: false,
         spaceSaved: 0,
@@ -196,13 +196,13 @@ export async function deduplicateFile(
     }
 
     // 4. Create reference to original file
-    const refResult = await createFileReference(recordingId, duplicate.recordingId, fileSize);
+    const refResult = await createFileReference(contentId, duplicate.contentId, fileSize);
 
     if (!refResult.success) {
       return {
-        recordingId,
+        contentId,
         isDuplicate: true,
-        originalRecordingId: duplicate.recordingId,
+        originalRecordingId: duplicate.contentId,
         referenceCreated: false,
         spaceSaved: 0,
         error: refResult.error,
@@ -210,24 +210,24 @@ export async function deduplicateFile(
     }
 
     // 5. Delete duplicate file from storage
-    const storageManager = StorageManager.getInstance();
+    const storageManager = new StorageManager();
     await storageManager.delete(currentPath, currentProvider === 'r2' ? currentPath : null);
 
     console.log(
-      `[Deduplication] Recording ${recordingId} is duplicate of ${duplicate.recordingId}. Saved ${(fileSize / 1024 / 1024).toFixed(2)} MB`
+      `[Deduplication] Recording ${contentId} is duplicate of ${duplicate.contentId}. Saved ${(fileSize / 1024 / 1024).toFixed(2)} MB`
     );
 
     return {
-      recordingId,
+      contentId,
       isDuplicate: true,
-      originalRecordingId: duplicate.recordingId,
+      originalRecordingId: duplicate.contentId,
       referenceCreated: true,
       spaceSaved: fileSize,
     };
   } catch (error) {
     console.error('[Deduplication] Error processing file:', error);
     return {
-      recordingId,
+      contentId,
       isDuplicate: false,
       referenceCreated: false,
       spaceSaved: 0,
@@ -249,11 +249,11 @@ export async function batchDeduplicateOrganization(
   errors: string[];
 }> {
   const supabase = createClient();
-  const storageManager = StorageManager.getInstance();
+  const storageManager = new StorageManager();
 
   // Get recordings without hashes
   const { data: recordings, error } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, storage_path, storage_path_r2, storage_provider, file_size')
     .eq('org_id', orgId)
     .is('file_hash', null)
@@ -333,7 +333,7 @@ export async function getDeduplicationStats(orgId: string): Promise<Deduplicatio
 
   // Get all recordings
   const { data: recordings } = await supabase
-    .from('recordings')
+    .from('content')
     .select('id, file_size, is_deduplicated, file_hash')
     .eq('org_id', orgId)
     .is('deleted_at', null);
@@ -391,7 +391,7 @@ export async function cleanupOrphanedReferences(
   // Find references where original recording is deleted
   const { data: orphaned } = await supabase
     .from('file_references')
-    .select('id, recording_id, original_recording_id')
+    .select('id, content_id, original_content_id')
     .eq('org_id', orgId);
 
   if (!orphaned || orphaned.length === 0) {
@@ -405,9 +405,9 @@ export async function cleanupOrphanedReferences(
     try {
       // Check if original still exists
       const { data: original } = await supabase
-        .from('recordings')
+        .from('content')
         .select('id')
-        .eq('id', ref.original_recording_id)
+        .eq('id', ref.original_content_id)
         .is('deleted_at', null)
         .single();
 

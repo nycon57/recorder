@@ -358,7 +358,7 @@ export class AnalyticsService {
 
     // Get top 10 largest files
     const { data: largestFiles, error: largestError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, title, content_type, file_size, created_at')
       .eq('org_id', orgId)
       .is('deleted_at', null)
@@ -933,7 +933,7 @@ export class AnalyticsService {
     const supabase = supabaseAdmin;
 
     const { count, error } = await supabase
-      .from('recordings')
+      .from('content')
       .select('*', { count: 'exact', head: true })
       .eq('org_id', orgId)
       .is('deleted_at', null)
@@ -1150,14 +1150,14 @@ export class AnalyticsService {
 
     // Get storage size for current and last month
     const { data: thisMonthStorage } = await supabase
-      .from('recordings')
+      .from('content')
       .select('file_size')
       .eq('org_id', orgId)
       .is('deleted_at', null)
       .lte('created_at', now.toISOString());
 
     const { data: lastMonthStorage } = await supabase
-      .from('recordings')
+      .from('content')
       .select('file_size')
       .eq('org_id', orgId)
       .is('deleted_at', null)

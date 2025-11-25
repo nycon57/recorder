@@ -75,7 +75,7 @@ async function collectMetricsForOrganization(
 
   // Fetch all recordings for this organization
   const { data: recordings, error: recordingsError } = await supabase
-    .from('recordings')
+    .from('content')
     .select('file_size, storage_tier, compression_stats, mime_type, content_type')
     .eq('org_id', orgId)
     .is('deleted_at', null);

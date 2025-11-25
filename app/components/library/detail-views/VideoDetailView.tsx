@@ -45,7 +45,7 @@ interface Word {
 
 interface Transcript {
   id: string;
-  recording_id: string;
+  content_id: string;
   text: string;
   words_json?: Word[] | null;
   language?: string | null;
@@ -55,7 +55,7 @@ interface Transcript {
 
 interface Document {
   id: string;
-  recording_id: string;
+  content_id: string;
   markdown: string;
   html?: string | null;
   summary?: string | null;
@@ -86,11 +86,15 @@ interface Recording {
   file_size: number | null;
 }
 
-interface VideoDetailViewProps {
+export interface VideoDetailViewProps {
   recording: Recording;
   transcript: Transcript | null;
   document: Document | null;
   initialTags: Tag[];
+  /** Cache key for fetching highlight sources */
+  sourceKey?: string;
+  /** ID of transcript chunk to highlight (from search) */
+  initialHighlightId?: string;
 }
 
 export default function VideoDetailView({
@@ -197,8 +201,10 @@ export default function VideoDetailView({
     },
     onFullscreen: () => {
       if (videoPlayerRef.current) {
-        if (document.fullscreenElement) {
-          document.exitFullscreen();
+        if (document && 'fullscreenElement' in document && document.fullscreenElement) {
+          if ('exitFullscreen' in document) {
+            (document as Document & { exitFullscreen: () => Promise<void> }).exitFullscreen();
+          }
         } else {
           videoPlayerRef.current.requestFullscreen();
         }

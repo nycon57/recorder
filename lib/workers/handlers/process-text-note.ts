@@ -75,7 +75,7 @@ export async function handleProcessTextNote(
       const { data, error } = await supabase
         .from('transcripts')
         .select('*')
-        .eq('recording_id', recordingId)
+        .eq('content_id', recordingId)
         .maybeSingle();
 
       if (!error && data) {
@@ -178,7 +178,7 @@ export async function handleProcessTextNote(
 
     // Update recording status
     await supabase
-      .from('recordings')
+      .from('content')
       .update({ status: 'transcribed' })
       .eq('id', recordingId);
 
@@ -238,7 +238,7 @@ export async function handleProcessTextNote(
 
     // Update recording status to error
     await supabase
-      .from('recordings')
+      .from('content')
       .update({
         status: 'error',
         error_message: error instanceof Error ? error.message : 'Text note processing failed',

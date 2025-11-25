@@ -27,7 +27,7 @@ export const POST = apiHandler(
 
     // Check if recording exists, belongs to org, and is soft-deleted
     const { data: recording, error: fetchError } = await supabase
-      .from('recordings')
+      .from('content')
       .select('id, deleted_at, title')
       .eq('id', id)
       .eq('org_id', orgId)
@@ -45,7 +45,7 @@ export const POST = apiHandler(
 
     // Restore the recording by clearing soft delete fields
     const { error } = await supabase
-      .from('recordings')
+      .from('content')
       .update({
         deleted_at: null,
         deleted_by: null,

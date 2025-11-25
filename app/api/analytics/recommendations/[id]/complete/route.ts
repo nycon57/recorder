@@ -34,7 +34,8 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
 
   const { id: recommendationId } = await context.params;
   const body = await parseBody(request, recommendationCompleteSchema);
-  const { actualSavings } = body;
+  // Type assertion for parsed body
+  const { actualSavings } = body as { actualSavings: number };
 
   // First, get the current recommendation to calculate implementation days
   const { data: current, error: fetchError } = await supabaseAdmin

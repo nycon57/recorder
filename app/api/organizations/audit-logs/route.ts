@@ -40,7 +40,7 @@ export type AuditLog = {
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
-  const filters = parseSearchParams(request, auditLogFiltersSchema);
+  const filtersData: AuditLogFilters = parseSearchParams(request, auditLogFiltersSchema);
   const supabase = supabaseAdmin;
 
   // Build base query
@@ -58,34 +58,34 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .order('created_at', { ascending: false });
 
   // Apply filters
-  if (filters.from) {
-    query = query.gte('created_at', new Date(filters.from).toISOString());
+  if (filtersData.from) {
+    query = query.gte('created_at', new Date(filtersData.from).toISOString());
   }
 
-  if (filters.to) {
-    query = query.lte('created_at', new Date(filters.to).toISOString());
+  if (filtersData.to) {
+    query = query.lte('created_at', new Date(filtersData.to).toISOString());
   }
 
-  if (filters.userId) {
-    query = query.eq('user_id', filters.userId);
+  if (filtersData.userId) {
+    query = query.eq('user_id', filtersData.userId);
   }
 
-  if (filters.action) {
-    query = query.eq('action', filters.action);
+  if (filtersData.action) {
+    query = query.eq('action', filtersData.action);
   }
 
-  if (filters.resourceType) {
-    query = query.eq('resource_type', filters.resourceType);
+  if (filtersData.resourceType) {
+    query = query.eq('resource_type', filtersData.resourceType);
   }
 
-  if (filters.search) {
+  if (filtersData.search) {
     // Search in action, resource_type, and metadata
-    query = query.or(`action.ilike.%${filters.search}%,resource_type.ilike.%${filters.search}%`);
+    query = query.or(`action.ilike.%${filtersData.search}%,resource_type.ilike.%${filtersData.search}%`);
   }
 
   // Apply pagination
-  const offset = (filters.page - 1) * filters.limit;
-  query = query.range(offset, offset + filters.limit - 1);
+  const offset = (filtersData.page - 1) * filtersData.limit;
+  query = query.range(offset, offset + filtersData.limit - 1);
 
   const { data: logs, error: logsError, count } = await query;
 
@@ -127,10 +127,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
   return successResponse({
     logs: logs || [],
     pagination: {
-      page: filters.page,
-      limit: filters.limit,
+      page: filtersData.page,
+      limit: filtersData.limit,
       total: count || 0,
-      totalPages: Math.ceil((count || 0) / filters.limit),
+      totalPages: Math.ceil((count || 0) / filtersData.limit),
     },
     filters: {
       actions: uniqueActions,
@@ -149,7 +149,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   const body = await request.json();
-  const filters = auditLogFiltersSchema.parse(body);
+  const filtersData: AuditLogFilters = auditLogFiltersSchema.parse(body);
   const supabase = supabaseAdmin;
 
   // Build query for export (no pagination)
@@ -166,24 +166,24 @@ export const POST = apiHandler(async (request: NextRequest) => {
     .order('created_at', { ascending: false });
 
   // Apply filters
-  if (filters.from) {
-    query = query.gte('created_at', new Date(filters.from).toISOString());
+  if (filtersData.from) {
+    query = query.gte('created_at', new Date(filtersData.from).toISOString());
   }
 
-  if (filters.to) {
-    query = query.lte('created_at', new Date(filters.to).toISOString());
+  if (filtersData.to) {
+    query = query.lte('created_at', new Date(filtersData.to).toISOString());
   }
 
-  if (filters.userId) {
-    query = query.eq('user_id', filters.userId);
+  if (filtersData.userId) {
+    query = query.eq('user_id', filtersData.userId);
   }
 
-  if (filters.action) {
-    query = query.eq('action', filters.action);
+  if (filtersData.action) {
+    query = query.eq('action', filtersData.action);
   }
 
-  if (filters.resourceType) {
-    query = query.eq('resource_type', filters.resourceType);
+  if (filtersData.resourceType) {
+    query = query.eq('resource_type', filtersData.resourceType);
   }
 
   // Limit to 10000 records for export
