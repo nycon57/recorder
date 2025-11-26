@@ -23,9 +23,9 @@ async function getContentItem(id: string, clerkOrgId: string) {
     return null;
   }
 
-  // Fetch content item (from recordings table - unified content storage)
+  // Fetch content item (from content table - unified content storage)
   const { data: item, error } = await supabase
-    .from('recordings')
+    .from('content')
     .select(
       `
       *,
@@ -99,33 +99,16 @@ async function getContentItem(id: string, clerkOrgId: string) {
  */
 async function getHighlightSources(sourceKey: string) {
   try {
-    console.log('[Library Detail] Fetching from:', `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/chat?sourcesKey=${sourceKey}`);
-
     const response = await fetch(
       `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/chat?sourcesKey=${sourceKey}`,
       { cache: 'no-store' }
     );
 
-    console.log('[Library Detail] Fetch response:', {
-      status: response.status,
-      ok: response.ok,
-      statusText: response.statusText,
-    });
-
     if (!response.ok) {
-      console.error('[Library Detail] Fetch failed:', {
-        status: response.status,
-        statusText: response.statusText,
-      });
       return null;
     }
 
     const { sources } = await response.json();
-    console.log('[Library Detail] Parsed JSON:', {
-      hasSources: !!sources,
-      sourcesCount: sources?.length || 0,
-    });
-
     return sources || null;
   } catch (error) {
     console.error('[Library Detail] Failed to fetch highlight sources:', error);
@@ -162,12 +145,6 @@ export default async function LibraryItemDetailPage({
   const { id } = await params;
   const { sourceKey, highlight } = await searchParams;
 
-  console.log('[Library Detail Page] URL params:', {
-    id,
-    sourceKey,
-    highlight,
-  });
-
   const item = await getContentItem(id, orgId);
 
   // Pass sourceKey and highlight to components for client-side fetching
@@ -187,7 +164,7 @@ export default async function LibraryItemDetailPage({
 
   // Fetch tags
   const { data: itemTags } = await supabaseAdmin
-    .from('recording_tags')
+    .from('content_tags')
     .select(`
       tag_id,
       tags (
@@ -198,7 +175,7 @@ export default async function LibraryItemDetailPage({
         updated_at
       )
     `)
-    .eq('recording_id', id);
+    .eq('content_id', id);
 
   const tags = itemTags
     ?.map((rt: any) => rt.tags)

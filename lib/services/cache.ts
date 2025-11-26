@@ -20,6 +20,7 @@ const CACHE_PREFIXES = {
   USER: 'cache:user',
   TAGS: 'cache:tags',
   COLLECTIONS: 'cache:collections',
+  CONCEPTS: 'cache:concepts',
   STATS: 'cache:stats',
   LIBRARY_META: 'cache:library:meta',
   DEDUP: 'dedup',
@@ -33,6 +34,9 @@ const CACHE_TTL = {
   USER: 300,          // 5 minutes - User data changes infrequently
   TAGS: 600,          // 10 minutes - Tags are relatively static
   COLLECTIONS: 600,   // 10 minutes - Collections are relatively static
+  CONCEPTS: 60,       // 1 minute - Concepts change as content is processed
+  CONCEPTS_SINGLE: 300, // 5 minutes - Single concept details cache longer
+  CONCEPTS_GRAPH: 300,  // 5 minutes - Graph data is expensive to compute
   STATS: 60,          // 1 minute - Stats need to be relatively fresh
   LIBRARY_META: 600,  // 10 minutes - Combined tags + collections metadata
   DEDUP: 10,          // 10 seconds - Request deduplication window
@@ -69,6 +73,17 @@ export interface CachedCollection {
   name: string;
   description?: string;
   item_count?: number;
+}
+
+/**
+ * Concept cache entry
+ */
+export interface CachedConcept {
+  id: string;
+  name: string;
+  concept_type: string;
+  mention_count: number;
+  description?: string;
 }
 
 /**
@@ -331,6 +346,138 @@ export class CollectionsCache {
   static async invalidate(orgId: string): Promise<void> {
     const key = this.buildKey(orgId);
     await CacheService.delete(key);
+  }
+}
+
+/**
+ * Concepts caching operations (Knowledge Graph)
+ */
+export class ConceptsCache {
+  /**
+   * TTL values for different concept cache types
+   */
+  static TTL = {
+    LIST: CACHE_TTL.CONCEPTS,
+    SINGLE: CACHE_TTL.CONCEPTS_SINGLE,
+    GRAPH: CACHE_TTL.CONCEPTS_GRAPH,
+  };
+
+  /**
+   * Build cache key for org concepts list
+   */
+  static listKey(orgId: string, queryHash: string): string {
+    return `${CACHE_PREFIXES.CONCEPTS}:list:${orgId}:${queryHash}`;
+  }
+
+  /**
+   * Build cache key for single concept
+   */
+  static singleKey(conceptId: string): string {
+    return `${CACHE_PREFIXES.CONCEPTS}:single:${conceptId}`;
+  }
+
+  /**
+   * Build cache key for org knowledge graph
+   */
+  static graphKey(orgId: string): string {
+    return `${CACHE_PREFIXES.CONCEPTS}:graph:${orgId}`;
+  }
+
+  /**
+   * Build cache key for content concepts
+   */
+  static contentKey(contentId: string): string {
+    return `${CACHE_PREFIXES.CONCEPTS}:content:${contentId}`;
+  }
+
+  /**
+   * Get cached concepts list for org
+   */
+  static async getList(orgId: string, queryHash: string): Promise<CachedConcept[] | null> {
+    const key = this.listKey(orgId, queryHash);
+    return CacheService.get<CachedConcept[]>(key);
+  }
+
+  /**
+   * Set cached concepts list for org
+   */
+  static async setList(orgId: string, queryHash: string, concepts: CachedConcept[]): Promise<void> {
+    const key = this.listKey(orgId, queryHash);
+    await CacheService.set(key, concepts, CACHE_TTL.CONCEPTS);
+  }
+
+  /**
+   * Get cached single concept
+   */
+  static async getSingle<T>(conceptId: string): Promise<T | null> {
+    const key = this.singleKey(conceptId);
+    return CacheService.get<T>(key);
+  }
+
+  /**
+   * Set cached single concept
+   */
+  static async setSingle<T>(conceptId: string, data: T): Promise<void> {
+    const key = this.singleKey(conceptId);
+    await CacheService.set(key, data, CACHE_TTL.CONCEPTS_SINGLE);
+  }
+
+  /**
+   * Get cached knowledge graph for org
+   */
+  static async getGraph<T>(orgId: string): Promise<T | null> {
+    const key = this.graphKey(orgId);
+    return CacheService.get<T>(key);
+  }
+
+  /**
+   * Set cached knowledge graph for org
+   */
+  static async setGraph<T>(orgId: string, data: T): Promise<void> {
+    const key = this.graphKey(orgId);
+    await CacheService.set(key, data, CACHE_TTL.CONCEPTS_GRAPH);
+  }
+
+  /**
+   * Get cached concepts for a content item
+   */
+  static async getContent<T>(contentId: string): Promise<T | null> {
+    const key = this.contentKey(contentId);
+    return CacheService.get<T>(key);
+  }
+
+  /**
+   * Set cached concepts for a content item
+   */
+  static async setContent<T>(contentId: string, data: T): Promise<void> {
+    const key = this.contentKey(contentId);
+    await CacheService.set(key, data, CACHE_TTL.CONCEPTS);
+  }
+
+  /**
+   * Invalidate all concept caches for an org
+   * Call this after content is processed or concepts are updated
+   */
+  static async invalidate(orgId: string): Promise<void> {
+    // Invalidate all concept-related caches for this org
+    await Promise.all([
+      CacheService.deletePattern(`${CACHE_PREFIXES.CONCEPTS}:list:${orgId}:*`),
+      CacheService.delete(this.graphKey(orgId)),
+    ]);
+  }
+
+  /**
+   * Invalidate concept cache for a specific content item
+   */
+  static async invalidateContent(contentId: string): Promise<void> {
+    await CacheService.delete(this.contentKey(contentId));
+  }
+
+  /**
+   * Invalidate single concept cache
+   */
+  static async invalidateSingle(conceptId: string): Promise<void> {
+    await CacheService.delete(this.singleKey(conceptId));
   }
 }
 
@@ -658,6 +805,7 @@ export const CacheInvalidation = {
     await Promise.all([
       TagsCache.invalidate(orgId),
       CollectionsCache.invalidate(orgId),
+      ConceptsCache.invalidate(orgId),
       StatsCache.invalidate(orgId),
       LibraryMetadataCache.invalidate(orgId),
     ]);
@@ -690,6 +838,20 @@ export const CacheInvalidation = {
     await StatsCache.invalidate(orgId);
     // Also invalidate library metadata if counts change
     await LibraryMetadataCache.invalidate(orgId);
+  },
+
+  /**
+   * Invalidate when concepts are extracted/updated
+   */
+  async invalidateConcepts(orgId: string): Promise<void> {
+    await ConceptsCache.invalidate(orgId);
+  },
+
+  /**
+   * Invalidate concepts for a specific content item
+   */
+  async invalidateContentConcepts(contentId: string): Promise<void> {
+    await ConceptsCache.invalidateContent(contentId);
   },
 
   /**

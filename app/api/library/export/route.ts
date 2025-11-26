@@ -55,8 +55,8 @@ export async function POST(request: NextRequest) {
       .from('content')
       .select(`
         *,
-        transcripts!recording_id (*),
-        documents!recording_id (*)
+        transcripts!content_id (*),
+        documents!content_id (*)
       `)
       .eq('org_id', orgId)
       .is('deleted_at', null);

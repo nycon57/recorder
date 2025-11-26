@@ -19,6 +19,7 @@ import { sanitizeMetadata } from '@/lib/utils/config-validation';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
 import { sendEmbeddingProgress, isStreamingAvailable } from '@/lib/services/llm-streaming-helper';
+import { extractAndStoreConcepts } from '@/lib/services/concept-extractor';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -746,6 +747,64 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
         chunkCount: embeddingRecords.length,
       },
     });
+
+    // MOAT Feature: Extract concepts for Knowledge Graph
+    // Run concept extraction in parallel with summary job enqueue (non-blocking)
+    progressCallback?.(92, 'Extracting concepts for Knowledge Graph...');
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'embeddings', 92, 'Extracting concepts for Knowledge Graph...');
+    }
+
+    try {
+      // Combine transcript and document text for concept extraction
+      const fullText = `${transcript.text}\n\n${document.markdown}`;
+
+      const conceptResult = await extractAndStoreConcepts(
+        recordingId,
+        orgId,
+        fullText,
+        {
+          maxConcepts: 30,
+          minConfidence: 0.6,
+          generateEmbeddings: true,
+        }
+      );
+
+      if (conceptResult.success) {
+        logger.info('Extracted concepts for Knowledge Graph', {
+          context: {
+            recordingId,
+            conceptCount: conceptResult.conceptCount,
+            newConcepts: conceptResult.newConcepts,
+            updatedConcepts: conceptResult.updatedConcepts,
+          },
+        });
+
+        // Create event for concept extraction
+        await supabase.from('events').insert({
+          type: 'concepts.extracted',
+          payload: {
+            recordingId,
+            orgId,
+            conceptCount: conceptResult.conceptCount,
+            newConcepts: conceptResult.newConcepts,
+            updatedConcepts: conceptResult.updatedConcepts,
+          },
+        });
+      } else {
+        logger.warn('Concept extraction completed with issues', {
+          context: { recordingId },
+        });
+      }
+    } catch (conceptError) {
+      // Concept extraction is non-critical - log and continue
+      logger.warn('Concept extraction failed (non-critical)', {
+        context: {
+          recordingId,
+          error: conceptError instanceof Error ? conceptError.message : String(conceptError),
+        },
+      });
+    }
 
     // Enqueue summary generation job
     await supabase.from('jobs').insert({

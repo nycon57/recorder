@@ -122,7 +122,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
   // Check if document already exists (idempotency check)
   const { data: existingDocument } = await supabase
     .from('documents')
-    .select('id, recording_id')
+    .select('id, content_id')
     .eq('content_id', recordingId)
     .eq('org_id', orgId)
     .single();

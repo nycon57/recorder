@@ -31,6 +31,8 @@ interface CollectionManagerProps {
   parentId?: string | null;
   collections: Collection[];
   onSave: (data: { name: string; description: string; parent_id: string | null }) => Promise<void>;
+  /** Set to false to prevent Dialog from trapping focus (useful when opening from inside Sheet) */
+  modal?: boolean;
 }
 
 /**
@@ -61,6 +63,7 @@ export function CollectionManager({
   parentId,
   collections,
   onSave,
+  modal = true,
 }: CollectionManagerProps) {
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
@@ -72,7 +75,7 @@ export function CollectionManager({
   React.useEffect(() => {
     if (open) {
       setName(collection?.name || '');
-      setDescription(''); // Collection type doesn't have description field
+      setDescription(collection?.description || '');
       setSelectedParentId(parentId || collection?.parent_id || null);
     }
   }, [open, collection, parentId]);
@@ -96,16 +99,32 @@ export function CollectionManager({
     }
   };
 
+  // Get all descendant IDs of a collection to prevent circular references
+  const getDescendantIds = (id: string): Set<string> => {
+    const descendants = new Set<string>();
+    const findDescendants = (parentId: string) => {
+      collections.forEach((c) => {
+        if (c.parent_id === parentId && !descendants.has(c.id)) {
+          descendants.add(c.id);
+          findDescendants(c.id);
+        }
+      });
+    };
+    findDescendants(id);
+    return descendants;
+  };
+
   // Filter out current collection and its descendants to prevent circular references
   const availableParents = collections.filter((c) => {
-    if (isEditing && c.id === collection.id) return false;
-    // TODO: Add logic to filter descendants
-    return true;
+    if (!isEditing) return true;
+    if (c.id === collection.id) return false;
+    const descendants = getDescendantIds(collection.id);
+    return !descendants.has(c.id);
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={onOpenChange} modal={modal}>
+      <DialogContent hideOverlay={!modal}>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>

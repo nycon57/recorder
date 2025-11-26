@@ -148,7 +148,7 @@ export async function indexRecordingFrames(
   const { data: frames, error } = await supabase
     .from('video_frames')
     .select('id, frame_url, frame_time_sec')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .is('visual_description', null)
     .order('frame_number');
 

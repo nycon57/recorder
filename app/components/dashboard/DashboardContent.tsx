@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import CreateNoteModal from '@/app/components/create-note/CreateNoteModal';
 import UploadModal from '@/app/components/upload/UploadModal';
+import { KnowledgeInsightsCard, ConceptPanel } from '@/app/components/knowledge';
 
 import { EmptyState } from './EmptyState';
 import { QuickActions } from './QuickActions';
@@ -39,6 +40,7 @@ export function DashboardContent() {
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isCreateNoteModalOpen, setIsCreateNoteModalOpen] = useState(false);
+  const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
 
   /**
    * Fetch dashboard data
@@ -147,6 +149,14 @@ export function DashboardContent() {
           <StatsRow stats={stats} isLoading={isLoadingStats} />
         </section>
 
+        {/* Knowledge Insights */}
+        <section>
+          <KnowledgeInsightsCard
+            onConceptClick={(conceptId) => setSelectedConceptId(conceptId)}
+            className="max-w-2xl"
+          />
+        </section>
+
         {/* Recent Items or Empty State */}
         <section>
           {isEmpty ? (
@@ -172,6 +182,13 @@ export function DashboardContent() {
         isOpen={isCreateNoteModalOpen}
         onClose={() => setIsCreateNoteModalOpen(false)}
         onNoteCreated={handleNoteCreated}
+      />
+
+      {/* Concept Panel (Knowledge Graph) */}
+      <ConceptPanel
+        conceptId={selectedConceptId}
+        onClose={() => setSelectedConceptId(null)}
+        onConceptClick={(conceptId) => setSelectedConceptId(conceptId)}
       />
     </>
   );

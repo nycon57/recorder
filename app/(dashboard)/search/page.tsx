@@ -17,7 +17,6 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Filter, Clock, FileText, Video, SlidersHorizontal, Bookmark, X, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import debounce from 'lodash/debounce';
 import ReactMarkdown from 'react-markdown';
 
 import { Loader } from '@/app/components/ai-elements/loader';
@@ -47,6 +46,8 @@ import {
 } from '@/app/components/ui/sheet';
 import { TagFilter } from '@/app/components/tags/TagFilter';
 import { TagBadge } from '@/app/components/tags/TagBadge';
+import { ConceptFilter, ConceptBadge, ConceptSectionCompact } from '@/app/components/knowledge';
+import type { ConceptType } from '@/lib/validations/knowledge';
 import { FavoriteButton } from '@/app/components/favorites/FavoriteButton';
 import { CollectionPicker } from '@/app/components/collections/CollectionPicker';
 import { CollectionBreadcrumb } from '@/app/components/collections/CollectionBreadcrumb';
@@ -56,6 +57,12 @@ import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/K
 import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/app/hooks/useKeyboardShortcuts';
 import { ContentType } from '@/lib/types/database';
 import { CONTENT_TYPE_EMOJI } from '@/lib/types/content';
+
+interface SearchResultConcept {
+  id: string;
+  name: string;
+  conceptType: ConceptType;
+}
 
 interface SearchResult {
   id: string;
@@ -75,6 +82,7 @@ interface SearchResult {
     isFavorite?: boolean;
   };
   createdAt: string;
+  concepts?: SearchResultConcept[];
 }
 
 interface FilterState {
@@ -84,6 +92,7 @@ interface FilterState {
   dateFrom: Date | null;
   dateTo: Date | null;
   favoritesOnly: boolean;
+  conceptTypes: ConceptType[];
 }
 
 function SearchPageContent() {
@@ -97,6 +106,9 @@ function SearchPageContent() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [sortBy, setSortBy] = useState<'relevance' | 'date' | 'name'>('relevance');
 
+  // Track if user has performed a search (for showing "no results" vs initial state)
+  const [hasSearched, setHasSearched] = useState(false);
+
   // Advanced filters state
   const [filters, setFilters] = useState<FilterState>({
     contentTypes: [],
@@ -105,6 +117,7 @@ function SearchPageContent() {
     dateFrom: null,
     dateTo: null,
     favoritesOnly: false,
+    conceptTypes: [],
   });
 
   // Tags and collections
@@ -131,6 +144,7 @@ function SearchPageContent() {
       // Clear results if query is empty
       setResults([]);
       setError(null);
+      setHasSearched(false);
       return;
     }
 
@@ -170,37 +184,21 @@ function SearchPageContent() {
 
       setResults(results);
       setError(null);
+      setHasSearched(true);
     } catch (error) {
       console.error('Search error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Search failed. Please try again.';
       setError(errorMessage);
       setResults([]);
+      setHasSearched(true);
     } finally {
       setLoading(false);
     }
   }, [query, filters, searchMode, sourceFilter, sortBy]);
 
-  // Debounced search function
-  const debouncedSearch = useCallback(
-    debounce((searchQuery: string, searchFilters: FilterState) => {
-      if (searchQuery.trim()) {
-        handleSearch(undefined, searchQuery, searchFilters);
-      }
-    }, 500),
-    [handleSearch]
-  );
-
-  // Auto-search on query or filter changes
-  useEffect(() => {
-    if (query.trim()) {
-      debouncedSearch(query, filters);
-    }
-
-    // Cleanup debounce on unmount
-    return () => {
-      debouncedSearch.cancel();
-    };
-  }, [query, filters, debouncedSearch]);
+  // Note: Removed auto-search on typing for cleaner UX
+  // Users can press Enter or click Search button to perform search
+  // This prevents unnecessary API calls and erroneous intermediate results
 
   async function fetchTags() {
     try {
@@ -225,6 +223,53 @@ function SearchPageContent() {
       console.error('Error fetching collections:', error);
     }
   }
+
+  // Fetch concepts for search results
+  const fetchResultsConcepts = useCallback(async (searchResults: SearchResult[]) => {
+    if (searchResults.length === 0) return;
+
+    // Get unique content IDs
+    const contentIds = [...new Set(searchResults.map(r => r.recordingId))];
+
+    // Fetch concepts for each content item in parallel (limit to 10 concurrent)
+    const conceptsMap = new Map<string, SearchResultConcept[]>();
+
+    await Promise.all(
+      contentIds.slice(0, 10).map(async (contentId) => {
+        try {
+          const response = await fetch(`/api/library/${contentId}/concepts?limit=5`);
+          if (response.ok) {
+            const data = await response.json();
+            const concepts = data.data?.concepts || [];
+            conceptsMap.set(contentId, concepts.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              conceptType: c.conceptType || c.concept_type,
+            })));
+          }
+        } catch (error) {
+          console.error(`Error fetching concepts for ${contentId}:`, error);
+        }
+      })
+    );
+
+    // Update results with concepts
+    if (conceptsMap.size > 0) {
+      setResults(prevResults =>
+        prevResults.map(result => ({
+          ...result,
+          concepts: conceptsMap.get(result.recordingId) || result.concepts,
+        }))
+      );
+    }
+  }, []);
+
+  // Fetch concepts when results change
+  useEffect(() => {
+    if (results.length > 0 && !results[0].concepts) {
+      fetchResultsConcepts(results);
+    }
+  }, [results, fetchResultsConcepts]);
 
   const sortResults = (results: SearchResult[], sortBy: 'relevance' | 'date' | 'name') => {
     const sorted = [...results];
@@ -259,6 +304,7 @@ function SearchPageContent() {
     if (filters.collectionId) count++;
     if (filters.dateFrom || filters.dateTo) count++;
     if (filters.favoritesOnly) count++;
+    if (filters.conceptTypes.length > 0) count++;
     return count;
   };
 
@@ -270,7 +316,15 @@ function SearchPageContent() {
       dateFrom: null,
       dateTo: null,
       favoritesOnly: false,
+      conceptTypes: [],
     });
+  };
+
+  const removeConceptTypeFilter = (type: ConceptType) => {
+    setFilters(prev => ({
+      ...prev,
+      conceptTypes: prev.conceptTypes.filter(t => t !== type),
+    }));
   };
 
   const removeContentTypeFilter = (type: ContentType) => {
@@ -488,6 +542,17 @@ function SearchPageContent() {
                   />
                 </div>
 
+                {/* Concept Types Filter */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Concept Types
+                  </label>
+                  <ConceptFilter
+                    selectedTypes={filters.conceptTypes}
+                    onSelectionChange={(types) => setFilters(prev => ({ ...prev, conceptTypes: types }))}
+                  />
+                </div>
+
                 {/* Collection Filter */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
@@ -575,6 +640,20 @@ function SearchPageContent() {
                 />
               ) : null;
             })}
+
+            {/* Concept Type Filters */}
+            {filters.conceptTypes.map((type) => (
+              <Badge key={type} variant="secondary" className="gap-1">
+                <span className="capitalize">{type.replace('_', ' ')}</span>
+                <button
+                  type="button"
+                  onClick={() => removeConceptTypeFilter(type)}
+                  className="hover:bg-black/10 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
 
             {/* Collection Filter */}
             {filters.collectionId && (
@@ -758,13 +837,35 @@ function SearchPageContent() {
                     ))}
                   </div>
                 )}
+
+                {/* Concepts */}
+                {result.concepts && result.concepts.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap mt-2">
+                    {result.concepts.slice(0, 3).map((concept) => (
+                      <ConceptBadge
+                        key={concept.id}
+                        name={concept.name}
+                        type={concept.conceptType}
+                        size="sm"
+                      />
+                    ))}
+                    {result.concepts.length > 3 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{result.concepts.length - 3} more
+                      </Badge>
+                    )}
+                  </div>
+                )}
               </motion.div>
             ))}
           </motion.div>
-        ) : query ? (
+        ) : hasSearched && query ? (
           <SearchNoResultsState
             query={query}
-            onClearSearch={() => setQuery('')}
+            onClearSearch={() => {
+              setQuery('');
+              setHasSearched(false);
+            }}
           />
         ) : (
           <SearchInitialState />

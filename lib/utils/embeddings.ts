@@ -56,9 +56,9 @@ export async function checkEmbeddingsStatus(
 ): Promise<EmbeddingsStatus> {
   const supabase = supabaseAdmin;
 
-  // Get recording embeddings timestamp
-  const { data: recording } = await supabase
-    .from('recordings')
+  // Get content embeddings timestamp
+  const { data: content } = await supabase
+    .from('content')
     .select('embeddings_updated_at')
     .eq('id', recordingId)
     .single();
@@ -67,17 +67,17 @@ export async function checkEmbeddingsStatus(
   const { data: document } = await supabase
     .from('documents')
     .select('updated_at, needs_embeddings_refresh')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .single();
 
   // Count existing chunks
   const { count: chunkCount } = await supabase
     .from('transcript_chunks')
     .select('id', { count: 'exact', head: true })
-    .eq('recording_id', recordingId);
+    .eq('content_id', recordingId);
 
-  const embeddingsUpdated = recording?.embeddings_updated_at
-    ? new Date(recording.embeddings_updated_at)
+  const embeddingsUpdated = content?.embeddings_updated_at
+    ? new Date(content.embeddings_updated_at)
     : null;
 
   const documentUpdated = document?.updated_at
@@ -165,14 +165,14 @@ export async function triggerEmbeddingsRefresh(
   const { data: transcript } = await supabase
     .from('transcripts')
     .select('id')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .eq('superseded', false)
     .single();
 
   const { data: document } = await supabase
     .from('documents')
     .select('id')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .eq('org_id', orgId)
     .single();
 
@@ -184,7 +184,7 @@ export async function triggerEmbeddingsRefresh(
   await supabase
     .from('transcript_chunks')
     .delete()
-    .eq('recording_id', recordingId);
+    .eq('content_id', recordingId);
 
   // Enqueue embeddings job
   const { data: job, error: jobError } = await supabase
@@ -223,7 +223,7 @@ export async function checkEmbeddingsStalenessDB(
   const supabase = supabaseAdmin;
 
   const { data, error } = await supabase.rpc('are_embeddings_stale', {
-    p_recording_id: recordingId,
+    p_content_id: recordingId,
     p_threshold_hours: thresholdHours,
   });
 
@@ -244,9 +244,9 @@ export async function getRecordingsWithStaleEmbeddings(
 ): Promise<Array<{ id: string; title: string; lastUpdated: Date | null }>> {
   const supabase = supabaseAdmin;
 
-  // Get recordings where document was updated after embeddings
-  const { data: recordings } = await supabase
-    .from('recordings')
+  // Get content where document was updated after embeddings
+  const { data: contentItems } = await supabase
+    .from('content')
     .select(
       `
       id,
@@ -266,11 +266,11 @@ export async function getRecordingsWithStaleEmbeddings(
     )
     .limit(limit);
 
-  if (!recordings) {
+  if (!contentItems) {
     return [];
   }
 
-  return recordings.map((r: any) => ({
+  return contentItems.map((r: any) => ({
     id: r.id,
     title: r.title,
     lastUpdated: r.embeddings_updated_at ? new Date(r.embeddings_updated_at) : null,

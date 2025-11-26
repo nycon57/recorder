@@ -64,14 +64,14 @@ export const POST = apiHandler(async (request: NextRequest, { params }: RoutePar
 
   // Create tag associations (ignore duplicates)
   const associations = recordings.map(recording => ({
-    recording_id: recording.id,
+    content_id: recording.id,
     tag_id: tagId,
     created_by: userId,
   }));
 
   const { data: inserted, error: insertError } = await supabaseAdmin
     .from('content_tags')
-    .upsert(associations, { onConflict: 'recording_id,tag_id', ignoreDuplicates: true })
+    .upsert(associations, { onConflict: 'content_id,tag_id', ignoreDuplicates: true })
     .select('content_id');
 
   if (insertError) {

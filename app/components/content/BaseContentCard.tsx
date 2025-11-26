@@ -33,6 +33,17 @@ import { cn } from '@/lib/utils';
 import { ContentType } from '@/lib/types/database';
 import { formatDuration, formatFileSize, formatDate } from '@/lib/utils/formatting';
 import { getStatusLabel, getStatusBadgeColor } from '@/lib/utils/status-helpers';
+import { ConceptSectionCompact } from '@/app/components/knowledge';
+
+/**
+ * Concept interface for Knowledge Graph display
+ */
+interface ContentConcept {
+  id: string;
+  name: string;
+  conceptType: 'tool' | 'process' | 'person' | 'organization' | 'technical_term' | 'general';
+  mentionCount?: number;
+}
 
 /**
  * Content item interface for library display
@@ -65,6 +76,8 @@ export interface ContentItem {
 
 interface BaseContentCardProps {
   item: ContentItem;
+  concepts?: ContentConcept[];
+  onConceptClick?: (conceptId: string) => void;
 }
 
 /**
@@ -139,7 +152,7 @@ const tagColorMap: Record<string, string> = {
  * - Hover card with additional details
  * - Click to navigate to detail page
  */
-export function BaseContentCard({ item }: BaseContentCardProps) {
+export function BaseContentCard({ item, concepts = [], onConceptClick }: BaseContentCardProps) {
   const contentType = (item.content_type || 'recording') as keyof typeof contentTypeConfig;
   const config = contentTypeConfig[contentType] || contentTypeConfig.recording;
   const Icon = config.icon;
@@ -154,6 +167,9 @@ export function BaseContentCard({ item }: BaseContentCardProps) {
   // Display first 2 tags
   const displayTags = tags.slice(0, 2);
   const hiddenTagsCount = tags.length - displayTags.length;
+
+  // Display first 3 concepts
+  const displayConcepts = concepts.slice(0, 3);
 
   const renderThumbnail = () => {
     const hasMedia = contentType === 'recording' || contentType === 'video';
@@ -351,6 +367,15 @@ export function BaseContentCard({ item }: BaseContentCardProps) {
                 </Tooltip>
               )}
             </div>
+          )}
+
+          {/* Concepts Row (Knowledge Graph) */}
+          {displayConcepts.length > 0 && (
+            <ConceptSectionCompact
+              concepts={displayConcepts}
+              onConceptClick={onConceptClick}
+              maxVisible={3}
+            />
           )}
 
           {/* Content Indicators Row */}

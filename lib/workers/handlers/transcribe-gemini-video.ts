@@ -174,7 +174,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
   // Check if transcript already exists (idempotency check)
   const { data: existingTranscript } = await supabase
     .from('transcripts')
-    .select('id, recording_id')
+    .select('id, content_id')
     .eq('content_id', recordingId)
     .single();
 

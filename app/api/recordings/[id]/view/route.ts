@@ -85,7 +85,7 @@ export const POST = apiHandler(async (request: NextRequest, context: any) => {
   const { data: viewId, error: trackError } = await supabase.rpc(
     'track_recording_view',
     {
-      p_recording_id: recordingId,
+      p_content_id: recordingId,
       p_user_id: user.id,
       p_org_id: user.org_id,
       p_source: typedBody.source || null,
@@ -170,7 +170,7 @@ export const GET = apiHandler(async (request: NextRequest, context: any) => {
   // Get view count using the database function
   const { data: viewCount, error: countError } = await supabase.rpc(
     'get_recording_view_count',
-    { p_recording_id: recordingId }
+    { p_content_id: recordingId }
   );
 
   if (countError) {

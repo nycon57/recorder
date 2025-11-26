@@ -15,6 +15,7 @@ import type { Database } from '@/lib/types/database';
 import { EmbeddingCache } from './cache';
 import { generateEmbeddingWithFallback } from './embedding-fallback';
 import { expandShortQuery } from './query-preprocessor';
+import { findMatchingConcepts, getConceptContentIds } from './concept-search';
 
 type TranscriptChunk = Database['public']['Tables']['transcript_chunks']['Row'];
 
@@ -113,6 +114,10 @@ export interface SearchOptions {
   collectionId?: string;
   /** Filter to only show favorited recordings */
   favoritesOnly?: boolean;
+  /** Enable concept boosting for results (default: true) */
+  conceptBoost?: boolean;
+  /** Concept boost factor (default: 0.15 = 15%) */
+  conceptBoostFactor?: number;
 }
 
 /**
@@ -397,6 +402,13 @@ export async function vectorSearch(
     }));
 
   console.log('[Vector Search] Returning top results:', searchResults.length);
+
+  // Apply concept boosting if enabled (default: true)
+  const { conceptBoost = true, conceptBoostFactor = 0.15 } = options;
+  if (conceptBoost && searchResults.length > 0) {
+    return applyConceptBoost(processedQuery, orgId, searchResults, conceptBoostFactor);
+  }
+
   return searchResults;
 }
 
@@ -995,4 +1007,74 @@ function mergeSearchResults(
   return boostedResults.sort(
     (a, b) => (b.similarity ?? 0) - (a.similarity ?? 0)
   );
+}
+
+/**
+ * Apply concept boosting to search results
+ * Boosts similarity scores for results that contain content mentioning matching concepts
+ *
+ * @param query - The search query
+ * @param orgId - Organization ID
+ * @param results - Search results to boost
+ * @param boostFactor - Boost factor (0.15 = 15% boost)
+ * @returns Boosted and re-sorted results
+ */
+async function applyConceptBoost(
+  query: string,
+  orgId: string,
+  results: SearchResult[],
+  boostFactor: number
+): Promise<SearchResult[]> {
+  try {
+    // Find concepts matching the query
+    const matchingConcepts = await findMatchingConcepts(query, orgId, { limit: 5 });
+
+    if (matchingConcepts.length === 0) {
+      console.log('[Vector Search] No matching concepts for boosting');
+      return results;
+    }
+
+    console.log('[Vector Search] Found matching concepts:', matchingConcepts.map(c => c.name));
+
+    // Get content IDs that mention these concepts
+    const conceptContentIds = await getConceptContentIds(
+      matchingConcepts.map(c => c.id),
+      orgId
+    );
+
+    if (conceptContentIds.size === 0) {
+      return results;
+    }
+
+    // Apply boost to results whose contentId is in the concept content set
+    const boostedResults = results.map(result => {
+      const mentionCount = conceptContentIds.get(result.contentId) || 0;
+
+      if (mentionCount > 0 && result.similarity !== null) {
+        // Calculate boost based on mention count (diminishing returns)
+        const boost = boostFactor * Math.min(1, Math.log2(mentionCount + 1));
+        const boostedSimilarity = Math.min(1.0, result.similarity * (1 + boost));
+
+        console.log(`[Vector Search] Boosting "${result.contentTitle}" by ${(boost * 100).toFixed(1)}% (${mentionCount} concept mentions)`);
+
+        return {
+          ...result,
+          similarity: boostedSimilarity,
+        };
+      }
+
+      return result;
+    });
+
+    // Re-sort by similarity
+    return boostedResults.sort((a, b) => {
+      if (a.similarity === null && b.similarity === null) return 0;
+      if (a.similarity === null) return 1;
+      if (b.similarity === null) return -1;
+      return b.similarity - a.similarity;
+    });
+  } catch (error) {
+    console.error('[Vector Search] Concept boosting error:', error);
+    return results; // Return original results on error
+  }
 }

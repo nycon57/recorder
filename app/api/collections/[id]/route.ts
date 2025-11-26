@@ -98,7 +98,42 @@ export const PATCH = apiHandler(
         return errors.notFound('Parent collection', undefined);
       }
 
-      // TODO: Add check for circular references (would need recursive query)
+      // Check for circular references by traversing up the parent chain
+      const checkCircularReference = async (parentId: string): Promise<boolean> => {
+        const visited = new Set<string>();
+        let currentId: string | null = parentId;
+
+        while (currentId) {
+          // If we encounter the collection we're editing, it's a circular reference
+          if (currentId === collectionId) {
+            return true;
+          }
+          // Prevent infinite loops in case of existing bad data
+          if (visited.has(currentId)) {
+            break;
+          }
+          visited.add(currentId);
+
+          const { data: parentCollection } = await supabase
+            .from('collections')
+            .select('parent_id')
+            .eq('id', currentId)
+            .eq('org_id', orgId)
+            .is('deleted_at', null)
+            .single();
+
+          currentId = parentCollection?.parent_id || null;
+        }
+
+        return false;
+      };
+
+      const hasCircularRef = await checkCircularReference(body.parent_id);
+      if (hasCircularRef) {
+        return errors.badRequest(
+          'Cannot set this parent: it would create a circular reference'
+        );
+      }
     }
 
     // Update the collection

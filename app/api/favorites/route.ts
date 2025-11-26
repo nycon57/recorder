@@ -33,14 +33,14 @@ export const GET = apiHandler(async (request: NextRequest) => {
   );
   const supabase = await createClient();
 
-  // Build query for favorites with recordings
+  // Build query for favorites with content
   let favoritesQuery = supabase
     .from('favorites')
     .select(
       `
-      recording_id,
+      content_id,
       created_at as favorited_at,
-      recordings!inner(
+      content!inner(
         id,
         title,
         content_type,
@@ -51,20 +51,20 @@ export const GET = apiHandler(async (request: NextRequest) => {
       { count: 'exact' }
     )
     .eq('user_id', userId)
-    .is('recordings.deleted_at', null);
+    .is('content.deleted_at', null);
 
   // Apply content_type filter
   if (query.content_type) {
-    favoritesQuery = favoritesQuery.eq('recordings.content_type', query.content_type);
+    favoritesQuery = favoritesQuery.eq('content.content_type', query.content_type);
   }
 
   // Apply sorting
   switch (query.sort) {
     case 'created_asc':
-      favoritesQuery = favoritesQuery.order('recordings(created_at)', { ascending: true });
+      favoritesQuery = favoritesQuery.order('content(created_at)', { ascending: true });
       break;
     case 'created_desc':
-      favoritesQuery = favoritesQuery.order('recordings(created_at)', { ascending: false });
+      favoritesQuery = favoritesQuery.order('content(created_at)', { ascending: false });
       break;
     case 'favorited_asc':
       favoritesQuery = favoritesQuery.order('created_at', { ascending: true });
@@ -89,10 +89,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Transform the data
   const formattedFavorites = (favorites || []).map((item: any) => ({
-    recording_id: item.recordings.id,
-    title: item.recordings.title,
-    content_type: item.recordings.content_type,
-    created_at: item.recordings.created_at,
+    recording_id: item.content.id,
+    title: item.content.title,
+    content_type: item.content.content_type,
+    created_at: item.content.created_at,
     favorited_at: item.favorited_at,
   }));
 
@@ -137,10 +137,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
     .upsert(
       {
         user_id: userId,
-        recording_id: body.recording_id,
+        content_id: body.recording_id,
       },
       {
-        onConflict: 'user_id,recording_id',
+        onConflict: 'user_id,content_id',
         ignoreDuplicates: false,
       }
     )

@@ -55,7 +55,7 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
   // Build query for frames
   let query = supabase
     .from('video_frames')
-    .select('id, recording_id, frame_number, frame_time_sec, frame_url, visual_description, ocr_text, scene_type, detected_elements, metadata, created_at', {
+    .select('id, content_id, frame_number, frame_time_sec, frame_url, visual_description, ocr_text, scene_type, detected_elements, metadata, created_at', {
       count: 'exact',
     })
     .eq('content_id', recordingId)
@@ -101,7 +101,7 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
 
       return {
         id: frame.id,
-        recordingId: frame.recording_id,
+        recordingId: frame.content_id,
         frameNumber: frame.frame_number,
         frameTimeSec: frame.frame_time_sec,
         frameUrl: signedUrl,

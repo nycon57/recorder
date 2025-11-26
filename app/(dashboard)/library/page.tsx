@@ -42,7 +42,6 @@ import { CollectionPicker } from '@/app/components/collections/CollectionPicker'
 import { FavoriteButton } from '@/app/components/favorites/FavoriteButton';
 import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/KeyboardShortcutsProvider';
 import { useToast } from '@/app/components/ui/use-toast';
-import UploadModal from '@/app/components/upload/UploadModal';
 import UploadWizard from '@/app/components/recorder/UploadWizard';
 import ExportModal from '@/app/components/library/ExportModal';
 import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/app/hooks/useKeyboardShortcuts';
@@ -110,7 +109,6 @@ function LibraryPageContent() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showTagModal, setShowTagModal] = useState(false);
   const [showTagManager, setShowTagManager] = useState(false);
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const [showUploadWizard, setShowUploadWizard] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showCollectionManager, setShowCollectionManager] = useState(false);
@@ -131,9 +129,23 @@ function LibraryPageContent() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [showCollectionSidebar, setShowCollectionSidebar] = useState(false);
+  const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
+  const [collectionToDelete, setCollectionToDelete] = useState<Collection | null>(null);
+  const [showDeleteCollectionDialog, setShowDeleteCollectionDialog] = useState(false);
+  const [isDeletingCollection, setIsDeletingCollection] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Track if we're on mobile (for Sheet vs desktop sidebar)
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024); // lg breakpoint
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Search input ref for keyboard shortcuts
   const searchInputRef = React.useRef<HTMLInputElement>(null);
@@ -656,11 +668,55 @@ function LibraryPageContent() {
     setSelectedCollectionId(collectionId);
   };
 
+  const handleEditCollection = (collection: Collection) => {
+    setEditingCollection(collection);
+    setShowCollectionManager(true);
+  };
+
+  const handleDeleteCollection = (collection: Collection) => {
+    setCollectionToDelete(collection);
+    setShowDeleteCollectionDialog(true);
+  };
+
+  const confirmDeleteCollection = async () => {
+    if (!collectionToDelete) return;
+
+    setIsDeletingCollection(true);
+    try {
+      const response = await fetch(`/api/collections/${collectionToDelete.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error?.message || 'Failed to delete');
+      }
+
+      // If deleted collection was selected, clear selection
+      if (selectedCollectionId === collectionToDelete.id) {
+        setSelectedCollectionId(null);
+      }
+
+      await fetchCollections();
+      toast({ description: 'Collection deleted successfully' });
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to delete collection',
+      });
+    } finally {
+      setIsDeletingCollection(false);
+      setShowDeleteCollectionDialog(false);
+      setCollectionToDelete(null);
+    }
+  };
+
   // Keyboard shortcuts
   useKeyboardShortcuts([
     {
       ...COMMON_SHORTCUTS.UPLOAD,
-      handler: () => setShowUploadModal(true),
+      handler: () => setShowUploadWizard(true),
     },
     {
       ...COMMON_SHORTCUTS.SEARCH,
@@ -725,18 +781,27 @@ function LibraryPageContent() {
                 collections={collections}
                 selectedId={selectedCollectionId}
                 onSelect={handleCollectionSelect}
-                onCreateChild={(parentId) => {
+                onCreateChild={() => {
+                  setEditingCollection(null);
                   setShowCollectionManager(true);
                 }}
+                onEdit={handleEditCollection}
+                onDelete={handleDeleteCollection}
               />
             </div>
           </motion.aside>
         )}
       </AnimatePresence>
 
-      {/* Mobile Sheet */}
-      <Sheet open={showCollectionSidebar} onOpenChange={setShowCollectionSidebar}>
-        <SheetContent side="left" className="lg:hidden w-[280px] p-4" hideOverlay={true}>
+      {/* Mobile Sheet - Only open on mobile to avoid conflicts with desktop sidebar */}
+      {isMobile && (
+        <Sheet open={showCollectionSidebar} onOpenChange={(open) => {
+          // Only close if not opening another modal (prevents Dialog from closing Sheet)
+          if (open || !showCollectionManager) {
+            setShowCollectionSidebar(open);
+          }
+        }}>
+          <SheetContent side="left" className="w-[280px] p-4" hideOverlay={true}>
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
               <FolderOpen className="h-4 w-4" />
@@ -761,15 +826,19 @@ function LibraryPageContent() {
               selectedId={selectedCollectionId}
               onSelect={(collection) => {
                 handleCollectionSelect(collection);
-                setShowCollectionSidebar(false); // Auto-close on mobile after selection
+                setShowCollectionSidebar(false);
               }}
-              onCreateChild={(parentId) => {
+              onCreateChild={() => {
+                setEditingCollection(null);
                 setShowCollectionManager(true);
               }}
+              onEdit={handleEditCollection}
+              onDelete={handleDeleteCollection}
             />
           </div>
         </SheetContent>
-      </Sheet>
+        </Sheet>
+      )}
 
       {/* Main Content */}
       <motion.div
@@ -811,19 +880,11 @@ function LibraryPageContent() {
                   <span className="sm:hidden">Tags</span>
                 </Button>
                 <Button
-                  onClick={() => setShowUploadModal(true)}
+                  onClick={() => setShowUploadWizard(true)}
                   className="w-full sm:w-auto justify-start sm:justify-center min-h-[44px]"
                 >
                   <Upload className="h-4 w-4 mr-2" />
                   Upload
-                </Button>
-                <Button
-                  onClick={() => setShowUploadWizard(true)}
-                  variant="outline"
-                  className="w-full sm:w-auto justify-start sm:justify-center min-h-[44px]"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Test New Upload
                 </Button>
               </div>
             </div>
@@ -1198,24 +1259,41 @@ function LibraryPageContent() {
 
       <CollectionManager
         open={showCollectionManager}
-        onOpenChange={setShowCollectionManager}
+        onOpenChange={(open) => {
+          setShowCollectionManager(open);
+          if (!open) setEditingCollection(null);
+        }}
+        collection={editingCollection}
         collections={collections}
+        modal={false}
         onSave={async (data) => {
           try {
-            const response = await fetch('/api/collections', {
-              method: 'POST',
+            const isEditing = !!editingCollection;
+            const url = isEditing
+              ? `/api/collections/${editingCollection.id}`
+              : '/api/collections';
+            const method = isEditing ? 'PATCH' : 'POST';
+
+            const response = await fetch(url, {
+              method,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(data),
             });
-            if (!response.ok) throw new Error('Failed to create collection');
+
+            if (!response.ok) throw new Error('Failed to save collection');
+
             await fetchCollections();
-            toast({ description: 'Collection created successfully' });
+            toast({
+              description: isEditing
+                ? 'Collection updated successfully'
+                : 'Collection created successfully',
+            });
           } catch (error) {
-            console.error('Failed to create collection:', error);
+            console.error('Failed to save collection:', error);
             toast({
               variant: 'destructive',
               title: 'Error',
-              description: 'Failed to create collection',
+              description: 'Failed to save collection',
             });
             throw error;
           }
@@ -1239,15 +1317,6 @@ function LibraryPageContent() {
           </SheetContent>
         </Sheet>
       )}
-
-      <UploadModal
-        isOpen={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
-        onUploadComplete={() => {
-          fetchItems();
-          setShowUploadModal(false);
-        }}
-      />
 
       <UploadWizard
         open={showUploadWizard}
@@ -1314,6 +1383,34 @@ function LibraryPageContent() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmBulkPermanentDelete} className="bg-red-500 text-white hover:bg-red-600">
               Delete Forever
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Collection Delete Confirmation */}
+      <AlertDialog open={showDeleteCollectionDialog} onOpenChange={setShowDeleteCollectionDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete &ldquo;{collectionToDelete?.name}&rdquo;?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete the collection. Items in this collection will not be deleted,
+              but they will no longer be in this collection.
+              {collectionToDelete?.item_count && collectionToDelete.item_count > 0 && (
+                <span className="block mt-2 font-medium">
+                  This collection contains {collectionToDelete.item_count} items.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingCollection}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteCollection}
+              disabled={isDeletingCollection}
+              className="bg-red-500 text-white hover:bg-red-600"
+            >
+              {isDeletingCollection ? 'Deleting...' : 'Delete Collection'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

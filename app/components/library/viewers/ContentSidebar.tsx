@@ -27,12 +27,20 @@ import type { ContentType, FileType, RecordingStatus } from '@/lib/types/databas
 import type { Tag } from '@/lib/types/database';
 import TagBadge from '@/app/components/TagBadge';
 import ContentTypeBadge from '../shared/ContentTypeBadge';
+import { ConceptSection } from '@/app/components/knowledge';
 
 interface Document {
   id: string;
   markdown: string;
   summary?: string | null;
   status: string;
+}
+
+interface ContentConcept {
+  id: string;
+  name: string;
+  conceptType: 'tool' | 'process' | 'person' | 'organization' | 'technical_term' | 'general';
+  mentionCount?: number;
 }
 
 interface ContentSidebarProps {
@@ -50,6 +58,10 @@ interface ContentSidebarProps {
 
   // Tags
   tags?: Tag[];
+
+  // Concepts (Knowledge Graph)
+  concepts?: ContentConcept[];
+  onConceptClick?: (conceptId: string) => void;
 
   // AI Insights (optional)
   document?: Document | null;
@@ -77,6 +89,8 @@ export default function ContentSidebar({
   originalFilename,
   deletedAt,
   tags = [],
+  concepts = [],
+  onConceptClick,
   document,
   textContent,
   onEdit,
@@ -220,6 +234,19 @@ export default function ContentSidebar({
           )}
         </CardContent>
       </Card>
+
+      {/* Concepts Card (Knowledge Graph) */}
+      {concepts.length > 0 && (
+        <ConceptSection
+          concepts={concepts}
+          onConceptClick={onConceptClick}
+          title="Concepts"
+          showGrouping={true}
+          collapsible={true}
+          defaultExpanded={true}
+          maxVisible={10}
+        />
+      )}
 
       {/* Quick Actions Card */}
       <Card>

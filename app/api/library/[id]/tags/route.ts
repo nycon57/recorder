@@ -136,7 +136,7 @@ export const POST = apiHandler(async (request: NextRequest, { params }: RoutePar
 
   // Insert new tag associations
   const associations = newTagIds.map(tagId => ({
-    recording_id: id,
+    content_id: id,
     tag_id: tagId,
   }));
 
@@ -231,7 +231,7 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
   // Insert new tag associations if any
   if (body.tagIds.length > 0) {
     const associations = body.tagIds.map(tagId => ({
-      recording_id: id,
+      content_id: id,
       tag_id: tagId,
     }));
 
