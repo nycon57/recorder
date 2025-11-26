@@ -16,7 +16,7 @@ import {
   CONCEPT_TYPE_COLORS,
   type ConceptType,
 } from '@/lib/validations/knowledge';
-import { ConceptTypeLabel } from './ConceptBadge';
+
 
 interface ConceptFilterProps {
   selectedTypes: ConceptType[];
@@ -101,19 +101,24 @@ export function ConceptFilter({
                     type="button"
                     onClick={() => toggleType(type)}
                     className={cn(
-                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-gray-50',
-                      isSelected && 'bg-purple-50'
+                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded min-h-[44px]',
+                      'hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+                      isSelected && 'bg-primary/10'
                     )}
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    aria-label={`Filter by ${formatType(type)} concepts`}
                   >
                     <div
                       className="w-4 h-4 rounded-full flex-shrink-0"
                       style={{ backgroundColor: CONCEPT_TYPE_COLORS[type] }}
+                      aria-hidden="true"
                     />
                     <span className="flex-1 text-left capitalize">
                       {formatType(type)}
                     </span>
                     {isSelected && (
-                      <Check className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" aria-hidden="true" />
                     )}
                   </button>
                 );
@@ -148,9 +153,10 @@ export function ConceptFilter({
               <button
                 type="button"
                 onClick={() => toggleType(type)}
-                className="ml-1 hover:bg-black/10 rounded p-0.5"
+                className="ml-1 hover:bg-black/10 rounded p-0.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                aria-label={`Remove ${formatType(type)} filter`}
               >
-                <X className="h-3 w-3" />
+                <X className="h-3 w-3" aria-hidden="true" />
               </button>
             </Badge>
           ))}

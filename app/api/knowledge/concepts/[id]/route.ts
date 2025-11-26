@@ -68,6 +68,9 @@ export const GET = apiHandler(async (request: NextRequest, { params }: RoutePara
   let recentMentions: ConceptMention[] = [];
 
   // Get related concepts if requested
+  // SECURITY NOTE: The get_related_concepts RPC function joins on concept_relationships
+  // which are scoped by org_id in the database. The concept itself is already verified
+  // to belong to the requesting organization (line 45 above).
   if (query.includeRelated) {
     const { data: related } = await supabase.rpc('get_related_concepts', {
       p_concept_id: id,

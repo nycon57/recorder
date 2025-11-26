@@ -118,7 +118,8 @@ export type JobType =
   | 'collect_metrics'
   | 'generate_alerts'
   | 'generate_recommendations'
-  | 'perform_health_check';
+  | 'perform_health_check'
+  | 'publish_document';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 

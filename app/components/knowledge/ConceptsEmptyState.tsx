@@ -93,12 +93,12 @@ export function ConceptsEmptyState({
 
         <EmptyContent>
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button onClick={handleRecordClick} className="gap-2">
-              <Video className="size-4" />
+            <Button onClick={handleRecordClick} className="gap-2 min-h-[44px]">
+              <Video className="size-4" aria-hidden="true" />
               Record Tutorial
             </Button>
-            <Button variant="outline" onClick={handleUploadClick} className="gap-2">
-              <Upload className="size-4" />
+            <Button variant="outline" onClick={handleUploadClick} className="gap-2 min-h-[44px]">
+              <Upload className="size-4" aria-hidden="true" />
               Upload Content
             </Button>
           </div>
@@ -130,31 +130,31 @@ export function ConceptsEmptyState({
 
       <EmptyContent>
         <div className="flex flex-col sm:flex-row gap-3">
-          <Button onClick={handleRecordClick} className="gap-2">
-            <Video className="size-4" />
+          <Button onClick={handleRecordClick} className="gap-2 min-h-[44px]">
+            <Video className="size-4" aria-hidden="true" />
             Start Recording
           </Button>
-          <Button variant="outline" onClick={handleUploadClick} className="gap-2">
-            <Upload className="size-4" />
+          <Button variant="outline" onClick={handleUploadClick} className="gap-2 min-h-[44px]">
+            <Upload className="size-4" aria-hidden="true" />
             Upload Files
           </Button>
         </div>
 
         {/* Benefits */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 pt-8 border-t w-full max-w-2xl">
-          <div className="text-center space-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 pt-8 border-t w-full max-w-2xl" role="list">
+          <div className="text-center space-y-1" role="listitem">
             <h4 className="font-medium text-sm">Cross-Reference</h4>
             <p className="text-xs text-muted-foreground">
               Find related content across all your recordings
             </p>
           </div>
-          <div className="text-center space-y-1">
+          <div className="text-center space-y-1" role="listitem">
             <h4 className="font-medium text-sm">Discover Patterns</h4>
             <p className="text-xs text-muted-foreground">
               See which tools and processes you use most
             </p>
           </div>
-          <div className="text-center space-y-1">
+          <div className="text-center space-y-1" role="listitem">
             <h4 className="font-medium text-sm">Smart Search</h4>
             <p className="text-xs text-muted-foreground">
               Search by concept to find exactly what you need

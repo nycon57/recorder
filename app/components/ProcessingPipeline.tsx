@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Check, Loader2, Clock, AlertCircle, RotateCw } from 'lucide-react';
+import { Check, Loader2, Clock, AlertCircle, RotateCw, Info } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -12,6 +12,12 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/app/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/app/components/ui/tooltip';
 import { cn } from '@/lib/utils/cn';
 
 import ReprocessStreamModal from './ReprocessStreamModal';
@@ -40,6 +46,7 @@ interface PipelineStep {
   label: string;
   status: StepStatus;
   timestamp?: string;
+  description?: string;
 }
 
 export default function ProcessingPipeline({
@@ -58,34 +65,34 @@ export default function ProcessingPipeline({
     switch (contentType) {
       case 'video':
         return {
-          step1: { id: 'extract', label: 'Extract Audio', inProgressLabel: 'Extracting audio...', failedLabel: 'Audio Extraction Failed' },
-          step2: { id: 'transcribe', label: 'Transcribed', inProgressLabel: 'Transcribing...', failedLabel: 'Transcription Failed' },
-          step3: { id: 'document', label: 'Document Generated', inProgressLabel: 'Generating document...', failedLabel: 'Document Generation Failed' },
-          step4: { id: 'embeddings', label: 'Ready to search', inProgressLabel: 'Creating embeddings...', failedLabel: 'Embedding Failed' },
+          step1: { id: 'extract', label: 'Extract Audio', inProgressLabel: 'Extracting audio...', failedLabel: 'Audio Extraction Failed', description: 'Extracting audio track from video' },
+          step2: { id: 'transcribe', label: 'Transcribed', inProgressLabel: 'Transcribing...', failedLabel: 'Transcription Failed', description: 'Converting speech to text using AI' },
+          step3: { id: 'document', label: 'Document Generated', inProgressLabel: 'Generating document...', failedLabel: 'Document Generation Failed', description: 'Creating structured documentation from transcript' },
+          step4: { id: 'embeddings', label: 'Indexed & Concepts Extracted', inProgressLabel: 'Indexing & extracting concepts...', failedLabel: 'Indexing Failed', description: 'Creating search index and extracting key concepts for the Knowledge Graph' },
         };
       case 'audio':
         return {
-          step1: { id: 'transcribe', label: 'Transcribed', inProgressLabel: 'Transcribing audio...', failedLabel: 'Transcription Failed' },
-          step2: { id: 'document', label: 'Document Generated', inProgressLabel: 'Generating document...', failedLabel: 'Document Generation Failed' },
-          step3: { id: 'embeddings', label: 'Ready to search', inProgressLabel: 'Creating embeddings...', failedLabel: 'Embedding Failed' },
+          step1: { id: 'transcribe', label: 'Transcribed', inProgressLabel: 'Transcribing audio...', failedLabel: 'Transcription Failed', description: 'Converting speech to text using AI' },
+          step2: { id: 'document', label: 'Document Generated', inProgressLabel: 'Generating document...', failedLabel: 'Document Generation Failed', description: 'Creating structured documentation from transcript' },
+          step3: { id: 'embeddings', label: 'Indexed & Concepts Extracted', inProgressLabel: 'Indexing & extracting concepts...', failedLabel: 'Indexing Failed', description: 'Creating search index and extracting key concepts for the Knowledge Graph' },
         };
       case 'document':
         return {
-          step1: { id: 'extract_text', label: 'Text Extracted', inProgressLabel: 'Extracting text...', failedLabel: 'Text Extraction Failed' },
-          step2: { id: 'document', label: 'Summary Generated', inProgressLabel: 'Generating summary...', failedLabel: 'Summary Generation Failed' },
-          step3: { id: 'embeddings', label: 'Ready to search', inProgressLabel: 'Creating embeddings...', failedLabel: 'Embedding Failed' },
+          step1: { id: 'extract_text', label: 'Text Extracted', inProgressLabel: 'Extracting text...', failedLabel: 'Text Extraction Failed', description: 'Extracting text content from document' },
+          step2: { id: 'document', label: 'Summary Generated', inProgressLabel: 'Generating summary...', failedLabel: 'Summary Generation Failed', description: 'Creating an AI-powered summary' },
+          step3: { id: 'embeddings', label: 'Indexed & Concepts Extracted', inProgressLabel: 'Indexing & extracting concepts...', failedLabel: 'Indexing Failed', description: 'Creating search index and extracting key concepts for the Knowledge Graph' },
         };
       case 'text':
         return {
-          step1: { id: 'process', label: 'Note Processed', inProgressLabel: 'Processing note...', failedLabel: 'Processing Failed' },
-          step2: { id: 'document', label: 'Summary Generated', inProgressLabel: 'Generating summary...', failedLabel: 'Summary Generation Failed' },
-          step3: { id: 'embeddings', label: 'Ready to search', inProgressLabel: 'Creating embeddings...', failedLabel: 'Embedding Failed' },
+          step1: { id: 'process', label: 'Note Processed', inProgressLabel: 'Processing note...', failedLabel: 'Processing Failed', description: 'Processing text content' },
+          step2: { id: 'document', label: 'Summary Generated', inProgressLabel: 'Generating summary...', failedLabel: 'Summary Generation Failed', description: 'Creating an AI-powered summary' },
+          step3: { id: 'embeddings', label: 'Indexed & Concepts Extracted', inProgressLabel: 'Indexing & extracting concepts...', failedLabel: 'Indexing Failed', description: 'Creating search index and extracting key concepts for the Knowledge Graph' },
         };
       default: // 'recording'
         return {
-          step1: { id: 'transcribe', label: 'Transcribed', inProgressLabel: 'Transcribing...', failedLabel: 'Transcription Failed' },
-          step2: { id: 'document', label: 'Document Generated', inProgressLabel: 'Generating document...', failedLabel: 'Document Generation Failed' },
-          step3: { id: 'embeddings', label: 'Ready to search', inProgressLabel: 'Creating embeddings...', failedLabel: 'Embedding Failed' },
+          step1: { id: 'transcribe', label: 'Transcribed', inProgressLabel: 'Transcribing...', failedLabel: 'Transcription Failed', description: 'Converting speech to text using AI' },
+          step2: { id: 'document', label: 'Document Generated', inProgressLabel: 'Generating document...', failedLabel: 'Document Generation Failed', description: 'Creating structured documentation from transcript' },
+          step3: { id: 'embeddings', label: 'Indexed & Concepts Extracted', inProgressLabel: 'Indexing & extracting concepts...', failedLabel: 'Indexing Failed', description: 'Creating search index and extracting key concepts for the Knowledge Graph' },
         };
     }
   };
@@ -97,6 +104,7 @@ export default function ProcessingPipeline({
         label: 'Upload Complete',
         status: 'completed',
         timestamp: recording.created_at,
+        description: 'Content has been uploaded and is ready for processing',
       },
     ];
 
@@ -110,6 +118,7 @@ export default function ProcessingPipeline({
         id: step1.id,
         label: step1.failedLabel,
         status: 'error',
+        description: step1.description,
       });
     } else if (hasTranscript || recording.status === 'completed') {
       steps.push({
@@ -117,18 +126,21 @@ export default function ProcessingPipeline({
         label: step1.label,
         status: 'completed',
         timestamp: recording.updated_at,
+        description: step1.description,
       });
     } else if (recording.status === 'transcribing') {
       steps.push({
         id: step1.id,
         label: step1.inProgressLabel,
         status: 'in_progress',
+        description: step1.description,
       });
     } else {
       steps.push({
         id: step1.id,
         label: step1.inProgressLabel.replace('...', ''),
         status: 'pending',
+        description: step1.description,
       });
     }
 
@@ -140,6 +152,7 @@ export default function ProcessingPipeline({
           id: step2.id,
           label: step2.failedLabel,
           status: 'error',
+          description: step2.description,
         });
       } else if (hasDocument || recording.status === 'completed') {
         steps.push({
@@ -147,18 +160,21 @@ export default function ProcessingPipeline({
           label: step2.label,
           status: 'completed',
           timestamp: recording.updated_at,
+          description: step2.description,
         });
       } else if (recording.status === 'doc_generating') {
         steps.push({
           id: step2.id,
           label: step2.inProgressLabel,
           status: 'in_progress',
+          description: step2.description,
         });
       } else if (hasTranscript) {
         steps.push({
           id: step2.id,
           label: step2.inProgressLabel.replace('...', ''),
           status: 'pending',
+          description: step2.description,
         });
       }
     }
@@ -172,12 +188,14 @@ export default function ProcessingPipeline({
           label: step3.label,
           status: 'completed',
           timestamp: recording.completed_at || recording.updated_at,
+          description: step3.description,
         });
       } else if (hasDocument) {
         steps.push({
           id: step3.id,
           label: step3.inProgressLabel,
           status: 'in_progress',
+          description: step3.description,
         });
       }
     }
@@ -191,12 +209,14 @@ export default function ProcessingPipeline({
           label: step4.label,
           status: 'completed',
           timestamp: recording.completed_at || recording.updated_at,
+          description: step4.description,
         });
       } else if (hasDocument) {
         steps.push({
           id: step4.id,
           label: step4.inProgressLabel,
           status: 'in_progress',
+          description: step4.description,
         });
       }
     }
@@ -289,17 +309,31 @@ export default function ProcessingPipeline({
               {/* Content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <p
-                    className={cn(
-                      'text-sm font-medium',
-                      step.status === 'completed' && 'text-foreground',
-                      step.status === 'in_progress' && 'text-blue-600 dark:text-blue-500',
-                      step.status === 'pending' && 'text-muted-foreground',
-                      step.status === 'error' && 'text-destructive'
+                  <div className="flex items-center gap-1.5">
+                    <p
+                      className={cn(
+                        'text-sm font-medium',
+                        step.status === 'completed' && 'text-foreground',
+                        step.status === 'in_progress' && 'text-blue-600 dark:text-blue-500',
+                        step.status === 'pending' && 'text-muted-foreground',
+                        step.status === 'error' && 'text-destructive'
+                      )}
+                    >
+                      {step.label}
+                    </p>
+                    {step.description && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="size-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-[250px]">
+                            <p className="text-xs">{step.description}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     )}
-                  >
-                    {step.label}
-                  </p>
+                  </div>
                   {step.status === 'error' && (
                     <Button
                       size="sm"

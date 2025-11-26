@@ -13,6 +13,7 @@ import { streamingManager } from '@/lib/services/streaming-processor';
 import { streamDocumentGeneration, isStreamingAvailable, sendCompletionNotification } from '@/lib/services/llm-streaming-helper';
 import { detectContentType, getInsightsPrompt, SCREEN_RECORDING_ENHANCEMENT } from '@/lib/prompts/insights-prompts';
 import OpenAI from 'openai';
+import { checkAutoPublish } from '@/lib/workers/hooks/auto-publish';
 
 // PERF-AI-006: Lazy-initialized OpenAI client for fallback
 let openaiClient: OpenAI | null = null;
@@ -464,6 +465,24 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
         orgId,
       },
     });
+
+    // Check if auto-publish is enabled for this organization
+    try {
+      await checkAutoPublish({
+        contentId: recordingId,
+        documentId: document.id,
+        orgId,
+      });
+    } catch (autoPublishError) {
+      // Log but don't fail document generation if auto-publish check fails
+      logger.warn('Auto-publish check failed', {
+        context: {
+          recordingId,
+          documentId: document.id,
+          error: autoPublishError instanceof Error ? autoPublishError.message : 'Unknown error',
+        },
+      });
+    }
 
     const totalTime = Date.now() - startTime;
     logger.info('Document generation completed', {

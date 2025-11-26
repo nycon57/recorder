@@ -10,6 +10,8 @@ export enum ConnectorType {
   NOTION = 'notion',
   ZOOM = 'zoom',
   MICROSOFT_TEAMS = 'microsoft_teams',
+  SHAREPOINT = 'sharepoint',
+  ONEDRIVE = 'onedrive',
   FILE_UPLOAD = 'file_upload',
   URL_IMPORT = 'url_import',
 }

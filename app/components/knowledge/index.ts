@@ -40,3 +40,16 @@ export {
   ConceptTypeBadges,
   ConceptFilterCompact,
 } from './ConceptFilter';
+
+// Graph visualization components
+export {
+  KnowledgeGraph,
+  KnowledgeGraphSkeleton,
+} from './KnowledgeGraph';
+
+// List view components
+export {
+  ConceptListView,
+  ConceptListViewHeader,
+  ConceptListViewSkeleton,
+} from './ConceptListView';

@@ -161,14 +161,16 @@ export function ConceptSection({
           {collapsible ? (
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="flex items-center gap-2 hover:text-foreground/80 transition-colors w-full text-left"
+              className="flex items-center gap-2 hover:text-foreground/80 transition-colors w-full text-left min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded"
+              aria-expanded={isExpanded}
+              aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${title}`}
             >
               {isExpanded ? (
-                <ChevronDown className="h-4 w-4" />
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
               ) : (
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
               )}
-              <Brain className="h-4 w-4" />
+              <Brain className="h-4 w-4" aria-hidden="true" />
               {title}
               <span className="ml-auto text-xs text-muted-foreground font-normal">
                 {concepts.length}
@@ -176,7 +178,7 @@ export function ConceptSection({
             </button>
           ) : (
             <div className="flex items-center gap-2">
-              <Brain className="h-4 w-4" />
+              <Brain className="h-4 w-4" aria-hidden="true" />
               {title}
               <span className="ml-auto text-xs text-muted-foreground font-normal">
                 {concepts.length}
@@ -241,12 +243,14 @@ function ConceptGroup({
     <div className="space-y-2">
       <button
         onClick={onToggle}
-        className="flex items-center gap-1 text-sm hover:text-foreground/80 transition-colors w-full text-left"
+        className="flex items-center gap-1 text-sm hover:text-foreground/80 transition-colors w-full text-left min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded"
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${type.replace('_', ' ')} concepts`}
       >
         {isExpanded ? (
-          <ChevronDown className="h-3 w-3" />
+          <ChevronDown className="h-3 w-3" aria-hidden="true" />
         ) : (
-          <ChevronRight className="h-3 w-3" />
+          <ChevronRight className="h-3 w-3" aria-hidden="true" />
         )}
         <ConceptTypeLabel type={type} size="sm" />
         <span className="ml-auto text-xs text-muted-foreground">

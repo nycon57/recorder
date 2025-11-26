@@ -14,6 +14,17 @@ import {
 } from '@/lib/validations/knowledge';
 
 /**
+ * Escape SQL LIKE pattern metacharacters (%, _, \) to treat them as literals.
+ * Backslash must be escaped first to avoid double-escaping.
+ */
+function escapeLike(input: string): string {
+  return input
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_');
+}
+
+/**
  * GET /api/knowledge/concepts - List all organization concepts
  *
  * Query params:
@@ -37,7 +48,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Apply search filter
   if (query.search) {
-    conceptsQuery = conceptsQuery.ilike('name', `%${query.search}%`);
+    conceptsQuery = conceptsQuery.ilike('name', `%${escapeLike(query.search)}%`);
   }
 
   // Apply type filter

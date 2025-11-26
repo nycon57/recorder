@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Video, Search, MessageSquare, Library } from "lucide-react"
+import { Home, Video, Search, MessageSquare, Library, Brain } from "lucide-react"
 
 import {
   SidebarGroup,
@@ -40,6 +40,12 @@ const navItems = [
     url: "/search",
     icon: Search,
     description: "Semantic and visual search",
+  },
+  {
+    title: "Knowledge",
+    url: "/knowledge",
+    icon: Brain,
+    description: "Explore your knowledge graph",
   },
   {
     title: "Assistant",

@@ -114,4 +114,5 @@ export interface ConnectorInfo {
   description: string;
   requiresOAuth: boolean;
   supportsWebhooks: boolean;
+  supportsPublish?: boolean;
 }

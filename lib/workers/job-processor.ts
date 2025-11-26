@@ -47,6 +47,9 @@ import { handleGenerateAlerts } from './handlers/generate-alerts';
 import { handleGenerateRecommendations } from './handlers/generate-recommendations';
 import { handlePerformHealthCheck } from './handlers/perform-health-check';
 
+// Publishing handlers
+import { handlePublishDocument } from './handlers/publish-document';
+
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
 // import { generateDocument } from './handlers/docify-google';
@@ -107,6 +110,7 @@ function getCompletionMessage(jobType: string): string {
     'generate_summary': 'AI summary generated',
     'extract_frames': 'Video frames extracted',
     'sync_connector': 'External sync complete',
+    'publish_document': 'Document published successfully',
   };
 
   return messages[jobType] || 'Processing complete';
@@ -218,6 +222,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   generate_alerts: handleGenerateAlerts,
   generate_recommendations: handleGenerateRecommendations,
   perform_health_check: handlePerformHealthCheck,
+
+  // Publishing handlers
+  publish_document: handlePublishDocument,
 };
 
 // PERF-WK-001: Job priority levels (0 = highest, 3 = lowest)

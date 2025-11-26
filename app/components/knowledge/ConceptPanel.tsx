@@ -74,12 +74,16 @@ export function ConceptPanel({
       return;
     }
 
+    const controller = new AbortController();
+
     const fetchConcept = async () => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const response = await fetch(`/api/knowledge/concepts/${conceptId}`);
+        const response = await fetch(`/api/knowledge/concepts/${conceptId}`, {
+          signal: controller.signal,
+        });
 
         if (!response.ok) {
           throw new Error(
@@ -91,17 +95,25 @@ export function ConceptPanel({
 
         const result = await response.json();
         setData(result);
+        setIsLoading(false);
       } catch (err) {
+        // Ignore abort errors - these are expected when conceptId changes
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
         console.error('Error fetching concept:', err);
         setError(
           err instanceof Error ? err.message : 'Failed to load concept details'
         );
-      } finally {
         setIsLoading(false);
       }
     };
 
     fetchConcept();
+
+    return () => {
+      controller.abort();
+    };
   }, [conceptId]);
 
   const handleConceptClick = (id: string) => {
@@ -155,7 +167,51 @@ export function ConceptPanel({
             {error && !isLoading && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription className="flex flex-col gap-3">
+                  <span>{error}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setError(null);
+                      if (conceptId) {
+                        const controller = new AbortController();
+                        const fetchConcept = async () => {
+                          setIsLoading(true);
+                          setError(null);
+                          try {
+                            const response = await fetch(`/api/knowledge/concepts/${conceptId}`, {
+                              signal: controller.signal,
+                            });
+                            if (!response.ok) {
+                              throw new Error(
+                                response.status === 404
+                                  ? 'Concept not found'
+                                  : 'Failed to load concept'
+                              );
+                            }
+                            const result = await response.json();
+                            setData(result);
+                          } catch (err) {
+                            if (err instanceof Error && err.name === 'AbortError') {
+                              return;
+                            }
+                            console.error('Error fetching concept:', err);
+                            setError(
+                              err instanceof Error ? err.message : 'Failed to load concept details'
+                            );
+                          } finally {
+                            setIsLoading(false);
+                          }
+                        };
+                        fetchConcept();
+                      }
+                    }}
+                    className="w-full sm:w-auto"
+                  >
+                    Try Again
+                  </Button>
+                </AlertDescription>
               </Alert>
             )}
 

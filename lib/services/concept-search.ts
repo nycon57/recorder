@@ -8,6 +8,18 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { ConceptType } from '@/lib/validations/knowledge';
 
+/**
+ * Escape SQL LIKE pattern metacharacters (%, _, \) to treat them as literals.
+ * Backslash must be escaped first to avoid double-escaping.
+ * SECURITY: Prevents LIKE injection attacks (OWASP reference: Input Validation)
+ */
+function escapeLike(input: string): string {
+  return input
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_');
+}
+
 export interface MatchingConcept {
   id: string;
   name: string;
@@ -37,9 +49,16 @@ export async function findMatchingConcepts(
 ): Promise<MatchingConcept[]> {
   const { limit = 10, minMentions = 1, types } = options;
 
+  // Allowlist for common short technical terms (normalized to lowercase)
+  const shortTermAllowlist = new Set([
+    'ai', 'ui', 'db', 'c#', 'c', 'r', 'go', 'io', 'ml', 'qa', 'ci', 'cd', 'os', 'vm', 'ip', 'id', 'api', 'aws', 'gcp', 'sql', 'css', 'vue', 'jwt', 'ssh', 'ssl', 'tls', 'url', 'uri', 'xml', 'csv', 'pdf', 'svg', 'png', 'gif', 'jpg', 'mp3', 'mp4', 'cli', 'gui', 'sdk', 'ide', 'git', 'svn', 'npm', 'cdn', 'dns', 'ftp', 'udp', 'tcp', 'oop', 'mvc', 'orm', 'dom', 'spa', 'ssr', 'seo', 'crm', 'erp', 'sms', 'pdf', 'ocr', 'nlp', 'llm', 'rag', 'gpu', 'cpu', 'ram', 'ssd', 'hdd', 'usb', 'lan', 'wan', 'vpn', 'aes', 'md5', 'sha', 'rsa', 'pgp', 'jwt', 'b2b', 'b2c', 'roi', 'kpi', 'mvp', 'poc', 'pr',
+  ]);
+
   // Normalize query for matching
   const normalizedQuery = query.toLowerCase().trim();
-  const queryWords = normalizedQuery.split(/\s+/).filter(w => w.length > 2);
+  const queryWords = normalizedQuery.split(/\s+/).filter(w =>
+    w.length > 1 || shortTermAllowlist.has(w.toLowerCase())
+  );
 
   if (queryWords.length === 0) {
     return [];
@@ -173,11 +192,14 @@ export async function searchConceptsByName(
     return [];
   }
 
+  // SECURITY: Escape LIKE pattern metacharacters to prevent injection
+  const escapedPattern = escapeLike(normalizedPattern);
+
   const { data: concepts, error } = await supabaseAdmin
     .from('knowledge_concepts')
     .select('id, name, normalized_name, concept_type, mention_count')
     .eq('org_id', orgId)
-    .ilike('name', `%${normalizedPattern}%`)
+    .ilike('name', `%${escapedPattern}%`)
     .order('mention_count', { ascending: false })
     .limit(limit);
 

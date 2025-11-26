@@ -115,6 +115,75 @@ export const listRecordingsInputSchema = z.object({
 });
 
 /**
+ * Schema for searchConcepts tool input
+ */
+export const searchConceptsInputSchema = z.object({
+  query: z
+    .string()
+    .min(1, 'Search query is required')
+    .max(500, 'Query too long')
+    .describe('The concept name or topic to search for'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .default(10)
+    .describe('Maximum number of concepts to return'),
+  types: z
+    .array(z.enum(['tool', 'process', 'person', 'organization', 'technical_term', 'general']))
+    .optional()
+    .describe('Filter by concept types'),
+  minMentions: z
+    .number()
+    .int()
+    .min(1)
+    .default(1)
+    .optional()
+    .describe('Minimum number of mentions to include'),
+});
+
+/**
+ * Schema for getConceptDetails tool input
+ */
+export const getConceptDetailsInputSchema = z.object({
+  conceptId: z
+    .string()
+    .uuid('Invalid concept ID')
+    .describe('The ID of the concept to retrieve'),
+  includeRelated: z
+    .boolean()
+    .default(true)
+    .describe('Include related concepts'),
+  includeMentions: z
+    .boolean()
+    .default(true)
+    .describe('Include recent content mentions'),
+});
+
+/**
+ * Schema for exploreKnowledgeGraph tool input
+ */
+export const exploreKnowledgeGraphInputSchema = z.object({
+  focusConceptId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe('Optional concept ID to focus exploration around'),
+  maxNodes: z
+    .number()
+    .int()
+    .min(5)
+    .max(50)
+    .default(20)
+    .describe('Maximum number of concepts to return'),
+  types: z
+    .array(z.enum(['tool', 'process', 'person', 'organization', 'technical_term', 'general']))
+    .optional()
+    .describe('Filter by concept types'),
+});
+
+/**
  * Schema for tool response wrapper
  */
 export const toolResponseSchema = z.object({
@@ -146,4 +215,7 @@ export type GetDocumentInput = z.infer<typeof getDocumentInputSchema>;
 export type GetTranscriptInput = z.infer<typeof getTranscriptInputSchema>;
 export type GetRecordingMetadataInput = z.infer<typeof getRecordingMetadataInputSchema>;
 export type ListRecordingsInput = z.infer<typeof listRecordingsInputSchema>;
+export type SearchConceptsInput = z.infer<typeof searchConceptsInputSchema>;
+export type GetConceptDetailsInput = z.infer<typeof getConceptDetailsInputSchema>;
+export type ExploreKnowledgeGraphInput = z.infer<typeof exploreKnowledgeGraphInputSchema>;
 export type ToolResponse = z.infer<typeof toolResponseSchema>;

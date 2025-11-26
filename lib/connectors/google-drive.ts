@@ -2,12 +2,14 @@
  * Google Drive Connector
  *
  * Implements OAuth authentication, file/folder listing, downloading,
- * token refresh, webhook support, and Google Workspace file conversion.
+ * token refresh, webhook support, Google Workspace file conversion,
+ * and bidirectional sync (publishing) capabilities.
  */
 
 import { google, drive_v3 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import TurndownService from 'turndown';
+import { Readable } from 'stream';
 
 import {
   Connector,
@@ -23,6 +25,30 @@ import {
   FileContent,
   WebhookEvent,
 } from './base';
+
+import {
+  PublishableConnector,
+  FolderListRequest,
+  FolderListResponse,
+  FolderInfo,
+  CreateFolderRequest,
+  CreateFolderResponse,
+  ConnectorPublishOptions,
+  ConnectorPublishResult,
+  ConnectorUpdateOptions,
+  ExternalDocumentInfo,
+  PublishFormat,
+} from '@/lib/types/publishing';
+
+import {
+  TokenManager,
+  createGoogleRefreshFunction,
+  TokenSet,
+} from '@/lib/services/token-manager';
+
+// =====================================================
+// CONSTANTS
+// =====================================================
 
 const GOOGLE_MIME_TYPES = {
   DOCUMENT: 'application/vnd.google-apps.document',
@@ -49,14 +75,58 @@ const SUPPORTED_MIME_TYPES = [
   ...Object.keys(EXPORT_FORMATS),
 ];
 
+/** OAuth scopes for read-only operations */
+const READ_ONLY_SCOPES = [
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/drive.metadata.readonly',
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/userinfo.email',
+];
+
+/** OAuth scope for write operations (publishing) */
+const WRITE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+/** Full scopes including write permissions */
+const FULL_SCOPES = [...READ_ONLY_SCOPES, WRITE_SCOPE];
+
+/**
+ * Map PublishFormat to Google Drive MIME types for upload
+ */
+const FORMAT_MIME_TYPES: Record<PublishFormat, string> = {
+  native: 'application/vnd.google-apps.document', // Convert to Google Docs
+  markdown: 'text/markdown',
+  pdf: 'application/pdf',
+  html: 'text/html',
+};
+
+/**
+ * Map PublishFormat to file extensions
+ */
+const FORMAT_EXTENSIONS: Record<PublishFormat, string> = {
+  native: '', // Google Docs don't need extension
+  markdown: '.md',
+  pdf: '.pdf',
+  html: '.html',
+};
+
+// =====================================================
+// CONFIG INTERFACE
+// =====================================================
+
 interface GoogleDriveConfig {
   folderIds?: string[];
   includeSharedDrives?: boolean;
   maxFileSizeBytes?: number;
   pageSize?: number;
+  /** Connector ID for token refresh management */
+  connectorId?: string;
 }
 
-export class GoogleDriveConnector implements Connector {
+// =====================================================
+// CONNECTOR CLASS
+// =====================================================
+
+export class GoogleDriveConnector implements Connector, PublishableConnector {
   readonly type = ConnectorType.GOOGLE_DRIVE;
   readonly name = 'Google Drive';
   readonly description = 'Sync documents from Google Drive including Docs, Sheets, Slides, and PDFs';
@@ -66,6 +136,7 @@ export class GoogleDriveConnector implements Connector {
   private credentials: ConnectorCredentials;
   private config: GoogleDriveConfig;
   private turndown: TurndownService;
+  private grantedScopes: string[] = [];
 
   constructor(credentials: ConnectorCredentials, config?: GoogleDriveConfig) {
     this.credentials = credentials;
@@ -91,7 +162,16 @@ export class GoogleDriveConnector implements Connector {
     if (credentials.accessToken) {
       this.setCredentials(credentials);
     }
+
+    // Track granted scopes if available
+    if (credentials.scopes && Array.isArray(credentials.scopes)) {
+      this.grantedScopes = credentials.scopes;
+    }
   }
+
+  // =====================================================
+  // CREDENTIAL MANAGEMENT
+  // =====================================================
 
   private setCredentials(credentials: ConnectorCredentials): void {
     this.oauth2Client.setCredentials({
@@ -104,19 +184,132 @@ export class GoogleDriveConnector implements Connector {
     });
 
     this.drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+
+    // Update granted scopes if available
+    if (credentials.scopes && Array.isArray(credentials.scopes)) {
+      this.grantedScopes = credentials.scopes;
+    }
   }
+
+  /**
+   * Generate an OAuth URL with specified scopes.
+   * Use this to get user authorization for read-only or full (read+write) access.
+   *
+   * @param scopes - Optional array of scopes. Defaults to read-only scopes.
+   * @returns OAuth authorization URL
+   */
+  generateAuthUrl(scopes?: string[]): string {
+    const requestedScopes = scopes || READ_ONLY_SCOPES;
+
+    return this.oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: requestedScopes,
+      prompt: 'consent',
+    });
+  }
+
+  /**
+   * Generate an OAuth URL with write permissions for publishing.
+   * @returns OAuth authorization URL with write scope
+   */
+  generatePublishAuthUrl(): string {
+    return this.generateAuthUrl(FULL_SCOPES);
+  }
+
+  // =====================================================
+  // TOKEN MANAGEMENT
+  // =====================================================
+
+  /**
+   * Ensure we have a valid access token, refreshing if necessary.
+   * Uses TokenManager for centralized token refresh handling.
+   */
+  private async ensureValidToken(): Promise<string> {
+    if (!this.config.connectorId) {
+      // No connector ID, fall back to basic refresh
+      if (this.isTokenExpired()) {
+        await this.refreshCredentials(this.credentials);
+      }
+      return this.credentials.accessToken!;
+    }
+
+    const refreshFn = createGoogleRefreshFunction(
+      process.env.GOOGLE_CLIENT_ID!,
+      process.env.GOOGLE_CLIENT_SECRET!
+    );
+
+    const tokens: TokenSet = {
+      accessToken: this.credentials.accessToken || '',
+      refreshToken: this.credentials.refreshToken || '',
+      expiresAt: this.credentials.expiresAt instanceof Date
+        ? this.credentials.expiresAt
+        : new Date(this.credentials.expiresAt || 0),
+      scopes: this.grantedScopes,
+    };
+
+    const validToken = await TokenManager.ensureValidToken(
+      this.config.connectorId,
+      tokens,
+      refreshFn
+    );
+
+    // Update local credentials if token was refreshed
+    if (validToken !== this.credentials.accessToken) {
+      this.credentials.accessToken = validToken;
+      this.setCredentials(this.credentials);
+    }
+
+    return validToken;
+  }
+
+  /**
+   * Check if token is expired (simple check without TokenManager)
+   */
+  private isTokenExpired(): boolean {
+    if (!this.credentials.expiresAt) return true;
+    const expiresAt = this.credentials.expiresAt instanceof Date
+      ? this.credentials.expiresAt
+      : new Date(this.credentials.expiresAt);
+    return expiresAt.getTime() < Date.now() + 5 * 60 * 1000; // 5 minute buffer
+  }
+
+  /**
+   * Execute an API call with automatic token refresh on 401 errors.
+   */
+  private async withTokenRefresh<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      await this.ensureValidToken();
+      return await operation();
+    } catch (error: any) {
+      if (error.code === 401 && this.credentials.refreshToken) {
+        console.log('[GoogleDrive] Got 401, attempting token refresh...');
+        await this.refreshCredentials(this.credentials);
+        return await operation();
+      }
+      throw error;
+    }
+  }
+
+  // =====================================================
+  // CONNECTOR INTERFACE METHODS
+  // =====================================================
 
   async authenticate(credentials: ConnectorCredentials): Promise<AuthResult> {
     try {
       if (credentials.code) {
         const { tokens } = await this.oauth2Client.getToken(credentials.code as string);
 
+        // Extract scopes from the token response
+        const scopes = tokens.scope?.split(' ') || [];
+
         this.credentials = {
           accessToken: tokens.access_token || undefined,
           refreshToken: tokens.refresh_token || undefined,
           expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
+          scopes,
         };
 
+        this.grantedScopes = scopes;
         this.setCredentials(this.credentials);
         const userInfo = await this.getUserInfo();
 
@@ -127,16 +320,7 @@ export class GoogleDriveConnector implements Connector {
         };
       }
 
-      const authUrl = this.oauth2Client.generateAuthUrl({
-        access_type: 'offline',
-        scope: [
-          'https://www.googleapis.com/auth/drive.readonly',
-          'https://www.googleapis.com/auth/drive.metadata.readonly',
-          'https://www.googleapis.com/auth/userinfo.profile',
-          'https://www.googleapis.com/auth/userinfo.email',
-        ],
-        prompt: 'consent',
-      });
+      const authUrl = this.generateAuthUrl();
 
       return {
         success: false,
@@ -157,7 +341,10 @@ export class GoogleDriveConnector implements Connector {
         return { success: false, message: 'Not authenticated' };
       }
 
-      const response = await this.drive.about.get({ fields: 'user,storageQuota' });
+      const response = await this.withTokenRefresh(() =>
+        this.drive!.about.get({ fields: 'user,storageQuota' })
+      );
+
       const user = response.data.user;
       const quota = response.data.storageQuota;
 
@@ -167,20 +354,12 @@ export class GoogleDriveConnector implements Connector {
         metadata: {
           user: { name: user?.displayName, email: user?.emailAddress },
           storage: { used: quota?.usage, total: quota?.limit },
+          supportsPublish: this.supportsPublish(),
+          grantedScopes: this.grantedScopes,
         },
       };
     } catch (error: any) {
       console.error('[GoogleDrive] Connection test failed:', error);
-
-      if (error.code === 401 && this.credentials.refreshToken) {
-        try {
-          await this.refreshCredentials(this.credentials);
-          return this.testConnection();
-        } catch {
-          return { success: false, message: 'Token expired and refresh failed' };
-        }
-      }
-
       return { success: false, message: error.message || 'Connection test failed' };
     }
   }
@@ -195,7 +374,9 @@ export class GoogleDriveConnector implements Connector {
 
     try {
       const query = this.buildQuery(options);
-      const files = await this.listAllFiles(query, options);
+      const files = await this.withTokenRefresh(() =>
+        this.listAllFiles(query, options)
+      );
 
       console.log(`[GoogleDrive] Found ${files.length} files to sync`);
 
@@ -249,7 +430,9 @@ export class GoogleDriveConnector implements Connector {
 
     try {
       const query = this.buildQuery();
-      const files = await this.listAllFiles(query, undefined, options?.limit);
+      const files = await this.withTokenRefresh(() =>
+        this.listAllFiles(query, undefined, options?.limit)
+      );
 
       return files.map((file) => this.mapDriveFileToConnectorFile(file));
     } catch (error: any) {
@@ -261,8 +444,8 @@ export class GoogleDriveConnector implements Connector {
   async downloadFile(fileId: string): Promise<FileContent> {
     if (!this.drive) throw new Error('Not authenticated');
 
-    try {
-      const fileResponse = await this.drive.files.get({
+    return this.withTokenRefresh(async () => {
+      const fileResponse = await this.drive!.files.get({
         fileId,
         fields: 'id,name,mimeType,size,modifiedTime,createdTime,webViewLink,owners',
       });
@@ -276,7 +459,7 @@ export class GoogleDriveConnector implements Connector {
       if (mimeType in EXPORT_FORMATS) {
         exportMimeType = EXPORT_FORMATS[mimeType as keyof typeof EXPORT_FORMATS];
 
-        const response = await this.drive.files.export(
+        const response = await this.drive!.files.export(
           { fileId, mimeType: exportMimeType },
           { responseType: 'arraybuffer' }
         );
@@ -289,7 +472,7 @@ export class GoogleDriveConnector implements Connector {
           content = Buffer.from(response.data as ArrayBuffer);
         }
       } else {
-        const response = await this.drive.files.get(
+        const response = await this.drive!.files.get(
           { fileId, alt: 'media' },
           { responseType: 'arraybuffer' }
         );
@@ -311,10 +494,7 @@ export class GoogleDriveConnector implements Connector {
           originalMimeType: mimeType,
         },
       };
-    } catch (error: any) {
-      console.error(`[GoogleDrive] Download file ${fileId} failed:`, error);
-      throw error;
-    }
+    });
   }
 
   async handleWebhook(event: WebhookEvent): Promise<void> {
@@ -331,19 +511,379 @@ export class GoogleDriveConnector implements Connector {
 
       const { credentials: newCredentials } = await this.oauth2Client.refreshAccessToken();
 
+      // Preserve existing scopes or extract from new token
+      const scopes = newCredentials.scope?.split(' ') || this.grantedScopes;
+
       const refreshedCredentials: ConnectorCredentials = {
         accessToken: newCredentials.access_token || undefined,
         refreshToken: newCredentials.refresh_token || credentials.refreshToken,
         expiresAt: newCredentials.expiry_date ? new Date(newCredentials.expiry_date) : undefined,
+        scopes,
       };
 
       this.credentials = refreshedCredentials;
+      this.grantedScopes = scopes;
       this.setCredentials(refreshedCredentials);
 
       return refreshedCredentials;
     } catch (error: any) {
       console.error('[GoogleDrive] Token refresh failed:', error);
       throw error;
+    }
+  }
+
+  // =====================================================
+  // PUBLISHABLE CONNECTOR INTERFACE METHODS
+  // =====================================================
+
+  /**
+   * Check if connector supports publishing (has write permissions).
+   * Returns true if the connector was authenticated with the drive.file scope.
+   */
+  supportsPublish(): boolean {
+    return this.grantedScopes.includes(WRITE_SCOPE);
+  }
+
+  /**
+   * List folders in Google Drive.
+   * Supports filtering by parent folder, searching by name, and pagination.
+   */
+  async listFolders(options: FolderListRequest): Promise<FolderListResponse> {
+    if (!this.drive) throw new Error('Not authenticated');
+
+    return this.withTokenRefresh(async () => {
+      const queryConditions: string[] = [
+        `mimeType='${GOOGLE_MIME_TYPES.FOLDER}'`,
+        'trashed=false',
+      ];
+
+      // Filter by parent folder
+      if (options.parentId) {
+        queryConditions.push(`'${options.parentId}' in parents`);
+      }
+
+      // Search by name
+      if (options.search) {
+        queryConditions.push(`name contains '${options.search.replace(/'/g, "\\'")}'`);
+      }
+
+      const query = queryConditions.join(' and ');
+      const pageSize = options.pageSize || 50;
+
+      const response = await this.drive!.files.list({
+        q: query,
+        pageSize,
+        pageToken: options.pageToken,
+        fields: 'nextPageToken, files(id, name, parents, webViewLink, modifiedTime, mimeType)',
+        includeItemsFromAllDrives: this.config.includeSharedDrives,
+        supportsAllDrives: this.config.includeSharedDrives,
+        orderBy: 'name',
+      });
+
+      const folders: FolderInfo[] = (response.data.files || []).map((file) => ({
+        id: file.id!,
+        name: file.name!,
+        path: file.name!, // Google Drive doesn't provide full path easily
+        hasChildren: true, // We'd need another API call to know for sure
+        parentId: file.parents?.[0],
+        webUrl: file.webViewLink || undefined,
+        modifiedAt: file.modifiedTime ? new Date(file.modifiedTime) : undefined,
+      }));
+
+      return {
+        folders,
+        nextPageToken: response.data.nextPageToken || undefined,
+        hasMore: !!response.data.nextPageToken,
+      };
+    });
+  }
+
+  /**
+   * Create a new folder in Google Drive.
+   */
+  async createFolder(options: CreateFolderRequest): Promise<CreateFolderResponse> {
+    if (!this.drive) throw new Error('Not authenticated');
+    if (!this.supportsPublish()) {
+      throw new Error('Write permissions not granted. Please re-authenticate with publish permissions.');
+    }
+
+    return this.withTokenRefresh(async () => {
+      const fileMetadata: drive_v3.Schema$File = {
+        name: options.name,
+        mimeType: GOOGLE_MIME_TYPES.FOLDER,
+      };
+
+      if (options.parentId) {
+        fileMetadata.parents = [options.parentId];
+      }
+
+      const response = await this.drive!.files.create({
+        requestBody: fileMetadata,
+        fields: 'id, name, parents, webViewLink, modifiedTime',
+      });
+
+      const file = response.data;
+
+      const folder: FolderInfo = {
+        id: file.id!,
+        name: file.name!,
+        path: file.name!,
+        hasChildren: false, // Newly created, no children yet
+        parentId: file.parents?.[0],
+        webUrl: file.webViewLink || undefined,
+        modifiedAt: file.modifiedTime ? new Date(file.modifiedTime) : undefined,
+      };
+
+      console.log(`[GoogleDrive] Created folder: ${folder.name} (${folder.id})`);
+
+      return { folder };
+    });
+  }
+
+  /**
+   * Publish a document to Google Drive.
+   *
+   * Supports multiple formats:
+   * - native: Converts content to Google Docs format
+   * - markdown: Uploads as .md file
+   * - pdf: Uploads as .pdf file
+   * - html: Uploads as .html file
+   */
+  async publishDocument(options: ConnectorPublishOptions): Promise<ConnectorPublishResult> {
+    if (!this.drive) throw new Error('Not authenticated');
+    if (!this.supportsPublish()) {
+      throw new Error('Write permissions not granted. Please re-authenticate with publish permissions.');
+    }
+
+    return this.withTokenRefresh(async () => {
+      const { title, content, format, folderId, metadata } = options;
+
+      // Determine file name and MIME type based on format
+      const extension = FORMAT_EXTENSIONS[format];
+      const fileName = format === 'native' ? title : `${title}${extension}`;
+      const uploadMimeType = this.getUploadMimeType(format, content);
+
+      // Prepare file metadata
+      const fileMetadata: drive_v3.Schema$File = {
+        name: fileName,
+      };
+
+      // Set parent folder if specified
+      if (folderId) {
+        fileMetadata.parents = [folderId];
+      }
+
+      // Add custom metadata if provided
+      if (metadata) {
+        fileMetadata.properties = Object.entries(metadata).reduce(
+          (acc, [key, value]) => {
+            acc[key] = String(value);
+            return acc;
+          },
+          {} as Record<string, string>
+        );
+      }
+
+      // Prepare media body
+      const contentBuffer = Buffer.from(content, 'utf-8');
+      const media = {
+        mimeType: uploadMimeType,
+        body: Readable.from(contentBuffer),
+      };
+
+      // For native format, we need to specify conversion
+      const requestBody = format === 'native'
+        ? { ...fileMetadata, mimeType: FORMAT_MIME_TYPES.native }
+        : fileMetadata;
+
+      // Create the file
+      const response = await this.drive!.files.create({
+        requestBody,
+        media,
+        fields: 'id, name, webViewLink, webContentLink, parents',
+      });
+
+      const file = response.data;
+      const webUrl = file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
+
+      console.log(`[GoogleDrive] Published document: ${file.name} (${file.id})`);
+
+      return {
+        externalId: file.id!,
+        externalUrl: webUrl,
+        externalPath: file.parents?.[0] ? `/${file.parents[0]}/${file.name}` : `/${file.name}`,
+      };
+    });
+  }
+
+  /**
+   * Update an existing document in Google Drive.
+   */
+  async updateDocument(options: ConnectorUpdateOptions): Promise<void> {
+    if (!this.drive) throw new Error('Not authenticated');
+    if (!this.supportsPublish()) {
+      throw new Error('Write permissions not granted. Please re-authenticate with publish permissions.');
+    }
+
+    return this.withTokenRefresh(async () => {
+      const { externalId, title, content } = options;
+
+      // Get current file info to determine format
+      const currentFile = await this.drive!.files.get({
+        fileId: externalId,
+        fields: 'id, name, mimeType',
+      });
+
+      const fileMetadata: drive_v3.Schema$File = {};
+
+      // Update title if provided
+      if (title) {
+        fileMetadata.name = title;
+      }
+
+      // Update content if provided
+      if (content) {
+        const mimeType = currentFile.data.mimeType || 'text/plain';
+        const uploadMimeType = mimeType === GOOGLE_MIME_TYPES.DOCUMENT
+          ? 'text/html'
+          : mimeType;
+
+        const contentBuffer = Buffer.from(content, 'utf-8');
+        const media = {
+          mimeType: uploadMimeType,
+          body: Readable.from(contentBuffer),
+        };
+
+        await this.drive!.files.update({
+          fileId: externalId,
+          requestBody: Object.keys(fileMetadata).length > 0 ? fileMetadata : undefined,
+          media,
+        });
+      } else if (Object.keys(fileMetadata).length > 0) {
+        // Only update metadata (no content change)
+        await this.drive!.files.update({
+          fileId: externalId,
+          requestBody: fileMetadata,
+        });
+      }
+
+      console.log(`[GoogleDrive] Updated document: ${externalId}`);
+    });
+  }
+
+  /**
+   * Delete a document from Google Drive.
+   * Moves the file to trash rather than permanently deleting.
+   */
+  async deleteDocument(externalId: string): Promise<void> {
+    if (!this.drive) throw new Error('Not authenticated');
+    if (!this.supportsPublish()) {
+      throw new Error('Write permissions not granted. Please re-authenticate with publish permissions.');
+    }
+
+    return this.withTokenRefresh(async () => {
+      // Move to trash instead of permanent deletion for safety
+      await this.drive!.files.update({
+        fileId: externalId,
+        requestBody: {
+          trashed: true,
+        },
+      });
+
+      console.log(`[GoogleDrive] Deleted (trashed) document: ${externalId}`);
+    });
+  }
+
+  /**
+   * Permanently delete a document from Google Drive.
+   * Use with caution - this cannot be undone.
+   */
+  async permanentlyDeleteDocument(externalId: string): Promise<void> {
+    if (!this.drive) throw new Error('Not authenticated');
+    if (!this.supportsPublish()) {
+      throw new Error('Write permissions not granted. Please re-authenticate with publish permissions.');
+    }
+
+    return this.withTokenRefresh(async () => {
+      await this.drive!.files.delete({
+        fileId: externalId,
+      });
+
+      console.log(`[GoogleDrive] Permanently deleted document: ${externalId}`);
+    });
+  }
+
+  /**
+   * Get information about an external document.
+   * Useful for checking if a previously published document still exists
+   * and what its current state is.
+   */
+  async getDocumentInfo(externalId: string): Promise<ExternalDocumentInfo> {
+    if (!this.drive) throw new Error('Not authenticated');
+
+    return this.withTokenRefresh(async () => {
+      try {
+        const response = await this.drive!.files.get({
+          fileId: externalId,
+          fields: 'id, name, modifiedTime, webViewLink, version, trashed',
+        });
+
+        const file = response.data;
+
+        // File exists but is in trash
+        if (file.trashed) {
+          return {
+            exists: false,
+            title: file.name || undefined,
+            modifiedAt: file.modifiedTime ? new Date(file.modifiedTime) : undefined,
+          };
+        }
+
+        return {
+          exists: true,
+          title: file.name || undefined,
+          modifiedAt: file.modifiedTime ? new Date(file.modifiedTime) : undefined,
+          webUrl: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
+          version: file.version || undefined,
+        };
+      } catch (error: any) {
+        if (error.code === 404) {
+          return { exists: false };
+        }
+        throw error;
+      }
+    });
+  }
+
+  // =====================================================
+  // PRIVATE HELPER METHODS
+  // =====================================================
+
+  /**
+   * Determine the upload MIME type based on format and content.
+   */
+  private getUploadMimeType(format: PublishFormat, content: string): string {
+    switch (format) {
+      case 'native':
+        // For conversion to Google Docs, upload as HTML
+        // Check if content looks like HTML
+        if (content.trim().startsWith('<') || content.includes('<html') || content.includes('<body')) {
+          return 'text/html';
+        }
+        // Otherwise treat as plain text (Google will handle basic conversion)
+        return 'text/plain';
+
+      case 'markdown':
+        return 'text/markdown';
+
+      case 'pdf':
+        return 'application/pdf';
+
+      case 'html':
+        return 'text/html';
+
+      default:
+        return 'text/plain';
     }
   }
 

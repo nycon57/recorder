@@ -87,33 +87,45 @@ export function ConceptBadge({
     lg: 'h-4 w-4',
   };
 
-  // Calculate text color based on background color
-  const getTextColor = (bgColor: string): string => {
-    const hex = bgColor.replace('#', '');
+  // Calculate text color based on background color (memoized)
+  const textColor = React.useMemo(() => {
+    const hex = color.replace('#', '');
     const r = parseInt(hex.substr(0, 2), 16);
     const g = parseInt(hex.substr(2, 2), 16);
     const b = parseInt(hex.substr(4, 2), 16);
     const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
     return luminance > 0.5 ? '#000000' : '#ffffff';
-  };
+  }, [color]);
 
-  const textColor = getTextColor(color);
+  // Determine if badge should be interactive (clickable but not removable)
+  const isInteractive = onClick && !removable;
+
+  // Keyboard handler for accessible button behavior
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLSpanElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      if (e.key === ' ') {
+        e.preventDefault(); // Prevent page scroll on Space
+      }
+      onClick?.();
+    }
+  };
 
   return (
     <span
       className={cn(
         'inline-flex items-center rounded-full font-medium transition-all',
         sizeClasses[size],
-        onClick && !removable && 'cursor-pointer hover:opacity-80',
+        isInteractive && 'cursor-pointer hover:opacity-80',
         className
       )}
       style={{
         backgroundColor: color,
         color: textColor,
       }}
-      onClick={onClick && !removable ? onClick : undefined}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
+      onClick={isInteractive ? onClick : undefined}
+      onKeyDown={isInteractive ? handleKeyDown : undefined}
+      role={isInteractive ? 'button' : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
     >
       {showIcon && Icon && <Icon className={iconSizes[size]} />}
       <span className="truncate max-w-[150px]">{name}</span>

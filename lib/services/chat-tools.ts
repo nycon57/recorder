@@ -600,6 +600,322 @@ export async function executeListRecordings(
 }
 
 /**
+ * Search Concepts Execute Function
+ *
+ * Search for concepts across the knowledge graph.
+ * Returns matching concepts with their types and mention counts.
+ */
+export async function executeSearchConcepts(
+  args: {
+    query: string;
+    limit?: number;
+    types?: string[];
+    minMentions?: number;
+  },
+  context: ToolContext
+): Promise<ToolResponse> {
+  const { orgId } = context;
+  const { query, limit = 10, types, minMentions = 1 } = args;
+
+  try {
+    const { findMatchingConcepts } = await import('./concept-search');
+
+    const concepts = await findMatchingConcepts(query, orgId, {
+      limit,
+      types: types as any,
+      minMentions,
+    });
+
+    if (concepts.length === 0) {
+      return {
+        success: true,
+        data: {
+          message: `No concepts found matching "${query}". Try a different search term or check your content library.`,
+          concepts: [],
+        },
+      };
+    }
+
+    // Format for AI understanding
+    const conceptSummary = concepts
+      .map(
+        (c, i) =>
+          `${i + 1}. **${c.name}** (${c.conceptType}) - mentioned ${c.mentionCount} times, ${Math.round(c.matchScore * 100)}% match`
+      )
+      .join('\n');
+
+    return {
+      success: true,
+      data: {
+        message: `Found ${concepts.length} concepts matching "${query}":\n${conceptSummary}`,
+        concepts: concepts.map((c) => ({
+          id: c.id,
+          name: c.name,
+          type: c.conceptType,
+          mentionCount: c.mentionCount,
+          matchScore: Math.round(c.matchScore * 100),
+        })),
+      },
+    };
+  } catch (error) {
+    console.error('[ChatTools] searchConcepts error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to search concepts',
+    };
+  }
+}
+
+/**
+ * Get Concept Details Execute Function
+ *
+ * Get detailed information about a specific concept including
+ * related concepts and recent content mentions.
+ */
+export async function executeGetConceptDetails(
+  args: {
+    conceptId: string;
+    includeRelated?: boolean;
+    includeMentions?: boolean;
+  },
+  context: ToolContext
+): Promise<ToolResponse> {
+  const { orgId } = context;
+  const { conceptId, includeRelated = true, includeMentions = true } = args;
+
+  try {
+    // Get concept
+    const { data: concept, error } = await supabaseAdmin
+      .from('knowledge_concepts')
+      .select('*')
+      .eq('id', conceptId)
+      .eq('org_id', orgId)
+      .single();
+
+    if (error || !concept) {
+      return {
+        success: false,
+        error: 'Concept not found or access denied',
+      };
+    }
+
+    let relatedConcepts: any[] = [];
+    let recentMentions: any[] = [];
+
+    // Get related concepts if requested
+    // SECURITY NOTE: concept_relationships table is scoped by org_id via RLS.
+    // The parent concept was already verified to belong to the org (line 692 above).
+    if (includeRelated) {
+      const { data: related } = await supabaseAdmin
+        .from('concept_relationships')
+        .select(
+          `
+          strength,
+          relationship_type,
+          related:related_concept_id(id, name, concept_type, mention_count)
+        `
+        )
+        .eq('concept_id', conceptId)
+        .order('strength', { ascending: false })
+        .limit(10);
+
+      relatedConcepts = (related || [])
+        .map((r: any) => ({
+          id: r.related?.id,
+          name: r.related?.name,
+          type: r.related?.concept_type,
+          relationshipType: r.relationship_type,
+          strength: Math.round(r.strength * 100),
+        }))
+        .filter((r) => r.id);
+    }
+
+    // Get recent mentions if requested
+    if (includeMentions) {
+      const { data: mentions } = await supabaseAdmin
+        .from('concept_mentions')
+        .select(
+          `
+          context,
+          confidence,
+          created_at,
+          content:content_id(id, title, content_type)
+        `
+        )
+        .eq('concept_id', conceptId)
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      recentMentions = (mentions || [])
+        .map((m: any) => ({
+          contentId: m.content?.id,
+          contentTitle: m.content?.title || 'Untitled',
+          contentType: m.content?.content_type,
+          context:
+            m.context?.substring(0, 200) + (m.context?.length > 200 ? '...' : ''),
+          confidence: Math.round(m.confidence * 100),
+        }))
+        .filter((m) => m.contentId);
+    }
+
+    // Format for AI
+    let summary = `**${concept.name}** (${concept.concept_type})\n`;
+    summary += `Mentioned ${concept.mention_count} times across your content.\n`;
+    if (concept.description) {
+      summary += `\nDescription: ${concept.description}\n`;
+    }
+
+    if (relatedConcepts.length > 0) {
+      summary += `\nRelated concepts: ${relatedConcepts.map((r) => r.name).join(', ')}`;
+    }
+
+    if (recentMentions.length > 0) {
+      summary += `\n\nRecent mentions:\n${recentMentions.map((m, i) => `${i + 1}. "${m.contentTitle}" - ${m.context}`).join('\n')}`;
+    }
+
+    return {
+      success: true,
+      data: {
+        message: summary,
+        concept: {
+          id: concept.id,
+          name: concept.name,
+          type: concept.concept_type,
+          description: concept.description,
+          mentionCount: concept.mention_count,
+          firstSeen: concept.first_seen_at,
+          lastSeen: concept.last_seen_at,
+        },
+        relatedConcepts,
+        recentMentions,
+      },
+    };
+  } catch (error) {
+    console.error('[ChatTools] getConceptDetails error:', error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to get concept details',
+    };
+  }
+}
+
+/**
+ * Explore Knowledge Graph Execute Function
+ *
+ * Explore the knowledge graph structure to discover concepts and relationships.
+ * Returns top concepts and their connections.
+ */
+export async function executeExploreKnowledgeGraph(
+  args: {
+    focusConceptId?: string;
+    maxNodes?: number;
+    types?: string[];
+  },
+  context: ToolContext
+): Promise<ToolResponse> {
+  const { orgId } = context;
+  const { focusConceptId, maxNodes = 20, types } = args;
+
+  try {
+    // Build query for concepts
+    let query = supabaseAdmin
+      .from('knowledge_concepts')
+      .select('id, name, concept_type, mention_count, description')
+      .eq('org_id', orgId)
+      .gte('mention_count', 2)
+      .order('mention_count', { ascending: false })
+      .limit(maxNodes);
+
+    if (types && types.length > 0) {
+      query = query.in('concept_type', types);
+    }
+
+    const { data: concepts, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    if (!concepts || concepts.length === 0) {
+      return {
+        success: true,
+        data: {
+          message:
+            'Your knowledge graph is empty. Add more content to build your concept network.',
+          concepts: [],
+          relationships: [],
+          stats: { totalConcepts: 0, totalRelationships: 0 },
+        },
+      };
+    }
+
+    // Get relationships between these concepts
+    const conceptIds = concepts.map((c) => c.id);
+    const { data: relationships } = await supabaseAdmin
+      .from('concept_relationships')
+      .select('concept_id, related_concept_id, relationship_type, strength')
+      .in('concept_id', conceptIds)
+      .in('related_concept_id', conceptIds)
+      .gte('strength', 0.3);
+
+    // Group by type for summary
+    const byType: Record<string, number> = {};
+    concepts.forEach((c) => {
+      byType[c.concept_type] = (byType[c.concept_type] || 0) + 1;
+    });
+
+    // Format summary
+    const typeBreakdown = Object.entries(byType)
+      .map(([type, count]) => `${count} ${type}${count > 1 ? 's' : ''}`)
+      .join(', ');
+
+    const topConcepts = concepts
+      .slice(0, 5)
+      .map(
+        (c, i) =>
+          `${i + 1}. **${c.name}** (${c.concept_type}, ${c.mention_count} mentions)`
+      )
+      .join('\n');
+
+    return {
+      success: true,
+      data: {
+        message: `Your knowledge graph contains ${concepts.length} concepts (${typeBreakdown}) with ${relationships?.length || 0} connections.\n\nTop concepts:\n${topConcepts}`,
+        concepts: concepts.map((c) => ({
+          id: c.id,
+          name: c.name,
+          type: c.concept_type,
+          mentionCount: c.mention_count,
+          description: c.description,
+        })),
+        relationships: (relationships || []).map((r) => ({
+          from: r.concept_id,
+          to: r.related_concept_id,
+          type: r.relationship_type,
+          strength: Math.round(r.strength * 100),
+        })),
+        stats: {
+          totalConcepts: concepts.length,
+          totalRelationships: relationships?.length || 0,
+          byType,
+        },
+      },
+    };
+  } catch (error) {
+    console.error('[ChatTools] exploreKnowledgeGraph error:', error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to explore knowledge graph',
+    };
+  }
+}
+
+/**
  * Tool descriptions for AI SDK
  */
 export const toolDescriptions = {
@@ -627,4 +943,13 @@ export const toolDescriptions = {
     'Use this when the user wants to see their recordings, ' +
     'browse available content, or get an overview of recorded sessions. ' +
     'Returns a list of recordings with basic metadata.',
+  searchConcepts:
+    'Search for key concepts and topics mentioned across your recordings. ' +
+    'Use this to discover what technologies, tools, processes, or topics are covered in your knowledge base.',
+  getConceptDetails:
+    'Get detailed information about a specific concept, including related concepts and recent content mentions. ' +
+    'Use this after finding a concept via searchConcepts.',
+  exploreKnowledgeGraph:
+    'Explore your knowledge graph to see how concepts are connected. ' +
+    'Use this to understand the big picture of what topics and technologies are covered across your content.',
 };

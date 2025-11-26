@@ -127,6 +127,9 @@ function SearchPageContent() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Track content IDs we've already fetched concepts for (prevents infinite loops)
+  const fetchedConceptsRef = useRef<Set<string>>(new Set());
+
   // Fetch tags and collections
   useEffect(() => {
     fetchTags();
@@ -151,6 +154,8 @@ function SearchPageContent() {
     setLoading(true);
     setShowSuggestions(false);
     setError(null);
+    // Clear fetched concepts cache for fresh results
+    fetchedConceptsRef.current.clear();
 
     try {
       const response = await fetch('/api/search', {
@@ -228,30 +233,41 @@ function SearchPageContent() {
   const fetchResultsConcepts = useCallback(async (searchResults: SearchResult[]) => {
     if (searchResults.length === 0) return;
 
-    // Get unique content IDs
-    const contentIds = [...new Set(searchResults.map(r => r.recordingId))];
+    // Get unique content IDs that we haven't already fetched
+    const allContentIds = [...new Set(searchResults.map(r => r.recordingId))];
+    const contentIdsToFetch = allContentIds.filter(id => !fetchedConceptsRef.current.has(id));
 
-    // Fetch concepts for each content item in parallel (limit to 10 concurrent)
+    if (contentIdsToFetch.length === 0) return;
+
+    // Mark these IDs as fetched (before async operations to prevent race conditions)
+    contentIdsToFetch.forEach(id => fetchedConceptsRef.current.add(id));
+
     const conceptsMap = new Map<string, SearchResultConcept[]>();
+    const BATCH_SIZE = 10;
 
-    await Promise.all(
-      contentIds.slice(0, 10).map(async (contentId) => {
-        try {
-          const response = await fetch(`/api/library/${contentId}/concepts?limit=5`);
-          if (response.ok) {
-            const data = await response.json();
-            const concepts = data.data?.concepts || [];
-            conceptsMap.set(contentId, concepts.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              conceptType: c.conceptType || c.concept_type,
-            })));
+    // Process content IDs in batches to limit concurrent requests
+    for (let i = 0; i < contentIdsToFetch.length; i += BATCH_SIZE) {
+      const batch = contentIdsToFetch.slice(i, i + BATCH_SIZE);
+
+      await Promise.all(
+        batch.map(async (contentId) => {
+          try {
+            const response = await fetch(`/api/library/${contentId}/concepts?limit=5`);
+            if (response.ok) {
+              const data = await response.json();
+              const concepts = data.data?.concepts || [];
+              conceptsMap.set(contentId, concepts.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                conceptType: c.conceptType || c.concept_type,
+              })));
+            }
+          } catch (error) {
+            console.error(`Error fetching concepts for ${contentId}:`, error);
           }
-        } catch (error) {
-          console.error(`Error fetching concepts for ${contentId}:`, error);
-        }
-      })
-    );
+        })
+      );
+    }
 
     // Update results with concepts
     if (conceptsMap.size > 0) {
@@ -266,7 +282,9 @@ function SearchPageContent() {
 
   // Fetch concepts when results change
   useEffect(() => {
-    if (results.length > 0 && !results[0].concepts) {
+    // Check if any result needs concepts (more robust than checking only first result)
+    const needsConcepts = results.some(r => r.concepts === undefined);
+    if (results.length > 0 && needsConcepts) {
       fetchResultsConcepts(results);
     }
   }, [results, fetchResultsConcepts]);

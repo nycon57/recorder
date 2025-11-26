@@ -30,6 +30,7 @@ import ShareControls from '../shared/ShareControls';
 import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
 import InlineEditableField from '../shared/InlineEditableField';
 import InlineTagsEditor from '../shared/InlineTagsEditor';
+import PublishModal from '../PublishModal';
 
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
@@ -114,6 +115,7 @@ export default function AudioDetailView({
   const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
+  const [isPublishModalOpen, setIsPublishModalOpen] = React.useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const isTrashed = !!recording.deleted_at;
@@ -552,6 +554,7 @@ export default function AudioDetailView({
                 onEdit={() => setIsEditModalOpen(true)}
                 onDelete={() => isTrashed ? setShowPermanentDeleteDialog(true) : setShowMoveToTrashDialog(true)}
                 onDownload={handleDownload}
+                onPublish={() => setIsPublishModalOpen(true)}
               />
 
               {/* Processing Pipeline */}
@@ -644,6 +647,19 @@ export default function AudioDetailView({
         open={showKeyboardShortcuts}
         onOpenChange={setShowKeyboardShortcuts}
         contentType={recording.content_type}
+      />
+
+      {/* Publish Modal */}
+      <PublishModal
+        contentId={recording.id}
+        documentId={document?.id || ''}
+        contentTitle={recording.title || 'Untitled'}
+        isOpen={isPublishModalOpen}
+        onClose={() => setIsPublishModalOpen(false)}
+        onPublishComplete={(publication) => {
+          toast({ description: 'Document published successfully!' });
+          router.refresh();
+        }}
       />
     </div>
   );

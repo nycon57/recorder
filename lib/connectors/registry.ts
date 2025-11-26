@@ -12,6 +12,7 @@ import { GoogleDriveConnector } from './google-drive';
 import { NotionConnector } from './notion';
 import { ZoomConnector } from './zoom';
 import { MicrosoftTeamsConnector } from './microsoft-teams';
+import { SharePointConnector } from './sharepoint';
 import { FileUploadConnector } from './file-upload';
 import { URLImportConnector } from './url-import';
 
@@ -21,6 +22,8 @@ export class ConnectorRegistry {
     [ConnectorType.NOTION, NotionConnector],
     [ConnectorType.ZOOM, ZoomConnector],
     [ConnectorType.MICROSOFT_TEAMS, MicrosoftTeamsConnector],
+    [ConnectorType.SHAREPOINT, SharePointConnector],
+    [ConnectorType.ONEDRIVE, SharePointConnector], // SharePointConnector handles both modes
     [ConnectorType.FILE_UPLOAD, FileUploadConnector],
     [ConnectorType.URL_IMPORT, URLImportConnector],
   ]);
@@ -55,6 +58,7 @@ export class ConnectorRegistry {
         description: connector.description,
         requiresOAuth: this.requiresOAuth(type),
         supportsWebhooks: this.supportsWebhooks(type),
+        supportsPublish: this.supportsPublish(type),
       };
     });
   }
@@ -68,6 +72,8 @@ export class ConnectorRegistry {
       ConnectorType.NOTION,
       ConnectorType.ZOOM,
       ConnectorType.MICROSOFT_TEAMS,
+      ConnectorType.SHAREPOINT,
+      ConnectorType.ONEDRIVE,
     ].includes(type);
   }
 
@@ -79,6 +85,19 @@ export class ConnectorRegistry {
       ConnectorType.GOOGLE_DRIVE,
       ConnectorType.ZOOM,
       ConnectorType.MICROSOFT_TEAMS,
+      ConnectorType.SHAREPOINT,
+      ConnectorType.ONEDRIVE,
+    ].includes(type);
+  }
+
+  /**
+   * Check if connector supports publishing
+   */
+  static supportsPublish(type: ConnectorType): boolean {
+    return [
+      ConnectorType.GOOGLE_DRIVE,
+      ConnectorType.SHAREPOINT,
+      ConnectorType.ONEDRIVE,
     ].includes(type);
   }
 

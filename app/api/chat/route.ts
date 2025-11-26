@@ -23,6 +23,9 @@ import {
   executeGetTranscript,
   executeGetRecordingMetadata,
   executeListRecordings,
+  executeSearchConcepts,
+  executeGetConceptDetails,
+  executeExploreKnowledgeGraph,
   toolDescriptions,
 } from '@/lib/services/chat-tools';
 import {
@@ -31,6 +34,9 @@ import {
   getTranscriptInputSchema,
   getRecordingMetadataInputSchema,
   listRecordingsInputSchema,
+  searchConceptsInputSchema,
+  getConceptDetailsInputSchema,
+  exploreKnowledgeGraphInputSchema,
 } from '@/lib/validations/chat';
 import { searchMonitor } from '@/lib/services/search-monitoring';
 import { assignVariant, getExperimentConfig, logExperimentResult } from '@/lib/services/ab-testing';
@@ -615,25 +621,36 @@ export async function POST(req: Request) {
 When users ask exploratory questions like "what can you help me with?" or "what topics do you know about?", you should:
 
 1. **Use the listRecordings tool** to browse their available recordings
-2. **Organize findings by topic or category** when presenting results
-3. **Be conversational and helpful** in explaining what's available
+2. **Use the exploreKnowledgeGraph tool** to see concepts and topics across their content
+3. **Organize findings by topic or category** when presenting results
+4. **Be conversational and helpful** in explaining what's available
 
 **Guidelines:**
 - Call listRecordings to see what recordings are available
+- Call exploreKnowledgeGraph to discover key concepts, tools, and topics mentioned across recordings
 - Group related recordings by topic (e.g., "Cloud Infrastructure", "Real Estate", "Authentication")
 - Present information in an organized, easy-to-scan format
-- Use emojis (📚, 🏠, 💼, etc.) to make topics more visually distinctive
+- Use emojis to make topics more visually distinctive
 - Offer to search for specific topics if the user wants more details
+
+**Knowledge Graph Tools:**
+You have access to a knowledge graph that tracks concepts (tools, processes, people, organizations, technical terms) mentioned across content:
+
+- Use **searchConcepts** when users ask about topics, technologies, or concepts ("What tools do we use?", "Tell me about React mentions")
+- Use **getConceptDetails** to get more information about a specific concept after finding it
+- Use **exploreKnowledgeGraph** when users want an overview of their knowledge base ("What's in my knowledge base?", "Show me the main topics")
+
+When discussing concepts, you can reference related content and show how concepts connect across different recordings.
 
 **Format Example:**
 \`\`\`
 Based on your recordings, I can help you with:
 
-📚 **Topic 1** (X recordings, Y minutes)
+**Topic 1** (X recordings, Y minutes)
 - Key point 1
 - Key point 2
 
-🏠 **Topic 2** (X recordings, Y minutes)
+**Topic 2** (X recordings, Y minutes)
 - Key point 1
 - Key point 2
 
@@ -750,6 +767,28 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
         inputSchema: listRecordingsInputSchema,
         execute: async (args: any) => {
           return await executeListRecordings(args, { orgId, userId });
+        },
+      }),
+      // Knowledge Graph Tools
+      searchConcepts: tool({
+        description: toolDescriptions.searchConcepts,
+        inputSchema: searchConceptsInputSchema,
+        execute: async (args: any) => {
+          return await executeSearchConcepts(args, { orgId, userId });
+        },
+      }),
+      getConceptDetails: tool({
+        description: toolDescriptions.getConceptDetails,
+        inputSchema: getConceptDetailsInputSchema,
+        execute: async (args: any) => {
+          return await executeGetConceptDetails(args, { orgId, userId });
+        },
+      }),
+      exploreKnowledgeGraph: tool({
+        description: toolDescriptions.exploreKnowledgeGraph,
+        inputSchema: exploreKnowledgeGraphInputSchema,
+        execute: async (args: any) => {
+          return await executeExploreKnowledgeGraph(args, { orgId, userId });
         },
       }),
     } : undefined;

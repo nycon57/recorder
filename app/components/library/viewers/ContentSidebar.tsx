@@ -14,6 +14,7 @@ import {
   HardDrive,
   FileType as FileTypeIcon,
   Copy,
+  FileUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -75,6 +76,7 @@ interface ContentSidebarProps {
   onShare?: () => void;
   onReprocess?: () => void;
   onDownload?: () => void;
+  onPublish?: () => void;
 }
 
 export default function ContentSidebar({
@@ -98,6 +100,7 @@ export default function ContentSidebar({
   onShare,
   onReprocess,
   onDownload,
+  onPublish,
 }: ContentSidebarProps) {
   const isTrashed = !!deletedAt;
 
@@ -295,6 +298,17 @@ export default function ContentSidebar({
             >
               <Share2 className="h-4 w-4 mr-2" />
               Share
+            </Button>
+          )}
+
+          {onPublish && !isTrashed && status === 'completed' && (
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={onPublish}
+            >
+              <FileUp className="h-4 w-4 mr-2" />
+              Publish
             </Button>
           )}
 

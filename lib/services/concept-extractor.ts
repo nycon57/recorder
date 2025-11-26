@@ -39,17 +39,22 @@ export interface ExtractedConcept {
 }
 
 // Stored concept from database
+// Note: Some fields are nullable because different RPC functions return different subsets
 export interface StoredConcept {
   id: string;
-  orgId: string;
+  orgId: string | null; // Not returned by get_content_concepts, find_similar_concepts
   name: string;
-  normalizedName: string;
+  normalizedName: string | null; // Not returned by get_content_concepts, find_similar_concepts
   conceptType: ConceptType;
-  description?: string;
+  description: string | null; // Not returned by get_content_concepts, find_similar_concepts
   mentionCount: number;
   embedding?: number[];
-  firstSeenAt: Date;
-  lastSeenAt: Date;
+  firstSeenAt: Date | null; // Not returned by get_content_concepts, find_similar_concepts
+  lastSeenAt: Date | null; // Not returned by get_content_concepts, find_similar_concepts
+  // Additional fields from specific RPCs
+  confidence?: number; // From get_content_concepts
+  context?: string; // From get_content_concepts
+  contentCount?: number; // From get_top_concepts
 }
 
 // Concept mention with content link
@@ -515,16 +520,21 @@ export async function getConceptsForContent(
     return [];
   }
 
+  // get_content_concepts returns: concept_id, concept_name, concept_type, mention_count, confidence, context
+  // It does NOT return: org_id, normalized_name, description, first_seen_at, last_seen_at
   return (data || []).map((row: any) => ({
     id: row.concept_id,
-    orgId: '',
+    orgId: null, // Not available from this RPC
     name: row.concept_name,
-    normalizedName: '',
-    conceptType: row.concept_type,
-    description: '',
-    mentionCount: row.mention_count,
-    firstSeenAt: new Date(),
-    lastSeenAt: new Date(),
+    normalizedName: null, // Not available from this RPC
+    conceptType: row.concept_type as ConceptType,
+    description: null, // Not available from this RPC
+    mentionCount: row.mention_count ?? 0,
+    firstSeenAt: null, // Not available from this RPC
+    lastSeenAt: null, // Not available from this RPC
+    // Additional fields specific to this RPC
+    confidence: row.confidence,
+    context: row.context,
   }));
 }
 
@@ -554,16 +564,20 @@ export async function getTopConceptsForOrg(
     return [];
   }
 
+  // get_top_concepts returns: concept_id, name, normalized_name, concept_type, description,
+  //                           mention_count, content_count, first_seen_at, last_seen_at
   return (data || []).map((row: any) => ({
     id: row.concept_id,
-    orgId,
+    orgId, // We pass this as parameter, so we can use it
     name: row.name,
-    normalizedName: '',
-    conceptType: row.concept_type,
-    description: row.description,
-    mentionCount: row.mention_count,
-    firstSeenAt: new Date(),
-    lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at) : new Date(),
+    normalizedName: row.normalized_name ?? null,
+    conceptType: row.concept_type as ConceptType,
+    description: row.description ?? null,
+    mentionCount: row.mention_count ?? 0,
+    firstSeenAt: row.first_seen_at ? new Date(row.first_seen_at) : null,
+    lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at) : null,
+    // Additional field from this RPC
+    contentCount: row.content_count ? Number(row.content_count) : undefined,
   }));
 }
 
@@ -579,7 +593,19 @@ export async function findSimilarConcepts(
   const supabase = createAdminClient();
 
   // Generate embedding for the query text
-  const embedding = await generateConceptEmbedding(text);
+  let embedding: number[];
+  try {
+    embedding = await generateConceptEmbedding(text);
+  } catch (embeddingError) {
+    logger.error('Failed to generate embedding for similar concepts search', {
+      context: {
+        orgId,
+        textLength: text.length,
+        error: embeddingError instanceof Error ? embeddingError.message : String(embeddingError),
+      },
+    });
+    return [];
+  }
 
   const { data, error } = await supabase.rpc('find_similar_concepts', {
     p_org_id: orgId,
@@ -598,17 +624,19 @@ export async function findSimilarConcepts(
     return [];
   }
 
+  // find_similar_concepts returns: concept_id, name, concept_type, mention_count, similarity
+  // It does NOT return: normalized_name, description, first_seen_at, last_seen_at
   return (data || []).map((row: any) => ({
     id: row.concept_id,
-    orgId,
+    orgId, // We pass this as parameter, so we can use it
     name: row.name,
-    normalizedName: '',
-    conceptType: row.concept_type,
-    description: '',
-    mentionCount: row.mention_count,
+    normalizedName: null, // Not available from this RPC
+    conceptType: row.concept_type as ConceptType,
+    description: null, // Not available from this RPC
+    mentionCount: row.mention_count ?? 0,
     similarity: row.similarity,
-    firstSeenAt: new Date(),
-    lastSeenAt: new Date(),
+    firstSeenAt: null, // Not available from this RPC
+    lastSeenAt: null, // Not available from this RPC
   }));
 }
 
