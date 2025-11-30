@@ -51,7 +51,7 @@ function generateState(orgId: string): string {
 export async function GET(req: NextRequest) {
   try {
     // Step 1: Authenticate user and get internal org ID
-    const { orgId } = await requireOrg();
+    const { orgId, userId } = await requireOrg();
 
     // Step 2: Validate environment variables
     const clientId = process.env.MICROSOFT_CLIENT_ID;

@@ -410,20 +410,32 @@ export default function FolderPicker({
           )}
           style={{ paddingLeft: `${depth * 1.25 + 0.5}rem` }}
         >
-          {/* Expand/collapse button */}
+          {/* Expand/collapse control */}
           {node.hasChildren && (
-            <button
-              type="button"
+            <span
+              role="button"
+              tabIndex={disabled ? -1 : 0}
               onClick={(e) => {
                 e.stopPropagation();
-                toggleFolder(node.id);
+                if (!disabled) {
+                  toggleFolder(node.id);
+                }
               }}
-              disabled={disabled}
+              onKeyDown={(e) => {
+                if (disabled) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleFolder(node.id);
+                }
+              }}
               className={cn(
                 'shrink-0 p-0.5 rounded hover:bg-muted transition-colors',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                disabled && 'pointer-events-none'
               )}
               aria-label={isExpanded ? 'Collapse folder' : 'Expand folder'}
+              aria-disabled={disabled}
             >
               {node.isLoading ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
@@ -432,7 +444,7 @@ export default function FolderPicker({
               ) : (
                 <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
               )}
-            </button>
+            </span>
           )}
 
           {/* Folder icon */}

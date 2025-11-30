@@ -52,11 +52,23 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // If focusing on a specific concept, fetch it and its related concepts
   if (query.focusConceptId) {
+    // Defense in depth: Validate UUID format before using in query
+    // UUID regex: 8-4-4-4-12 hex characters with hyphens
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(query.focusConceptId)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid focusConceptId format' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    // Store validated value to use in queries
+    const validatedFocusConceptId = query.focusConceptId;
+
     // Fetch the focus concept
     const { data: focusConcept, error: focusError } = await supabase
       .from('knowledge_concepts')
       .select('id, name, concept_type, mention_count')
-      .eq('id', query.focusConceptId)
+      .eq('id', validatedFocusConceptId)
       .eq('org_id', orgId)
       .single();
 
@@ -81,7 +93,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       `)
       .eq('org_id', orgId)
       .gte('strength', query.minStrength)
-      .or(`concept_a_id.eq.${query.focusConceptId},concept_b_id.eq.${query.focusConceptId}`);
+      .or(`concept_a_id.eq.${validatedFocusConceptId},concept_b_id.eq.${validatedFocusConceptId}`);
 
     if (relatedError) {
       console.error('[GET /api/knowledge/graph] Error fetching related concepts:', relatedError);
@@ -96,10 +108,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
       const conceptA = rel.knowledge_concepts?.[0] || rel['knowledge_concepts!concept_relationships_concept_a_id_fkey'];
       const conceptB = rel.knowledge_concepts?.[1] || rel['knowledge_concepts!concept_relationships_concept_b_id_fkey'];
 
-      if (conceptA && conceptA.id !== query.focusConceptId) {
+      if (conceptA && conceptA.id !== validatedFocusConceptId) {
         nodeMap.set(conceptA.id, conceptA);
       }
-      if (conceptB && conceptB.id !== query.focusConceptId) {
+      if (conceptB && conceptB.id !== validatedFocusConceptId) {
         nodeMap.set(conceptB.id, conceptB);
       }
     });
@@ -116,14 +128,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
       mentionCount: c.mention_count || 0,
     }));
 
-    // Fetch edges for these nodes
+    // Fetch edges for these nodes (both endpoints must be in the selected node set)
     const nodeIds = nodes.map((n) => n.id);
     const { data: edges, error: edgesError } = await supabase
       .from('concept_relationships')
       .select('id, concept_a_id, concept_b_id, relationship_type, strength')
       .eq('org_id', orgId)
       .gte('strength', query.minStrength)
-      .or(`concept_a_id.in.(${nodeIds.join(',')}),concept_b_id.in.(${nodeIds.join(',')})`)
       .in('concept_a_id', nodeIds)
       .in('concept_b_id', nodeIds);
 
@@ -137,7 +148,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       id: e.id,
       source: e.concept_a_id,
       target: e.concept_b_id,
-      type: (e.relationship_type || 'related') as 'related' | 'co-occurs' | 'prerequisite',
+      type: e.relationship_type || 'related',
       strength: e.strength || 0,
     }));
 
@@ -216,7 +227,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     id: r.id,
     source: r.concept_a_id,
     target: r.concept_b_id,
-    type: (r.relationship_type || 'related') as 'related' | 'co-occurs' | 'prerequisite',
+    type: r.relationship_type || 'related',
     strength: r.strength || 0,
   }));
 

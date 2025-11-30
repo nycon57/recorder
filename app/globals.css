@@ -125,6 +125,16 @@
   --glow-secondary: 0 0 40px rgba(44, 194, 149, 0.3); /* Mountain Meadow */
   --glow-primary: 0 0 40px rgba(3, 98, 76, 0.4); /* Bangladesh Green */
 
+  /* Glow Scale System (Art Direction) */
+  --glow-accent-10: rgba(0, 223, 130, 0.10);
+  --glow-accent-15: rgba(0, 223, 130, 0.15);
+  --glow-accent-25: rgba(0, 223, 130, 0.25);
+  --glow-accent-40: rgba(0, 223, 130, 0.40);
+
+  /* Professional Easing (from Wope/Reflect reference sites) */
+  --ease-smooth: cubic-bezier(0.6, 0.6, 0, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
   /* Blur Amounts (Cryptix-inspired) */
   --blur-sm: 7px;
   --blur-md: 24px;
@@ -913,6 +923,71 @@
   .dark .glass {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Interactive Card Hover Pattern (from Railway/Wope reference) */
+  .card-interactive {
+    transition: transform 200ms var(--ease-smooth, cubic-bezier(0.6, 0.6, 0, 1)),
+                box-shadow 200ms var(--ease-smooth, cubic-bezier(0.6, 0.6, 0, 1)),
+                border-color 200ms var(--ease-smooth, cubic-bezier(0.6, 0.6, 0, 1));
+  }
+
+  .card-interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 20px var(--glow-accent-15, rgba(0, 223, 130, 0.15));
+    border-color: rgba(0, 223, 130, 0.2);
+  }
+
+  .card-interactive:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  }
+
+  /* Colored Badge Support (dynamic colors via CSS custom properties) */
+  [data-slot="colored-badge"] {
+    background-color: var(--badge-bg, var(--color-primary));
+    color: var(--badge-text, var(--color-primary-foreground));
+  }
+
+  [data-slot="colored-badge"][data-interactive="true"] {
+    cursor: pointer;
+    transition: opacity 150ms var(--ease-smooth, cubic-bezier(0.6, 0.6, 0, 1));
+  }
+
+  [data-slot="colored-badge"][data-interactive="true"]:hover {
+    opacity: 0.85;
+  }
+
+  [data-slot="colored-badge"][data-interactive="true"]:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  }
+
+  /* Glow Box Button (from Wope reference) */
+  .btn-glow {
+    position: relative;
+    transition: box-shadow 200ms var(--ease-smooth, cubic-bezier(0.6, 0.6, 0, 1));
+  }
+
+  .btn-glow:hover {
+    box-shadow: 0 0 30px var(--glow-accent-40, rgba(0, 223, 130, 0.4));
+  }
+
+  /* Gradient Text (from Wope/Reflect reference) */
+  .text-gradient-brand {
+    background: linear-gradient(135deg, #00df82 0%, #2cc295 50%, #03624c 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Frosted Glass Card (from Resend reference) */
+  .card-glass {
+    background: rgba(4, 34, 34, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 223, 130, 0.1);
+    border-radius: 16px;
   }
 }
 

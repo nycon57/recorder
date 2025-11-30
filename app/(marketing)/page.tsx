@@ -1,19 +1,21 @@
 import {
-  RegistryHero,
-  RegistryFeatures,
-  RegistryPricing,
-  ModernCTA,
-  RecordTestimonials,
+  AuroraHero,
+  AuroraValueProp,
+  AuroraFeatures,
+  AuroraTestimonials,
+  AuroraPricing,
+  AuroraCTA,
 } from '@/app/components/sections';
 
 export default function HomePage() {
   return (
     <>
-      <RegistryHero />
-      <RegistryFeatures />
-      <RecordTestimonials />
-      <RegistryPricing />
-      <ModernCTA />
+      <AuroraHero />
+      <AuroraValueProp />
+      <AuroraFeatures />
+      <AuroraTestimonials />
+      <AuroraPricing />
+      <AuroraCTA />
     </>
   );
 }

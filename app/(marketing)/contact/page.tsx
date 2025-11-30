@@ -1,40 +1,136 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { Mail, MessageSquare, Github, MapPin, Phone, Send, Sparkles, ArrowRight, Loader2 } from 'lucide-react';
+import * as motion from 'motion/react-client';
+import { useState } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import {
+  Mail01Icon,
+  Message01Icon,
+  ArrowRight01Icon,
+  SparklesIcon,
+  Location01Icon,
+  Call02Icon,
+  Clock01Icon,
+  Tick02Icon,
+  Loading03Icon,
+  SentIcon,
+  Calendar03Icon,
+  LinkSquare01Icon,
+} from '@hugeicons/core-free-icons';
 import Link from 'next/link';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { useState } from 'react';
 
+import { cn } from '@/lib/utils';
+import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Label } from '@/app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/select';
 import { contactFormSchema, type ContactFormData } from '@/lib/validations/contact';
+import { AuroraCTA } from '@/app/components/sections';
 
-const CONTACT_METHODS = [
+// ============================================================================
+// ANIMATION VARIANTS (Consistent with Aurora design system)
+// ============================================================================
+
+const fadeInUp = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: 'spring', stiffness: 400, damping: 30 },
+  },
+};
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1, delayChildren: 0.1 },
+  },
+};
+
+const scaleIn = {
+  hidden: { opacity: 0, scale: 0.9 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    transition: { type: 'spring', stiffness: 400, damping: 25 },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 30, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: 'spring', stiffness: 400, damping: 25 },
+  },
+};
+
+// ============================================================================
+// DATA
+// ============================================================================
+
+interface ContactMethod {
+  icon: typeof Mail01Icon;
+  title: string;
+  description: string;
+  action: string;
+  actionHref: string;
+  highlight?: boolean;
+}
+
+const CONTACT_METHODS: ContactMethod[] = [
   {
-    icon: Mail,
+    icon: Mail01Icon,
     title: 'Email Us',
-    description: 'For general inquiries and support',
-    link: 'mailto:hello@record.app',
-    linkText: 'hello@record.app',
-    color: 'from-blue-500/20 to-cyan-500/20',
+    description: 'General inquiries and support questions',
+    action: 'hello@tribora.com',
+    actionHref: 'mailto:hello@tribora.com',
   },
   {
-    icon: MessageSquare,
-    title: 'Sales',
-    description: 'Interested in Enterprise plans?',
-    link: 'mailto:sales@record.app',
-    linkText: 'sales@record.app',
-    color: 'from-green-500/20 to-emerald-500/20',
+    icon: Calendar03Icon,
+    title: 'Book a Demo',
+    description: 'See Tribora in action with a personalized walkthrough',
+    action: 'Schedule a call',
+    actionHref: '/contact?type=demo',
+    highlight: true,
+  },
+  {
+    icon: Message01Icon,
+    title: 'Enterprise Sales',
+    description: 'Custom solutions for large organizations',
+    action: 'sales@tribora.com',
+    actionHref: 'mailto:sales@tribora.com',
   },
 ];
 
+const INQUIRY_TYPES = [
+  { value: 'general', label: 'General Inquiry' },
+  { value: 'demo', label: 'Request a Demo' },
+  { value: 'sales', label: 'Enterprise Sales' },
+  { value: 'support', label: 'Technical Support' },
+  { value: 'partnership', label: 'Partnership' },
+];
+
+// ============================================================================
+// PAGE COMPONENT
+// ============================================================================
+
 export default function ContactPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   const {
     control,
@@ -47,6 +143,7 @@ export default function ContactPage() {
       name: '',
       email: '',
       company: '',
+      inquiryType: 'general',
       subject: '',
       message: '',
     },
@@ -57,9 +154,7 @@ export default function ContactPage() {
     try {
       const response = await fetch('/api/contact', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
 
@@ -73,12 +168,11 @@ export default function ContactPage() {
         description: result.data.message,
       });
 
-      reset(); // Reset form on success
+      setIsSubmitted(true);
+      reset();
     } catch (error) {
-      // SECURITY: Only log error message, not the full error object which may contain form data
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const errorCode = error instanceof Error && 'code' in error ? (error as any).code : undefined;
-      console.error('Contact form error:', { message: errorMessage, code: errorCode });
+      console.error('Contact form error:', { message: errorMessage });
 
       toast.error('Failed to send message', {
         description: errorMessage || 'Please try again later',
@@ -90,360 +184,643 @@ export default function ContactPage() {
 
   return (
     <div className="flex flex-col">
-      {/* Hero Section */}
-      <section className="relative py-24 lg:py-32 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-background to-background" />
+      {/* ================================================================== */}
+      {/* HERO SECTION */}
+      {/* ================================================================== */}
+      <section className="relative pt-24 pb-16 sm:pt-32 sm:pb-20 lg:pt-40 lg:pb-24 overflow-hidden">
+        {/* Aurora Background */}
+        <div className="absolute inset-0 pointer-events-none">
+          {/* Flowing aurora orbs */}
+          <div
+            className="absolute top-[5%] right-[10%] w-[600px] h-[600px] rounded-full
+              bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.1)_0%,transparent_70%)]
+              blur-[100px] animate-float"
+            style={{ animationDelay: '0s' }}
+          />
+          <div
+            className="absolute top-[40%] left-[5%] w-[500px] h-[500px] rounded-full
+              bg-[radial-gradient(ellipse_at_center,rgba(44,194,149,0.08)_0%,transparent_70%)]
+              blur-[80px] animate-float"
+            style={{ animationDelay: '2s' }}
+          />
 
-        <div className="relative z-10 container px-6 mx-auto max-w-4xl text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <span className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 text-sm font-medium text-primary backdrop-blur-sm mb-6">
-              <Sparkles className="h-4 w-4" />
-              Contact Us
-            </span>
-          </motion.div>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-heading-1 mb-6"
-          >
-            Get in Touch
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="text-lg text-muted-foreground max-w-2xl mx-auto"
-          >
-            Have questions? We'd love to hear from you. Send us a message and we'll respond as
-            soon as possible.
-          </motion.p>
+          {/* Subtle grid pattern */}
+          <div
+            className="absolute inset-0 opacity-[0.015]"
+            style={{
+              backgroundImage: `
+                linear-gradient(to right, rgba(0,223,130,0.5) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0,223,130,0.5) 1px, transparent 1px)
+              `,
+              backgroundSize: '80px 80px',
+            }}
+          />
         </div>
-      </section>
 
-      {/* Contact Methods */}
-      <section className="container px-6 py-16 mx-auto max-w-6xl">
-        <div className="grid md:grid-cols-3 gap-8 mb-16">
-          {CONTACT_METHODS.map((method, index) => {
-            const Icon = method.icon;
-            return (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                whileHover={{ scale: 1.02, y: -4 }}
-                className="text-center p-8 border border-border rounded-2xl bg-card hover:shadow-xl transition-all group"
+        <div className="container px-4 sm:px-6 lg:px-8 relative z-10">
+          <motion.div
+            className="text-center max-w-4xl mx-auto"
+            initial="hidden"
+            animate="visible"
+            variants={staggerContainer}
+          >
+            {/* Badge */}
+            <motion.div variants={scaleIn}>
+              <Badge
+                variant="outline"
+                className="mb-6 px-4 py-2 rounded-full
+                  bg-accent/5 backdrop-blur-sm border-accent/30"
               >
-                <div className={`w-16 h-16 bg-gradient-to-br ${method.color} rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform`}>
-                  <Icon className="w-8 h-8 text-primary" />
-                </div>
-                <h3 className="text-heading-4 mb-2">{method.title}</h3>
-                <p className="text-sm text-muted-foreground mb-4">{method.description}</p>
-                <a
-                  href={method.link}
-                  target={method.link.startsWith('http') ? '_blank' : undefined}
-                  rel={method.link.startsWith('http') ? 'noopener noreferrer' : undefined}
-                  className="text-primary hover:underline font-medium inline-flex items-center gap-2 transition-colors"
-                >
-                  {method.linkText}
-                  {method.link.startsWith('http') && (
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                <HugeiconsIcon icon={SparklesIcon} size={14} className="mr-2 text-accent" />
+                <span className="text-sm font-medium text-accent">
+                  We'd Love to Hear From You
+                </span>
+              </Badge>
+            </motion.div>
+
+            {/* Headline */}
+            <motion.h1
+              className="font-outfit text-4xl sm:text-5xl lg:text-6xl xl:text-7xl
+                font-light leading-tight tracking-tight mb-6"
+              variants={fadeInUp}
+            >
+              Let's start a{' '}
+              <span
+                className="bg-gradient-to-r from-accent via-secondary to-primary
+                  bg-clip-text text-transparent"
+              >
+                conversation
+              </span>
+            </motion.h1>
+
+            {/* Subheadline */}
+            <motion.p
+              className="text-lg sm:text-xl lg:text-2xl text-muted-foreground
+                font-light max-w-2xl mx-auto"
+              variants={fadeInUp}
+            >
+              Whether you have questions, need a demo, or want to discuss enterprise
+              solutions—we're here to help illuminate your path forward.
+            </motion.p>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* CONTACT METHOD CARDS */}
+      {/* ================================================================== */}
+      <section className="relative py-8 sm:py-12">
+        <div className="container px-4 sm:px-6 lg:px-8">
+          <motion.div
+            className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto"
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.2 }}
+            variants={staggerContainer}
+          >
+            {CONTACT_METHODS.map((method, index) => (
+              <motion.a
+                key={index}
+                href={method.actionHref}
+                variants={cardVariants}
+                whileHover={{ y: -8, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
+                className={cn(
+                  'group relative rounded-2xl overflow-hidden p-6',
+                  'bg-card/50 backdrop-blur-sm',
+                  'border transition-all duration-500',
+                  method.highlight
+                    ? 'border-accent/50 shadow-[0_0_40px_rgba(0,223,130,0.12)]'
+                    : 'border-border/50 hover:border-accent/30',
+                  'hover:shadow-[0_0_50px_rgba(0,223,130,0.1)]'
+                )}
+              >
+                {/* Card gradient background */}
+                <div
+                  className={cn(
+                    'absolute inset-0 opacity-0 transition-opacity duration-500',
+                    'bg-gradient-to-br from-accent/5 via-transparent to-secondary/5',
+                    method.highlight ? 'opacity-100' : 'group-hover:opacity-100'
                   )}
-                </a>
+                />
+
+                <div className="relative z-10">
+                  {/* Icon */}
+                  <div
+                    className={cn(
+                      'w-14 h-14 rounded-xl mb-5 flex items-center justify-center',
+                      'bg-accent/10 border border-accent/20',
+                      'transition-all duration-300',
+                      'group-hover:bg-accent/15 group-hover:border-accent/30',
+                      'group-hover:shadow-[0_0_20px_rgba(0,223,130,0.2)]'
+                    )}
+                  >
+                    <HugeiconsIcon
+                      icon={method.icon}
+                      size={24}
+                      className="text-accent"
+                    />
+                  </div>
+
+                  {/* Content */}
+                  <h3 className="font-outfit text-lg font-medium mb-2 text-foreground">
+                    {method.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+                    {method.description}
+                  </p>
+
+                  {/* Action */}
+                  <span
+                    className="inline-flex items-center text-sm font-medium text-accent
+                      group-hover:text-accent transition-colors"
+                  >
+                    {method.action}
+                    <HugeiconsIcon
+                      icon={ArrowRight01Icon}
+                      size={16}
+                      className="ml-2 transition-transform group-hover:translate-x-1"
+                    />
+                  </span>
+                </div>
+
+                {/* Highlight badge for featured method */}
+                {method.highlight && (
+                  <div className="absolute top-4 right-4">
+                    <Badge
+                      className="text-xs px-2 py-0.5
+                        bg-gradient-to-r from-accent to-secondary
+                        text-accent-foreground border-0"
+                    >
+                      Recommended
+                    </Badge>
+                  </div>
+                )}
+              </motion.a>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* MAIN CONTACT SECTION - Form + Info */}
+      {/* ================================================================== */}
+      <section className="relative py-16 sm:py-24 lg:py-32 overflow-hidden">
+        {/* Background aurora */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div
+            className="absolute top-0 left-0 right-0 h-px
+              bg-gradient-to-r from-transparent via-accent/20 to-transparent"
+          />
+          <div
+            className="absolute bottom-[20%] right-[10%] w-[400px] h-[400px] rounded-full
+              bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.06)_0%,transparent_70%)]
+              blur-[80px]"
+          />
+        </div>
+
+        <div className="container px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid lg:grid-cols-5 gap-12 lg:gap-16">
+              {/* ============================================= */}
+              {/* LEFT COLUMN - Contact Form (3 cols) */}
+              {/* ============================================= */}
+              <motion.div
+                className="lg:col-span-3"
+                initial={{ opacity: 0, x: -30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              >
+                {/* Form Card */}
+                <div
+                  className="rounded-2xl overflow-hidden
+                    bg-card/50 backdrop-blur-sm
+                    border border-border/50
+                    shadow-[0_0_60px_rgba(0,223,130,0.05)]"
+                >
+                  {/* Form Header */}
+                  <div className="px-6 sm:px-8 pt-8 pb-6 border-b border-border/50">
+                    <h2 className="font-outfit text-2xl sm:text-3xl font-light mb-2">
+                      Send us a message
+                    </h2>
+                    <p className="text-muted-foreground">
+                      We typically respond within 24 hours.
+                    </p>
+                  </div>
+
+                  {/* Form Body */}
+                  <div className="p-6 sm:p-8">
+                    {isSubmitted ? (
+                      <SuccessState onReset={() => setIsSubmitted(false)} />
+                    ) : (
+                      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                        {/* Name & Email Row */}
+                        <div className="grid sm:grid-cols-2 gap-6">
+                          <FormField
+                            name="name"
+                            label="Name"
+                            required
+                            control={control}
+                            error={formErrors.name?.message}
+                            disabled={isSubmitting}
+                            placeholder="Your name"
+                          />
+                          <FormField
+                            name="email"
+                            label="Email"
+                            type="email"
+                            required
+                            control={control}
+                            error={formErrors.email?.message}
+                            disabled={isSubmitting}
+                            placeholder="you@company.com"
+                          />
+                        </div>
+
+                        {/* Company & Inquiry Type Row */}
+                        <div className="grid sm:grid-cols-2 gap-6">
+                          <FormField
+                            name="company"
+                            label="Company"
+                            control={control}
+                            error={formErrors.company?.message}
+                            disabled={isSubmitting}
+                            placeholder="Your company"
+                          />
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">
+                              Inquiry Type
+                            </Label>
+                            <Controller
+                              name="inquiryType"
+                              control={control}
+                              render={({ field }) => (
+                                <Select
+                                  value={field.value}
+                                  onValueChange={field.onChange}
+                                  disabled={isSubmitting}
+                                >
+                                  <SelectTrigger
+                                    className="h-12 rounded-xl bg-background/50
+                                      border-border/50 focus:border-accent/50
+                                      focus:ring-2 focus:ring-accent/20
+                                      transition-all duration-200"
+                                  >
+                                    <SelectValue placeholder="Select type" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {INQUIRY_TYPES.map((type) => (
+                                      <SelectItem key={type.value} value={type.value}>
+                                        {type.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Subject */}
+                        <FormField
+                          name="subject"
+                          label="Subject"
+                          required
+                          control={control}
+                          error={formErrors.subject?.message}
+                          disabled={isSubmitting}
+                          placeholder="How can we help you?"
+                        />
+
+                        {/* Message */}
+                        <div className="space-y-2">
+                          <Label htmlFor="message" className="text-sm font-medium">
+                            Message <span className="text-accent">*</span>
+                          </Label>
+                          <Controller
+                            name="message"
+                            control={control}
+                            render={({ field }) => (
+                              <Textarea
+                                {...field}
+                                id="message"
+                                rows={5}
+                                placeholder="Tell us more about your inquiry..."
+                                disabled={isSubmitting}
+                                className="resize-none rounded-xl bg-background/50
+                                  border-border/50 focus:border-accent/50
+                                  focus:ring-2 focus:ring-accent/20
+                                  transition-all duration-200"
+                              />
+                            )}
+                          />
+                          {formErrors.message ? (
+                            <p className="text-sm text-destructive">
+                              {formErrors.message.message}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Minimum 20 characters
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Submit Button */}
+                        <Button
+                          type="submit"
+                          size="lg"
+                          disabled={isSubmitting}
+                          className="w-full h-14 rounded-full group
+                            bg-gradient-to-r from-accent to-secondary
+                            text-accent-foreground font-medium
+                            hover:shadow-[0_0_40px_rgba(0,223,130,0.4)]
+                            transition-all duration-300
+                            disabled:opacity-70"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <HugeiconsIcon
+                                icon={Loading03Icon}
+                                size={20}
+                                className="mr-2 animate-spin"
+                              />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <HugeiconsIcon icon={SentIcon} size={20} className="mr-2" />
+                              Send Message
+                              <HugeiconsIcon
+                                icon={ArrowRight01Icon}
+                                size={20}
+                                className="ml-2 transition-transform group-hover:translate-x-1"
+                              />
+                            </>
+                          )}
+                        </Button>
+                      </form>
+                    )}
+                  </div>
+                </div>
               </motion.div>
-            );
-          })}
-        </div>
-      </section>
 
-      {/* Contact Form */}
-      <section className="container px-6 py-16 mx-auto max-w-4xl">
-        <div className="grid md:grid-cols-2 gap-12">
-          {/* Left Column - Form */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-          >
-            <h2 className="text-heading-2 mb-6">Send us a message</h2>
-            <p className="text-muted-foreground mb-8">
-              Fill out the form below and we'll get back to you within 24 hours.
-            </p>
+              {/* ============================================= */}
+              {/* RIGHT COLUMN - Contact Info (2 cols) */}
+              {/* ============================================= */}
+              <motion.div
+                className="lg:col-span-2 space-y-8"
+                initial={{ opacity: 0, x: 30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ type: 'spring', stiffness: 400, damping: 30, delay: 0.1 }}
+              >
+                {/* Contact Info Card */}
+                <div
+                  className="rounded-2xl overflow-hidden p-6
+                    bg-card/30 backdrop-blur-sm
+                    border border-border/50"
+                >
+                  <h3 className="font-outfit text-lg font-medium mb-6">
+                    Other Ways to Reach Us
+                  </h3>
 
-            <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-sm font-medium">
-                  Name <span className="text-destructive">*</span>
-                </Label>
-                <Controller
-                  name="name"
-                  control={control}
-                  render={({ field }) => (
-                    <Input
-                      {...field}
-                      type="text"
-                      id="name"
-                      placeholder="John Doe"
-                      className="transition-all focus:ring-2 focus:ring-primary/20"
-                      disabled={isSubmitting}
+                  <div className="space-y-5">
+                    <ContactInfoItem
+                      icon={Mail01Icon}
+                      title="Email Support"
+                      subtitle="For technical support"
+                      action="support@tribora.com"
+                      actionHref="mailto:support@tribora.com"
                     />
-                  )}
-                />
-                {formErrors.name && (
-                  <p className="text-sm text-destructive">{formErrors.name.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
-                  Email <span className="text-destructive">*</span>
-                </Label>
-                <Controller
-                  name="email"
-                  control={control}
-                  render={({ field }) => (
-                    <Input
-                      {...field}
-                      type="email"
-                      id="email"
-                      placeholder="john@company.com"
-                      className="transition-all focus:ring-2 focus:ring-primary/20"
-                      disabled={isSubmitting}
+                    <ContactInfoItem
+                      icon={Call02Icon}
+                      title="Sales Team"
+                      subtitle="Talk to our enterprise team"
+                      action="Schedule a call"
+                      actionHref="/contact?type=demo"
                     />
-                  )}
-                />
-                {formErrors.email && (
-                  <p className="text-sm text-destructive">{formErrors.email.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="company" className="text-sm font-medium">
-                  Company
-                </Label>
-                <Controller
-                  name="company"
-                  control={control}
-                  render={({ field }) => (
-                    <Input
-                      {...field}
-                      type="text"
-                      id="company"
-                      placeholder="Acme Inc."
-                      className="transition-all focus:ring-2 focus:ring-primary/20"
-                      disabled={isSubmitting}
+                    <ContactInfoItem
+                      icon={Location01Icon}
+                      title="Office"
+                      subtitle="San Francisco, CA"
+                      action="United States"
                     />
-                  )}
-                />
-                {formErrors.company && (
-                  <p className="text-sm text-destructive">{formErrors.company.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="subject" className="text-sm font-medium">
-                  Subject <span className="text-destructive">*</span>
-                </Label>
-                <Controller
-                  name="subject"
-                  control={control}
-                  render={({ field }) => (
-                    <Input
-                      {...field}
-                      type="text"
-                      id="subject"
-                      placeholder="How can we help you?"
-                      className="transition-all focus:ring-2 focus:ring-primary/20"
-                      disabled={isSubmitting}
+                    <ContactInfoItem
+                      icon={Clock01Icon}
+                      title="Business Hours"
+                      subtitle="Mon - Fri, 9am - 6pm PST"
+                      action="24hr support for Enterprise"
                     />
-                  )}
-                />
-                {formErrors.subject && (
-                  <p className="text-sm text-destructive">{formErrors.subject.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="message" className="text-sm font-medium">
-                  Message <span className="text-destructive">*</span>
-                </Label>
-                <Controller
-                  name="message"
-                  control={control}
-                  render={({ field }) => (
-                    <Textarea
-                      {...field}
-                      id="message"
-                      rows={6}
-                      placeholder="Tell us more about your inquiry..."
-                      className="resize-none transition-all focus:ring-2 focus:ring-primary/20"
-                      disabled={isSubmitting}
-                    />
-                  )}
-                />
-                {formErrors.message ? (
-                  <p className="text-sm text-destructive">{formErrors.message.message}</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Minimum 20 characters</p>
-                )}
-              </div>
-
-              <Button type="submit" size="lg" className="w-full group" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2 transition-transform group-hover:translate-x-1" />
-                    Send Message
-                  </>
-                )}
-              </Button>
-
-              <div className="p-4 rounded-lg bg-muted/50 border border-border">
-                <p className="text-sm text-muted-foreground text-center">
-                  <Sparkles className="h-4 w-4 inline mr-2 text-primary" />
-                  We typically respond within 24 hours
-                </p>
-              </div>
-            </form>
-          </motion.div>
-
-          {/* Right Column - Info */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            className="space-y-8"
-          >
-            <div>
-              <h3 className="text-heading-3 mb-6">Other Ways to Reach Us</h3>
-
-              <div className="space-y-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Mail className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold mb-1">Email Support</h4>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      For technical support and questions
-                    </p>
-                    <a
-                      href="mailto:support@record.app"
-                      className="text-primary hover:underline text-sm font-medium"
-                    >
-                      support@record.app
-                    </a>
                   </div>
                 </div>
 
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Phone className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold mb-1">Enterprise Sales</h4>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Talk to our sales team about Enterprise plans
-                    </p>
-                    <a
-                      href="mailto:sales@record.app"
-                      className="text-primary hover:underline text-sm font-medium"
-                    >
-                      Schedule a Call
-                    </a>
+                {/* Quick Links Card */}
+                <div
+                  className="rounded-2xl overflow-hidden p-6
+                    bg-gradient-to-br from-accent/5 via-card/50 to-secondary/5
+                    backdrop-blur-sm border border-accent/20"
+                >
+                  <h3 className="font-outfit text-lg font-medium mb-4">
+                    Looking for Quick Answers?
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-5">
+                    Explore our resources for instant help with common questions.
+                  </p>
+                  <div className="space-y-3">
+                    <QuickLink href="/pricing" label="View Pricing Plans" />
+                    <QuickLink href="/features" label="Explore Features" />
+                    <QuickLink href="/features/knowledge-graph" label="Knowledge Graph" />
                   </div>
                 </div>
 
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <MapPin className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold mb-1">Office</h4>
-                    <p className="text-sm text-muted-foreground">
-                      San Francisco, CA
-                      <br />
-                      United States
-                    </p>
-                  </div>
-                </div>
-              </div>
+                {/* Response Time Indicator */}
+                <motion.div
+                  className="flex items-center gap-3 p-4 rounded-xl
+                    bg-accent/5 border border-accent/20"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.3 }}
+                >
+                  <div className="w-3 h-3 rounded-full bg-accent animate-pulse" />
+                  <p className="text-sm text-muted-foreground">
+                    <span className="text-foreground font-medium">Fast response</span>
+                    {' '}— We typically reply within 24 hours
+                  </p>
+                </motion.div>
+              </motion.div>
             </div>
-
-            {/* FAQ Quick Links */}
-            <div className="p-6 border border-border rounded-2xl bg-card">
-              <h4 className="font-semibold mb-4">Looking for Quick Answers?</h4>
-              <p className="text-sm text-muted-foreground mb-4">
-                Check out our frequently asked questions for instant help.
-              </p>
-              <div className="space-y-2">
-                <Link
-                  href="/pricing"
-                  className="block text-sm text-primary hover:underline font-medium"
-                >
-                  → View Pricing Plans
-                </Link>
-                <Link
-                  href="/features"
-                  className="block text-sm text-primary hover:underline font-medium"
-                >
-                  → Explore Features
-                </Link>
-                <Link
-                  href="/about"
-                  className="block text-sm text-primary hover:underline font-medium"
-                >
-                  → About Record
-                </Link>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Support Section */}
-      <section className="container px-6 py-16 mx-auto max-w-6xl">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="p-12 bg-gradient-to-br from-primary/10 to-purple-500/10 rounded-2xl text-center border border-primary/20"
-        >
-          <h2 className="text-heading-2 mb-4">Need Immediate Help?</h2>
-          <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Check out our documentation and FAQ for quick answers to common questions, or contact
-            our support team for immediate assistance.
-          </p>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <Link href="/pricing">
-              <Button size="lg" variant="outline">
-                View Pricing
-              </Button>
-            </Link>
-            <a href="mailto:support@record.app">
-              <Button size="lg">
-                <Mail className="h-4 w-4 mr-2" />
-                Contact Support
-              </Button>
-            </a>
           </div>
-        </motion.div>
+        </div>
       </section>
+
+      {/* ================================================================== */}
+      {/* CTA SECTION */}
+      {/* ================================================================== */}
+      <AuroraCTA />
     </div>
+  );
+}
+
+// ============================================================================
+// HELPER COMPONENTS
+// ============================================================================
+
+interface FormFieldProps {
+  name: keyof ContactFormData;
+  label: string;
+  type?: string;
+  required?: boolean;
+  control: any;
+  error?: string;
+  disabled?: boolean;
+  placeholder?: string;
+}
+
+function FormField({
+  name,
+  label,
+  type = 'text',
+  required,
+  control,
+  error,
+  disabled,
+  placeholder,
+}: FormFieldProps) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={name} className="text-sm font-medium">
+        {label} {required && <span className="text-accent">*</span>}
+      </Label>
+      <Controller
+        name={name}
+        control={control}
+        render={({ field }) => (
+          <Input
+            {...field}
+            type={type}
+            id={name}
+            placeholder={placeholder}
+            disabled={disabled}
+            className="h-12 rounded-xl bg-background/50
+              border-border/50 focus:border-accent/50
+              focus:ring-2 focus:ring-accent/20
+              transition-all duration-200"
+          />
+        )}
+      />
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+interface ContactInfoItemProps {
+  icon: typeof Mail01Icon;
+  title: string;
+  subtitle: string;
+  action: string;
+  actionHref?: string;
+}
+
+function ContactInfoItem({
+  icon,
+  title,
+  subtitle,
+  action,
+  actionHref,
+}: ContactInfoItemProps) {
+  const content = (
+    <div className="flex items-start gap-4 group">
+      <div
+        className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0
+          bg-accent/10 border border-accent/20
+          transition-all duration-300
+          group-hover:bg-accent/15 group-hover:border-accent/30"
+      >
+        <HugeiconsIcon icon={icon} size={20} className="text-accent" />
+      </div>
+      <div>
+        <h4 className="font-medium text-sm mb-0.5">{title}</h4>
+        <p className="text-xs text-muted-foreground mb-1">{subtitle}</p>
+        <span
+          className={cn(
+            'text-sm font-medium',
+            actionHref ? 'text-accent hover:underline' : 'text-muted-foreground'
+          )}
+        >
+          {action}
+        </span>
+      </div>
+    </div>
+  );
+
+  if (actionHref) {
+    return (
+      <a href={actionHref} className="block">
+        {content}
+      </a>
+    );
+  }
+
+  return content;
+}
+
+function QuickLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-2 text-sm font-medium text-accent
+        hover:underline transition-colors group"
+    >
+      <HugeiconsIcon icon={LinkSquare01Icon} size={14} className="text-accent/70" />
+      {label}
+      <HugeiconsIcon
+        icon={ArrowRight01Icon}
+        size={14}
+        className="ml-auto transition-transform group-hover:translate-x-1"
+      />
+    </Link>
+  );
+}
+
+function SuccessState({ onReset }: { onReset: () => void }) {
+  return (
+    <motion.div
+      className="text-center py-12"
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+    >
+      {/* Success Icon */}
+      <motion.div
+        className="w-20 h-20 mx-auto mb-6 rounded-full
+          bg-gradient-to-br from-accent/20 to-secondary/20
+          border border-accent/30
+          flex items-center justify-center
+          shadow-[0_0_40px_rgba(0,223,130,0.2)]"
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 20, delay: 0.1 }}
+      >
+        <HugeiconsIcon icon={Tick02Icon} size={36} className="text-accent" />
+      </motion.div>
+
+      <h3 className="font-outfit text-2xl font-light mb-3">
+        Message Sent Successfully!
+      </h3>
+      <p className="text-muted-foreground mb-8 max-w-sm mx-auto">
+        Thank you for reaching out. Our team will review your message and get back
+        to you within 24 hours.
+      </p>
+
+      <Button
+        variant="outline"
+        onClick={onReset}
+        className="rounded-full px-6 border-accent/30 hover:border-accent/50
+          hover:bg-accent/5 transition-all duration-300"
+      >
+        Send Another Message
+      </Button>
+    </motion.div>
   );
 }

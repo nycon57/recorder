@@ -125,16 +125,17 @@ async function getHighlightSources(sourceKey: string) {
  * - document -> DocumentDetailView
  * - text -> TextNoteDetailView
  *
- * Supports citation highlighting via URL parameters:
+ * Supports URL parameters:
  * - ?sourceKey={key} - Retrieves all cited chunks
  * - &highlight={chunkId} - Specifies which chunk to scroll to
+ * - &t={seconds} - Seek to specific timestamp (video/audio only)
  */
 export default async function LibraryItemDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ sourceKey?: string; highlight?: string }>;
+  searchParams: Promise<{ sourceKey?: string; highlight?: string; t?: string }>;
 }) {
   const { userId, orgId } = await auth();
 
@@ -143,7 +144,10 @@ export default async function LibraryItemDetailPage({
   }
 
   const { id } = await params;
-  const { sourceKey, highlight } = await searchParams;
+  const { sourceKey, highlight, t } = await searchParams;
+
+  // Parse timestamp parameter (in seconds)
+  const initialTimestamp = t ? parseInt(t, 10) : undefined;
 
   const item = await getContentItem(id, orgId);
 
@@ -193,6 +197,7 @@ export default async function LibraryItemDetailPage({
           initialTags={tags}
           sourceKey={sourceKey}
           initialHighlightId={highlight}
+          initialTimestamp={initialTimestamp}
         />
       );
 
@@ -205,6 +210,7 @@ export default async function LibraryItemDetailPage({
           initialTags={tags}
           sourceKey={sourceKey}
           initialHighlightId={highlight}
+          initialTimestamp={initialTimestamp}
         />
       );
 
@@ -242,6 +248,7 @@ export default async function LibraryItemDetailPage({
           initialTags={tags}
           sourceKey={sourceKey}
           initialHighlightId={highlight}
+          initialTimestamp={initialTimestamp}
         />
       );
   }

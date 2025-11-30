@@ -1,167 +1,404 @@
 'use client';
 
 import { SignUp } from '@clerk/nextjs';
+import { dark } from '@clerk/themes';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Video, Sparkles, ArrowLeft, Check } from 'lucide-react';
+import { ArrowLeft, Check, Zap, Search, Users, Brain } from 'lucide-react';
 import Link from 'next/link';
 
 /**
- * Sign Up Page
- * Modern two-column layout with branded left side and hero right side
+ * Sign Up Page - "Begin Your Journey"
  *
- * ACCESSIBILITY:
- * - Respects user's reduced motion preference (prefers-reduced-motion)
- * - All animations are conditionally disabled when shouldReduceMotion is true
- * - Ensures WCAG 2.1 compliance for motion-triggered vestibular disorders
+ * A premium, immersive sign-up experience with a two-column layout.
+ * Left: Sign-up form in frosted glass card
+ * Right: Animated feature showcase (hidden on mobile)
+ *
+ * Design Philosophy:
+ * - This is the START of the user's knowledge journey
+ * - Visual storytelling with staggered feature animations
+ * - Warm, inviting copy that emphasizes transformation
+ * - Trust indicators prominent for conversion
  */
 export default function SignUpPage() {
-  // Accessibility: Detect if user prefers reduced motion
   const shouldReduceMotion = useReducedMotion();
 
+  const features = [
+    {
+      icon: Zap,
+      title: 'AI-Powered Transcription',
+      description: 'Convert screen recordings to searchable text in seconds',
+    },
+    {
+      icon: Brain,
+      title: 'Knowledge Extraction',
+      description: 'Automatically generate documentation from your workflows',
+    },
+    {
+      icon: Search,
+      title: 'Semantic Search',
+      description: 'Find any moment across all your recordings instantly',
+    },
+    {
+      icon: Users,
+      title: 'Team Collaboration',
+      description: 'Share knowledge across your entire organization',
+    },
+  ];
+
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div className="flex min-h-screen">
       {/* Left Column - Sign Up Form */}
-      <div className="flex flex-col gap-4 p-6 md:p-10">
-        {/* Header with Logo and Back Button */}
-        <div className="flex items-center justify-between">
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-12 lg:px-8">
+        {/* Back to Home - Top Left */}
+        <motion.div
+          initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="absolute top-6 left-6 md:top-8 md:left-8"
+        >
           <Link
             href="/"
-            className="flex items-center gap-2 font-semibold text-lg hover:opacity-80 transition-opacity"
+            className="group flex items-center gap-2 text-sm text-[rgb(170,203,196)] hover:text-[rgb(241,247,247)] transition-colors duration-200"
           >
-            <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg">
-              <Video className="size-5" />
-            </div>
-            Record
+            <ArrowLeft className="size-4 transition-transform duration-200 group-hover:-translate-x-1" />
+            <span>Back to home</span>
           </Link>
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="size-4" />
-            Back to home
-          </Link>
-        </div>
+        </motion.div>
 
-        {/* Centered Form Container */}
-        <div className="flex flex-1 items-center justify-center">
-          <motion.div
-            initial={{ opacity: shouldReduceMotion ? 1 : 0, y: shouldReduceMotion ? 0 : 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: shouldReduceMotion ? 0 : 0.5 }}
-            className="w-full max-w-md"
+        {/* Main Content Card */}
+        <motion.div
+          initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 20, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.5, ease: [0.6, 0.6, 0, 1] }}
+          className="w-full max-w-md"
+        >
+          {/* Frosted Glass Card */}
+          <div
+            className="relative rounded-2xl p-8 md:p-10"
+            style={{
+              background: 'rgba(4, 34, 34, 0.6)',
+              backdropFilter: 'blur(24px)',
+              WebkitBackdropFilter: 'blur(24px)',
+              border: '1px solid rgba(0, 223, 130, 0.1)',
+              boxShadow: '0 0 60px rgba(0, 223, 130, 0.08), inset 0 1px 0 rgba(255,255,255,0.05)',
+            }}
           >
-            <div className="mb-8 text-center">
-              <h1 className="text-heading-2 mb-2">Create your account</h1>
-              <p className="text-muted-foreground">
-                Start capturing knowledge in minutes
+            {/* Logo */}
+            <motion.div
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.1 }}
+              className="flex justify-center mb-8"
+            >
+              <Link href="/" className="flex items-center gap-3 group">
+                {/* Logo Icon */}
+                <div
+                  className="flex size-10 items-center justify-center rounded-xl transition-shadow duration-300 group-hover:shadow-[0_0_20px_rgba(0,223,130,0.3)]"
+                  style={{
+                    background: 'linear-gradient(135deg, #03624c 0%, #2cc295 50%, #00df82 100%)',
+                  }}
+                >
+                  <span className="text-[rgb(241,247,247)] font-bold text-lg">T</span>
+                </div>
+                {/* Logo Text */}
+                <span
+                  className="text-2xl font-light tracking-tight"
+                  style={{
+                    fontFamily: 'var(--font-heading)',
+                    color: 'rgb(241, 247, 247)',
+                  }}
+                >
+                  Tribora
+                </span>
+              </Link>
+            </motion.div>
+
+            {/* Header */}
+            <motion.div
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+              className="text-center mb-8"
+            >
+              <h1
+                className="text-3xl md:text-4xl font-light tracking-tight mb-3"
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  background: 'linear-gradient(135deg, #00df82 0%, #2cc295 50%, rgb(241,247,247) 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                Start your journey
+              </h1>
+              <p
+                className="text-base"
+                style={{ color: 'rgb(170, 203, 196)' }}
+              >
+                Create your account and illuminate your team&apos;s knowledge
               </p>
-            </div>
+            </motion.div>
 
-            {/* Clerk SignUp Component */}
-            <div className="flex justify-center">
+            {/* Clerk SignUp Component - Themed */}
+            <motion.div
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.3 }}
+              className="flex justify-center"
+            >
               <SignUp
                 appearance={{
+                  baseTheme: dark,
+                  variables: {
+                    colorPrimary: '#00df82',
+                    colorBackground: 'transparent',
+                    colorInputBackground: 'rgba(6, 48, 44, 0.5)',
+                    colorInputText: 'rgb(241, 247, 247)',
+                    colorText: 'rgb(241, 247, 247)',
+                    colorTextSecondary: 'rgb(170, 203, 196)',
+                    colorDanger: '#ef4444',
+                    borderRadius: '0.75rem',
+                    fontFamily: 'Inter, sans-serif',
+                    fontFamilyButtons: 'Inter, sans-serif',
+                  },
                   elements: {
-                    rootBox: "mx-auto",
-                    card: "shadow-none border-0",
-                  }
+                    rootBox: 'w-full',
+                    card: 'bg-transparent shadow-none border-0 p-0 w-full',
+                    headerTitle: 'hidden',
+                    headerSubtitle: 'hidden',
+                    socialButtonsBlockButton: `
+                      bg-[rgba(6,48,44,0.5)]
+                      border border-[rgba(0,223,130,0.15)]
+                      hover:bg-[rgba(6,48,44,0.8)]
+                      hover:border-[rgba(0,223,130,0.3)]
+                      transition-all duration-200
+                      text-[rgb(241,247,247)]
+                    `,
+                    socialButtonsBlockButtonText: 'text-[rgb(241,247,247)] font-medium',
+                    dividerLine: 'bg-[rgba(0,223,130,0.1)]',
+                    dividerText: 'text-[rgb(170,203,196)]',
+                    formFieldLabel: 'text-[rgb(170,203,196)] text-sm font-medium',
+                    formFieldInput: `
+                      bg-[rgba(6,48,44,0.5)]
+                      border-[rgba(0,223,130,0.15)]
+                      text-[rgb(241,247,247)]
+                      placeholder:text-[rgb(111,125,125)]
+                      focus:border-[rgba(0,223,130,0.4)]
+                      focus:ring-[rgba(0,223,130,0.2)]
+                      transition-all duration-200
+                    `,
+                    formButtonPrimary: `
+                      bg-gradient-to-r from-[#03624c] via-[#2cc295] to-[#00df82]
+                      hover:shadow-[0_0_30px_rgba(0,223,130,0.4)]
+                      transition-all duration-200
+                      font-medium
+                    `,
+                    footerActionLink: 'text-[#00df82] hover:text-[#2cc295] transition-colors',
+                    identityPreviewEditButton: 'text-[#00df82] hover:text-[#2cc295]',
+                    formFieldAction: 'text-[#00df82] hover:text-[#2cc295]',
+                    alert: 'bg-[rgba(239,68,68,0.1)] border-[rgba(239,68,68,0.3)] text-[rgb(241,247,247)]',
+                    alertText: 'text-[rgb(241,247,247)]',
+                    footer: 'hidden',
+                  },
                 }}
               />
-            </div>
-          </motion.div>
-        </div>
+            </motion.div>
 
-        {/* Footer */}
-        <div className="text-center text-sm text-muted-foreground">
-          <p>
-            Already have an account?{' '}
-            <Link href="/sign-in" className="text-primary font-medium hover:underline">
-              Sign in
-            </Link>
-          </p>
-        </div>
+            {/* Footer Link */}
+            <motion.div
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.4 }}
+              className="mt-8 text-center"
+            >
+              <p className="text-sm" style={{ color: 'rgb(170, 203, 196)' }}>
+                Already have an account?{' '}
+                <Link
+                  href="/sign-in"
+                  className="font-medium transition-colors duration-200"
+                  style={{ color: '#00df82' }}
+                  onMouseOver={(e) => (e.currentTarget.style.color = '#2cc295')}
+                  onMouseOut={(e) => (e.currentTarget.style.color = '#00df82')}
+                >
+                  Sign in
+                </Link>
+              </p>
+            </motion.div>
+
+            {/* Terms & Privacy */}
+            <motion.p
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.5 }}
+              className="mt-6 text-center text-xs"
+              style={{ color: 'rgb(111, 125, 125)' }}
+            >
+              By signing up, you agree to our{' '}
+              <Link href="/terms" className="underline underline-offset-2 hover:text-[rgb(170,203,196)] transition-colors">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link href="/privacy" className="underline underline-offset-2 hover:text-[rgb(170,203,196)] transition-colors">
+                Privacy Policy
+              </Link>
+            </motion.p>
+          </div>
+        </motion.div>
       </div>
 
-      {/* Right Column - Hero Section */}
-      <div className="relative hidden lg:flex bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10">
-        {/* Animated Background Pattern */}
-        <div className="absolute inset-0 bg-grid-white/5 [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black)]" />
+      {/* Right Column - Feature Showcase (Hidden on mobile) */}
+      <div className="hidden lg:flex flex-1 flex-col items-center justify-center px-12 relative">
+        {/* Additional glow for this section */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'radial-gradient(circle at 30% 50%, rgba(0,223,130,0.08) 0%, transparent 50%)',
+          }}
+        />
 
-        {/* Content */}
-        <div className="relative flex flex-col items-center justify-center p-12 text-center">
+        <motion.div
+          initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="relative max-w-lg"
+        >
+          {/* Headline */}
           <motion.div
-            initial={{ opacity: shouldReduceMotion ? 1 : 0, scale: shouldReduceMotion ? 1 : 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: shouldReduceMotion ? 0 : 0.7, delay: shouldReduceMotion ? 0 : 0.2 }}
-            className="space-y-6"
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            className="mb-12"
           >
-            {/* Icon Badge */}
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary/10 backdrop-blur-sm border border-primary/20">
-              <Video className="w-10 h-10 text-primary" />
-            </div>
-
-            {/* Heading */}
-            <div className="space-y-3">
-              <h2 className="text-heading-2">
-                Start Your
-                <br />
-                Knowledge Journey
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-md mx-auto">
-                Join thousands of teams transforming their recordings into searchable, actionable intelligence.
-              </p>
-            </div>
-
-            {/* Benefits List */}
-            <div className="grid gap-4 text-left max-w-sm mx-auto pt-6">
-              {[
-                { title: 'Free to start', desc: 'No credit card required' },
-                { title: 'Unlimited recordings', desc: 'Capture as much as you need' },
-                { title: 'AI-powered search', desc: 'Find anything instantly' },
-                { title: 'Team collaboration', desc: 'Share with your organization' },
-              ].map((benefit, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: shouldReduceMotion ? 1 : 0, x: shouldReduceMotion ? 0 : -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: shouldReduceMotion ? 0 : 0.5, delay: shouldReduceMotion ? 0 : 0.4 + index * 0.1 }}
-                  className="flex items-start gap-3"
-                >
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center mt-0.5">
-                    <Check className="w-4 h-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{benefit.title}</p>
-                    <p className="text-xs text-muted-foreground">{benefit.desc}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-
-            {/* Trust Indicators */}
-            <motion.div
-              initial={{ opacity: shouldReduceMotion ? 1 : 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: shouldReduceMotion ? 0 : 0.5, delay: shouldReduceMotion ? 0 : 1 }}
-              className="pt-6 border-t border-border/50"
+            <h2
+              className="text-4xl xl:text-5xl font-light tracking-tight mb-4"
+              style={{
+                fontFamily: 'var(--font-heading)',
+                color: 'rgb(241, 247, 247)',
+              }}
             >
-              <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-3 h-3 text-primary" />
-                  <span>SOC 2 Compliant</span>
+              Transform recordings into{' '}
+              <span
+                style={{
+                  background: 'linear-gradient(135deg, #00df82 0%, #2cc295 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                searchable knowledge
+              </span>
+            </h2>
+            <p
+              className="text-lg"
+              style={{ color: 'rgb(170, 203, 196)' }}
+            >
+              Join thousands of teams using Tribora to capture, preserve, and share their expertise.
+            </p>
+          </motion.div>
+
+          {/* Feature List */}
+          <div className="space-y-6">
+            {features.map((feature, index) => (
+              <motion.div
+                key={feature.title}
+                initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: 0.5 + index * 0.1 }}
+                className="flex items-start gap-4 group"
+              >
+                {/* Icon */}
+                <div
+                  className="flex-shrink-0 flex size-12 items-center justify-center rounded-xl transition-all duration-300 group-hover:shadow-[0_0_20px_rgba(0,223,130,0.2)]"
+                  style={{
+                    background: 'rgba(0, 223, 130, 0.1)',
+                    border: '1px solid rgba(0, 223, 130, 0.15)',
+                  }}
+                >
+                  <feature.icon className="size-6" style={{ color: '#00df82' }} />
                 </div>
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-3 h-3 text-primary" />
-                  <span>GDPR Ready</span>
+                {/* Text */}
+                <div>
+                  <h3
+                    className="text-base font-medium mb-1"
+                    style={{ color: 'rgb(241, 247, 247)' }}
+                  >
+                    {feature.title}
+                  </h3>
+                  <p
+                    className="text-sm"
+                    style={{ color: 'rgb(170, 203, 196)' }}
+                  >
+                    {feature.description}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Social Proof */}
+          <motion.div
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.9 }}
+            className="mt-12 pt-8"
+            style={{ borderTop: '1px solid rgba(0, 223, 130, 0.1)' }}
+          >
+            <div className="flex items-center gap-6">
+              {/* Stats */}
+              <div>
+                <div
+                  className="text-2xl font-light"
+                  style={{
+                    fontFamily: 'var(--font-heading)',
+                    color: '#00df82',
+                  }}
+                >
+                  10,000+
+                </div>
+                <div className="text-sm" style={{ color: 'rgb(111, 125, 125)' }}>
+                  Recordings processed
                 </div>
               </div>
-            </motion.div>
+              <div
+                className="w-px h-12"
+                style={{ background: 'rgba(0, 223, 130, 0.1)' }}
+              />
+              <div>
+                <div
+                  className="text-2xl font-light"
+                  style={{
+                    fontFamily: 'var(--font-heading)',
+                    color: '#00df82',
+                  }}
+                >
+                  500+
+                </div>
+                <div className="text-sm" style={{ color: 'rgb(111, 125, 125)' }}>
+                  Teams onboarded
+                </div>
+              </div>
+              <div
+                className="w-px h-12"
+                style={{ background: 'rgba(0, 223, 130, 0.1)' }}
+              />
+              <div>
+                <div
+                  className="text-2xl font-light"
+                  style={{
+                    fontFamily: 'var(--font-heading)',
+                    color: '#00df82',
+                  }}
+                >
+                  99.9%
+                </div>
+                <div className="text-sm" style={{ color: 'rgb(111, 125, 125)' }}>
+                  Uptime SLA
+                </div>
+              </div>
+            </div>
           </motion.div>
-        </div>
-
-        {/* Decorative Elements */}
-        <div className="absolute top-10 right-10 w-32 h-32 bg-primary/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 left-10 w-40 h-40 bg-purple-500/20 rounded-full blur-3xl" />
+        </motion.div>
       </div>
     </div>
   );

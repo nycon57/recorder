@@ -266,7 +266,9 @@ export function BaseContentCard({ item, concepts = [], onConceptClick }: BaseCon
 
   return (
     <Card className={cn(
-      "group relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/20 p-0 gap-2 h-full",
+      "group relative overflow-hidden p-0 gap-2 h-full",
+      // Use card-interactive from globals.css for brand-consistent hover glow
+      "card-interactive",
       item.deleted_at && "opacity-70 border-red-500/20"
     )}>
       <Link href={`/library/${item.id}`} className="block">

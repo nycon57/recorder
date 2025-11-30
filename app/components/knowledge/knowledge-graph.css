@@ -1,0 +1,564 @@
+/**
+ * Knowledge Graph Custom Styles
+ *
+ * This file provides dark mode-compatible styling for ReactFlow components
+ * (Controls and MiniMap) that don't natively support theme variables.
+ *
+ * stylelint-disable -- Third-party component overrides use BEM naming
+ */
+
+/* ============================================================================
+ * ReactFlow Controls - Dark Mode Support
+ * ============================================================================ */
+
+.react-flow__controls {
+  /* Use theme background with semi-transparency */
+  background-color: hsl(var(--background) / 0.9) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-md);
+}
+
+.react-flow__controls-button {
+  /* Button background */
+  background-color: transparent !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
+
+  /* Icon color */
+  color: hsl(var(--foreground)) !important;
+  fill: hsl(var(--foreground)) !important;
+
+  transition: all 150ms ease-in-out;
+}
+
+.react-flow__controls-button:hover {
+  background-color: hsl(var(--muted) / 0.5) !important;
+}
+
+.react-flow__controls-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Remove border from last button */
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+/* Fit view button specific styling */
+.react-flow__controls-fitview {
+  /* Inherits from .react-flow__controls-button */
+}
+
+/* Zoom in/out buttons */
+.react-flow__controls-zoomin,
+.react-flow__controls-zoomout {
+  /* Inherits from .react-flow__controls-button */
+}
+
+/* Interactive toggle button */
+.react-flow__controls-interactive {
+  /* Inherits from .react-flow__controls-button */
+}
+
+/* ============================================================================
+ * ReactFlow MiniMap - Dark Mode Support
+ * ============================================================================ */
+
+.react-flow__minimap {
+  /* Use theme background */
+  background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: var(--shadow-md);
+}
+
+/* MiniMap mask (the overlay that shows non-viewport area) */
+.react-flow__minimap-mask {
+  /* Light mode: dark semi-transparent overlay */
+  fill: hsl(var(--foreground) / 0.1) !important;
+}
+
+.dark .react-flow__minimap-mask {
+  /* Dark mode: lighter semi-transparent overlay for contrast */
+  fill: hsl(var(--foreground) / 0.05) !important;
+}
+
+/* MiniMap nodes (the colored rectangles representing nodes) */
+.react-flow__minimap-node {
+  /* Node colors are set via nodeColor prop, no override needed */
+  stroke: hsl(var(--border));
+  stroke-width: 1;
+}
+
+/* ============================================================================
+ * Edge Legend Panel
+ * ============================================================================ */
+
+.edge-legend {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 5;
+  pointer-events: auto;
+}
+
+.edge-legend-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background-color: hsl(var(--background) / 0.9);
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: all 150ms ease-in-out;
+  color: hsl(var(--foreground));
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.edge-legend-toggle:hover {
+  background-color: hsl(var(--muted) / 0.5);
+  border-color: hsl(var(--border) / 1.2);
+}
+
+.edge-legend-toggle:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.edge-legend-content {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background-color: hsl(var(--background) / 0.95);
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-lg);
+  min-width: 200px;
+}
+
+.edge-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.375rem 0;
+}
+
+.edge-legend-item:not(:last-child) {
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+}
+
+.edge-legend-line {
+  width: 32px;
+  height: 2px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.edge-legend-line.animated {
+  position: relative;
+  overflow: hidden;
+}
+
+.edge-legend-line.animated::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255, 255, 255, 0.5),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.edge-legend-label {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  flex: 1;
+}
+
+/* ============================================================================
+ * ReactFlow Background - Theme Support
+ * ============================================================================ */
+
+.react-flow__background {
+  /* Background pattern dots/lines color */
+}
+
+.react-flow__background path {
+  stroke: hsl(var(--border));
+  stroke-width: 1;
+}
+
+/* ============================================================================
+ * ReactFlow Attribution (if not hidden)
+ * ============================================================================ */
+
+.react-flow__attribution {
+  background-color: hsl(var(--background) / 0.8) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+}
+
+.react-flow__attribution a {
+  color: hsl(var(--primary)) !important;
+}
+
+/* ============================================================================
+ * Responsive Adjustments
+ * ============================================================================ */
+
+@media (max-width: 640px) {
+  .edge-legend {
+    bottom: 12px;
+    left: 12px;
+  }
+
+  .edge-legend-toggle {
+    font-size: 0.7rem;
+    padding: 0.375rem 0.625rem;
+  }
+
+  .edge-legend-content {
+    min-width: 180px;
+    padding: 0.625rem;
+  }
+
+  .edge-legend-item {
+    gap: 0.5rem;
+  }
+
+  .edge-legend-line {
+    width: 24px;
+  }
+}
+
+/* ============================================================================
+ * Edge Popover - Relationship Details
+ * ============================================================================ */
+
+.edge-popover {
+  position: absolute;
+  z-index: 50;
+  min-width: 280px;
+  max-width: 360px;
+  padding: 0;
+  background-color: hsl(var(--background) / 0.95);
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 10px 25px -5px rgba(0, 0, 0, 0.2),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  transform: translate(-50%, 8px);
+  animation: popover-in 150ms ease-out;
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 8px);
+  }
+}
+
+.edge-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+}
+
+.edge-popover-title {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.edge-popover-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 0.375rem;
+  background-color: transparent;
+  border: none;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: all 150ms ease-in-out;
+}
+
+.edge-popover-close:hover {
+  background-color: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+.edge-popover-close:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.edge-popover-connection {
+  padding: 1rem;
+}
+
+/* Each row: rail (fixed 24px) + content */
+.edge-popover-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 0;
+}
+
+/* Clickable node rows */
+.edge-popover-row--clickable {
+  cursor: pointer;
+  border-radius: 0.375rem;
+  padding: 0.375rem;
+  margin-left: 0;
+  margin-right: 0;
+  margin-top: -0.375rem;
+  margin-bottom: -0.375rem;
+  transition: background-color 150ms ease-in-out;
+  justify-content: flex-start;
+}
+
+.edge-popover-row--clickable:hover {
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+.edge-popover-row--clickable:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.edge-popover-row--clickable .edge-popover-name {
+  transition: color 150ms ease-in-out;
+}
+
+.edge-popover-row--clickable:hover .edge-popover-name {
+  color: hsl(var(--primary));
+}
+
+/* Rail column - fixed width, centers dots/line/arrow */
+.edge-popover-rail {
+  width: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Node dot */
+.edge-popover-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid hsl(var(--background));
+  flex-shrink: 0;
+}
+
+/* Content column */
+.edge-popover-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  min-width: 0;
+  flex: 1;
+  padding: 0.375rem 0;
+}
+
+.edge-popover-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edge-popover-type {
+  font-size: 0.6875rem;
+  color: hsl(var(--muted-foreground));
+  text-transform: capitalize;
+}
+
+/* Connector row - line + arrow + label */
+.edge-popover-row--connector {
+  align-items: flex-start;
+}
+
+.edge-popover-row--connector .edge-popover-rail {
+  padding: 0.25rem 0;
+  gap: 0.25rem;
+}
+
+.edge-popover-row--connector .edge-popover-content {
+  padding: 0.25rem 0;
+  justify-content: center;
+}
+
+.edge-popover-line {
+  width: 2px;
+  height: 20px;
+  border-radius: 1px;
+}
+
+.edge-popover-arrow {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top-width: 6px;
+  border-top-style: solid;
+}
+
+.edge-popover-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.5rem;
+  background-color: hsl(var(--background));
+  border: 1px solid;
+  border-radius: 0.25rem;
+  white-space: nowrap;
+}
+
+.edge-popover-strength {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background-color: hsl(var(--muted) / 0.2);
+  border-top: 1px solid hsl(var(--border) / 0.5);
+  border-radius: 0 0 0.75rem 0.75rem;
+}
+
+.edge-popover-strength-header {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.edge-popover-strength-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.edge-popover-strength-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--muted-foreground) / 0.7);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: color 150ms ease-in-out;
+}
+
+.edge-popover-strength-info:hover {
+  color: hsl(var(--foreground));
+}
+
+.edge-popover-strength-value-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.edge-popover-strength-rating {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  min-width: 70px;
+}
+
+.edge-popover-strength-bar {
+  flex: 1;
+  height: 6px;
+  background-color: hsl(var(--muted) / 0.5);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.edge-popover-strength-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 300ms ease-out;
+}
+
+.edge-popover-strength-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  min-width: 32px;
+  text-align: right;
+}
+
+/* Responsive adjustments for edge popover */
+@media (max-width: 640px) {
+  .edge-popover {
+    min-width: 220px;
+    max-width: 280px;
+  }
+
+  .edge-popover-connection {
+    padding: 0.75rem;
+  }
+
+  .edge-popover-row {
+    gap: 0.5rem;
+  }
+
+  .edge-popover-rail {
+    width: 20px;
+  }
+
+  .edge-popover-dot {
+    width: 10px;
+    height: 10px;
+  }
+
+  .edge-popover-name {
+    font-size: 0.8125rem;
+  }
+
+  .edge-popover-label {
+    font-size: 0.625rem;
+    padding: 0.1875rem 0.375rem;
+  }
+}

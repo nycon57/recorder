@@ -239,8 +239,9 @@ function SearchPageContent() {
 
     if (contentIdsToFetch.length === 0) return;
 
-    // Mark these IDs as fetched (before async operations to prevent race conditions)
-    contentIdsToFetch.forEach(id => fetchedConceptsRef.current.add(id));
+    // Track IDs currently being fetched to prevent concurrent duplicate requests
+    const fetchingIds = new Set<string>();
+    contentIdsToFetch.forEach(id => fetchingIds.add(id));
 
     const conceptsMap = new Map<string, SearchResultConcept[]>();
     const BATCH_SIZE = 10;
@@ -261,9 +262,13 @@ function SearchPageContent() {
                 name: c.name,
                 conceptType: c.conceptType || c.concept_type,
               })));
+              // Only mark as fetched after successful fetch
+              fetchedConceptsRef.current.add(contentId);
             }
+            // Non-ok responses: ID not added to fetchedConceptsRef, allowing retry
           } catch (error) {
             console.error(`Error fetching concepts for ${contentId}:`, error);
+            // Failed fetch: ID not added to fetchedConceptsRef, allowing retry
           }
         })
       );

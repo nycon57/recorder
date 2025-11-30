@@ -621,7 +621,14 @@ export class DocumentPublisher {
   }
 
   /**
-   * Create or update a publication record in published_documents.
+   * Create or update a publication record in published_documents atomically.
+   *
+   * Uses a single upsert query with ON CONFLICT to prevent race conditions
+   * when multiple concurrent publishes target the same content+connector+destination.
+   *
+   * The unique partial index `idx_published_documents_content_connector_destination`
+   * on (content_id, connector_id, destination) WHERE deleted_at IS NULL ensures
+   * atomic insert-or-update behavior.
    *
    * @param params - Publication parameters
    * @returns Published document record
@@ -645,17 +652,8 @@ export class DocumentPublisher {
   }): Promise<PublishedDocument> {
     const now = new Date().toISOString();
 
-    // Check for existing publication
-    const { data: existing } = await supabaseAdmin
-      .from('published_documents')
-      .select('id, document_version')
-      .eq('content_id', params.contentId)
-      .eq('connector_id', params.connectorId)
-      .eq('destination', params.destination)
-      .is('deleted_at', null)
-      .single();
-
-    const publicationData: Partial<PublishedDocumentRow> = {
+    // Build the upsert payload for insert
+    const insertData = {
       content_id: params.contentId,
       document_id: params.documentId,
       connector_id: params.connectorId,
@@ -670,50 +668,139 @@ export class DocumentPublisher {
       format: params.format,
       custom_title: params.customTitle || null,
       branding_config: params.brandingConfig as unknown as Record<string, unknown>,
-      status: 'published',
+      status: 'published' as const,
       last_published_at: now,
       last_synced_at: now,
       content_hash: params.contentHash,
       retry_count: 0,
       last_error: null,
+      document_version: 1, // Initial version for new records
+      created_at: now,
       updated_at: now,
     };
 
-    let result: PublishedDocumentRow;
+    // Use raw SQL for atomic upsert with document_version increment
+    // This ensures the version is atomically incremented on conflict
+    const { data, error } = await supabaseAdmin.rpc('upsert_published_document', {
+      p_content_id: params.contentId,
+      p_document_id: params.documentId,
+      p_connector_id: params.connectorId,
+      p_org_id: params.orgId,
+      p_published_by: params.publishedBy || null,
+      p_destination: params.destination,
+      p_external_id: params.externalId,
+      p_external_url: params.externalUrl,
+      p_external_path: params.externalPath || null,
+      p_folder_id: params.folderId || null,
+      p_folder_path: params.folderPath || null,
+      p_format: params.format,
+      p_custom_title: params.customTitle || null,
+      p_branding_config: params.brandingConfig,
+      p_content_hash: params.contentHash,
+    });
 
-    if (existing) {
-      // Update existing publication
-      publicationData.document_version = (existing.document_version || 0) + 1;
-
-      const { data, error } = await supabaseAdmin
-        .from('published_documents')
-        .update(publicationData)
-        .eq('id', existing.id)
-        .select('*')
-        .single();
-
-      if (error) {
-        throw new Error(`Failed to update publication: ${error.message}`);
+    if (error) {
+      // Map Supabase errors to descriptive messages
+      if (error.code === '23505') {
+        // Unique constraint violation - should not happen with proper upsert
+        throw new Error(
+          `Publication conflict: A publication already exists for this content, connector, and destination. Error: ${error.message}`
+        );
       }
-      result = data as PublishedDocumentRow;
-    } else {
-      // Create new publication
-      publicationData.document_version = 1;
-      publicationData.created_at = now;
-
-      const { data, error } = await supabaseAdmin
-        .from('published_documents')
-        .insert(publicationData)
-        .select('*')
-        .single();
-
-      if (error) {
-        throw new Error(`Failed to create publication: ${error.message}`);
+      if (error.code === '23503') {
+        // Foreign key violation
+        throw new Error(
+          `Invalid reference: One of the referenced records (content, document, or connector) does not exist. Error: ${error.message}`
+        );
       }
-      result = data as PublishedDocumentRow;
+      if (error.code === '42883') {
+        // Function does not exist - fallback to manual upsert
+        console.warn(
+          '[DocumentPublisher] upsert_published_document function not found, using fallback'
+        );
+        return this.upsertPublicationFallback(params, insertData, now);
+      }
+      throw new Error(`Failed to upsert publication: ${error.message}`);
     }
 
+    // The RPC returns the full row
+    const result = data as PublishedDocumentRow;
     return mapPublishedDocumentRow(result);
+  }
+
+  /**
+   * Fallback upsert using Supabase's built-in upsert method.
+   * Used if the RPC function is not available.
+   *
+   * Note: This method has a small race window for document_version increment
+   * but is safer than the previous select-then-update pattern.
+   */
+  private async upsertPublicationFallback(
+    params: {
+      contentId: string;
+      connectorId: string;
+      destination: PublishDestination;
+    },
+    insertData: Record<string, unknown>,
+    now: string
+  ): Promise<PublishedDocument> {
+    // Supabase upsert with onConflict - requires the conflict target columns
+    // Since we're using a partial index with WHERE deleted_at IS NULL,
+    // we need to handle this carefully
+    const { data, error } = await supabaseAdmin
+      .from('published_documents')
+      .upsert(insertData, {
+        onConflict: 'content_id,connector_id,destination',
+        ignoreDuplicates: false,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      // If upsert fails due to partial index, try update
+      if (error.code === '23505' || error.message.includes('duplicate')) {
+        // Conflict occurred - fetch and update
+        const { data: existing, error: fetchError } = await supabaseAdmin
+          .from('published_documents')
+          .select('id, document_version')
+          .eq('content_id', params.contentId)
+          .eq('connector_id', params.connectorId)
+          .eq('destination', params.destination)
+          .is('deleted_at', null)
+          .single();
+
+        if (fetchError || !existing) {
+          throw new Error(
+            `Publication conflict but record not found: ${fetchError?.message || 'Unknown error'}`
+          );
+        }
+
+        // Update with incremented version (exclude created_at)
+        const { created_at: _createdAt, ...insertDataWithoutCreatedAt } = insertData;
+        const updateData = {
+          ...insertDataWithoutCreatedAt,
+          document_version: (existing.document_version || 0) + 1,
+          updated_at: now,
+        };
+
+        const { data: updated, error: updateError } = await supabaseAdmin
+          .from('published_documents')
+          .update(updateData)
+          .eq('id', existing.id)
+          .select('*')
+          .single();
+
+        if (updateError) {
+          throw new Error(`Failed to update publication: ${updateError.message}`);
+        }
+
+        return mapPublishedDocumentRow(updated as PublishedDocumentRow);
+      }
+
+      throw new Error(`Failed to upsert publication: ${error.message}`);
+    }
+
+    return mapPublishedDocumentRow(data as PublishedDocumentRow);
   }
 
   /**

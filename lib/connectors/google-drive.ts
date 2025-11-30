@@ -64,15 +64,39 @@ const EXPORT_FORMATS = {
 } as const;
 
 const SUPPORTED_MIME_TYPES = [
+  // Google Workspace (from EXPORT_FORMATS)
+  ...Object.keys(EXPORT_FORMATS),
+  // Documents
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/msword',
   'text/plain',
   'text/markdown',
   'text/html',
+  'text/csv',
+  // Spreadsheets
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  // Images
   'image/jpeg',
   'image/png',
-  ...Object.keys(EXPORT_FORMATS),
+  'image/gif',
+  'image/webp',
+  // Video
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+  'video/x-msvideo',
+  'video/x-ms-wmv',
+  'video/mpeg',
+  // Audio
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/ogg',
+  'audio/x-m4a',
+  'audio/mp4',
 ];
 
 /** OAuth scopes for read-only operations */
@@ -108,6 +132,16 @@ const FORMAT_EXTENSIONS: Record<PublishFormat, string> = {
   pdf: '.pdf',
   html: '.html',
 };
+
+/**
+ * Escape a search term for use in Google Drive query strings.
+ * Google Drive queries use single quotes for string values and requires
+ * escaping both backslashes and single quotes within the value.
+ */
+function escapeSearchTerm(term: string): string {
+  // First escape backslashes, then escape single quotes
+  return term.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
 
 // =====================================================
 // CONFIG INTERFACE
@@ -441,6 +475,72 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
     }
   }
 
+  /**
+   * List all files for browser UI - includes folders, videos, zips, etc.
+   * Unlike listFiles(), this doesn't filter by supported MIME types.
+   * Used by the import modal to show the full folder structure.
+   */
+  async listFilesForBrowser(options?: {
+    folderId?: string;
+    search?: string;
+    limit?: number;
+    pageToken?: string;
+  }): Promise<{ files: ConnectorFile[]; nextPageToken?: string }> {
+    if (!this.drive) throw new Error('Not authenticated');
+
+    return this.withTokenRefresh(async () => {
+      const queryConditions: string[] = ['trashed = false'];
+
+      // Filter by parent folder
+      if (options?.folderId && options.folderId !== 'root') {
+        queryConditions.push(`'${options.folderId}' in parents`);
+      } else if (!options?.search) {
+        // If no folder specified and no search, show root files
+        queryConditions.push("'root' in parents");
+      }
+
+      // Search by name
+      if (options?.search) {
+        queryConditions.push(`name contains '${escapeSearchTerm(options.search)}'`);
+      }
+
+      const query = queryConditions.join(' and ');
+      const pageSize = Math.min(options?.limit || 100, 100);
+
+      const response = await this.drive!.files.list({
+        q: query,
+        pageSize,
+        pageToken: options?.pageToken,
+        fields:
+          'nextPageToken, files(id, name, mimeType, size, modifiedTime, createdTime, parents, webViewLink, owners, thumbnailLink)',
+        includeItemsFromAllDrives: this.config.includeSharedDrives,
+        supportsAllDrives: this.config.includeSharedDrives,
+        orderBy: 'folder,name', // Folders first, then alphabetically
+      });
+
+      const files = (response.data.files || []).map((file) =>
+        this.mapDriveFileToConnectorFile(file)
+      );
+
+      return {
+        files,
+        nextPageToken: response.data.nextPageToken || undefined,
+      };
+    });
+  }
+
+  /**
+   * Check if a file type is supported for import.
+   */
+  isFileTypeSupported(mimeType: string): boolean {
+    return (
+      SUPPORTED_MIME_TYPES.includes(mimeType) ||
+      mimeType.startsWith('text/') ||
+      mimeType.startsWith('video/') ||
+      mimeType.startsWith('audio/')
+    );
+  }
+
   async downloadFile(fileId: string): Promise<FileContent> {
     if (!this.drive) throw new Error('Not authenticated');
 
@@ -564,7 +664,7 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
 
       // Search by name
       if (options.search) {
-        queryConditions.push(`name contains '${options.search.replace(/'/g, "\\'")}'`);
+        queryConditions.push(`name contains '${escapeSearchTerm(options.search)}'`);
       }
 
       const query = queryConditions.join(' and ');
@@ -646,8 +746,12 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
    * Supports multiple formats:
    * - native: Converts content to Google Docs format
    * - markdown: Uploads as .md file
-   * - pdf: Uploads as .pdf file
+   * - pdf: Uploads as .pdf file (content should be a Buffer or base64 string)
    * - html: Uploads as .html file
+   *
+   * For binary formats like PDF, content should be provided as a Buffer.
+   * If content is a string for binary formats, it will be treated as base64
+   * and decoded to a Buffer.
    */
   async publishDocument(options: ConnectorPublishOptions): Promise<ConnectorPublishResult> {
     if (!this.drive) throw new Error('Not authenticated');
@@ -661,7 +765,7 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       // Determine file name and MIME type based on format
       const extension = FORMAT_EXTENSIONS[format];
       const fileName = format === 'native' ? title : `${title}${extension}`;
-      const uploadMimeType = this.getUploadMimeType(format, content);
+      const uploadMimeType = this.getUploadMimeType(format);
 
       // Prepare file metadata
       const fileMetadata: drive_v3.Schema$File = {
@@ -684,8 +788,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
         );
       }
 
-      // Prepare media body
-      const contentBuffer = Buffer.from(content, 'utf-8');
+      // Prepare content buffer - handle both string and Buffer inputs
+      const contentBuffer = this.prepareContentBuffer(content, format);
+
       const media = {
         mimeType: uploadMimeType,
         body: Readable.from(contentBuffer),
@@ -718,6 +823,10 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
 
   /**
    * Update an existing document in Google Drive.
+   *
+   * For binary formats like PDF, content should be provided as a Buffer.
+   * If content is a string for binary formats, it will be treated as base64
+   * and decoded to a Buffer.
    */
   async updateDocument(options: ConnectorUpdateOptions): Promise<void> {
     if (!this.drive) throw new Error('Not authenticated');
@@ -742,13 +851,16 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       }
 
       // Update content if provided
-      if (content) {
+      if (content !== undefined) {
         const mimeType = currentFile.data.mimeType || 'text/plain';
         const uploadMimeType = mimeType === GOOGLE_MIME_TYPES.DOCUMENT
           ? 'text/html'
           : mimeType;
 
-        const contentBuffer = Buffer.from(content, 'utf-8');
+        // Determine format based on MIME type for proper buffer handling
+        const format = this.getFormatFromMimeType(mimeType);
+        const contentBuffer = this.prepareContentBuffer(content, format);
+
         const media = {
           mimeType: uploadMimeType,
           body: Readable.from(contentBuffer),
@@ -860,18 +972,17 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
   // =====================================================
 
   /**
-   * Determine the upload MIME type based on format and content.
+   * Determine the upload MIME type based on format.
+   *
+   * @param format - The publish format
+   * @returns The appropriate MIME type for uploading to Google Drive
    */
-  private getUploadMimeType(format: PublishFormat, content: string): string {
+  private getUploadMimeType(format: PublishFormat): string {
     switch (format) {
       case 'native':
-        // For conversion to Google Docs, upload as HTML
-        // Check if content looks like HTML
-        if (content.trim().startsWith('<') || content.includes('<html') || content.includes('<body')) {
-          return 'text/html';
-        }
-        // Otherwise treat as plain text (Google will handle basic conversion)
-        return 'text/plain';
+        // For conversion to Google Docs, upload as HTML by default
+        // The actual content type detection is done in prepareContentBuffer
+        return 'text/html';
 
       case 'markdown':
         return 'text/markdown';
@@ -884,6 +995,79 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
 
       default:
         return 'text/plain';
+    }
+  }
+
+  /**
+   * Prepare content buffer for upload, handling both string and Buffer inputs.
+   *
+   * For text formats (markdown, html, native), content is expected to be a UTF-8 string
+   * or a Buffer of UTF-8 encoded text.
+   *
+   * For binary formats (pdf), content can be:
+   * - A Buffer: used directly
+   * - A string: treated as base64 and decoded to a Buffer
+   *
+   * @param content - The content to prepare (Buffer or string)
+   * @param format - The publish format
+   * @returns A Buffer ready for upload
+   */
+  private prepareContentBuffer(content: Buffer | string, format: PublishFormat): Buffer {
+    // If content is already a Buffer, use it directly
+    if (Buffer.isBuffer(content)) {
+      return content;
+    }
+
+    // For binary formats like PDF, try to decode as base64
+    if (format === 'pdf') {
+      // Check if it looks like base64 (only contains valid base64 characters)
+      const base64Regex = /^[A-Za-z0-9+/=]+$/;
+      const trimmedContent = content.replace(/\s/g, ''); // Remove whitespace
+
+      if (base64Regex.test(trimmedContent) && trimmedContent.length > 0) {
+        try {
+          const decoded = Buffer.from(trimmedContent, 'base64');
+          // Verify it looks like a PDF by checking the magic bytes
+          if (decoded.length >= 4 && decoded.toString('ascii', 0, 4) === '%PDF') {
+            return decoded;
+          }
+          // If it doesn't look like a PDF but was valid base64, still use the decoded version
+          // This handles cases where the PDF might be corrupted or a different binary format
+          if (decoded.length > 0) {
+            console.warn('[GoogleDrive] Content decoded as base64 but does not have PDF magic bytes');
+            return decoded;
+          }
+        } catch {
+          // If base64 decoding fails, fall through to UTF-8 encoding
+          console.warn('[GoogleDrive] Failed to decode content as base64, treating as UTF-8');
+        }
+      }
+    }
+
+    // For text formats or if base64 decoding failed, encode as UTF-8
+    return Buffer.from(content, 'utf-8');
+  }
+
+  /**
+   * Determine the PublishFormat from a MIME type.
+   * Used when updating documents to determine how to handle content.
+   *
+   * @param mimeType - The MIME type of the file
+   * @returns The corresponding PublishFormat
+   */
+  private getFormatFromMimeType(mimeType: string): PublishFormat {
+    switch (mimeType) {
+      case 'application/pdf':
+        return 'pdf';
+      case 'text/html':
+        return 'html';
+      case 'text/markdown':
+        return 'markdown';
+      case GOOGLE_MIME_TYPES.DOCUMENT:
+        return 'native';
+      default:
+        // Default to markdown for unknown text types
+        return 'markdown';
     }
   }
 
@@ -975,13 +1159,40 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
   }
 
   private getFileType(mimeType: string): string {
+    // Google Workspace types
     if (mimeType === GOOGLE_MIME_TYPES.FOLDER) return 'folder';
     if (mimeType === GOOGLE_MIME_TYPES.DOCUMENT) return 'google_doc';
     if (mimeType === GOOGLE_MIME_TYPES.SPREADSHEET) return 'google_sheet';
     if (mimeType === GOOGLE_MIME_TYPES.PRESENTATION) return 'google_slide';
-    if (mimeType.startsWith('application/pdf')) return 'pdf';
+
+    // Documents
+    if (mimeType === 'application/pdf') return 'pdf';
+    if (mimeType.includes('wordprocessingml') || mimeType === 'application/msword') return 'word';
+    if (mimeType.includes('spreadsheetml') || mimeType === 'application/vnd.ms-excel') return 'excel';
+    if (mimeType === 'text/csv') return 'csv';
+    if (mimeType === 'text/markdown') return 'markdown';
+    if (mimeType === 'text/html') return 'html';
+    if (mimeType === 'text/plain') return 'text';
+
+    // Media
+    if (mimeType.startsWith('video/')) return 'video';
+    if (mimeType.startsWith('audio/')) return 'audio';
     if (mimeType.startsWith('image/')) return 'image';
+
+    // Archives
+    if (mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed') return 'archive';
+    if (mimeType === 'application/x-rar-compressed' || mimeType === 'application/vnd.rar') return 'archive';
+    if (mimeType === 'application/x-7z-compressed') return 'archive';
+    if (mimeType === 'application/gzip' || mimeType === 'application/x-tar') return 'archive';
+
+    // Code files
+    if (mimeType === 'application/json') return 'code';
+    if (mimeType === 'application/javascript' || mimeType === 'text/javascript') return 'code';
+    if (mimeType === 'application/xml' || mimeType === 'text/xml') return 'code';
+
+    // Other text types
     if (mimeType.startsWith('text/')) return 'text';
+
     return 'file';
   }
 }

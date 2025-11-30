@@ -40,7 +40,7 @@ const CSP_WITH_CLERK = {
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https://*.supabase.co https://*.clerk.com https://img.clerk.com https://storage.googleapis.com/eleven-public-cdn/",
     "media-src 'self' blob: data: https://*.supabase.co",
-    "connect-src 'self' blob: https://*.supabase.co https://*.clerk.com https://*.clerk.accounts.dev https://clerk-telemetry.com https://*.upstash.io https://storage.googleapis.com/eleven-public-cdn/ https://unpkg.com/@ffmpeg/core@0.12.6/dist/ wss://*.supabase.co https://*.react-grab.com",
+    "connect-src 'self' blob: https://*.supabase.co https://*.clerk.com https://*.clerk.accounts.dev https://clerk-telemetry.com https://*.upstash.io https://storage.googleapis.com/eleven-public-cdn/ https://unpkg.com/@ffmpeg/core@0.12.6/dist/ wss://*.supabase.co https://*.react-grab.com https://cdn.jsdelivr.net",
     "frame-src 'self' https://challenges.cloudflare.com https://*.clerk.accounts.dev https://*.clerk.com",
     "worker-src 'self' blob:",
     "object-src 'none'",
@@ -144,6 +144,16 @@ const nextConfig = {
         protocol: 'https',
         hostname: '**.clerk.accounts.dev',
       },
+      {
+        // Unsplash images for marketing pages
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+      {
+        // Avatar placeholder service
+        protocol: 'https',
+        hostname: 'i.pravatar.cc',
+      },
     ],
   },
 
@@ -186,6 +196,7 @@ const nextConfig = {
       bodySizeLimit: '500mb', // Allow large video/audio file uploads
     },
   },
+
 };
 
 module.exports = nextConfig;

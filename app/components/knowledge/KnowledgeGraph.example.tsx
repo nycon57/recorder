@@ -7,7 +7,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { KnowledgeGraph, ConceptPanel } from '@/app/components/knowledge';
 import type { GraphNode, GraphEdge } from '@/lib/validations/knowledge';
 
@@ -98,8 +98,8 @@ export function LoadingGraphExample() {
   });
 
   // Simulate loading
-  useState(() => {
-    setTimeout(() => {
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
       setGraphData({
         nodes: [
           { id: '1', name: 'API Design', type: 'process', mentionCount: 10 },
@@ -113,7 +113,9 @@ export function LoadingGraphExample() {
       });
       setIsLoading(false);
     }, 2000);
-  });
+
+    return () => clearTimeout(timeoutId);
+  }, []);
 
   return (
     <div className="w-full h-screen p-8">
@@ -214,7 +216,9 @@ export function APIGraphExample() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useState(() => {
+  useEffect(() => {
+    let isMounted = true;
+
     async function loadGraph() {
       try {
         const response = await fetch('/api/knowledge/graph');
@@ -224,16 +228,26 @@ export function APIGraphExample() {
         }
 
         const data = await response.json();
-        setGraphData(data);
+        if (isMounted) {
+          setGraphData(data);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Unknown error');
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     }
 
     loadGraph();
-  });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   if (error) {
     return (

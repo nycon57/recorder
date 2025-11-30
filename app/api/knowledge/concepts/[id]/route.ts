@@ -68,31 +68,51 @@ export const GET = apiHandler(async (request: NextRequest, { params }: RoutePara
   let recentMentions: ConceptMention[] = [];
 
   // Get related concepts if requested
-  // SECURITY NOTE: The get_related_concepts RPC function joins on concept_relationships
-  // which are scoped by org_id in the database. The concept itself is already verified
-  // to belong to the requesting organization (line 45 above).
+  // Query concept_relationships directly (same as graph API) to ensure consistency
+  // This finds all relationships where the concept is either source (concept_a) or target (concept_b)
   if (query.includeRelated) {
-    const { data: related } = await supabase.rpc('get_related_concepts', {
-      p_concept_id: id,
-      p_limit: query.relatedLimit,
-    });
+    const { data: relationships } = await supabase
+      .from('concept_relationships')
+      .select(`
+        id,
+        concept_a_id,
+        concept_b_id,
+        relationship_type,
+        strength,
+        concept_a:knowledge_concepts!concept_relationships_concept_a_id_fkey (
+          id, name, concept_type, mention_count
+        ),
+        concept_b:knowledge_concepts!concept_relationships_concept_b_id_fkey (
+          id, name, concept_type, mention_count
+        )
+      `)
+      .eq('org_id', orgId)
+      .or(`concept_a_id.eq.${id},concept_b_id.eq.${id}`)
+      .order('strength', { ascending: false })
+      .limit(query.relatedLimit);
 
-    if (related) {
-      relatedConcepts = related.map((r: any) => ({
-        id: r.id,
-        orgId: r.org_id,
-        name: r.name,
-        normalizedName: r.normalized_name,
-        description: r.description,
-        conceptType: r.concept_type,
-        mentionCount: r.mention_count,
-        firstSeenAt: r.first_seen_at,
-        lastSeenAt: r.last_seen_at,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-        relationshipType: r.relationship_type,
-        strength: r.strength,
-      }));
+    if (relationships) {
+      relatedConcepts = relationships.map((rel: any) => {
+        // Determine which concept is the "other" one (not the current concept)
+        const isConceptA = rel.concept_a_id === id;
+        const relatedConcept = isConceptA ? rel.concept_b : rel.concept_a;
+
+        return {
+          id: relatedConcept?.id,
+          orgId: orgId,
+          name: relatedConcept?.name || 'Unknown',
+          normalizedName: relatedConcept?.name?.toLowerCase().replace(/\s+/g, '_') || '',
+          description: null,
+          conceptType: relatedConcept?.concept_type || 'general',
+          mentionCount: relatedConcept?.mention_count || 0,
+          firstSeenAt: null,
+          lastSeenAt: null,
+          createdAt: null,
+          updatedAt: null,
+          relationshipType: rel.relationship_type || 'related',
+          strength: rel.strength || 0,
+        };
+      }).filter((r: any) => r.id); // Filter out any null entries
     }
   }
 

@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import {
-  KnowledgeGraph,
+  KnowledgeGraphContainer,
   KnowledgeGraphSkeleton,
   ConceptListView,
   ConceptListViewSkeleton,
@@ -70,74 +70,85 @@ function KnowledgePageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch graph data on mount
+  // Stable fetch function that takes params explicitly to avoid stale closures
+  const fetchGraphData = useCallback(
+    async (
+      types: ConceptType[],
+      sort: SortOption,
+      signal: AbortSignal
+    ) => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Build query params for graph
+        const graphParams = new URLSearchParams();
+        if (types.length > 0) {
+          graphParams.set('types', types.join(','));
+        }
+
+        const graphResponse = await fetch(`/api/knowledge/graph?${graphParams.toString()}`, { signal });
+
+        if (!graphResponse.ok) {
+          const errorData = await graphResponse.json().catch(() => ({}));
+          throw new Error(errorData.error?.message || 'Failed to fetch knowledge graph');
+        }
+
+        const graphResult = await graphResponse.json();
+        const data = graphResult.data || { nodes: [], edges: [] };
+
+        // Check if aborted before updating state
+        if (signal.aborted) return;
+
+        setGraphNodes(data.nodes);
+        setGraphEdges(data.edges);
+
+        // Also fetch concepts for list view
+        const conceptParams = new URLSearchParams();
+        // Fetch all concepts - client-side filtering handles multiple type selection
+        // The API only supports single type filter, so we fetch all and filter in filteredConcepts
+        conceptParams.set('sort', sort);
+        conceptParams.set('limit', '100');
+
+        const conceptResponse = await fetch(`/api/knowledge/concepts?${conceptParams.toString()}`, { signal });
+
+        if (!conceptResponse.ok) {
+          throw new Error('Failed to fetch concepts');
+        }
+
+        const conceptResult = await conceptResponse.json();
+
+        // Check if aborted before updating state
+        if (signal.aborted) return;
+
+        setConcepts(conceptResult.data?.concepts || []);
+      } catch (err) {
+        // Ignore abort errors
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
+        console.error('Error fetching graph data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load knowledge graph');
+      } finally {
+        // Only clear loading if not aborted
+        if (!signal.aborted) {
+          setLoading(false);
+        }
+      }
+    },
+    [] // No dependencies - all values passed as params
+  );
+
+  // Fetch data when selectedTypes or sortBy change (including initial mount)
   useEffect(() => {
-    fetchGraphData();
-  }, []);
+    const controller = new AbortController();
 
-  const fetchGraphData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+    fetchGraphData(selectedTypes, sortBy, controller.signal);
 
-      // Build query params
-      const params = new URLSearchParams();
-      if (selectedTypes.length > 0) {
-        params.set('types', selectedTypes.join(','));
-      }
-
-      const response = await fetch(`/api/knowledge/graph?${params.toString()}`);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || 'Failed to fetch knowledge graph');
-      }
-
-      const result = await response.json();
-      const data = result.data || { nodes: [], edges: [] };
-      setGraphNodes(data.nodes);
-      setGraphEdges(data.edges);
-
-      // Also fetch concepts for list view
-      await fetchConcepts();
-    } catch (err) {
-      console.error('Error fetching graph data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load knowledge graph');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchConcepts = async () => {
-    try {
-      const params = new URLSearchParams();
-      if (selectedTypes.length > 0) {
-        // For list view, fetch filtered concepts
-        params.set('type', selectedTypes[0]); // API only supports single type filter
-      }
-      params.set('sort', sortBy);
-      params.set('limit', '100');
-
-      const response = await fetch(`/api/knowledge/concepts?${params.toString()}`);
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch concepts');
-      }
-
-      const result = await response.json();
-      setConcepts(result.data?.concepts || []);
-    } catch (err) {
-      console.error('Error fetching concepts:', err);
-      // Don't set error here as graph might have loaded successfully
-    }
-  };
-
-  // Re-fetch when filters or sort change
-  useEffect(() => {
-    if (!loading) {
-      fetchGraphData();
-    }
-  }, [selectedTypes, sortBy]);
+    return () => {
+      controller.abort();
+    };
+  }, [fetchGraphData, selectedTypes, sortBy]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -463,11 +474,12 @@ function KnowledgePageContent() {
             exit="exit"
           >
             {viewMode === 'graph' ? (
-              <KnowledgeGraph
+              <KnowledgeGraphContainer
                 nodes={graphNodes}
                 edges={graphEdges}
                 onNodeClick={handleConceptClick}
                 selectedNodeId={selectedConceptId}
+                height={600}
               />
             ) : (
               <ConceptListView

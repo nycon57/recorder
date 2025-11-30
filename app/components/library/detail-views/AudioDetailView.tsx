@@ -96,6 +96,8 @@ export interface AudioDetailViewProps {
   sourceKey?: string;
   /** ID of transcript chunk to highlight (from search) */
   initialHighlightId?: string;
+  /** Initial timestamp to seek to in seconds (from concept mention link) */
+  initialTimestamp?: number;
 }
 
 export default function AudioDetailView({
@@ -103,6 +105,7 @@ export default function AudioDetailView({
   transcript,
   document,
   initialTags,
+  initialTimestamp,
 }: AudioDetailViewProps) {
   const router = useRouter();
 
@@ -119,6 +122,30 @@ export default function AudioDetailView({
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const isTrashed = !!recording.deleted_at;
+
+  // Handle initial timestamp seek from URL parameter (e.g., from concept mention link)
+  React.useEffect(() => {
+    if (initialTimestamp === undefined || initialTimestamp <= 0) return;
+
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    // If audio is already loaded, seek immediately
+    if (audio.readyState >= 1) {
+      audio.currentTime = initialTimestamp;
+      return;
+    }
+
+    // Otherwise, wait for metadata to load
+    const handleLoadedMetadata = () => {
+      audio.currentTime = initialTimestamp;
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    return () => {
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, [initialTimestamp]);
 
   const handleTimestampClick = (timestamp: number) => {
     if (audioRef.current) {

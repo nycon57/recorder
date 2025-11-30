@@ -96,6 +96,8 @@ export interface VideoDetailViewProps {
   sourceKey?: string;
   /** ID of transcript chunk to highlight (from search) */
   initialHighlightId?: string;
+  /** Initial timestamp to seek to in seconds (from concept mention link) */
+  initialTimestamp?: number;
 }
 
 export default function VideoDetailView({
@@ -103,6 +105,7 @@ export default function VideoDetailView({
   transcript,
   document,
   initialTags,
+  initialTimestamp,
 }: VideoDetailViewProps) {
   const router = useRouter();
 
@@ -122,6 +125,32 @@ export default function VideoDetailView({
   const videoPlayerRef = React.useRef<HTMLVideoElement | null>(null);
 
   const isTrashed = !!recording.deleted_at;
+
+  // Handle initial timestamp seek from URL parameter (e.g., from concept mention link)
+  React.useEffect(() => {
+    if (initialTimestamp === undefined || initialTimestamp <= 0) return;
+
+    const video = videoPlayerRef.current;
+    if (!video) return;
+
+    // If video is already loaded, seek immediately
+    if (video.readyState >= 1) {
+      video.currentTime = initialTimestamp;
+      video.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    // Otherwise, wait for metadata to load
+    const handleLoadedMetadata = () => {
+      video.currentTime = initialTimestamp;
+      video.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, [initialTimestamp]);
 
   const handleVideoDurationChange = (duration: number) => {
     setVideoDuration(duration);

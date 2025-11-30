@@ -29,10 +29,11 @@ import {
  * Displays user avatar, name, and account actions
  */
 export function NavUser() {
-  const { user } = useUser()
+  const { user, isLoaded } = useUser()
   const { signOut } = useClerk()
 
-  if (!user) {
+  // Wait for Clerk to load and user to be available
+  if (!isLoaded || !user) {
     return null
   }
 

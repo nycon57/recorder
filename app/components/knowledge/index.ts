@@ -47,6 +47,12 @@ export {
   KnowledgeGraphSkeleton,
 } from './KnowledgeGraph';
 
+// 3D Graph visualization (dynamic import recommended)
+export { KnowledgeGraph3DSkeleton } from './KnowledgeGraph3D';
+
+// Container with 2D/3D toggle
+export { KnowledgeGraphContainer } from './KnowledgeGraphContainer';
+
 // List view components
 export {
   ConceptListView,

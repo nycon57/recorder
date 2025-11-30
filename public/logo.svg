@@ -1,5 +1,14 @@
-<svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="40" cy="40" r="40" fill="#89303c" />
-  <circle cx="40" cy="40" r="20" fill="#FF5065" />
-  <circle cx="40" cy="40" r="30" stroke="white" stroke-width="6" />
+<svg width="180" height="48" viewBox="0 0 180 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#03624c"/>
+      <stop offset="50%" stop-color="#2cc295"/>
+      <stop offset="100%" stop-color="#00df82"/>
+    </linearGradient>
+  </defs>
+  <!-- Icon mark - "T" in circle -->
+  <circle cx="24" cy="24" r="22" fill="url(#logoGradient)"/>
+  <path d="M12 12h24v6h-9v18h-6V18h-9V12z" fill="#f1f7f7"/>
+  <!-- Wordmark - "Tribora" -->
+  <text x="56" y="32" font-family="Outfit, sans-serif" font-size="28" font-weight="300" letter-spacing="-0.02em" fill="currentColor">Tribora</text>
 </svg>

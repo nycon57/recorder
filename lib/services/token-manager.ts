@@ -136,7 +136,9 @@ export class TokenManager {
   }
 
   /**
-   * Update stored tokens in database
+   * Update stored tokens in database.
+   * Merges new token fields with existing credentials to preserve other stored keys
+   * (e.g., email, userId, provider-specific data).
    */
   private static async updateStoredTokens(
     connectorId: string,
@@ -144,22 +146,40 @@ export class TokenManager {
   ): Promise<void> {
     const supabase = createAdminClient();
 
-    const { error } = await supabase
+    // First, fetch existing credentials to preserve other stored keys
+    const { data: existingData, error: fetchError } = await supabase
+      .from('connector_configs')
+      .select('credentials')
+      .eq('id', connectorId)
+      .single();
+
+    if (fetchError) {
+      console.error(`[TokenManager] Failed to fetch existing credentials for connector ${connectorId}:`, fetchError);
+      throw new Error(`Failed to fetch existing credentials: ${fetchError.message}`);
+    }
+
+    // Merge existing credentials with new token fields
+    const existingCredentials = (existingData?.credentials as StoredCredentials) || {};
+    const mergedCredentials: StoredCredentials = {
+      ...existingCredentials,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresAt.toISOString(),
+      scopes: tokens.scopes,
+    };
+
+    // Update with merged credentials
+    const { error: updateError } = await supabase
       .from('connector_configs')
       .update({
-        credentials: {
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          expiresAt: tokens.expiresAt.toISOString(),
-          scopes: tokens.scopes,
-        },
+        credentials: mergedCredentials,
         credentials_updated_at: new Date().toISOString(),
       })
       .eq('id', connectorId);
 
-    if (error) {
-      console.error(`[TokenManager] Failed to update tokens in database:`, error);
-      throw new Error(`Failed to persist refreshed tokens: ${error.message}`);
+    if (updateError) {
+      console.error(`[TokenManager] Failed to update tokens in database:`, updateError);
+      throw new Error(`Failed to persist refreshed tokens: ${updateError.message}`);
     }
   }
 

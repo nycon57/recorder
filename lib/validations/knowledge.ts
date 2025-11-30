@@ -180,13 +180,33 @@ export interface GraphNode {
 }
 
 /**
+ * Valid relationship types for graph edges
+ */
+export const RELATIONSHIP_TYPES = [
+  'related',
+  'related_to',
+  'co-occurs',
+  'often_used_with',
+  'prerequisite',
+  'requires',
+  'uses',
+  'implements',
+  'created_by',
+  'works_on',
+  'employs',
+  'provides',
+] as const;
+
+export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
+
+/**
  * Graph edge for visualization
  */
 export interface GraphEdge {
   id: string;
   source: string;
   target: string;
-  type: 'related' | 'co-occurs' | 'prerequisite';
+  type: RelationshipType | string; // Allow any string for flexibility
   strength: number;
 }
 

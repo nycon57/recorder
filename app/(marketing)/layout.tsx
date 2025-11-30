@@ -1,5 +1,5 @@
 import { Footer } from '@/app/components/layout';
-import Navbar from '@/app/components/layout/navbar';
+import AuroraNavbar from '@/app/components/layout/aurora-navbar';
 
 // Force dynamic rendering to prevent static generation at build time
 // Marketing pages use Clerk components which require runtime env vars
@@ -12,7 +12,7 @@ export default function MarketingLayout({
 }) {
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <Navbar />
+      <AuroraNavbar />
       <main className="flex-1">{children}</main>
       <Footer />
     </div>

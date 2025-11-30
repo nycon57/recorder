@@ -444,7 +444,7 @@ export function ExternalSourcesTab() {
                 </CardContent>
               )}
 
-              {/* Import Settings (for connected integrations without expanded publish settings) */}
+              {/* Import Settings (for connected integrations without publish support) */}
               {isConnected && !integration.supportsPublish && (
                 <CardContent className="pt-0">
                   <div className="grid gap-3">
@@ -454,6 +454,31 @@ export function ExternalSourcesTab() {
                         {integration.supportsImport ? 'Enabled' : 'Disabled'}
                       </Badge>
                     </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Publish capability</span>
+                      <Badge variant="outline" className="text-amber-600 border-amber-600">
+                        Upgrade Required
+                      </Badge>
+                    </div>
+                    <Alert className="mt-2">
+                      <AlertDescription className="text-xs">
+                        To publish documents to {integration.name}, you need to grant write permissions.
+                      </AlertDescription>
+                    </Alert>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        const metadata = INTEGRATION_METADATA[integration.type];
+                        if (metadata.authUrl) {
+                          window.location.href = `${metadata.authUrl}?publish=true`;
+                        }
+                      }}
+                    >
+                      <FileUp className="h-4 w-4 mr-2" />
+                      Enable Publishing
+                    </Button>
                   </div>
                 </CardContent>
               )}

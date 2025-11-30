@@ -314,10 +314,21 @@ export interface PublishableConnectorConfig {
   lastPublishAt?: Date;
 }
 
-/** Options for publishing a document via connector */
+/**
+ * Options for publishing a document via connector.
+ *
+ * Content can be provided as either a string or Buffer:
+ * - For text formats (markdown, html, native): provide a UTF-8 string
+ * - For binary formats (pdf): provide a Buffer or base64-encoded string
+ *
+ * When content is a string and format is 'pdf', the connector will attempt
+ * to decode it as base64. If the string doesn't appear to be base64-encoded
+ * (e.g., it's actual binary data as a string), it will be used as-is.
+ */
 export interface ConnectorPublishOptions {
   title: string;
-  content: string;
+  /** Document content - string for text formats, Buffer for binary formats */
+  content: Buffer | string;
   format: PublishFormat;
   folderId?: string;
   metadata?: Record<string, unknown>;
@@ -330,11 +341,18 @@ export interface ConnectorPublishResult {
   externalPath?: string;
 }
 
-/** Options for updating a document via connector */
+/**
+ * Options for updating a document via connector.
+ *
+ * Content can be provided as either a string or Buffer:
+ * - For text formats (markdown, html, native): provide a UTF-8 string
+ * - For binary formats (pdf): provide a Buffer or base64-encoded string
+ */
 export interface ConnectorUpdateOptions {
   externalId: string;
   title?: string;
-  content?: string;
+  /** Document content - string for text formats, Buffer for binary formats */
+  content?: Buffer | string;
 }
 
 /** Document info from external system */

@@ -177,32 +177,33 @@ export default function PublishModal({
     try {
       setIsLoadingConnectors(true);
 
-      // Fetch connectors from database
-      // For now, we'll use the connector_configs table via the publish API
-      // In a full implementation, you'd have a dedicated /api/integrations endpoint
+      // Fetch connectors from the integrations API
+      const response = await fetch('/api/integrations');
 
-      // Simulated connector fetch - replace with actual API call
-      // const response = await fetch('/api/integrations');
-      // const data = await response.json();
+      if (!response.ok) {
+        throw new Error('Failed to fetch integrations');
+      }
 
-      // For demo purposes, showing structure
-      // In production, this would filter connectors where supports_publish = true
-      const mockConnectors: ConnectorConfig[] = [
-        // These would come from database
-        // {
-        //   id: 'connector-uuid-1',
-        //   connector_type: 'google_drive',
-        //   display_name: 'My Google Drive',
-        //   is_active: true,
-        //   supports_publish: true,
-        // },
-      ];
+      const data = await response.json();
 
-      setConnectors(mockConnectors);
+      // Filter to only show connectors that support publishing
+      const publishableConnectors: ConnectorConfig[] = (data.integrations || [])
+        .filter((integration: any) => integration.supportsPublish && integration.status === 'connected')
+        .map((integration: any) => ({
+          id: integration.id,
+          connector_type: integration.type as PublishDestination,
+          display_name: integration.externalUserName
+            ? `${integration.name} (${integration.externalUserName})`
+            : integration.name,
+          is_active: true,
+          supports_publish: true,
+        }));
+
+      setConnectors(publishableConnectors);
 
       // Auto-select first connector if available
-      if (mockConnectors.length > 0) {
-        setSelectedConnector(mockConnectors[0].id);
+      if (publishableConnectors.length > 0) {
+        setSelectedConnector(publishableConnectors[0].id);
       }
     } catch (err) {
       console.error('Failed to load connectors:', err);

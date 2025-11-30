@@ -88,7 +88,7 @@ export function RecentItems({ items, isLoading = false }: RecentItemsProps) {
               className="group text-left focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-xl"
               aria-label={`View ${item.title || 'Untitled'}`}
             >
-              <Card className="h-full overflow-hidden transition-all duration-200 group-hover:shadow-md group-hover:scale-[1.02]">
+              <Card className="h-full overflow-hidden card-interactive">
                 {/* Thumbnail or Icon */}
                 <div className={`relative h-32 ${colors.bg} flex items-center justify-center`}>
                   {item.thumbnail_url ? (

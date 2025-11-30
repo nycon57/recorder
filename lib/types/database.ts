@@ -1707,3 +1707,75 @@ export interface Database {
     };
   };
 }
+
+// =============================================================================
+// Blog Post Types
+// =============================================================================
+
+/**
+ * Blog post status for publishing workflow.
+ * - 'draft': Work in progress, not publicly visible
+ * - 'published': Live and visible to the public
+ * - 'archived': Hidden from public but preserved
+ */
+export type BlogPostStatus = 'draft' | 'published' | 'archived';
+
+/**
+ * Blog post category for content organization.
+ */
+export type BlogPostCategory = 'product' | 'insights' | 'tutorials' | 'general';
+
+/**
+ * Blog post record from the database.
+ */
+export interface BlogPost {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  content: string;
+  featured_image_url: string | null;
+  featured_image_alt: string | null;
+  category: BlogPostCategory;
+  tags: string[];
+  author_name: string;
+  author_role: string | null;
+  author_avatar_url: string | null;
+  status: BlogPostStatus;
+  is_featured: boolean;
+  meta_title: string | null;
+  meta_description: string | null;
+  canonical_url: string | null;
+  reading_time_minutes: number;
+  view_count: number;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Blog post for display (with formatted dates).
+ */
+export interface BlogPostDisplay extends Omit<BlogPost, 'published_at' | 'created_at' | 'updated_at'> {
+  published_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * Blog post card data for archive listings.
+ */
+export interface BlogPostCard {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  featured_image_url: string | null;
+  category: BlogPostCategory;
+  tags: string[];
+  author_name: string;
+  author_role: string | null;
+  is_featured: boolean;
+  reading_time_minutes: number;
+  published_at: string | null;
+}

@@ -64,8 +64,8 @@ export async function GET(req: NextRequest) {
   const supabase = createAdminClient();
 
   try {
-    // Step 1: Authenticate user and get internal org ID
-    const { orgId } = await requireOrg();
+    // Step 1: Authenticate user and get internal org/user IDs
+    const { orgId, userId } = await requireOrg();
 
     // Step 2: Extract query parameters
     const searchParams = req.nextUrl.searchParams;
@@ -187,25 +187,14 @@ export async function GET(req: NextRequest) {
       userPrincipalName,
     });
 
-    // Step 7: Get internal user ID from Supabase
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('clerk_id', userId)
-      .single();
-
-    if (userError || !user) {
-      console.error('[SharePoint Callback] User not found:', userError);
-      return redirectWithError('user_not_found', 'User account not found');
-    }
-
-    // Step 8: Store credentials in connector_configs table
+    // Step 7: Store credentials in connector_configs table
+    // Note: userId from requireOrg() is already the internal UUID
     const { error: insertError } = await supabase
       .from('connector_configs')
       .upsert(
         {
           org_id: orgId,
-          user_id: user.id,
+          user_id: userId,
           type: 'sharepoint', // Can be 'sharepoint' or 'onedrive' based on usage
           credentials: {
             accessToken: access_token,
@@ -235,15 +224,15 @@ export async function GET(req: NextRequest) {
 
     console.log('[SharePoint Callback] Successfully connected SharePoint', {
       orgId,
-      userId: user.id,
+      userId,
       externalUserId,
     });
 
-    // Step 9: Clear OAuth cookies
+    // Step 8: Clear OAuth cookies
     cookieStore.delete('sharepoint_oauth_state');
     cookieStore.delete('sharepoint_code_verifier');
 
-    // Step 10: Redirect to settings with success message
+    // Step 9: Redirect to settings with success message
     const successUrl = new URL(
       '/settings/organization/integrations',
       appUrl

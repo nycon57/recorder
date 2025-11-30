@@ -18,6 +18,10 @@ export const contactFormSchema = z.object({
     .max(100, 'Company name must be at most 100 characters')
     .optional()
     .or(z.literal('')),
+  inquiryType: z
+    .enum(['general', 'demo', 'sales', 'support', 'partnership'])
+    .optional()
+    .default('general'),
   subject: z
     .string()
     .min(5, 'Subject must be at least 5 characters')

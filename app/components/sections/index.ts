@@ -14,6 +14,15 @@ export { default as ModernCTA } from './modern-cta';
 // Premium sections (Cryptix-inspired with green palette)
 export { default as PremiumHero } from './premium-hero';
 
+// Aurora sections (Railway/Reflect/Wope-inspired with flowing gradients)
+export { AuroraHero } from './aurora-hero';
+export type { AuroraHeroProps } from './aurora-hero';
+export { AuroraValueProp } from './aurora-value-prop';
+export { AuroraFeatures } from './aurora-features';
+export { AuroraTestimonials } from './aurora-testimonials';
+export { AuroraPricing } from './aurora-pricing';
+export { AuroraCTA } from './aurora-cta';
+
 // Registry-based sections (from shadcnblocks with Caribbean Green palette)
 export { RegistryHero } from './registry-hero';
 export { RegistryFeatures } from './registry-features';

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Loader2, Grid3x3, List, Search, SlidersHorizontal, FileX2, Settings, Upload, Download, FolderOpen, Plus, Trash2, RotateCcw } from 'lucide-react';
+import { Loader2, Grid3x3, List, Search, SlidersHorizontal, FileX2, Settings, Upload, Download, FolderOpen, Plus, Trash2, RotateCcw, HardDrive, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { Input } from '@/app/components/ui/input';
@@ -44,6 +44,13 @@ import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/K
 import { useToast } from '@/app/components/ui/use-toast';
 import UploadWizard from '@/app/components/recorder/UploadWizard';
 import ExportModal from '@/app/components/library/ExportModal';
+import GoogleDriveImportModal from '@/app/components/library/GoogleDriveImportModal';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/app/components/ui/dropdown-menu';
 import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/app/hooks/useKeyboardShortcuts';
 
 import { SelectableContentCard, LibraryTable } from '@/app/components/library';
@@ -111,6 +118,7 @@ function LibraryPageContent() {
   const [showTagManager, setShowTagManager] = useState(false);
   const [showUploadWizard, setShowUploadWizard] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showGoogleDriveImport, setShowGoogleDriveImport] = useState(false);
   const [showCollectionManager, setShowCollectionManager] = useState(false);
   const [showCollectionPicker, setShowCollectionPicker] = useState(false);
 
@@ -879,6 +887,24 @@ function LibraryPageContent() {
                   <span className="hidden sm:inline">Manage Tags</span>
                   <span className="sm:hidden">Tags</span>
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full sm:w-auto justify-start sm:justify-center min-h-[44px]"
+                    >
+                      <HardDrive className="h-4 w-4 mr-2" />
+                      Import
+                      <ChevronDown className="h-4 w-4 ml-2" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setShowGoogleDriveImport(true)}>
+                      <HardDrive className="h-4 w-4 mr-2" />
+                      Google Drive
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   onClick={() => setShowUploadWizard(true)}
                   className="w-full sm:w-auto justify-start sm:justify-center min-h-[44px]"
@@ -1331,6 +1357,17 @@ function LibraryPageContent() {
         onClose={() => setShowExportModal(false)}
         selectedItems={selectedIds}
         totalItems={items.length}
+      />
+
+      <GoogleDriveImportModal
+        isOpen={showGoogleDriveImport}
+        onClose={() => setShowGoogleDriveImport(false)}
+        onImportComplete={(count) => {
+          toast({
+            description: `Successfully imported ${count} file(s) from Google Drive`,
+          });
+          fetchItems(); // Refresh the library
+        }}
       />
 
       {/* Delete Confirmation Dialogs */}

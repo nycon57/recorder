@@ -8,10 +8,14 @@ import {
   Building,
   Code,
   Lightbulb,
-  X,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import {
+  ColoredBadge,
+  ColoredBadgeList,
+  type ColoredBadgeProps,
+} from '@/app/components/ui/colored-badge';
 import {
   type ConceptType,
   CONCEPT_TYPE_COLORS,
@@ -20,7 +24,10 @@ import {
 /**
  * Icon mapping for concept types
  */
-const ConceptTypeIcons: Record<ConceptType, React.ComponentType<{ className?: string }>> = {
+const ConceptTypeIcons: Record<
+  ConceptType,
+  React.ComponentType<{ className?: string }>
+> = {
   tool: Wrench,
   process: GitBranch,
   person: User,
@@ -29,24 +36,10 @@ const ConceptTypeIcons: Record<ConceptType, React.ComponentType<{ className?: st
   general: Lightbulb,
 };
 
-interface ConceptBadgeProps {
-  concept?: {
-    id?: string;
-    name: string;
-    conceptType: ConceptType;
-  };
-  name?: string;
-  type?: ConceptType;
-  size?: 'sm' | 'md' | 'lg';
-  showIcon?: boolean;
-  removable?: boolean;
-  onRemove?: () => void;
-  className?: string;
-  onClick?: () => void;
-}
-
 /**
  * ConceptBadge - Display a concept with type-specific icon and color
+ *
+ * Built on ColoredBadge foundation for consistent styling and accessibility.
  *
  * @param concept - Concept object with name and type
  * @param name - Concept name to display (alternative to concept object)
@@ -57,6 +50,24 @@ interface ConceptBadgeProps {
  * @param onRemove - Callback when remove is clicked
  * @param onClick - Callback when badge is clicked
  */
+export interface ConceptBadgeProps
+  extends Omit<ColoredBadgeProps, 'color' | 'icon' | 'removable'> {
+  /** Concept object with name and type */
+  concept?: {
+    id?: string;
+    name: string;
+    conceptType: ConceptType;
+  };
+  /** Concept name to display (alternative to concept object) */
+  name?: string;
+  /** Concept type (alternative to concept object) */
+  type?: ConceptType;
+  /** Show type icon (default: true) */
+  showIcon?: boolean;
+  /** Show remove button */
+  removable?: boolean;
+}
+
 export function ConceptBadge({
   concept,
   name: propName,
@@ -67,6 +78,7 @@ export function ConceptBadge({
   onRemove,
   className,
   onClick,
+  ...props
 }: ConceptBadgeProps) {
   // Support both concept object and individual props
   const name = concept?.name || propName || '';
@@ -74,87 +86,26 @@ export function ConceptBadge({
   const color = CONCEPT_TYPE_COLORS[conceptType];
   const Icon = ConceptTypeIcons[conceptType];
 
-  // Size classes
-  const sizeClasses = {
-    sm: 'text-xs px-2 py-0.5 gap-1',
-    md: 'text-sm px-2.5 py-1 gap-1.5',
-    lg: 'text-base px-3 py-1.5 gap-2',
-  };
-
-  const iconSizes = {
-    sm: 'h-3 w-3',
-    md: 'h-3.5 w-3.5',
-    lg: 'h-4 w-4',
-  };
-
-  // Calculate text color based on background color (memoized)
-  const textColor = React.useMemo(() => {
-    const hex = color.replace('#', '');
-    const r = parseInt(hex.substr(0, 2), 16);
-    const g = parseInt(hex.substr(2, 2), 16);
-    const b = parseInt(hex.substr(4, 2), 16);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance > 0.5 ? '#000000' : '#ffffff';
-  }, [color]);
-
-  // Determine if badge should be interactive (clickable but not removable)
-  const isInteractive = onClick && !removable;
-
-  // Keyboard handler for accessible button behavior
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLSpanElement>) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      if (e.key === ' ') {
-        e.preventDefault(); // Prevent page scroll on Space
-      }
-      onClick?.();
-    }
-  };
-
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full font-medium transition-all',
-        sizeClasses[size],
-        isInteractive && 'cursor-pointer hover:opacity-80',
-        className
-      )}
-      style={{
-        backgroundColor: color,
-        color: textColor,
-      }}
-      onClick={isInteractive ? onClick : undefined}
-      onKeyDown={isInteractive ? handleKeyDown : undefined}
-      role={isInteractive ? 'button' : undefined}
-      tabIndex={isInteractive ? 0 : undefined}
+    <ColoredBadge
+      color={color}
+      size={size}
+      icon={showIcon && Icon ? <Icon className="size-full" /> : undefined}
+      removable={removable}
+      onRemove={onRemove}
+      onClick={onClick}
+      className={className}
+      {...props}
     >
-      {showIcon && Icon && <Icon className={iconSizes[size]} />}
-      <span className="truncate max-w-[150px]">{name}</span>
-      {removable && onRemove && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          className={cn(
-            'ml-0.5 -mr-1 rounded-full hover:bg-black/10 transition-colors',
-            size === 'sm' && 'p-0.5',
-            size === 'md' && 'p-0.5',
-            size === 'lg' && 'p-1'
-          )}
-          aria-label={`Remove ${name} concept`}
-        >
-          <X className={iconSizes[size]} />
-        </button>
-      )}
-    </span>
+      {name}
+    </ColoredBadge>
   );
 }
 
 /**
- * ConceptList - Display a list of concepts grouped or flat
+ * ConceptList - Display a list of concepts
  */
-interface ConceptListProps {
+export interface ConceptListProps {
   concepts: Array<{
     id: string;
     name: string;
@@ -179,43 +130,34 @@ export function ConceptList({
   className,
   maxVisible = 5,
 }: ConceptListProps) {
-  const visibleConcepts = maxVisible ? concepts.slice(0, maxVisible) : concepts;
-  const hiddenCount = concepts.length - visibleConcepts.length;
+  // Convert concepts to ColoredBadgeList format
+  const items = concepts.map((concept) => {
+    const Icon = ConceptTypeIcons[concept.conceptType];
+    return {
+      id: concept.id,
+      name: concept.name,
+      color: CONCEPT_TYPE_COLORS[concept.conceptType],
+      icon: showIcon && Icon ? <Icon className="size-full" /> : undefined,
+    };
+  });
 
   return (
-    <div className={cn('flex flex-wrap gap-1.5', className)}>
-      {visibleConcepts.map((concept) => (
-        <ConceptBadge
-          key={concept.id}
-          name={concept.name}
-          type={concept.conceptType}
-          size={size}
-          showIcon={showIcon}
-          removable={removable}
-          onRemove={onRemove ? () => onRemove(concept.id) : undefined}
-          onClick={onConceptClick ? () => onConceptClick(concept.id) : undefined}
-        />
-      ))}
-      {hiddenCount > 0 && (
-        <span
-          className={cn(
-            'inline-flex items-center rounded-full bg-muted text-muted-foreground',
-            size === 'sm' && 'text-xs px-2 py-0.5',
-            size === 'md' && 'text-sm px-2.5 py-1',
-            size === 'lg' && 'text-base px-3 py-1.5'
-          )}
-        >
-          +{hiddenCount} more
-        </span>
-      )}
-    </div>
+    <ColoredBadgeList
+      items={items}
+      size={size}
+      removable={removable}
+      onRemove={onRemove}
+      onItemClick={onConceptClick}
+      maxVisible={maxVisible}
+      className={className}
+    />
   );
 }
 
 /**
  * ConceptTypeLabel - Display a concept type as a label
  */
-interface ConceptTypeLabelProps {
+export interface ConceptTypeLabelProps {
   type: ConceptType;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
@@ -236,9 +178,9 @@ export function ConceptTypeLabel({
   };
 
   const iconSizes = {
-    sm: 'h-3 w-3',
-    md: 'h-3.5 w-3.5',
-    lg: 'h-4 w-4',
+    sm: 'size-3',
+    md: 'size-3.5',
+    lg: 'size-4',
   };
 
   // Format type for display
