@@ -10,11 +10,14 @@ import {
   Clock01Icon,
   SparklesIcon,
   BookOpen01Icon,
-  FilterIcon,
   Search01Icon,
   SortingAZ01Icon,
-  Tag01Icon,
   Cancel01Icon,
+  CheckmarkSquare01Icon,
+  SquareIcon,
+  ArrowDown01Icon,
+  Folder01Icon,
+  Tag01Icon,
 } from '@hugeicons/core-free-icons';
 
 import { cn } from '@/lib/utils';
@@ -28,6 +31,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/app/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/app/components/ui/command';
 import type { BlogPostCard, BlogPostCategory } from '@/lib/types/database';
 
 // Animation variants
@@ -105,12 +121,14 @@ const CATEGORY_COLORS: Record<BlogPostCategory, string> = {
  */
 export default function BlogPage() {
   const [posts, setPosts] = useState<BlogPostCard[]>([]);
-  const [featuredPosts, setFeaturedPosts] = useState<BlogPostCard[]>([]);
+  const [featuredPost, setFeaturedPost] = useState<BlogPostCard | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<BlogPostCategory | 'all'>('all');
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selectedCategories, setSelectedCategories] = useState<BlogPostCategory[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('newest');
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [tagOpen, setTagOpen] = useState(false);
 
   useEffect(() => {
     async function fetchPosts() {
@@ -120,8 +138,9 @@ export default function BlogPage() {
         const data = await response.json();
         setPosts(data.posts || []);
 
-        // Separate featured posts
-        setFeaturedPosts((data.posts || []).filter((p: BlogPostCard) => p.is_featured));
+        // Get the first featured post (only one can be featured)
+        const featured = (data.posts || []).find((p: BlogPostCard) => p.is_featured);
+        setFeaturedPost(featured || null);
       } catch (error) {
         console.error('Failed to fetch blog posts:', error);
       } finally {
@@ -145,14 +164,14 @@ export default function BlogPage() {
   const filteredPosts = useMemo(() => {
     let result = posts.filter(p => !p.is_featured);
 
-    // Category filter
-    if (selectedCategory !== 'all') {
-      result = result.filter(p => p.category === selectedCategory);
+    // Category filter (multi-select)
+    if (selectedCategories.length > 0) {
+      result = result.filter(p => selectedCategories.includes(p.category));
     }
 
-    // Tag filter
-    if (selectedTag) {
-      result = result.filter(p => p.tags?.includes(selectedTag));
+    // Tag filter (multi-select)
+    if (selectedTags.length > 0) {
+      result = result.filter(p => p.tags?.some(tag => selectedTags.includes(tag)));
     }
 
     // Search filter
@@ -185,7 +204,7 @@ export default function BlogPage() {
     }
 
     return result;
-  }, [posts, selectedCategory, selectedTag, searchQuery, sortBy]);
+  }, [posts, selectedCategories, selectedTags, searchQuery, sortBy]);
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '';
@@ -198,12 +217,30 @@ export default function BlogPage() {
 
   const clearFilters = () => {
     setSearchQuery('');
-    setSelectedCategory('all');
-    setSelectedTag(null);
+    setSelectedCategories([]);
+    setSelectedTags([]);
     setSortBy('newest');
   };
 
-  const hasActiveFilters = searchQuery || selectedCategory !== 'all' || selectedTag || sortBy !== 'newest';
+  const hasActiveFilters = searchQuery || selectedCategories.length > 0 || selectedTags.length > 0;
+
+  // Toggle category selection
+  const toggleCategory = (category: BlogPostCategory) => {
+    setSelectedCategories(prev =>
+      prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
+
+  // Toggle tag selection
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag)
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
+  };
 
   return (
     <main className="relative min-h-screen bg-background">
@@ -294,8 +331,8 @@ export default function BlogPage() {
           </motion.p>
         </motion.div>
 
-        {/* Featured Posts */}
-        {featuredPosts.length > 0 && (
+        {/* Featured Post - Single Hero */}
+        {featuredPost && (
           <motion.section
             className="mb-16 sm:mb-20"
             initial="hidden"
@@ -310,96 +347,107 @@ export default function BlogPage() {
               <h2 className="text-lg font-medium text-foreground">Featured</h2>
             </motion.div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {featuredPosts.slice(0, 2).map((post) => (
-                <motion.article
-                  key={post.id}
-                  variants={cardVariants}
-                  whileHover={{ y: -8, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
-                >
-                  <Link
-                    href={`/blog/${post.slug}`}
-                    className={cn(
-                      'group block relative rounded-2xl overflow-hidden h-full',
-                      'bg-card/50 backdrop-blur-sm',
-                      'border border-accent/30',
-                      'hover:border-accent/50 hover:shadow-[0_0_50px_rgba(0,223,130,0.15)]',
-                      'transition-all duration-500'
+            <motion.article
+              variants={cardVariants}
+              whileHover={{ y: -8, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
+            >
+              <Link
+                href={`/blog/${featuredPost.slug}`}
+                className={cn(
+                  'group block relative rounded-2xl overflow-hidden',
+                  'bg-card/50 backdrop-blur-sm',
+                  'border border-accent/30',
+                  'hover:border-accent/50 hover:shadow-[0_0_50px_rgba(0,223,130,0.15)]',
+                  'transition-all duration-500'
+                )}
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-2">
+                  {/* Featured image area - larger on single featured */}
+                  <div className="aspect-[16/10] lg:aspect-auto lg:min-h-[400px] bg-gradient-to-br from-accent/10 via-card to-secondary/10 relative">
+                    {featuredPost.featured_image_url ? (
+                      <Image
+                        src={featuredPost.featured_image_url}
+                        alt={featuredPost.title}
+                        fill
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <HugeiconsIcon icon={BookOpen01Icon} size={64} className="text-accent/30" />
+                      </div>
                     )}
-                  >
-                    {/* Featured image area */}
-                    <div className="aspect-[16/9] bg-gradient-to-br from-accent/10 via-card to-secondary/10 relative">
-                      {post.featured_image_url ? (
-                        <Image
-                          src={post.featured_image_url}
-                          alt={post.title}
-                          fill
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <HugeiconsIcon icon={BookOpen01Icon} size={48} className="text-accent/30" />
-                        </div>
-                      )}
-                      {/* Featured badge */}
-                      <div className="absolute top-4 left-4">
-                        <Badge
-                          className="bg-accent text-accent-foreground border-0"
-                        >
-                          <HugeiconsIcon icon={SparklesIcon} size={12} className="mr-1" />
-                          Featured
-                        </Badge>
-                      </div>
+                    {/* Featured badge */}
+                    <div className="absolute top-4 left-4">
+                      <Badge
+                        className="bg-accent text-accent-foreground border-0"
+                      >
+                        <HugeiconsIcon icon={SparklesIcon} size={12} className="mr-1" />
+                        Featured
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-8 lg:p-10 flex flex-col justify-center">
+                    <div className="flex items-center gap-3 mb-4">
+                      <Badge
+                        variant="outline"
+                        className={cn('text-xs', CATEGORY_COLORS[featuredPost.category])}
+                      >
+                        {featuredPost.category}
+                      </Badge>
+                      <span className="flex items-center text-sm text-muted-foreground">
+                        <HugeiconsIcon icon={Clock01Icon} size={14} className="mr-1" />
+                        {featuredPost.reading_time_minutes} min read
+                      </span>
                     </div>
 
-                    {/* Content */}
-                    <div className="p-6">
-                      <div className="flex items-center gap-3 mb-3">
-                        <Badge
-                          variant="outline"
-                          className={cn('text-xs', CATEGORY_COLORS[post.category])}
-                        >
-                          {post.category}
-                        </Badge>
-                        <span className="flex items-center text-xs text-muted-foreground">
-                          <HugeiconsIcon icon={Clock01Icon} size={12} className="mr-1" />
-                          {post.reading_time_minutes} min read
-                        </span>
+                    <h3 className="font-outfit text-2xl lg:text-3xl font-medium text-foreground mb-4 group-hover:text-accent transition-colors">
+                      {featuredPost.title}
+                    </h3>
+
+                    {featuredPost.excerpt && (
+                      <p className="text-base text-muted-foreground line-clamp-3 mb-6">
+                        {featuredPost.excerpt}
+                      </p>
+                    )}
+
+                    {/* Tags preview */}
+                    {featuredPost.tags && featuredPost.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-6">
+                        {featuredPost.tags.slice(0, 4).map((tag) => (
+                          <span
+                            key={tag}
+                            className="text-xs text-muted-foreground/70 bg-muted/30 px-2.5 py-1 rounded-full"
+                          >
+                            {tag}
+                          </span>
+                        ))}
                       </div>
+                    )}
 
-                      <h3 className="font-outfit text-xl font-medium text-foreground mb-2 group-hover:text-accent transition-colors">
-                        {post.title}
-                      </h3>
-
-                      {post.excerpt && (
-                        <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-                          {post.excerpt}
-                        </p>
-                      )}
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center">
-                            <span className="text-xs font-medium text-accent">
-                              {post.author_name.split(' ').map(n => n[0]).join('')}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-foreground">{post.author_name}</p>
-                            <p className="text-xs text-muted-foreground">{formatDate(post.published_at)}</p>
-                          </div>
+                    <div className="flex items-center justify-between pt-4 border-t border-border/30">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                          <span className="text-sm font-medium text-accent">
+                            {featuredPost.author_name.split(' ').map(n => n[0]).join('')}
+                          </span>
                         </div>
-
-                        <span className="flex items-center text-sm text-accent group-hover:translate-x-1 transition-transform">
-                          Read more
-                          <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="ml-1" />
-                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{featuredPost.author_name}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(featuredPost.published_at)}</p>
+                        </div>
                       </div>
+
+                      <span className="flex items-center text-sm font-medium text-accent group-hover:translate-x-1 transition-transform">
+                        Read article
+                        <HugeiconsIcon icon={ArrowRight01Icon} size={18} className="ml-2" />
+                      </span>
                     </div>
-                  </Link>
-                </motion.article>
-              ))}
-            </div>
+                  </div>
+                </div>
+              </Link>
+            </motion.article>
           </motion.section>
         )}
 
@@ -410,10 +458,10 @@ export default function BlogPage() {
           animate="visible"
           variants={fadeInUp}
         >
-          {/* Search and Sort Row */}
-          <div className="flex flex-col sm:flex-row gap-4">
+          {/* All Controls Row */}
+          <div className="flex flex-col lg:flex-row gap-3">
             {/* Search Input */}
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <HugeiconsIcon
                 icon={Search01Icon}
                 size={18}
@@ -437,10 +485,140 @@ export default function BlogPage() {
               )}
             </div>
 
+            {/* Filters Group */}
+            <div className="flex flex-wrap items-center gap-3">
+            {/* Category Multi-Select */}
+            <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={categoryOpen}
+                  className={cn(
+                    'w-[200px] justify-between bg-card/50 border-border/50',
+                    'hover:border-accent/30 transition-all duration-300',
+                    selectedCategories.length > 0 && 'border-accent/50 text-foreground'
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <HugeiconsIcon icon={Folder01Icon} size={16} className="text-muted-foreground shrink-0" />
+                    <span className="truncate">
+                      {selectedCategories.length === 0
+                        ? 'All Categories'
+                        : selectedCategories.length === 1
+                          ? CATEGORIES.find(c => c.value === selectedCategories[0])?.label
+                          : `${selectedCategories.length} categories`}
+                    </span>
+                  </div>
+                  <HugeiconsIcon
+                    icon={ArrowDown01Icon}
+                    size={16}
+                    className={cn(
+                      'ml-2 shrink-0 text-muted-foreground transition-transform duration-200',
+                      categoryOpen && 'rotate-180'
+                    )}
+                  />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[200px] p-0 bg-card/95 backdrop-blur-sm border-border/50" align="start">
+                <Command className="bg-transparent">
+                  <CommandInput placeholder="Search categories..." className="h-9 border-0" />
+                  <CommandList>
+                    <CommandEmpty>No category found.</CommandEmpty>
+                    <CommandGroup>
+                      {CATEGORIES.filter(c => c.value !== 'all').map((category) => (
+                        <CommandItem
+                          key={category.value}
+                          value={category.value}
+                          onSelect={() => toggleCategory(category.value as BlogPostCategory)}
+                          className="cursor-pointer"
+                        >
+                          <HugeiconsIcon
+                            icon={selectedCategories.includes(category.value as BlogPostCategory) ? CheckmarkSquare01Icon : SquareIcon}
+                            size={16}
+                            className={cn(
+                              'mr-2',
+                              selectedCategories.includes(category.value as BlogPostCategory) ? 'text-accent' : 'text-muted-foreground'
+                            )}
+                          />
+                          {category.label}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+
+            {/* Tags Multi-Select */}
+            {allTags.length > 0 && (
+              <Popover open={tagOpen} onOpenChange={setTagOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={tagOpen}
+                    className={cn(
+                      'w-[200px] justify-between bg-card/50 border-border/50',
+                      'hover:border-accent/30 transition-all duration-300',
+                      selectedTags.length > 0 && 'border-accent/50 text-foreground'
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <HugeiconsIcon icon={Tag01Icon} size={16} className="text-muted-foreground shrink-0" />
+                      <span className="truncate">
+                        {selectedTags.length === 0
+                          ? 'All Tags'
+                          : selectedTags.length === 1
+                            ? selectedTags[0]
+                            : `${selectedTags.length} tags`}
+                      </span>
+                    </div>
+                    <HugeiconsIcon
+                      icon={ArrowDown01Icon}
+                      size={16}
+                      className={cn(
+                        'ml-2 shrink-0 text-muted-foreground transition-transform duration-200',
+                        tagOpen && 'rotate-180'
+                      )}
+                    />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[220px] p-0 bg-card/95 backdrop-blur-sm border-border/50" align="start">
+                  <Command className="bg-transparent">
+                    <CommandInput placeholder="Search tags..." className="h-9 border-0" />
+                    <CommandList className="max-h-[250px]">
+                      <CommandEmpty>No tag found.</CommandEmpty>
+                      <CommandGroup>
+                        {allTags.map((tag) => (
+                          <CommandItem
+                            key={tag}
+                            value={tag}
+                            onSelect={() => toggleTag(tag)}
+                            className="cursor-pointer"
+                          >
+                            <HugeiconsIcon
+                              icon={selectedTags.includes(tag) ? CheckmarkSquare01Icon : SquareIcon}
+                              size={16}
+                              className={cn(
+                                'mr-2',
+                                selectedTags.includes(tag) ? 'text-accent' : 'text-muted-foreground'
+                              )}
+                            />
+                            {tag}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            )}
+
             {/* Sort Select */}
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-full sm:w-[180px] bg-card/50 border-border/50">
-                <HugeiconsIcon icon={SortingAZ01Icon} size={16} className="mr-2 text-muted-foreground" />
+              <SelectTrigger className="w-[170px] bg-card/50 border-border/50">
+                <HugeiconsIcon icon={SortingAZ01Icon} size={16} className="mr-2 text-muted-foreground shrink-0" />
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>
@@ -451,58 +629,45 @@ export default function BlogPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
 
-          {/* Category Filter */}
-          <div className="flex flex-wrap items-center gap-2">
-            <HugeiconsIcon icon={FilterIcon} size={16} className="text-muted-foreground" />
-            {CATEGORIES.map((cat) => (
-              <Button
-                key={cat.value}
-                variant="outline"
-                size="sm"
-                className={cn(
-                  'rounded-full transition-all duration-300',
-                  selectedCategory === cat.value
-                    ? 'bg-accent/10 border-accent/50 text-accent'
-                    : 'bg-card/50 border-border/50 text-muted-foreground hover:border-accent/30'
-                )}
-                onClick={() => setSelectedCategory(cat.value)}
-              >
-                {cat.label}
-              </Button>
-            ))}
-
+            {/* Clear Filters Button */}
             {hasActiveFilters && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="rounded-full text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={clearFilters}
               >
                 <HugeiconsIcon icon={Cancel01Icon} size={14} className="mr-1" />
                 Clear filters
               </Button>
             )}
+            </div>
           </div>
 
-          {/* Tags */}
-          {allTags.length > 0 && (
+          {/* Active Filters Display */}
+          {(selectedCategories.length > 0 || selectedTags.length > 0) && (
             <div className="flex flex-wrap items-center gap-2">
-              <HugeiconsIcon icon={Tag01Icon} size={16} className="text-muted-foreground" />
-              {allTags.map((tag) => (
+              {selectedCategories.map((cat) => (
+                <Badge
+                  key={cat}
+                  variant="outline"
+                  className="bg-accent/10 border-accent/30 text-accent cursor-pointer hover:bg-accent/20"
+                  onClick={() => toggleCategory(cat)}
+                >
+                  {CATEGORIES.find(c => c.value === cat)?.label}
+                  <HugeiconsIcon icon={Cancel01Icon} size={12} className="ml-1" />
+                </Badge>
+              ))}
+              {selectedTags.map((tag) => (
                 <Badge
                   key={tag}
                   variant="outline"
-                  className={cn(
-                    'cursor-pointer transition-all duration-300',
-                    selectedTag === tag
-                      ? 'bg-accent/10 border-accent/50 text-accent'
-                      : 'bg-card/30 border-border/30 text-muted-foreground hover:border-accent/30'
-                  )}
-                  onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                  className="bg-secondary/10 border-secondary/30 text-secondary cursor-pointer hover:bg-secondary/20"
+                  onClick={() => toggleTag(tag)}
                 >
                   {tag}
+                  <HugeiconsIcon icon={Cancel01Icon} size={12} className="ml-1" />
                 </Badge>
               ))}
             </div>
@@ -544,7 +709,7 @@ export default function BlogPage() {
             initial="hidden"
             animate="visible"
             variants={staggerContainer}
-            key={`${selectedCategory}-${selectedTag}-${searchQuery}-${sortBy}`}
+            key={`${selectedCategories.join(',')}-${selectedTags.join(',')}-${searchQuery}-${sortBy}`}
           >
             {filteredPosts.map((post) => (
               <motion.article

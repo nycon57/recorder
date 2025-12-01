@@ -1,26 +1,28 @@
 'use client';
 
 import { useState } from 'react';
+import * as motion from 'motion/react-client';
+import { HugeiconsIcon } from '@hugeicons/react';
+import type { IconSvgElement } from '@hugeicons/react';
 import {
-  Mic,
-  Brain,
-  Search,
-  MessageSquare,
-  FileText,
-  Users,
-  Network,
-  CloudUpload,
-  Check,
-  ArrowRight,
-  Sparkles,
-  Play,
-  Shield,
-  Globe,
-  Zap,
-  TrendingUp,
-  Clock,
-  Eye,
-} from 'lucide-react';
+  Mic01Icon,
+  AiBrain01Icon,
+  AiSearchIcon,
+  MessageMultiple01Icon,
+  File01Icon,
+  UserGroupIcon,
+  AiNetworkIcon,
+  Tick02Icon,
+  ArrowRight01Icon,
+  SparklesIcon,
+  PlayCircleIcon,
+  SecurityCheckIcon,
+  Globe02Icon,
+  ZapIcon,
+  Clock01Icon,
+  TrendingUp01Icon,
+  Layers01Icon,
+} from '@hugeicons/core-free-icons';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -30,6 +32,59 @@ import { Button } from '@/app/components/ui/button';
 import { Card, CardContent } from '@/app/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
 import { AuroraCTA } from '@/app/components/sections';
+
+// Spring configuration for natural feel (brand-compliant: max 500ms perceived duration)
+const springTransition = {
+  type: 'spring' as const,
+  stiffness: 400,
+  damping: 30,
+};
+
+// Stagger configuration for children
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: springTransition,
+  },
+};
+
+// Card variants for bento grid
+const cardVariants = {
+  hidden: { opacity: 0, y: 30, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: springTransition,
+  },
+};
+
+// Feature section variants
+const featureSectionVariants = {
+  hidden: { opacity: 0, y: 40 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: 'spring' as const,
+      stiffness: 300,
+      damping: 25,
+    },
+  },
+};
 
 /**
  * Features Page - Aurora Design System
@@ -47,20 +102,20 @@ import { AuroraCTA } from '@/app/components/sections';
 // ============================================================================
 
 interface Stat {
-  icon: typeof TrendingUp;
+  icon: IconSvgElement;
   value: string;
   label: string;
 }
 
 const HERO_STATS: Stat[] = [
-  { icon: TrendingUp, value: '95%', label: 'Transcription Accuracy' },
-  { icon: Clock, value: '<2min', label: 'Average Processing' },
-  { icon: Globe, value: '50+', label: 'Languages Supported' },
-  { icon: Shield, value: '100%', label: 'SOC 2 Compliant' },
+  { icon: Tick02Icon, value: '95%', label: 'Transcription Accuracy' },
+  { icon: Clock01Icon, value: '<2min', label: 'Average Processing' },
+  { icon: Globe02Icon, value: '50+', label: 'Languages Supported' },
+  { icon: SecurityCheckIcon, value: '100%', label: 'SOC 2 Compliant' },
 ];
 
 interface FeatureHighlight {
-  icon: typeof Mic;
+  icon: IconSvgElement;
   title: string;
   description: string;
   size?: 'normal' | 'large';
@@ -69,36 +124,36 @@ interface FeatureHighlight {
 
 const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
   {
-    icon: Mic,
+    icon: Mic01Icon,
     title: 'Browser Recording',
     description: 'Capture screen, camera, and audio instantly. No downloads or plugins required.',
     size: 'large',
     badge: 'Core Feature',
   },
   {
-    icon: Brain,
+    icon: AiBrain01Icon,
     title: 'AI Transcription',
     description: 'Whisper-powered with 95%+ accuracy across 50+ languages.',
   },
   {
-    icon: Search,
+    icon: AiSearchIcon,
     title: 'Semantic Search',
     description: 'Find anything with context-aware AI that understands meaning.',
   },
   {
-    icon: MessageSquare,
+    icon: MessageMultiple01Icon,
     title: 'RAG Assistant',
     description: 'Get instant answers with exact citations from your knowledge base.',
     size: 'large',
     badge: 'AI Powered',
   },
   {
-    icon: FileText,
+    icon: File01Icon,
     title: 'Auto Documentation',
     description: 'Transform recordings into structured docs automatically.',
   },
   {
-    icon: Network,
+    icon: AiNetworkIcon,
     title: 'Knowledge Graph',
     description: 'Cross-recording concept linking that compounds value over time.',
   },
@@ -106,7 +161,7 @@ const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
 
 interface DeepDiveFeature {
   id: string;
-  icon: typeof Mic;
+  icon: IconSvgElement;
   title: string;
   subtitle: string;
   description: string;
@@ -117,7 +172,7 @@ interface DeepDiveFeature {
 const DEEP_DIVE_FEATURES: DeepDiveFeature[] = [
   {
     id: 'recording',
-    icon: Mic,
+    icon: Mic01Icon,
     title: 'Browser-Based Recording',
     subtitle: 'Zero friction capture',
     description:
@@ -134,7 +189,7 @@ const DEEP_DIVE_FEATURES: DeepDiveFeature[] = [
   },
   {
     id: 'transcription',
-    icon: Brain,
+    icon: AiBrain01Icon,
     title: 'AI-Powered Transcription',
     subtitle: 'Words become searchable',
     description:
@@ -151,7 +206,7 @@ const DEEP_DIVE_FEATURES: DeepDiveFeature[] = [
   },
   {
     id: 'search',
-    icon: Search,
+    icon: AiSearchIcon,
     title: 'Semantic Search',
     subtitle: 'Find what you mean',
     description:
@@ -167,7 +222,7 @@ const DEEP_DIVE_FEATURES: DeepDiveFeature[] = [
   },
   {
     id: 'assistant',
-    icon: MessageSquare,
+    icon: MessageMultiple01Icon,
     title: 'RAG AI Assistant',
     subtitle: 'Your knowledge, conversational',
     description:
@@ -184,7 +239,7 @@ const DEEP_DIVE_FEATURES: DeepDiveFeature[] = [
   },
   {
     id: 'documentation',
-    icon: FileText,
+    icon: File01Icon,
     title: 'Auto Documentation',
     subtitle: 'Recordings become documents',
     description:
@@ -200,7 +255,7 @@ const DEEP_DIVE_FEATURES: DeepDiveFeature[] = [
   },
   {
     id: 'collaboration',
-    icon: Users,
+    icon: UserGroupIcon,
     title: 'Team Collaboration',
     subtitle: 'Knowledge multiplied',
     description:
@@ -275,24 +330,32 @@ function FeaturesHero() {
       </div>
 
       <div className="container px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="max-w-4xl mx-auto text-center">
+        <motion.div
+          className="max-w-4xl mx-auto text-center"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
           {/* Badge */}
-          <Badge
-            variant="outline"
-            className="mb-6 px-4 py-2 rounded-full
-              bg-accent/5 backdrop-blur-sm
-              border-accent/30"
-          >
-            <Sparkles className="h-4 w-4 mr-2 text-accent" />
-            <span className="text-sm font-medium text-accent">
-              Powerful Features
-            </span>
-          </Badge>
+          <motion.div variants={itemVariants}>
+            <Badge
+              variant="outline"
+              className="mb-6 px-4 py-2 rounded-full
+                bg-accent/5 backdrop-blur-sm
+                border-accent/30"
+            >
+              <HugeiconsIcon icon={SparklesIcon} size={16} className="mr-2 text-accent" />
+              <span className="text-sm font-medium text-accent">
+                Powerful Features
+              </span>
+            </Badge>
+          </motion.div>
 
           {/* Headline */}
-          <h1
+          <motion.h1
             className="font-outfit text-4xl sm:text-5xl lg:text-6xl xl:text-7xl
               font-light leading-[1.1] tracking-tight mb-6"
+            variants={itemVariants}
           >
             Everything you need to{' '}
             <span
@@ -301,53 +364,56 @@ function FeaturesHero() {
             >
               capture knowledge
             </span>
-          </h1>
+          </motion.h1>
 
           {/* Subheadline */}
-          <p
+          <motion.p
             className="text-lg sm:text-xl text-muted-foreground font-light
               max-w-2xl mx-auto mb-12"
+            variants={itemVariants}
           >
             From recording to AI-powered answers, transform tacit expertise into
             searchable intelligence that compounds over time.
-          </p>
+          </motion.p>
 
           {/* Stats */}
-          <div
+          <motion.div
             className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8
               pt-8 border-t border-border/30"
+            variants={itemVariants}
           >
-            {HERO_STATS.map((stat, index) => {
-              const Icon = stat.icon;
-              return (
-                <div
-                  key={index}
-                  className={cn(
-                    'group flex flex-col items-center p-4 rounded-xl',
-                    'transition-all duration-300',
-                    'hover:bg-accent/5'
-                  )}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Icon
-                      className={cn(
-                        'h-5 w-5 text-accent',
-                        'transition-transform duration-300',
-                        'group-hover:scale-110'
-                      )}
-                    />
-                    <span className="text-2xl sm:text-3xl font-light text-foreground">
-                      {stat.value}
-                    </span>
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {stat.label}
+            {HERO_STATS.map((stat, index) => (
+              <motion.div
+                key={index}
+                className={cn(
+                  'group flex flex-col items-center p-4 rounded-xl',
+                  'transition-all duration-300',
+                  'hover:bg-accent/5'
+                )}
+                whileHover={{ scale: 1.05 }}
+                transition={springTransition}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <HugeiconsIcon
+                    icon={stat.icon}
+                    size={20}
+                    className={cn(
+                      'text-accent',
+                      'transition-transform duration-300',
+                      'group-hover:scale-110'
+                    )}
+                  />
+                  <span className="text-2xl sm:text-3xl font-light text-foreground">
+                    {stat.value}
                   </span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
+                <span className="text-sm text-muted-foreground">
+                  {stat.label}
+                </span>
+              </motion.div>
+            ))}
+          </motion.div>
+        </motion.div>
       </div>
     </section>
   );
@@ -376,10 +442,17 @@ function FeatureHighlights() {
 
       <div className="container px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-12 sm:mb-16">
-          <h2
+        <motion.div
+          className="text-center max-w-3xl mx-auto mb-12 sm:mb-16"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-100px' }}
+          variants={containerVariants}
+        >
+          <motion.h2
             className="font-outfit text-3xl sm:text-4xl lg:text-5xl font-light
               leading-tight tracking-tight mb-4"
+            variants={itemVariants}
           >
             Feature{' '}
             <span
@@ -388,16 +461,25 @@ function FeatureHighlights() {
             >
               highlights
             </span>
-          </h2>
-          <p className="text-lg text-muted-foreground font-light">
+          </motion.h2>
+          <motion.p className="text-lg text-muted-foreground font-light" variants={itemVariants}>
             Six core capabilities that transform how teams capture and share knowledge.
-          </p>
-        </div>
+          </motion.p>
+        </motion.div>
 
         {/* === BENTO GRID (Feature261 Pattern) === */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-6 lg:grid-cols-12 max-w-7xl mx-auto">
+        <motion.div
+          className="grid grid-cols-1 gap-4 md:grid-cols-6 lg:grid-cols-12 max-w-7xl mx-auto"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-50px' }}
+          variants={containerVariants}
+        >
           {/* Image Card - Recording Visual (tall, left) */}
-          <div className="relative h-60 overflow-hidden rounded-3xl md:col-span-2 md:row-span-2 md:h-[400px] lg:col-span-4 lg:h-full group">
+          <motion.div
+            className="relative h-60 overflow-hidden rounded-3xl md:col-span-2 md:row-span-2 md:h-[400px] lg:col-span-4 lg:h-full group"
+            variants={cardVariants}
+          >
             <img
               src="https://images.unsplash.com/photo-1551434678-e076c223a692?q=80&w=2070&auto=format&fit=crop"
               alt="Team using Tribora for knowledge capture"
@@ -414,13 +496,16 @@ function FeatureHighlights() {
             </div>
             <div className="absolute right-6 top-6 z-10">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/20 backdrop-blur-sm border border-accent/30 transition-all duration-300 group-hover:scale-110 group-hover:bg-accent/30">
-                <Mic className="h-6 w-6 text-accent" />
+                <HugeiconsIcon icon={Mic01Icon} size={24} className="text-accent" />
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Image Card - AI Visual */}
-          <div className="relative h-60 overflow-hidden rounded-3xl border border-border/50 md:col-span-2 md:row-span-2 md:h-[400px] lg:col-span-4 lg:h-full group">
+          <motion.div
+            className="relative h-60 overflow-hidden rounded-3xl border border-border/50 md:col-span-2 md:row-span-2 md:h-[400px] lg:col-span-4 lg:h-full group"
+            variants={cardVariants}
+          >
             <img
               src="https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=2070&auto=format&fit=crop"
               alt="AI-powered transcription"
@@ -432,189 +517,206 @@ function FeatureHighlights() {
                 AI transforms your words into searchable, structured knowledge.
               </h3>
             </div>
-          </div>
+          </motion.div>
 
           {/* Stats Card - Accuracy */}
-          <Card className="col-span-1 rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:col-span-2 md:row-span-1 md:h-[192px] lg:col-span-2 group hover:border-accent/30 hover:shadow-[0_0_40px_rgba(0,223,130,0.1)] transition-all duration-500">
-            <CardContent className="flex h-full flex-col justify-center p-4 md:p-6">
-              <div className="mb-2 text-4xl font-bold md:text-4xl lg:text-6xl">
-                <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
-                  95
-                </span>
-                <span className="align-top text-2xl md:text-xl lg:text-3xl text-accent">
-                  %
-                </span>
-              </div>
-              <p className="text-sm leading-tight text-muted-foreground md:text-sm">
-                Transcription accuracy
-                <br />
-                powered by Whisper AI
-              </p>
-            </CardContent>
-          </Card>
+          <motion.div variants={cardVariants} className="col-span-1 md:col-span-2 md:row-span-1 lg:col-span-2">
+            <Card className="h-full rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:h-[192px] group hover:border-accent/30 hover:shadow-[0_0_40px_rgba(0,223,130,0.1)] transition-all duration-500">
+              <CardContent className="flex h-full flex-col justify-center p-4 md:p-6">
+                <div className="mb-2 text-4xl font-bold md:text-4xl lg:text-6xl">
+                  <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
+                    95
+                  </span>
+                  <span className="align-top text-2xl md:text-xl lg:text-3xl text-accent">
+                    %
+                  </span>
+                </div>
+                <p className="text-sm leading-tight text-muted-foreground md:text-sm">
+                  Transcription accuracy
+                  <br />
+                  powered by Whisper AI
+                </p>
+              </CardContent>
+            </Card>
+          </motion.div>
 
           {/* Image Card - Small */}
-          <div className="relative col-span-1 h-60 overflow-hidden rounded-3xl border border-border/50 md:col-span-2 md:row-span-1 md:h-[192px] lg:col-span-2 group">
+          <motion.div
+            className="relative col-span-1 h-60 overflow-hidden rounded-3xl border border-border/50 md:col-span-2 md:row-span-1 md:h-[192px] lg:col-span-2 group"
+            variants={cardVariants}
+          >
             <img
               src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=2070&auto=format&fit=crop"
               alt="Team collaboration"
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
-          </div>
+          </motion.div>
 
           {/* Feature Card - RAG Assistant (large) */}
-          <Card className="bg-gradient-to-br from-accent/10 via-card/80 to-secondary/10 col-span-1 rounded-3xl border-border/50 backdrop-blur-sm md:col-span-4 md:row-span-1 md:h-[300px] lg:col-span-4 group hover:border-accent/30 hover:shadow-[0_0_50px_rgba(0,223,130,0.15)] transition-all duration-500">
-            <CardContent className="h-full p-4 md:p-6">
-              <div className="flex h-full flex-col justify-end">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/20 transition-all duration-300 group-hover:scale-110 group-hover:bg-accent/30">
-                      <MessageSquare className="h-5 w-5 text-accent" />
+          <motion.div variants={cardVariants} className="col-span-1 md:col-span-4 lg:col-span-4">
+            <Card className="h-full bg-gradient-to-br from-accent/10 via-card/80 to-secondary/10 rounded-3xl border-border/50 backdrop-blur-sm md:h-[300px] group hover:border-accent/30 hover:shadow-[0_0_50px_rgba(0,223,130,0.15)] transition-all duration-500">
+              <CardContent className="h-full p-4 md:p-6">
+                <div className="flex h-full flex-col justify-end">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/20 transition-all duration-300 group-hover:scale-110 group-hover:bg-accent/30">
+                        <HugeiconsIcon icon={MessageMultiple01Icon} size={20} className="text-accent" />
+                      </div>
+                      <Badge variant="outline" className="bg-accent/10 border-accent/30 text-accent text-xs">
+                        <HugeiconsIcon icon={SparklesIcon} size={12} className="mr-1" />
+                        AI Powered
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="bg-accent/10 border-accent/30 text-accent text-xs">
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      AI Powered
-                    </Badge>
+                    <div className="text-2xl font-medium md:text-3xl lg:text-4xl text-foreground">
+                      RAG Assistant
+                    </div>
+                    <div className="text-muted-foreground text-sm">
+                      Ask questions, get answers with exact citations
+                    </div>
+                    <Button asChild className="rounded-full bg-gradient-to-r from-accent to-secondary text-accent-foreground hover:shadow-[0_0_30px_rgba(0,223,130,0.4)] transition-all duration-300">
+                      <Link href="/features/assistant">
+                        Try Assistant
+                        <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="ml-2" />
+                      </Link>
+                    </Button>
                   </div>
-                  <div className="text-2xl font-medium md:text-3xl lg:text-4xl text-foreground">
-                    RAG Assistant
-                  </div>
-                  <div className="text-muted-foreground text-sm">
-                    Ask questions, get answers with exact citations
-                  </div>
-                  <Button asChild className="rounded-full bg-gradient-to-r from-accent to-secondary text-accent-foreground hover:shadow-[0_0_30px_rgba(0,223,130,0.4)] transition-all duration-300">
-                    <Link href="/features/assistant">
-                      Try Assistant
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Link>
-                  </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </motion.div>
 
           {/* Stats Card - Languages */}
-          <Card className="col-span-1 rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:col-span-2 md:row-span-1 md:h-[300px] lg:col-span-3 group hover:border-accent/30 hover:shadow-[0_0_40px_rgba(0,223,130,0.1)] transition-all duration-500">
-            <CardContent className="flex h-full flex-col justify-center p-4 md:p-5">
-              <div className="mb-3">
-                <span className="text-4xl font-bold md:text-3xl lg:text-6xl bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
-                  50
-                </span>
-                <span className="align-top text-2xl font-bold md:text-xl lg:text-3xl text-accent">
-                  +
-                </span>
-              </div>
-              <p className="mb-4 text-sm text-muted-foreground md:text-sm">
-                Languages supported worldwide
-              </p>
-              <div className="flex -space-x-2">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <Avatar
-                    key={i}
-                    className="border-background h-8 w-8 border-2 md:h-8 md:w-8 lg:h-10 lg:w-10 ring-2 ring-accent/20"
-                  >
-                    <AvatarImage src={`https://i.pravatar.cc/100?img=${i + 20}`} />
-                    <AvatarFallback className="bg-accent/20 text-accent text-xs">
-                      {['EN', 'ES', 'FR', 'DE', 'JP'][i - 1]}
-                    </AvatarFallback>
-                  </Avatar>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <motion.div variants={cardVariants} className="col-span-1 md:col-span-2 lg:col-span-3">
+            <Card className="h-full rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:h-[300px] group hover:border-accent/30 hover:shadow-[0_0_40px_rgba(0,223,130,0.1)] transition-all duration-500">
+              <CardContent className="flex h-full flex-col justify-center p-4 md:p-5">
+                <div className="mb-3">
+                  <span className="text-4xl font-bold md:text-3xl lg:text-6xl bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
+                    50
+                  </span>
+                  <span className="align-top text-2xl font-bold md:text-xl lg:text-3xl text-accent">
+                    +
+                  </span>
+                </div>
+                <p className="mb-4 text-sm text-muted-foreground md:text-sm">
+                  Languages supported worldwide
+                </p>
+                <div className="flex -space-x-2">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Avatar
+                      key={i}
+                      className="border-background h-8 w-8 border-2 md:h-8 md:w-8 lg:h-10 lg:w-10 ring-2 ring-accent/20"
+                    >
+                      <AvatarImage src={`https://i.pravatar.cc/100?img=${i + 20}`} />
+                      <AvatarFallback className="bg-accent/20 text-accent text-xs">
+                        {['EN', 'ES', 'FR', 'DE', 'JP'][i - 1]}
+                      </AvatarFallback>
+                    </Avatar>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
           {/* Image Card - Wide */}
-          <Card className="relative col-span-1 h-60 overflow-hidden rounded-3xl border-border/50 md:col-span-3 md:row-span-1 md:h-[300px] lg:col-span-5 group">
-            <img
-              src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=2015&auto=format&fit=crop"
-              alt="Analytics dashboard"
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/40 to-transparent" />
-            <div className="absolute bottom-6 left-6 z-10">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary/20 backdrop-blur-sm">
-                  <Search className="h-4 w-4 text-secondary" />
+          <motion.div variants={cardVariants} className="col-span-1 md:col-span-3 lg:col-span-5">
+            <Card className="h-full relative overflow-hidden rounded-3xl border-border/50 md:h-[300px] group">
+              <img
+                src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=2015&auto=format&fit=crop"
+                alt="Analytics dashboard"
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/40 to-transparent" />
+              <div className="absolute bottom-6 left-6 z-10">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary/20 backdrop-blur-sm">
+                    <HugeiconsIcon icon={AiSearchIcon} size={16} className="text-secondary" />
+                  </div>
+                  <span className="text-sm font-medium text-foreground">
+                    Semantic Search
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-foreground">
-                  Semantic Search
-                </span>
+                <p className="text-sm text-muted-foreground max-w-xs">
+                  Find anything instantly with AI that understands meaning
+                </p>
               </div>
-              <p className="text-sm text-muted-foreground max-w-xs">
-                Find anything instantly with AI that understands meaning
-              </p>
-            </div>
-          </Card>
+            </Card>
+          </motion.div>
 
           {/* Image Card with Overlay - Knowledge Graph */}
-          <Card className="relative col-span-1 h-60 overflow-hidden rounded-3xl border-border/50 md:col-span-3 md:row-span-1 md:h-[300px] lg:col-span-4 group">
-            <img
-              src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2034&auto=format&fit=crop"
-              alt="Knowledge connections"
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
-            <div className="absolute inset-0 z-10 flex items-center justify-start p-4 md:p-6">
-              <div>
-                <div className="mb-3 flex items-center gap-2 md:gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent/20 backdrop-blur-sm md:h-10 md:w-10 transition-all duration-300 group-hover:scale-110">
-                    <Network className="h-4 w-4 md:h-5 md:w-5 text-accent" />
+          <motion.div variants={cardVariants} className="col-span-1 md:col-span-3 lg:col-span-4">
+            <Card className="h-full relative overflow-hidden rounded-3xl border-border/50 md:h-[300px] group">
+              <img
+                src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2034&auto=format&fit=crop"
+                alt="Knowledge connections"
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
+              <div className="absolute inset-0 z-10 flex items-center justify-start p-4 md:p-6">
+                <div>
+                  <div className="mb-3 flex items-center gap-2 md:gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent/20 backdrop-blur-sm md:h-10 md:w-10 transition-all duration-300 group-hover:scale-110">
+                      <HugeiconsIcon icon={AiNetworkIcon} size={20} className="text-accent" />
+                    </div>
+                    <span className="text-base font-semibold md:text-lg text-foreground">
+                      Knowledge Graph
+                    </span>
                   </div>
-                  <span className="text-base font-semibold md:text-lg text-foreground">
-                    Knowledge Graph
-                  </span>
+                  <p className="text-sm text-muted-foreground md:text-sm max-w-xs">
+                    Concepts link across recordings
+                    <br />
+                    <span className="text-sm font-medium text-accent">
+                      compounding value over time
+                    </span>
+                  </p>
                 </div>
-                <p className="text-sm text-muted-foreground md:text-sm max-w-xs">
-                  Concepts link across recordings
-                  <br />
-                  <span className="text-sm font-medium text-accent">
-                    compounding value over time
-                  </span>
-                </p>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </motion.div>
 
           {/* Stats Card - Processing */}
-          <Card className="col-span-1 rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:col-span-3 md:row-span-1 md:h-[200px] lg:col-span-6 group hover:border-accent/30 hover:shadow-[0_0_40px_rgba(0,223,130,0.1)] transition-all duration-500">
-            <CardContent className="flex h-full flex-row items-center gap-6 p-4 md:p-6">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent/20">
-                <Clock className="h-7 w-7 text-accent" />
-              </div>
-              <div>
-                <div className="mb-1 text-3xl font-bold md:text-4xl lg:text-5xl">
-                  <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
-                    &lt;2
-                  </span>
-                  <span className="text-lg md:text-xl lg:text-2xl text-accent ml-1">
-                    min
-                  </span>
+          <motion.div variants={cardVariants} className="col-span-1 md:col-span-3 lg:col-span-6">
+            <Card className="h-full rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:h-[200px] group hover:border-accent/30 hover:shadow-[0_0_40px_rgba(0,223,130,0.1)] transition-all duration-500">
+              <CardContent className="flex h-full flex-row items-center gap-6 p-4 md:p-6">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent/20">
+                  <HugeiconsIcon icon={Clock01Icon} size={28} className="text-accent" />
                 </div>
-                <p className="text-sm leading-tight text-muted-foreground">
-                  Average processing time for any recording
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+                <div>
+                  <div className="mb-1 text-3xl font-bold md:text-4xl lg:text-5xl">
+                    <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
+                      &lt;2
+                    </span>
+                    <span className="text-lg md:text-xl lg:text-2xl text-accent ml-1">
+                      min
+                    </span>
+                  </div>
+                  <p className="text-sm leading-tight text-muted-foreground">
+                    Average processing time for any recording
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
           {/* Feature Card - Auto Docs */}
-          <Card className="col-span-1 rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:col-span-3 md:row-span-1 md:h-[200px] lg:col-span-6 group hover:border-secondary/30 hover:shadow-[0_0_40px_rgba(44,194,149,0.1)] transition-all duration-500">
-            <CardContent className="flex h-full flex-row items-center gap-6 p-4 md:p-6">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-secondary/20 transition-all duration-300 group-hover:scale-110 group-hover:bg-secondary/30">
-                <FileText className="h-7 w-7 text-secondary" />
-              </div>
-              <div>
-                <h3 className="text-xl font-medium mb-1 group-hover:text-secondary transition-colors">
-                  Auto Documentation
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Recordings transform into structured, searchable docs instantly
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+          <motion.div variants={cardVariants} className="col-span-1 md:col-span-3 lg:col-span-6">
+            <Card className="h-full rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:h-[200px] group hover:border-secondary/30 hover:shadow-[0_0_40px_rgba(44,194,149,0.1)] transition-all duration-500">
+              <CardContent className="flex h-full flex-row items-center gap-6 p-4 md:p-6">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-secondary/20 transition-all duration-300 group-hover:scale-110 group-hover:bg-secondary/30">
+                  <HugeiconsIcon icon={File01Icon} size={28} className="text-secondary" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-medium mb-1 group-hover:text-secondary transition-colors">
+                    Auto Documentation
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Recordings transform into structured, searchable docs instantly
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </motion.div>
       </div>
     </section>
   );
@@ -630,19 +732,28 @@ function DeepDiveFeatures() {
     <section className="relative py-16 sm:py-20 lg:py-24">
       <div className="container px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16 sm:mb-20">
-          <Badge
-            variant="outline"
-            className="mb-6 px-4 py-2 rounded-full
-              bg-accent/5 backdrop-blur-sm border-accent/30"
-          >
-            <Eye className="h-4 w-4 mr-2 text-accent" />
-            <span className="text-sm font-medium text-accent">Deep Dive</span>
-          </Badge>
+        <motion.div
+          className="text-center max-w-3xl mx-auto mb-16 sm:mb-20"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-100px' }}
+          variants={containerVariants}
+        >
+          <motion.div variants={itemVariants}>
+            <Badge
+              variant="outline"
+              className="mb-6 px-4 py-2 rounded-full
+                bg-accent/5 backdrop-blur-sm border-accent/30"
+            >
+              <HugeiconsIcon icon={Layers01Icon} size={16} className="mr-2 text-accent" />
+              <span className="text-sm font-medium text-accent">Deep Dive</span>
+            </Badge>
+          </motion.div>
 
-          <h2
+          <motion.h2
             className="font-outfit text-3xl sm:text-4xl lg:text-5xl font-light
               leading-tight tracking-tight mb-4"
+            variants={itemVariants}
           >
             Explore every{' '}
             <span
@@ -651,24 +762,27 @@ function DeepDiveFeatures() {
             >
               capability
             </span>
-          </h2>
-          <p className="text-lg text-muted-foreground font-light">
+          </motion.h2>
+          <motion.p className="text-lg text-muted-foreground font-light" variants={itemVariants}>
             Detailed look at how each feature helps you capture and leverage knowledge.
-          </p>
-        </div>
+          </motion.p>
+        </motion.div>
 
         {/* Feature Sections */}
         <div className="max-w-6xl mx-auto space-y-24 sm:space-y-32">
           {DEEP_DIVE_FEATURES.map((feature, index) => {
-            const Icon = feature.icon;
             const isEven = index % 2 === 0;
 
             return (
-              <div
+              <motion.div
                 key={feature.id}
                 className={cn(
                   'grid lg:grid-cols-2 gap-12 lg:gap-16 items-center'
                 )}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, margin: '-50px' }}
+                variants={featureSectionVariants}
                 onMouseEnter={() => setHoveredFeature(feature.id)}
                 onMouseLeave={() => setHoveredFeature(null)}
                 onFocus={() => setHoveredFeature(feature.id)}
@@ -684,7 +798,7 @@ function DeepDiveFeatures() {
                       className="mb-4 px-3 py-1 rounded-full
                         bg-accent/10 border-accent/30 text-accent text-xs"
                     >
-                      <Sparkles className="h-3 w-3 mr-1" />
+                      <HugeiconsIcon icon={SparklesIcon} size={12} className="mr-1" />
                       {feature.badge}
                     </Badge>
                   )}
@@ -700,7 +814,7 @@ function DeepDiveFeatures() {
                         hoveredFeature === feature.id && 'bg-accent/20 scale-110'
                       )}
                     >
-                      <Icon className="h-7 w-7 text-accent" />
+                      <HugeiconsIcon icon={feature.icon} size={28} className="text-accent" />
                     </div>
                     <div>
                       <p className="text-sm text-accent font-medium">
@@ -728,28 +842,26 @@ function DeepDiveFeatures() {
                             'flex items-center justify-center'
                           )}
                         >
-                          <Check className="h-3 w-3 text-accent" />
+                          <HugeiconsIcon icon={Tick02Icon} size={12} className="text-accent" />
                         </div>
                         <span className="text-foreground/80">{bullet}</span>
                       </li>
                     ))}
+                  </ul>
                   <Button
                     asChild
                     variant="outline"
                     className={cn(
                       'rounded-full group/btn',
                       'border-accent/30 hover:border-accent/50',
-                      'hover:bg-accent/5'
+                      'hover:bg-accent/5 hover:text-accent'
                     )}
                   >
                     <Link href={`/features/${feature.id}`}>
                       Learn more
-                      <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
+                      <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="ml-2 transition-transform group-hover/btn:translate-x-1" />
                     </Link>
                   </Button>
-                      <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
-                    </Button>
-                  </Link>
                 </div>
 
                 {/* Visual */}
@@ -792,7 +904,7 @@ function DeepDiveFeatures() {
                             hoveredFeature === feature.id && 'scale-110'
                           )}
                         >
-                          <Icon className="h-10 w-10 text-accent" />
+                          <HugeiconsIcon icon={feature.icon} size={40} className="text-accent" />
                         </div>
                         <p className="text-sm text-muted-foreground">
                           [{feature.title} Demo]
@@ -817,12 +929,12 @@ function DeepDiveFeatures() {
                           'shadow-[0_0_30px_rgba(0,223,130,0.5)]'
                         )}
                       >
-                        <Play className="h-8 w-8 text-accent-foreground ml-1" />
+                        <HugeiconsIcon icon={PlayCircleIcon} size={32} className="text-accent-foreground ml-1" />
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -852,19 +964,28 @@ function ComparisonMatrix() {
 
       <div className="container px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-12 sm:mb-16">
-          <Badge
-            variant="outline"
-            className="mb-6 px-4 py-2 rounded-full
-              bg-accent/5 backdrop-blur-sm border-accent/30"
-          >
-            <Zap className="h-4 w-4 mr-2 text-accent" />
-            <span className="text-sm font-medium text-accent">Comparison</span>
-          </Badge>
+        <motion.div
+          className="text-center max-w-3xl mx-auto mb-12 sm:mb-16"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-100px' }}
+          variants={containerVariants}
+        >
+          <motion.div variants={itemVariants}>
+            <Badge
+              variant="outline"
+              className="mb-6 px-4 py-2 rounded-full
+                bg-accent/5 backdrop-blur-sm border-accent/30"
+            >
+              <HugeiconsIcon icon={ZapIcon} size={16} className="mr-2 text-accent" />
+              <span className="text-sm font-medium text-accent">Comparison</span>
+            </Badge>
+          </motion.div>
 
-          <h2
+          <motion.h2
             className="font-outfit text-3xl sm:text-4xl lg:text-5xl font-light
               leading-tight tracking-tight mb-4"
+            variants={itemVariants}
           >
             How Tribora{' '}
             <span
@@ -873,14 +994,20 @@ function ComparisonMatrix() {
             >
               compares
             </span>
-          </h2>
-          <p className="text-lg text-muted-foreground font-light">
+          </motion.h2>
+          <motion.p className="text-lg text-muted-foreground font-light" variants={itemVariants}>
             See why knowledge-driven teams choose Tribora over alternatives.
-          </p>
-        </div>
+          </motion.p>
+        </motion.div>
 
         {/* Table */}
-        <div className="max-w-5xl mx-auto">
+        <motion.div
+          className="max-w-5xl mx-auto"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-50px' }}
+          variants={cardVariants}
+        >
           <div
             className={cn(
               'rounded-2xl overflow-hidden',
@@ -936,7 +1063,7 @@ function ComparisonMatrix() {
                                 className="w-6 h-6 rounded-full bg-accent/20
                                   flex items-center justify-center"
                               >
-                                <Check className="h-4 w-4 text-accent" />
+                                <HugeiconsIcon icon={Tick02Icon} size={16} className="text-accent" />
                               </div>
                             </div>
                           ) : (
@@ -951,7 +1078,7 @@ function ComparisonMatrix() {
                       <td className="p-4 sm:p-6 text-center">
                         {typeof row.competitorA === 'boolean' ? (
                           row.competitorA ? (
-                            <Check className="h-4 w-4 text-muted-foreground mx-auto" />
+                            <HugeiconsIcon icon={Tick02Icon} size={16} className="text-muted-foreground mx-auto" />
                           ) : (
                             <span className="text-muted-foreground/50">—</span>
                           )
@@ -964,7 +1091,7 @@ function ComparisonMatrix() {
                       <td className="p-4 sm:p-6 text-center">
                         {typeof row.competitorB === 'boolean' ? (
                           row.competitorB ? (
-                            <Check className="h-4 w-4 text-muted-foreground mx-auto" />
+                            <HugeiconsIcon icon={Tick02Icon} size={16} className="text-muted-foreground mx-auto" />
                           ) : (
                             <span className="text-muted-foreground/50">—</span>
                           )
@@ -980,7 +1107,7 @@ function ComparisonMatrix() {
               </table>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
     </section>
   );

@@ -247,7 +247,7 @@ export default function AuroraNavbar() {
           : 'bg-transparent border-b border-transparent'
       )}
     >
-      <div className="container">
+      <div className="container px-4 sm:px-6 lg:px-8">
         <nav className="flex items-center justify-between h-16 sm:h-18 lg:h-20">
           {/* Logo */}
           <Link
@@ -363,6 +363,7 @@ export default function AuroraNavbar() {
               </SheetTrigger>
               <SheetContent
                 side="right"
+                hideCloseButton
                 className={cn(
                   'w-[85vw] max-w-[320px] p-0',
                   'bg-background/98 backdrop-blur-xl',
@@ -619,26 +620,25 @@ function DesktopMenuItem({ item, isScrolled }: DesktopMenuItemProps) {
                 variants={dropdownFooterVariants}
                 className="mt-2 pt-2 border-t border-border/30"
               >
-                <NavigationMenuLink asChild>
-                  <Link
-                    href="/features"
+                <Link
+                  href="/features"
+                  className={cn(
+                    'group inline-flex items-center justify-center gap-2 w-full',
+                    'rounded-lg px-3 py-2.5',
+                    'text-xs font-medium text-muted-foreground/80',
+                    'transition-all duration-300',
+                    'hover:text-accent hover:bg-accent/5'
+                  )}
+                >
+                  <span>View all features</span>
+                  <ArrowRight
                     className={cn(
-                      'group flex items-center gap-2 rounded-lg px-3 py-2',
-                      'text-xs font-medium text-muted-foreground/80',
-                      'transition-all duration-300',
-                      'hover:text-accent hover:bg-accent/5'
+                      'h-3.5 w-3.5',
+                      'transition-transform duration-300',
+                      'group-hover:translate-x-1'
                     )}
-                  >
-                    <span>View all features</span>
-                    <ArrowRight
-                      className={cn(
-                        'h-3.5 w-3.5',
-                        'transition-transform duration-300',
-                        'group-hover:translate-x-1'
-                      )}
-                    />
-                  </Link>
-                </NavigationMenuLink>
+                  />
+                </Link>
               </motion.div>
             )}
           </div>

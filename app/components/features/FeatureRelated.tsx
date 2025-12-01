@@ -174,7 +174,7 @@ export function FeatureRelated({ currentFeatureId, relatedIds }: FeatureRelatedP
                 <Button
                   variant="outline"
                   size="lg"
-                  className="rounded-full border-accent/30 hover:border-accent/50 hover:bg-accent/5"
+                  className="rounded-full border-accent/30 hover:border-accent/50 hover:bg-accent/5 hover:text-accent"
                 >
                   View All Features
                   <ArrowRight className="h-4 w-4 ml-2" />
