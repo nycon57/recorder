@@ -30,6 +30,9 @@ import {
   CONTENT_TYPE_COLORS,
   CONTENT_TYPE_LABELS,
   FILE_SIZE_LIMIT_LABELS,
+  DURATION_LIMITS,
+  DURATION_LIMIT_LABELS,
+  formatDurationSeconds,
 } from '@/lib/types/content';
 import {
   fetchWithRetry,
@@ -57,6 +60,41 @@ interface UploadFile {
   error?: string;
   recordingId?: string;
   retryCount?: number;
+  duration?: number; // Duration in seconds for video/audio files
+}
+
+/**
+ * Get the duration of a video or audio file
+ * Returns duration in seconds, or null if unable to determine
+ */
+async function getMediaDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const isVideo = file.type.startsWith('video/');
+    const element = isVideo
+      ? document.createElement('video')
+      : document.createElement('audio');
+
+    element.preload = 'metadata';
+
+    element.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(element.duration);
+    };
+
+    element.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null); // Unable to determine duration
+    };
+
+    // Timeout after 10 seconds
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    }, 10000);
+
+    element.src = url;
+  });
 }
 
 interface UploadModalProps {
@@ -94,14 +132,26 @@ export default function UploadModal({
 
   /**
    * Handle file selection from input or drag-drop
+   * Now async to support duration validation for video/audio files
    */
-  const handleFiles = useCallback((fileList: FileList | null) => {
+  const handleFiles = useCallback(async (fileList: FileList | null) => {
     if (!fileList) return;
 
     const newFiles: UploadFile[] = [];
 
-    Array.from(fileList).forEach((file) => {
-      const validation = validateFileForUpload(file);
+    // Process files sequentially to handle async duration checks
+    for (const file of Array.from(fileList)) {
+      // For video/audio files, get duration for validation
+      const isMediaFile = file.type.startsWith('video/') || file.type.startsWith('audio/');
+      let duration: number | undefined;
+
+      if (isMediaFile) {
+        const mediaDuration = await getMediaDuration(file);
+        duration = mediaDuration ?? undefined;
+      }
+
+      // Validate file with duration if available
+      const validation = validateFileForUpload(file, duration);
 
       if (validation.valid && validation.contentType && validation.fileType) {
         newFiles.push({
@@ -111,6 +161,7 @@ export default function UploadModal({
           fileType: validation.fileType,
           status: 'pending',
           progress: 0,
+          duration,
         });
       } else {
         // Add as error file to show validation message
@@ -122,9 +173,10 @@ export default function UploadModal({
           status: 'error',
           progress: 0,
           error: validation.error || 'Invalid file',
+          duration,
         });
       }
-    });
+    }
 
     setFiles((prev) => [...prev, ...newFiles]);
   }, []);

@@ -23,7 +23,11 @@ import {
   getContentTypeFromMimeType,
   getFileTypeFromMimeType,
   isValidFileSize,
+  isValidDuration,
   FILE_SIZE_LIMITS,
+  DURATION_LIMITS,
+  DURATION_LIMIT_LABELS,
+  formatDurationSeconds,
   type ContentType,
   type FileType,
 } from '@/lib/types/content';
@@ -100,6 +104,33 @@ export const POST = withRateLimit(
         return errors.badRequest(
           `File size (${fileSize} bytes) exceeds limit for ${contentType} files`,
           { maxSize: maxSizeBytes },
+          requestId
+        );
+      }
+
+      // Validate duration for content type (prevents processing failures for long videos)
+      if (durationSec && !isValidDuration(durationSec, contentType)) {
+        const maxDurationSec = DURATION_LIMITS[contentType];
+        const maxDurationLabel = DURATION_LIMIT_LABELS[contentType];
+        const actualDuration = formatDurationSeconds(durationSec);
+
+        logger.warn('Duration limit exceeded', {
+          context: { requestId, orgId, userId },
+          data: {
+            durationSec,
+            maxDurationSec,
+            contentType,
+          },
+        });
+
+        return errors.badRequest(
+          `Video duration (${actualDuration}) exceeds the maximum of ${maxDurationLabel}. Please trim your video or split it into shorter segments.`,
+          {
+            maxDuration: maxDurationSec,
+            maxDurationLabel,
+            actualDuration: durationSec,
+            suggestion: 'Videos longer than 30 minutes cannot be processed due to AI transcription limits.',
+          },
           requestId
         );
       }

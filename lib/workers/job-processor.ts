@@ -46,6 +46,7 @@ import { handleCollectMetrics } from './handlers/collect-metrics';
 import { handleGenerateAlerts } from './handlers/generate-alerts';
 import { handleGenerateRecommendations } from './handlers/generate-recommendations';
 import { handlePerformHealthCheck } from './handlers/perform-health-check';
+import { handleArchiveSearchMetrics } from './handlers/archive-search-metrics';
 
 // Publishing handlers
 import { handlePublishDocument } from './handlers/publish-document';
@@ -222,6 +223,7 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   generate_alerts: handleGenerateAlerts,
   generate_recommendations: handleGenerateRecommendations,
   perform_health_check: handlePerformHealthCheck,
+  archive_search_metrics: handleArchiveSearchMetrics,
 
   // Publishing handlers
   publish_document: handlePublishDocument,
@@ -247,7 +249,41 @@ const CONFIG = {
   maxPollInterval: parseIntWithDefault(process.env.JOB_MAX_POLL_INTERVAL_MS, 10000),
   maxRetries: parseIntWithDefault(process.env.JOB_MAX_RETRIES, 3),
   deadLetterAfterRetries: parseIntWithDefault(process.env.JOB_DEAD_LETTER_RETRIES, 5),
+  // Maximum job execution time (4 hours default)
+  // This prevents long-running jobs from blocking the worker indefinitely
+  jobTimeoutMs: parseIntWithDefault(process.env.JOB_TIMEOUT_MS, 4 * 60 * 60 * 1000),
 };
+
+/**
+ * Execute a function with a timeout
+ * @throws Error if the function exceeds the timeout
+ */
+async function withTimeout<T>(
+  fn: () => Promise<T>,
+  timeoutMs: number,
+  jobId: string,
+  jobType: string
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(
+        `Job timeout exceeded (${Math.round(timeoutMs / 60000)} minutes). ` +
+        `Job ID: ${jobId}, Type: ${jobType}. ` +
+        `This may indicate the content is too large to process. Consider reducing file size or duration.`
+      ));
+    }, timeoutMs);
+
+    fn()
+      .then((result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
 
 /**
  * Main job processing loop with exponential backoff for idle periods
@@ -271,6 +307,7 @@ export async function processJobs(options?: {
 
   console.log('[Job Processor] Starting job processor with exponential backoff...');
   console.log(`[Job Processor] Batch size: ${batchSize}, Base poll interval: ${pollInterval}ms, Max poll interval: ${maxPollInterval}ms`);
+  console.log(`[Job Processor] Job timeout: ${Math.round(CONFIG.jobTimeoutMs / 60000)} minutes, Max retries: ${maxRetries}`);
 
   // Exponential backoff state
   let currentPollInterval = pollInterval;
@@ -400,8 +437,14 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
       }
     };
 
-    // Execute handler with progress callback
-    await handler(job, progressCallback);
+    // Execute handler with progress callback and timeout protection
+    // This prevents long-running jobs from blocking the worker indefinitely
+    await withTimeout(
+      () => handler(job, progressCallback),
+      CONFIG.jobTimeoutMs,
+      job.id,
+      job.type
+    );
 
     // Mark job as completed (preserve contextual message)
     const completionMessage = getCompletionMessage(job.type);

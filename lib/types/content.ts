@@ -182,6 +182,30 @@ export const FILE_SIZE_LIMIT_LABELS: Record<ContentType, string> = {
 };
 
 /**
+ * Maximum duration limits in seconds per content type
+ * Based on Gemini API context window limits (~300 tokens/sec, 1M token limit = ~55 min max)
+ * Using 30 minutes as safe limit to account for memory/processing constraints
+ */
+export const DURATION_LIMITS: Record<ContentType, number | null> = {
+  recording: 30 * 60, // 30 minutes (1800 seconds)
+  video: 30 * 60, // 30 minutes
+  audio: 60 * 60, // 60 minutes (audio-only is less resource-intensive)
+  document: null, // Not applicable
+  text: null, // Not applicable
+};
+
+/**
+ * Human-readable duration limit labels
+ */
+export const DURATION_LIMIT_LABELS: Record<ContentType, string | null> = {
+  recording: '30 minutes',
+  video: '30 minutes',
+  audio: '60 minutes',
+  document: null,
+  text: null,
+};
+
+/**
  * Accepted file extensions per content type for file input
  */
 export const ACCEPTED_FILE_EXTENSIONS: Record<ContentType, string[]> = {
@@ -253,6 +277,43 @@ export function isValidFileType(
  */
 export function isValidFileSize(size: number, contentType: ContentType): boolean {
   return size <= FILE_SIZE_LIMITS[contentType];
+}
+
+/**
+ * Helper function to validate duration
+ * Returns true if duration is valid (within limits or no limit applies)
+ */
+export function isValidDuration(
+  durationSeconds: number | null | undefined,
+  contentType: ContentType
+): boolean {
+  const limit = DURATION_LIMITS[contentType];
+  // If no limit or no duration provided, consider it valid
+  if (limit === null || durationSeconds === null || durationSeconds === undefined) {
+    return true;
+  }
+  return durationSeconds <= limit;
+}
+
+/**
+ * Get duration limit for content type
+ */
+export function getDurationLimit(contentType: ContentType): number | null {
+  return DURATION_LIMITS[contentType];
+}
+
+/**
+ * Format duration in seconds to human-readable string
+ */
+export function formatDurationSeconds(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours > 0) {
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours} hour${hours > 1 ? 's' : ''}`;
+  }
+  return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
 }
 
 /**
@@ -341,9 +402,12 @@ export interface UploadValidationResult {
 
 /**
  * Validate file for upload
+ * @param file - The file to validate
+ * @param durationSeconds - Optional duration in seconds (for video/audio files)
  */
 export function validateFileForUpload(
-  file: File
+  file: File,
+  durationSeconds?: number
 ): UploadValidationResult {
   // Check MIME type
   const fileType = getFileTypeFromMimeType(file.type);
@@ -367,6 +431,16 @@ export function validateFileForUpload(
     return {
       valid: false,
       error: `File size exceeds limit of ${FILE_SIZE_LIMIT_LABELS[contentType]} for ${CONTENT_TYPE_LABELS[contentType]} files`,
+    };
+  }
+
+  // Check duration (if provided) for video/audio content
+  if (durationSeconds !== undefined && !isValidDuration(durationSeconds, contentType)) {
+    const maxDuration = DURATION_LIMIT_LABELS[contentType];
+    const actualDuration = formatDurationSeconds(durationSeconds);
+    return {
+      valid: false,
+      error: `${CONTENT_TYPE_LABELS[contentType]} duration (${actualDuration}) exceeds maximum of ${maxDuration}. Please trim or split into shorter segments.`,
     };
   }
 
