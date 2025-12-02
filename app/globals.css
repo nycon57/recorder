@@ -174,14 +174,15 @@
   --chart-3: oklch(0.7090 0.1592 293.5412);
   --chart-4: oklch(0.8369 0.1644 84.4286);
   --chart-5: var(--color-fun-green-300);
-  --sidebar: oklch(0.1822 0 0);
-  --sidebar-foreground: oklch(0.6301 0 0);
-  --sidebar-primary: var(--color-fun-green-400);
-  --sidebar-primary-foreground: var(--color-fun-green-950);
-  --sidebar-accent: oklch(0.3132 0 0);
-  --sidebar-accent-foreground: oklch(0.9851 0 0);
-  --sidebar-border: oklch(0.2809 0 0);
-  --sidebar-ring: var(--color-fun-green-400);
+  /* Sidebar - Brand-integrated dark with green tint */
+  --sidebar: rgb(2, 26, 26);                    /* Rich Black - darker than content */
+  --sidebar-foreground: rgb(170, 203, 196);    /* Pistachio - green-tinted text */
+  --sidebar-primary: rgb(0, 223, 130);         /* Caribbean Green - active/accent */
+  --sidebar-primary-foreground: rgb(3, 14, 16);
+  --sidebar-accent: rgb(6, 48, 44);            /* Pine - hover backgrounds */
+  --sidebar-accent-foreground: rgb(241, 247, 247);
+  --sidebar-border: rgba(0, 223, 130, 0.1);    /* Subtle green border */
+  --sidebar-ring: rgb(0, 223, 130);
   --font-sans: 'Inter', sans-serif;
   --font-heading: 'Outfit', sans-serif;
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;

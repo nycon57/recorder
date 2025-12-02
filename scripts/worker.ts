@@ -18,9 +18,81 @@ import { resolve } from 'path';
 config({ path: resolve(process.cwd(), '.env.local') });
 
 import { processJobs, processJobById } from '@/lib/workers/job-processor';
+import { createClient as createAdminClient } from '@/lib/supabase/admin';
 
 const args = process.argv.slice(2);
 const command = args[0];
+
+/**
+ * Scheduled Jobs Configuration
+ * Define recurring jobs with their intervals (in milliseconds)
+ */
+const SCHEDULED_JOBS = [
+  {
+    type: 'archive_search_metrics',
+    interval: 60 * 60 * 1000, // 1 hour
+    payload: { retentionDays: 90 },
+    dedupe_key: 'archive_search_metrics:hourly',
+  },
+] as const;
+
+/**
+ * Creates a scheduled job if one doesn't already exist (pending or running)
+ */
+async function createScheduledJob(jobConfig: typeof SCHEDULED_JOBS[number]): Promise<boolean> {
+  const supabase = createAdminClient();
+
+  // Check if a job with this dedupe_key already exists and is pending/running
+  const { data: existingJob } = await supabase
+    .from('jobs')
+    .select('id, status')
+    .eq('dedupe_key', jobConfig.dedupe_key)
+    .in('status', ['pending', 'running'])
+    .single();
+
+  if (existingJob) {
+    return false; // Job already queued
+  }
+
+  // Create the job
+  const { error } = await supabase
+    .from('jobs')
+    .insert({
+      type: jobConfig.type,
+      payload: jobConfig.payload,
+      dedupe_key: jobConfig.dedupe_key,
+      status: 'pending',
+      priority: 3, // Low priority for maintenance jobs
+    });
+
+  if (error) {
+    console.error(`[Scheduler] Failed to create ${jobConfig.type} job:`, error.message);
+    return false;
+  }
+
+  console.log(`[Scheduler] Created scheduled job: ${jobConfig.type}`);
+  return true;
+}
+
+/**
+ * Scheduler that creates recurring jobs at their configured intervals
+ */
+async function startScheduler(): Promise<void> {
+  console.log('[Scheduler] Starting job scheduler...');
+  console.log(`[Scheduler] Configured jobs: ${SCHEDULED_JOBS.map(j => `${j.type} (every ${j.interval / 1000 / 60} min)`).join(', ')}`);
+
+  // Create initial jobs immediately
+  for (const jobConfig of SCHEDULED_JOBS) {
+    await createScheduledJob(jobConfig);
+  }
+
+  // Set up intervals for each job type
+  for (const jobConfig of SCHEDULED_JOBS) {
+    setInterval(async () => {
+      await createScheduledJob(jobConfig);
+    }, jobConfig.interval);
+  }
+}
 
 async function main() {
   console.log('='.repeat(60));
@@ -114,7 +186,10 @@ async function main() {
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-    // Start processing
+    // Start the scheduler for recurring jobs (runs in background)
+    await startScheduler();
+
+    // Start processing jobs (main loop)
     await processJobs({
       batchSize: 10,
       pollInterval: 2000,        // Poll every 2 seconds (reduced from 5s)

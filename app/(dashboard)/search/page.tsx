@@ -441,7 +441,7 @@ function SearchPageContent() {
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-normal mb-2">Search Recordings</h1>
+        <h1 className="text-heading-3 font-outfit mb-2">Search Recordings</h1>
         <p className="text-muted-foreground">
           Search across all your recordings using AI-powered semantic search
         </p>

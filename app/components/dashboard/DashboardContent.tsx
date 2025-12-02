@@ -131,10 +131,10 @@ export function DashboardContent() {
         {/* Hero Section with Quick Actions */}
         <section>
           <div className="mb-6">
-            <h1 className="text-3xl font-normal mb-2">
+            <h1 className="text-heading-3 font-outfit">
               Welcome to your Knowledge Hub
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-body-md text-muted-foreground mt-2">
               Record, upload, search, and manage all your content in one place
             </p>
           </div>

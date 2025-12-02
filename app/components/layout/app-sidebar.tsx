@@ -46,19 +46,19 @@ export function AppSidebar({ role, isSystemAdmin = false, ...props }: AppSidebar
     <Sidebar collapsible="icon" {...props}>
       {/* Header: Logo and branding */}
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1">
+        <div className="flex items-center gap-2 px-2 py-1 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center">
           <Link
             href="/dashboard"
-            className="group flex items-center gap-2 rounded-lg p-2 transition-all duration-300 hover:bg-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2"
+            className="group flex items-center gap-2 rounded-lg p-2 transition-all duration-300 hover:bg-accent/10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-1"
           >
-            <div className="relative flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-sm">
+            <div className="relative flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-secondary text-accent-foreground shadow-sm transition-all duration-300 group-hover:shadow-[0_0_20px_rgba(0,223,130,0.4)] group-hover:scale-105">
               <span className="relative text-sm font-bold">T</span>
             </div>
             <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-              <span className="truncate font-semibold transition-colors duration-300 group-hover:text-primary">
+              <span className="truncate font-semibold transition-colors duration-300 group-hover:text-accent">
                 Tribora
               </span>
-              <span className="truncate text-xs text-muted-foreground transition-colors duration-300 group-hover:text-primary/60">
+              <span className="truncate text-xs text-muted-foreground transition-colors duration-300 group-hover:text-accent/60">
                 Knowledge Intelligence
               </span>
             </div>

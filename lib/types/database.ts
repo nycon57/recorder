@@ -94,6 +94,7 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
  * - 'generate_alerts': Generate alerts based on configured thresholds
  * - 'generate_recommendations': Analyze usage patterns and generate optimization recommendations
  * - 'perform_health_check': Monitor system health and log metrics
+ * - 'archive_search_metrics': Archive search metrics from Redis to Supabase (90-day retention)
  */
 export type JobType =
   | 'transcribe'
@@ -119,6 +120,7 @@ export type JobType =
   | 'generate_alerts'
   | 'generate_recommendations'
   | 'perform_health_check'
+  | 'archive_search_metrics'
   | 'publish_document';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';

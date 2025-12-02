@@ -187,7 +187,7 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
           <div className="space-y-4 pb-4">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search tags..."
                   value={searchQuery}
@@ -206,7 +206,7 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
 
             {/* Create new tag form */}
             {isCreating && (
-              <div className="border rounded-lg p-4 space-y-3 bg-gray-50">
+              <div className="border rounded-lg p-4 space-y-3 bg-muted/50">
                 <div className="space-y-2">
                   <Label htmlFor="new-tag-name">Tag Name</Label>
                   <Input
@@ -237,7 +237,7 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                         className={cn(
                           'w-8 h-8 rounded-full transition-all',
                           selectedColor === color &&
-                            'ring-2 ring-offset-2 ring-gray-400'
+                            'ring-2 ring-offset-2 ring-accent'
                         )}
                         style={{ backgroundColor: color }}
                       />
@@ -273,10 +273,10 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
           <div className="flex-1 overflow-auto border rounded-lg">
             {isLoading ? (
               <div className="flex items-center justify-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : filteredTags.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
                 <TagIcon className="h-12 w-12 mb-2 opacity-20" />
                 <p>No tags found</p>
                 {searchQuery && (
@@ -326,13 +326,13 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                       </TableCell>
                       <TableCell>
                         {tag.usage_count !== undefined && (
-                          <span className="text-sm text-gray-500">
+                          <span className="text-sm text-muted-foreground">
                             {tag.usage_count} {tag.usage_count === 1 ? 'item' : 'items'}
                           </span>
                         )}
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm text-gray-500">
+                        <span className="text-sm text-muted-foreground">
                           {new Date(tag.created_at).toLocaleDateString()}
                         </span>
                       </TableCell>

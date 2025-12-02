@@ -47,9 +47,9 @@ function TooltipContent({
         sideOffset={sideOffset}
         className={cn(
           // Dark tooltip that works in both light and dark modes
-          "bg-zinc-900 text-zinc-50 dark:bg-zinc-800 dark:text-zinc-100",
-          "border border-zinc-800 dark:border-zinc-700",
-          "shadow-lg shadow-black/20",
+          "bg-zinc-900/95 backdrop-blur-sm text-zinc-50 dark:bg-zinc-800/95 dark:text-zinc-100",
+          "border border-zinc-700/50 dark:border-zinc-600/50",
+          "shadow-[0_0_20px_rgba(0,0,0,0.3),0_0_8px_rgba(0,223,130,0.05)]",
           // Animation
           "animate-in fade-in-0 zoom-in-95",
           "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",

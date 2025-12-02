@@ -861,7 +861,7 @@ function LibraryPageContent() {
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5">
               {/* Left: Title and description */}
               <div className="space-y-2">
-                <h1 className="text-2xl sm:text-3xl font-normal tracking-tight">Library</h1>
+                <h1 className="text-heading-3 font-outfit tracking-tight">Library</h1>
                 <p className="text-sm sm:text-base text-muted-foreground">
                   All your recordings, videos, audio, documents, and notes in one place
                 </p>

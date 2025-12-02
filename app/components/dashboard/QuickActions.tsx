@@ -1,6 +1,8 @@
 'use client';
 
+import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import * as motion from 'motion/react-client';
 import { Video, Upload, FileText, Search } from 'lucide-react';
 
 interface QuickActionsProps {
@@ -8,8 +10,40 @@ interface QuickActionsProps {
   onCreateNoteClick?: () => void;
 }
 
+// Motion variants for staggered entrance
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: 'spring' as const,
+      stiffness: 400,
+      damping: 30,
+    },
+  },
+};
+
 export function QuickActions({ onUploadClick, onCreateNoteClick }: QuickActionsProps) {
   const router = useRouter();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const MotionDiv = mounted ? motion.div : 'div';
 
   const actions = [
     {
@@ -39,30 +73,45 @@ export function QuickActions({ onUploadClick, onCreateNoteClick }: QuickActionsP
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <MotionDiv
+      {...(mounted ? {
+        variants: containerVariants,
+        initial: 'hidden',
+        animate: 'visible',
+      } : {})}
+      className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
+    >
       {actions.map((action) => {
         const Icon = action.icon;
         return (
-          <button
+          <MotionDiv
             key={action.label}
-            onClick={action.onClick}
-            className="group relative rounded-lg border border-border bg-card p-6 text-left transition-all duration-200 hover:border-primary/50 hover:bg-card/80 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary active:scale-[0.98]"
-            aria-label={action.label}
+            {...(mounted ? {
+              variants: itemVariants,
+              whileHover: { scale: 1.02 },
+              whileTap: { scale: 0.98 },
+            } : {})}
           >
-            <div className="mb-4">
-              <div className="inline-flex items-center justify-center rounded-full bg-primary/10 p-3 ring-1 ring-primary/20 transition-all duration-200 group-hover:bg-primary/20 group-hover:ring-primary/30">
-                <Icon className="size-5 text-primary" />
+            <button
+              onClick={action.onClick}
+              className="group relative w-full rounded-2xl border border-border/50 bg-card p-6 text-left transition-all duration-300 hover:border-accent/30 hover:shadow-[0_0_30px_rgba(0,223,130,0.1)] focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              aria-label={action.label}
+            >
+              <div className="mb-4">
+                <div className="inline-flex items-center justify-center rounded-xl bg-accent/10 p-3 ring-1 ring-accent/20 transition-all duration-300 group-hover:bg-accent/20 group-hover:ring-accent/30 group-hover:shadow-[0_0_20px_rgba(0,223,130,0.15)]">
+                  <Icon className="size-5 text-accent" />
+                </div>
               </div>
-            </div>
-            <h3 className="text-base font-semibold text-foreground mb-2">
-              {action.label}
-            </h3>
-            <p className="text-sm text-muted-foreground line-clamp-2">
-              {action.description}
-            </p>
-          </button>
+              <h3 className="text-heading-6 font-outfit text-foreground mb-2">
+                {action.label}
+              </h3>
+              <p className="text-body-sm text-muted-foreground line-clamp-2">
+                {action.description}
+              </p>
+            </button>
+          </MotionDiv>
         );
       })}
-    </div>
+    </MotionDiv>
   );
 }

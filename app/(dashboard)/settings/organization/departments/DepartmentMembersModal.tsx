@@ -66,10 +66,10 @@ interface User {
 }
 
 const roleColors = {
-  owner: "bg-purple-100 text-purple-800",
-  admin: "bg-blue-100 text-blue-800",
-  contributor: "bg-green-100 text-green-800",
-  reader: "bg-gray-100 text-gray-800",
+  owner: "bg-primary/20 text-primary",
+  admin: "bg-accent/20 text-accent",
+  contributor: "bg-secondary/20 text-secondary",
+  reader: "bg-muted text-muted-foreground",
 };
 
 export function DepartmentMembersModal({

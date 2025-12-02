@@ -74,7 +74,7 @@ export function TagFilter({
             variant="outline"
             className={cn(
               'justify-start',
-              selectedTags.length > 0 && 'border-blue-500'
+              selectedTags.length > 0 && 'border-accent'
             )}
           >
             <Tag className="mr-2 h-4 w-4" />
@@ -100,7 +100,7 @@ export function TagFilter({
 
             {selectedTags.length > 1 && (
               <div className="space-y-2">
-                <Label className="text-xs text-gray-500">Filter Mode</Label>
+                <Label className="text-xs text-muted-foreground">Filter Mode</Label>
                 <RadioGroup value={filterMode} onValueChange={onFilterModeChange as any}>
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="or" id="or" />
@@ -120,7 +120,7 @@ export function TagFilter({
 
             <div className="space-y-1 max-h-64 overflow-y-auto">
               {filteredTags.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-4">
+                <p className="text-sm text-muted-foreground text-center py-4">
                   No tags found
                 </p>
               ) : (
@@ -132,8 +132,8 @@ export function TagFilter({
                       type="button"
                       onClick={() => handleTagToggle(tag.id)}
                       className={cn(
-                        'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-gray-50',
-                        isSelected && 'bg-blue-50'
+                        'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-accent/50 transition-colors duration-150',
+                        isSelected && 'bg-accent/20'
                       )}
                     >
                       <div
@@ -142,12 +142,12 @@ export function TagFilter({
                       />
                       <span className="flex-1 text-left truncate">{tag.name}</span>
                       {showCounts && tag.usage_count !== undefined && (
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-muted-foreground">
                           {tag.usage_count}
                         </span>
                       )}
                       {isSelected && (
-                        <Check className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                        <Check className="h-4 w-4 text-accent flex-shrink-0" />
                       )}
                     </button>
                   );
@@ -157,7 +157,7 @@ export function TagFilter({
 
             {selectedTags.length > 0 && (
               <div className="flex justify-between items-center pt-2 border-t">
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-muted-foreground">
                   {selectedTags.length} selected
                 </span>
                 <Button
@@ -203,7 +203,7 @@ export function TagFilter({
             </Badge>
           )}
           {filterMode === 'and' && selectedTags.length > 1 && (
-            <span className="text-xs text-gray-500 ml-1">(ALL)</span>
+            <span className="text-xs text-muted-foreground ml-1">(ALL)</span>
           )}
         </div>
       )}
@@ -236,7 +236,7 @@ export function TagFilterCompact({
       </PopoverTrigger>
       <PopoverContent className="w-64 p-3" align="end">
         <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-500">Filter by tags</p>
+          <p className="text-xs font-medium text-muted-foreground">Filter by tags</p>
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {tags.map((tag) => {
               const isSelected = selectedTags.includes(tag.id);
@@ -254,8 +254,8 @@ export function TagFilterCompact({
                     }
                   }}
                   className={cn(
-                    'flex items-center gap-2 w-full px-2 py-1 text-xs rounded hover:bg-gray-50',
-                    isSelected && 'bg-blue-50'
+                    'flex items-center gap-2 w-full px-2 py-1 text-xs rounded-md hover:bg-accent/50 transition-colors duration-150',
+                    isSelected && 'bg-accent/20'
                   )}
                 >
                   <div
@@ -263,7 +263,7 @@ export function TagFilterCompact({
                     style={{ backgroundColor: tag.color }}
                   />
                   <span className="flex-1 text-left">{tag.name}</span>
-                  {isSelected && <Check className="h-3 w-3 text-blue-500" />}
+                  {isSelected && <Check className="h-3 w-3 text-accent" />}
                 </button>
               );
             })}
@@ -272,7 +272,7 @@ export function TagFilterCompact({
             <button
               type="button"
               onClick={() => onSelectionChange([])}
-              className="text-xs text-gray-500 hover:text-gray-700"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               Clear all
             </button>

@@ -1,5 +1,7 @@
 'use client';
 
+import * as React from 'react';
+import * as motion from 'motion/react-client';
 import { Files, HardDrive, TrendingUp, Clock } from 'lucide-react';
 
 import { Card, CardContent } from '@/app/components/ui/card';
@@ -18,12 +20,45 @@ interface StatsRowProps {
   isLoading?: boolean;
 }
 
+// Motion variants for staggered entrance
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0.15,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: 'spring' as const,
+      stiffness: 400,
+      damping: 30,
+    },
+  },
+};
+
 export function StatsRow({ stats, isLoading = false }: StatsRowProps) {
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const MotionDiv = mounted ? motion.div : 'div';
+
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i}>
+          <Card key={i} className="card-interactive">
             <CardContent className="p-6">
               <Skeleton className="h-4 w-20 mb-2" />
               <Skeleton className="h-8 w-16 mb-1" />
@@ -71,36 +106,46 @@ export function StatsRow({ stats, isLoading = false }: StatsRowProps) {
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-      {statItems.map((item, index) => {
+    <MotionDiv
+      {...(mounted ? {
+        variants: containerVariants,
+        initial: 'hidden',
+        animate: 'visible',
+      } : {})}
+      className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+    >
+      {statItems.map((item) => {
         const Icon = item.icon;
         return (
-          <Card
+          <MotionDiv
             key={item.label}
-            className="overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-lg animate-fade-in"
-            style={{ animationDelay: `${index * 50}ms` }}
+            {...(mounted ? {
+              variants: itemVariants,
+            } : {})}
           >
-            <CardContent className="p-3 sm:p-4 lg:p-6">
-              <div className="flex items-start justify-between mb-2 sm:mb-4">
-                <div className={`inline-flex items-center justify-center rounded-lg ${item.iconBg} p-1.5 sm:p-2.5 transition-transform duration-200 hover:scale-110`}>
-                  <Icon className={`size-4 sm:size-5 ${item.iconColor}`} />
+            <Card className="overflow-hidden card-interactive h-full">
+              <CardContent className="p-4 lg:p-6">
+                <div className="flex items-start justify-between mb-3">
+                  <div className={`inline-flex items-center justify-center rounded-xl ${item.iconBg} p-2.5 transition-all duration-300 hover:scale-110 hover:shadow-[0_0_15px_rgba(0,223,130,0.1)]`}>
+                    <Icon className={`size-5 ${item.iconColor}`} />
+                  </div>
                 </div>
-              </div>
-              <div>
-                <p className="text-xs sm:text-sm text-muted-foreground mb-0.5 sm:mb-1">
-                  {item.label}
-                </p>
-                <p className="text-xl sm:text-2xl lg:text-3xl font-bold mb-0.5 sm:mb-1 truncate">
-                  {item.value}
-                </p>
-                <p className="text-[10px] sm:text-xs text-muted-foreground line-clamp-1">
-                  {item.description}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+                <div>
+                  <p className="text-body-sm text-muted-foreground mb-1">
+                    {item.label}
+                  </p>
+                  <p className="text-heading-4 font-outfit truncate">
+                    {item.value}
+                  </p>
+                  <p className="text-body-xs text-muted-foreground mt-1 line-clamp-1">
+                    {item.description}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </MotionDiv>
         );
       })}
-    </div>
+    </MotionDiv>
   );
 }

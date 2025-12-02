@@ -27,6 +27,7 @@ import {
   FILE_SIZE_LIMITS,
   DURATION_LIMITS,
   DURATION_LIMIT_LABELS,
+  CONTENT_TYPE_LABELS,
   formatDurationSeconds,
   type ContentType,
   type FileType,
@@ -123,13 +124,14 @@ export const POST = withRateLimit(
           },
         });
 
+        const contentTypeLabel = CONTENT_TYPE_LABELS[contentType] || 'Media';
         return errors.badRequest(
-          `Video duration (${actualDuration}) exceeds the maximum of ${maxDurationLabel}. Please trim your video or split it into shorter segments.`,
+          `${contentTypeLabel} duration (${actualDuration}) exceeds the maximum of ${maxDurationLabel}. Please trim your ${contentTypeLabel.toLowerCase()} or split it into shorter segments.`,
           {
             maxDuration: maxDurationSec,
             maxDurationLabel,
             actualDuration: durationSec,
-            suggestion: 'Videos longer than 30 minutes cannot be processed due to AI transcription limits.',
+            suggestion: `${contentTypeLabel} files longer than 30 minutes cannot be processed due to AI transcription limits.`,
           },
           requestId
         );

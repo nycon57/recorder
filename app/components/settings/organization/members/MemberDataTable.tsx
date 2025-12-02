@@ -40,10 +40,10 @@ interface MemberDataTableProps {
 // Helper components
 function RoleBadge({ role }: { role: string }) {
   const variants: Record<string, { color: string; label: string }> = {
-    owner: { color: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Owner' },
-    admin: { color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Admin' },
-    contributor: { color: 'bg-green-100 text-green-700 border-green-200', label: 'Contributor' },
-    reader: { color: 'bg-gray-100 text-gray-700 border-gray-200', label: 'Reader' },
+    owner: { color: 'bg-primary/15 text-primary border-primary/30', label: 'Owner' },
+    admin: { color: 'bg-accent/15 text-accent border-accent/30', label: 'Admin' },
+    contributor: { color: 'bg-secondary/15 text-secondary border-secondary/30', label: 'Contributor' },
+    reader: { color: 'bg-muted text-muted-foreground border-border/50', label: 'Reader' },
   };
 
   const variant = variants[role] || variants.reader;
@@ -57,10 +57,10 @@ function RoleBadge({ role }: { role: string }) {
 
 function StatusBadge({ status }: { status: string }) {
   const variants: Record<string, { color: string; label: string }> = {
-    active: { color: 'bg-green-100 text-green-700 border-green-200', label: 'Active' },
-    pending: { color: 'bg-yellow-100 text-yellow-700 border-yellow-200', label: 'Pending' },
-    suspended: { color: 'bg-red-100 text-red-700 border-red-200', label: 'Suspended' },
-    inactive: { color: 'bg-gray-100 text-gray-700 border-gray-200', label: 'Inactive' },
+    active: { color: 'bg-accent/15 text-accent border-accent/30', label: 'Active' },
+    pending: { color: 'bg-warning/15 text-warning border-warning/30', label: 'Pending' },
+    suspended: { color: 'bg-destructive/15 text-destructive border-destructive/30', label: 'Suspended' },
+    inactive: { color: 'bg-muted text-muted-foreground border-border/50', label: 'Inactive' },
   };
 
   const variant = variants[status] || variants.inactive;

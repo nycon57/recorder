@@ -231,7 +231,7 @@ function KnowledgePageContent() {
           {/* Left: Title and description */}
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl sm:text-3xl font-normal tracking-tight flex items-center gap-3">
+              <h1 className="text-heading-3 font-outfit tracking-tight flex items-center gap-3">
                 <Brain className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
                 Knowledge Graph
               </h1>

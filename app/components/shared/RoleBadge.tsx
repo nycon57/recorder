@@ -18,10 +18,10 @@ const roleBadgeVariants = cva(
   {
     variants: {
       role: {
-        owner: 'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-800',
-        admin: 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800',
-        contributor: 'bg-green-100 text-green-700 border-green-300 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800',
-        reader: 'bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-950/30 dark:text-gray-400 dark:border-gray-800',
+        owner: 'bg-primary/15 text-primary border-primary/30',
+        admin: 'bg-accent/15 text-accent border-accent/30',
+        contributor: 'bg-secondary/15 text-secondary border-secondary/30',
+        reader: 'bg-muted text-muted-foreground border-border/50',
       },
       size: {
         sm: 'text-xs px-1.5 py-0.5 [&>svg]:size-2.5',
@@ -153,10 +153,10 @@ export function RoleBadge({
  */
 export function getRoleColor(role: UserRole): string {
   const colorMap: Record<UserRole, string> = {
-    owner: 'text-purple-700 dark:text-purple-400',
-    admin: 'text-blue-700 dark:text-blue-400',
-    contributor: 'text-green-700 dark:text-green-400',
-    reader: 'text-gray-700 dark:text-gray-400',
+    owner: 'text-primary',
+    admin: 'text-accent',
+    contributor: 'text-secondary',
+    reader: 'text-muted-foreground',
   };
   return colorMap[role];
 }

@@ -3,7 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/app/components/ui/sidebar';
 import { Separator } from '@/app/components/ui/separator';
-import { AppSidebar } from '@/app/components/layout/app-sidebar';
+import { AuroraSidebar } from '@/app/components/layout/aurora-sidebar';
 import { Breadcrumbs } from '@/app/components/layout/breadcrumbs';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
@@ -59,12 +59,12 @@ export default async function DashboardLayout({
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <AppSidebar role={userRole} isSystemAdmin={isSystemAdmin} />
+      <AuroraSidebar role={userRole} isSystemAdmin={isSystemAdmin} />
       <SidebarInset>
         {/* Header with sidebar trigger and breadcrumbs */}
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
+        <header className="flex h-16 shrink-0 items-center gap-2 px-4 sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-accent/10 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
+          <SidebarTrigger className="-ml-1 hover:bg-accent/10 hover:text-accent transition-colors" />
+          <Separator orientation="vertical" className="mr-2 h-4 bg-accent/20" />
           <Breadcrumbs />
         </header>
 
