@@ -27,6 +27,7 @@ import EditRecordingModal from '@/app/components/EditRecordingModal';
 // New unified components
 import UnifiedContentViewer from '../viewers/UnifiedContentViewer';
 import ContentSidebar from '../viewers/ContentSidebar';
+import ThumbnailHero from '../viewers/ThumbnailHero';
 
 import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
 import InlineEditableField from '../shared/InlineEditableField';
@@ -588,7 +589,14 @@ export default function DocumentDetailView({
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
-          <div className="lg:col-span-2" style={isTrashed ? { opacity: 0.7 } : undefined}>
+          <div className="lg:col-span-2 space-y-6" style={isTrashed ? { opacity: 0.7 } : undefined}>
+            {/* Thumbnail Hero - Shows thumbnail or elegant fallback for documents */}
+            <ThumbnailHero
+              thumbnailUrl={recording.thumbnail_url}
+              title={recording.title}
+              contentType={recording.content_type}
+            />
+
             {document ? (
               <ContentTabs defaultValue="content" className="w-full">
                 <ContentTabsList>

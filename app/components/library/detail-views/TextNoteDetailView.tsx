@@ -22,6 +22,7 @@ import TextNoteViewer from './TextNoteViewer';
 
 // New unified sidebar component
 import ContentSidebar from '../viewers/ContentSidebar';
+import ThumbnailHero from '../viewers/ThumbnailHero';
 import ShareControls from '../shared/ShareControls';
 import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
 import InlineEditableField from '../shared/InlineEditableField';
@@ -391,6 +392,13 @@ export default function TextNoteDetailView({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
           <div className="lg:col-span-2 space-y-6" style={isTrashed ? { opacity: 0.7 } : undefined}>
+            {/* Thumbnail Hero - Shows thumbnail or elegant fallback for text notes */}
+            <ThumbnailHero
+              thumbnailUrl={recording.thumbnail_url}
+              title={recording.title}
+              contentType={recording.content_type}
+            />
+
             {/* Text Note Viewer - Always Visible */}
             {transcript?.text ? (
               <>
