@@ -39,6 +39,10 @@ export interface CompressionResult {
   warning?: string;
 }
 
+// Maximum duration (in seconds) for VMAF validation
+// VMAF for 60-minute video can take 2-4 hours, which is impractical
+const VMAF_DURATION_LIMIT_SECONDS = 15 * 60; // 15 minutes
+
 /**
  * Compression options
  */
@@ -51,6 +55,8 @@ export interface CompressionOptions {
   contentType: ContentType;
   /** File size in bytes */
   fileSize: number;
+  /** Duration in seconds (optional, used to skip VMAF for long videos) */
+  durationSeconds?: number;
   /** Organization compression preferences */
   preferences?: Partial<CompressionPreferences>;
   /** Progress callback */
@@ -196,10 +202,12 @@ export class VideoCompressor {
       console.log(`[VideoCompressor] Ratio: ${compressionRatio.toFixed(2)}x`);
       console.log(`[VideoCompressor] Time: ${encodingTime.toFixed(2)}s`);
 
-      // Validate quality if requested
+      // Validate quality if requested (skip for long videos to avoid multi-hour validation)
       let qualityScore: { vmaf?: number; ssim?: number } | undefined;
+      const videoDuration = options.durationSeconds || metadata.format?.duration || 0;
+      const skipVMAFForLongVideo = videoDuration > VMAF_DURATION_LIMIT_SECONDS;
 
-      if (options.validateQuality !== false) {
+      if (options.validateQuality !== false && !skipVMAFForLongVideo) {
         console.log('[VideoCompressor] Validating quality (VMAF)...');
         try {
           const vmaf = await measureVMAF(options.inputPath, options.outputPath);
@@ -225,6 +233,10 @@ export class VideoCompressor {
           console.warn('[VideoCompressor] Quality validation failed:', error);
           // Continue without quality validation if it fails
         }
+      } else if (skipVMAFForLongVideo) {
+        console.log(`[VideoCompressor] Skipping VMAF validation for long video (${Math.round(videoDuration / 60)} min > 15 min limit)`);
+        // Set a placeholder quality score for long videos
+        qualityScore = { vmaf: undefined };
       }
 
       // Build compression stats

@@ -7,19 +7,31 @@
  * PERF-AI-006: Includes automatic fallback to OpenAI Whisper if Gemini fails.
  */
 
-import { createReadStream } from 'fs';
-import { readFile, unlink , writeFile } from 'fs/promises';
+import { createReadStream, createWriteStream } from 'fs';
+import { readFile, unlink, writeFile, stat } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
+import { pipeline } from 'stream/promises';
+import { Readable } from 'stream';
 import OpenAI from 'openai';
 
 import type { Database } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
-import { getGoogleAI, GOOGLE_CONFIG } from '@/lib/google/client';
+import { getGoogleAI, getFileManager, FileState, GOOGLE_CONFIG } from '@/lib/google/client';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
-import { streamTranscription, isStreamingAvailable, sendCompletionNotification } from '@/lib/services/llm-streaming-helper';
+import { streamTranscription, isStreamingAvailable, sendCompletionNotification, type VideoSource } from '@/lib/services/llm-streaming-helper';
+
+// Size threshold for using Gemini File API vs inline base64
+const FILE_API_THRESHOLD_BYTES = 20 * 1024 * 1024; // 20MB
+
+/**
+ * Sleep helper for polling file processing status
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 // PERF-AI-006: Lazy-initialized OpenAI client for fallback transcription
 let openaiClient: OpenAI | null = null;
@@ -228,7 +240,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
   let tempFilePath: string | null = null;
 
   try {
-    // Download video from Supabase Storage
+    // Download video from Supabase Storage using streaming to reduce memory usage
     logger.info('Downloading video from storage', {
       context: { storagePath },
     });
@@ -259,23 +271,23 @@ export async function transcribeRecording(job: Job): Promise<void> {
       streamingManager.sendProgress(recordingId, 'transcribe', 20, `Downloaded video (${fileSizeMB} MB)`);
     }
 
-    // Save to temp file
+    // Stream video to temp file to reduce memory pressure
+    // This avoids holding the entire file in memory as arrayBuffer
     tempFilePath = join(tmpdir(), `${randomUUID()}.webm`);
-    const buffer = await videoBlob.arrayBuffer();
-    await writeFile(tempFilePath, Buffer.from(buffer));
 
-    logger.info('Saved to temp file', {
-      context: { tempFilePath, bufferSize: buffer.byteLength },
-    });
+    // Use streaming to write blob to file
+    const blobStream = videoBlob.stream();
+    const writeStream = createWriteStream(tempFilePath);
+    await pipeline(Readable.fromWeb(blobStream as any), writeStream);
 
-    // Read video file as base64
-    const videoBytes = await readFile(tempFilePath);
-    const videoBase64 = videoBytes.toString('base64');
+    // Verify file was written correctly
+    const tempFileStats = await stat(tempFilePath);
 
-    logger.info('Prepared video for Gemini', {
+    logger.info('Saved to temp file via streaming', {
       context: {
-        bytesLength: videoBytes.length,
-        base64Length: videoBase64.length,
+        tempFilePath,
+        fileSize: tempFileStats.size,
+        matchesBlob: tempFileStats.size === fileSize,
       },
     });
 
@@ -284,15 +296,115 @@ export async function transcribeRecording(job: Job): Promise<void> {
     }
 
     // Determine method based on file size
-    const use20MBLimit = fileSize < 20 * 1024 * 1024;
+    // Files >20MB must use Gemini File API, smaller files can use inline base64
+    const useFileAPI = fileSize >= FILE_API_THRESHOLD_BYTES;
 
     logger.info('Selected Gemini upload method', {
       context: {
-        method: use20MBLimit ? 'inline' : 'File API',
+        method: useFileAPI ? 'File API' : 'inline',
         fileSizeMB: fileSizeMB,
         threshold: '20MB',
       },
     });
+
+    // For File API uploads, we need to upload the file first and get a URI
+    // For inline uploads, we read the file as base64
+    let videoBase64: string | null = null;
+    let geminiFileUri: string | null = null;
+    let geminiMimeType: string | null = null;
+
+    if (useFileAPI) {
+      // Use Gemini File API for large files (>20MB)
+      logger.info('Uploading video to Gemini File API', {
+        context: { fileSizeMB, recordingId },
+      });
+
+      if (isStreaming) {
+        streamingManager.sendProgress(recordingId, 'transcribe', 35, 'Uploading large video to Gemini...');
+      }
+
+      const fileManager = getFileManager();
+
+      // Upload file to Gemini
+      const uploadResult = await fileManager.uploadFile(tempFilePath, {
+        mimeType: 'video/webm',
+        displayName: `video-${recordingId}`,
+      });
+
+      logger.info('File uploaded to Gemini, waiting for processing', {
+        context: {
+          fileName: uploadResult.file.name,
+          state: uploadResult.file.state,
+          uri: uploadResult.file.uri,
+        },
+      });
+
+      // Wait for file to be processed (Gemini needs to process video before use)
+      let file = uploadResult.file;
+      let pollCount = 0;
+      const maxPolls = 120; // 10 minutes max wait (120 * 5 seconds)
+
+      while (file.state === FileState.PROCESSING) {
+        pollCount++;
+        if (pollCount > maxPolls) {
+          throw new Error('Gemini file processing timeout - video may be too long or complex');
+        }
+
+        if (pollCount % 6 === 0) { // Log every 30 seconds
+          logger.info('Waiting for Gemini file processing', {
+            context: {
+              fileName: file.name,
+              pollCount,
+              elapsedSeconds: pollCount * 5,
+            },
+          });
+
+          if (isStreaming) {
+            streamingManager.sendProgress(
+              recordingId,
+              'transcribe',
+              35 + Math.min(pollCount / 2, 10), // Progress from 35-45%
+              `Processing video in Gemini (${Math.round(pollCount * 5 / 60)}m)...`
+            );
+          }
+        }
+
+        await sleep(5000); // Poll every 5 seconds
+        file = await fileManager.getFile(file.name);
+      }
+
+      if (file.state === FileState.FAILED) {
+        throw new Error(`Gemini file processing failed: ${file.name}`);
+      }
+
+      geminiFileUri = file.uri;
+      geminiMimeType = file.mimeType;
+
+      logger.info('Gemini file processing complete', {
+        context: {
+          fileName: file.name,
+          uri: geminiFileUri,
+          mimeType: geminiMimeType,
+          pollCount,
+          processingTimeSeconds: pollCount * 5,
+        },
+      });
+
+      if (isStreaming) {
+        streamingManager.sendProgress(recordingId, 'transcribe', 45, 'Video ready for analysis');
+      }
+    } else {
+      // Use inline base64 for small files (<20MB)
+      const videoBytes = await readFile(tempFilePath);
+      videoBase64 = videoBytes.toString('base64');
+
+      logger.info('Prepared video for inline upload', {
+        context: {
+          bytesLength: videoBytes.length,
+          base64Length: videoBase64.length,
+        },
+      });
+    }
 
     // Call Gemini API
     const googleAI = getGoogleAI();
@@ -368,10 +480,17 @@ Return ONLY valid JSON matching this structure:
 IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory text.`;
 
     const startTime = Date.now();
+
+    // Build video source based on upload method
+    const videoSource: VideoSource = geminiFileUri
+      ? { type: 'fileApi', fileUri: geminiFileUri, mimeType: geminiMimeType || 'video/webm' }
+      : { type: 'inline', base64: videoBase64 || '' };
+
     logger.info('Sending video to Gemini for analysis', {
       context: {
         promptLength: prompt.length,
-        videoDataSize: videoBase64.length,
+        videoSourceType: videoSource.type,
+        videoDataSize: videoSource.type === 'inline' ? videoSource.base64.length : 'File API',
       },
     });
 
@@ -385,9 +504,10 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
 
     try {
       // Use streaming helper for transcription (Gemini)
+      // Supports both inline base64 (<20MB) and File API (>20MB) sources
       const streamingResult = await streamTranscription(
         model,
-        videoBase64,
+        videoSource,
         prompt,
         {
           recordingId,

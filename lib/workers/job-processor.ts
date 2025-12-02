@@ -252,7 +252,75 @@ const CONFIG = {
   // Maximum job execution time (4 hours default)
   // This prevents long-running jobs from blocking the worker indefinitely
   jobTimeoutMs: parseIntWithDefault(process.env.JOB_TIMEOUT_MS, 4 * 60 * 60 * 1000),
+  // Memory warning threshold (default: 80% of heap limit)
+  memoryWarningThreshold: parseIntWithDefault(process.env.JOB_MEMORY_WARNING_PERCENT, 80),
 };
+
+/**
+ * Get current memory usage statistics
+ * @returns Memory usage in MB with heap statistics
+ */
+function getMemoryUsage(): {
+  heapUsedMB: number;
+  heapTotalMB: number;
+  rssMB: number;
+  heapPercentUsed: number;
+  v8HeapLimitMB: number;
+} {
+  const memoryUsage = process.memoryUsage();
+  const v8 = require('v8');
+  const heapStats = v8.getHeapStatistics();
+
+  return {
+    heapUsedMB: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+    heapTotalMB: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+    rssMB: Math.round(memoryUsage.rss / 1024 / 1024),
+    heapPercentUsed: Math.round((memoryUsage.heapUsed / heapStats.heap_size_limit) * 100),
+    v8HeapLimitMB: Math.round(heapStats.heap_size_limit / 1024 / 1024),
+  };
+}
+
+/**
+ * Log memory usage with optional warning for high usage
+ * @param context - Description of when this is being logged
+ * @param jobId - Optional job ID for context
+ * @param jobType - Optional job type for context
+ */
+function logMemoryUsage(
+  context: string,
+  jobId?: string,
+  jobType?: string
+): void {
+  const memory = getMemoryUsage();
+  const isHighUsage = memory.heapPercentUsed >= CONFIG.memoryWarningThreshold;
+
+  const logData = {
+    context: context,
+    heapUsedMB: memory.heapUsedMB,
+    heapTotalMB: memory.heapTotalMB,
+    rssMB: memory.rssMB,
+    heapPercent: memory.heapPercentUsed,
+    heapLimitMB: memory.v8HeapLimitMB,
+    ...(jobId && { jobId }),
+    ...(jobType && { jobType }),
+  };
+
+  if (isHighUsage) {
+    processorLogger.warn(`[Memory] HIGH USAGE: ${context}`, {
+      context: { ...logData, warning: 'Consider increasing Node.js memory limit or optimizing job handlers' },
+    });
+
+    // Suggest garbage collection if available (requires --expose-gc flag)
+    if (global.gc) {
+      processorLogger.info('[Memory] Triggering garbage collection due to high memory usage');
+      global.gc();
+    }
+  } else {
+    processorLogger.debug(`[Memory] ${context}`, {
+      context: logData,
+    });
+  }
+}
 
 /**
  * Execute a function with a timeout
@@ -308,6 +376,10 @@ export async function processJobs(options?: {
   console.log('[Job Processor] Starting job processor with exponential backoff...');
   console.log(`[Job Processor] Batch size: ${batchSize}, Base poll interval: ${pollInterval}ms, Max poll interval: ${maxPollInterval}ms`);
   console.log(`[Job Processor] Job timeout: ${Math.round(CONFIG.jobTimeoutMs / 60000)} minutes, Max retries: ${maxRetries}`);
+
+  // Log initial memory state
+  const initialMemory = getMemoryUsage();
+  console.log(`[Job Processor] Initial memory: ${initialMemory.heapUsedMB}MB used / ${initialMemory.v8HeapLimitMB}MB limit (${initialMemory.heapPercentUsed}%)`);
 
   // Exponential backoff state
   let currentPollInterval = pollInterval;
@@ -399,6 +471,10 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
   const supabase = createAdminClient();
   // Support both old (recordingId) and new (contentId) payload formats for backward compatibility
   const contentId = (job.payload as any)?.contentId || (job.payload as any)?.recordingId;
+  const jobStartTime = Date.now();
+
+  // Log memory at job start (for memory-intensive jobs like transcribe)
+  logMemoryUsage('Before job execution', job.id, job.type);
 
   try {
     processorLogger.info('Processing job', {
@@ -466,8 +542,18 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
       });
     }
 
+    const jobDuration = Date.now() - jobStartTime;
+
+    // Log memory after job completion
+    logMemoryUsage('After job execution', job.id, job.type);
+
     processorLogger.info('Job completed successfully', {
-      context: { jobId: job.id, contentId },
+      context: {
+        jobId: job.id,
+        contentId,
+        durationMs: jobDuration,
+        durationSec: Math.round(jobDuration / 1000),
+      },
     });
 
   } catch (error) {

@@ -107,17 +107,31 @@ class ChunkBuffer {
 }
 
 /**
+ * Video source for transcription - either inline base64 or File API reference
+ */
+export type VideoSource =
+  | { type: 'inline'; base64: string; mimeType?: string }
+  | { type: 'fileApi'; fileUri: string; mimeType: string };
+
+/**
  * Stream transcription with Gemini (video understanding)
+ * Supports both inline base64 (for files <20MB) and File API (for files >20MB)
  */
 export async function streamTranscription(
   model: GenerativeModel,
-  videoBase64: string,
+  videoSource: string | VideoSource,
   prompt: string,
   config: StreamingConfig
 ): Promise<StreamingResult> {
   const startTime = Date.now();
   let fullText = '';
   let streamedToClient = false;
+
+  // Normalize video source - support legacy string format (base64) for backwards compatibility
+  const normalizedSource: VideoSource =
+    typeof videoSource === 'string'
+      ? { type: 'inline', base64: videoSource }
+      : videoSource;
 
   // Check if client is connected
   const isConnected = streamingManager.isConnected(config.recordingId);
@@ -127,21 +141,37 @@ export async function streamTranscription(
       recordingId: config.recordingId,
       isConnected,
       modelName: model.model,
+      videoSourceType: normalizedSource.type,
     },
   });
 
   try {
+    // Build the content parts based on source type
+    const contentParts: any[] = [];
+
+    if (normalizedSource.type === 'inline') {
+      // Inline base64 for files <20MB
+      contentParts.push({
+        inlineData: {
+          mimeType: normalizedSource.mimeType || 'video/webm',
+          data: normalizedSource.base64,
+        },
+      });
+    } else {
+      // File API reference for files >20MB
+      contentParts.push({
+        fileData: {
+          fileUri: normalizedSource.fileUri,
+          mimeType: normalizedSource.mimeType,
+        },
+      });
+    }
+
+    contentParts.push({ text: prompt });
+
     // Note: Gemini video understanding doesn't support true streaming
     // We'll simulate streaming by processing the response in chunks
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: 'video/webm',
-          data: videoBase64,
-        },
-      },
-      { text: prompt },
-    ]);
+    const result = await model.generateContent(contentParts);
 
     const responseText = result.response.text();
     fullText = responseText;

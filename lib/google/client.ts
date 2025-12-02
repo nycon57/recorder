@@ -1,10 +1,12 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleAIFileManager, FileState } from '@google/generative-ai/server';
 import { SpeechClient } from '@google-cloud/speech';
 
 import { getGoogleAuth } from './credentials';
 
 // Lazy initialization to support environment variable loading
 let _googleAI: GoogleGenerativeAI | null = null;
+let _fileManager: GoogleAIFileManager | null = null;
 
 /**
  * Get Google AI client (Gemini)
@@ -22,6 +24,27 @@ export function getGoogleAI(): GoogleGenerativeAI {
   _googleAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
   return _googleAI;
 }
+
+/**
+ * Get Google AI File Manager for uploading large files (>20MB)
+ * Required for videos larger than 20MB which can't use inline base64
+ * Lazily initialized on first use
+ */
+export function getFileManager(): GoogleAIFileManager {
+  if (_fileManager) {
+    return _fileManager;
+  }
+
+  if (!process.env.GOOGLE_AI_API_KEY) {
+    throw new Error('Missing GOOGLE_AI_API_KEY environment variable');
+  }
+
+  _fileManager = new GoogleAIFileManager(process.env.GOOGLE_AI_API_KEY);
+  return _fileManager;
+}
+
+// Re-export FileState enum for use in handlers
+export { FileState };
 
 // Legacy export for backwards compatibility
 export const googleAI = new Proxy({} as GoogleGenerativeAI, {
