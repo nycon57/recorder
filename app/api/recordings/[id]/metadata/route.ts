@@ -77,7 +77,15 @@ export const POST = apiHandler(async (
         hasDescription: !!description,
         tagCount: tags?.length || 0,
         thumbnailUploaded,
+        providedThumbnailPath: providedThumbnailPath || null,
       },
+    });
+
+    // Debug: Log thumbnail parameters
+    console.log('[Metadata Route] Thumbnail params:', {
+      recordingId,
+      thumbnailUploaded,
+      providedThumbnailPath: providedThumbnailPath || 'NOT PROVIDED',
     });
 
     // Verify content exists and belongs to org
@@ -109,46 +117,72 @@ export const POST = apiHandler(async (
 
     // Generate thumbnail URL if thumbnail was uploaded
     let thumbnailUrl: string | null = null;
+    console.log('[Metadata Route] thumbnailUploaded check:', { thumbnailUploaded, type: typeof thumbnailUploaded });
+
     if (thumbnailUploaded) {
       // Use provided path if available, otherwise default to .jpg extension
       const thumbnailPath = providedThumbnailPath || `${orgId}/uploads/${recordingId}/thumbnail.jpg`;
+      console.log('[Metadata Route] Generating thumbnail URL:', {
+        thumbnailPath,
+        bucket: 'content',
+        providedThumbnailPath: providedThumbnailPath || 'DEFAULTED TO JPG',
+      });
+
       const { data: publicUrlData } = supabase.storage
         .from('content')
         .getPublicUrl(thumbnailPath);
       thumbnailUrl = publicUrlData?.publicUrl || null;
 
+      console.log('[Metadata Route] Generated thumbnail URL:', {
+        thumbnailUrl,
+        publicUrlData,
+      });
+
       logger.info('Thumbnail URL generated', {
         context: { requestId, recordingId },
         data: { thumbnailPath, thumbnailUrl, usedProvidedPath: !!providedThumbnailPath },
       });
+    } else {
+      console.log('[Metadata Route] No thumbnail uploaded, skipping URL generation');
     }
 
     // Update content with metadata
+    const updatePayload = {
+      title,
+      description: description || null,
+      status: 'uploaded', // Move to uploaded status
+      storage_path_raw: storagePath,
+      thumbnail_url: thumbnailUrl, // Set thumbnail URL if uploaded
+      metadata: {
+        ...(recording.metadata as any),
+        ...metadata,
+        metadata_submitted_at: new Date().toISOString(),
+        thumbnail_uploaded: thumbnailUploaded || false,
+      },
+      updated_at: new Date().toISOString(),
+    };
+
+    console.log('[Metadata Route] Updating content with payload:', {
+      recordingId,
+      thumbnail_url: updatePayload.thumbnail_url,
+      thumbnail_uploaded_in_metadata: updatePayload.metadata.thumbnail_uploaded,
+    });
+
     const { error: updateError } = await supabase
       .from('content')
-      .update({
-        title,
-        description: description || null,
-        status: 'uploaded', // Move to uploaded status
-        storage_path_raw: storagePath,
-        thumbnail_url: thumbnailUrl, // Set thumbnail URL if uploaded
-        metadata: {
-          ...(recording.metadata as any),
-          ...metadata,
-          metadata_submitted_at: new Date().toISOString(),
-          thumbnail_uploaded: thumbnailUploaded || false,
-        },
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', recordingId);
 
     if (updateError) {
+      console.error('[Metadata Route] Database update error:', updateError);
       logger.error('Failed to update recording', {
         context: { requestId, recordingId },
         error: updateError as Error,
       });
       return errors.internalError(requestId);
     }
+
+    console.log('[Metadata Route] Successfully updated content with thumbnail_url:', thumbnailUrl);
 
     logger.info('Recording updated', {
       context: { requestId, recordingId },

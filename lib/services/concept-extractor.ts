@@ -267,6 +267,13 @@ async function generateConceptEmbedding(
   const genai = getGenAIClient();
   const text = description ? `${name}: ${description}` : name;
 
+  console.log('[Concept Extractor] Generating embedding:', {
+    model: GOOGLE_CONFIG.EMBEDDING_MODEL,
+    outputDimensionality: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS,
+    taskType: GOOGLE_CONFIG.EMBEDDING_TASK_TYPE,
+    textPreview: text.substring(0, 50),
+  });
+
   const result = await genai.models.embedContent({
     model: GOOGLE_CONFIG.EMBEDDING_MODEL, // gemini-embedding-001, produces 1536-dim
     contents: text,
@@ -280,6 +287,12 @@ async function generateConceptEmbedding(
   if (!embedding) {
     throw new Error('Failed to generate concept embedding');
   }
+
+  console.log('[Concept Extractor] Received embedding:', {
+    dimensions: embedding.length,
+    expected: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS,
+    match: embedding.length === GOOGLE_CONFIG.EMBEDDING_DIMENSIONS,
+  });
 
   // Verify dimension matches expected (defense in depth)
   if (embedding.length !== GOOGLE_CONFIG.EMBEDDING_DIMENSIONS) {
