@@ -121,15 +121,16 @@ export const POST = apiHandler(async (
 
     if (thumbnailUploaded) {
       // Use provided path if available, otherwise default to .jpg extension
-      const thumbnailPath = providedThumbnailPath || `${orgId}/uploads/${recordingId}/thumbnail.jpg`;
+      // Thumbnails are stored in the 'thumbnails' bucket with path pattern: org_{orgId}/recordings/{recordingId}/thumbnail.{ext}
+      const thumbnailPath = providedThumbnailPath || `org_${orgId}/recordings/${recordingId}/thumbnail.jpg`;
       console.log('[Metadata Route] Generating thumbnail URL:', {
         thumbnailPath,
-        bucket: 'content',
+        bucket: 'thumbnails',
         providedThumbnailPath: providedThumbnailPath || 'DEFAULTED TO JPG',
       });
 
       const { data: publicUrlData } = supabase.storage
-        .from('content')
+        .from('thumbnails')
         .getPublicUrl(thumbnailPath);
       thumbnailUrl = publicUrlData?.publicUrl || null;
 

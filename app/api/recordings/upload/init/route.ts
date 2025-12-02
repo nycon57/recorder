@@ -43,6 +43,8 @@ const initUploadSchema = z.object({
   mimeType: z.string().min(1),
   fileSize: z.number().positive(),
   durationSec: z.number().positive().optional(),
+  analysisType: z.enum(['none', 'meeting', 'tutorial', 'sop', 'demo', 'general']).optional().default('general'),
+  skipAnalysis: z.boolean().optional().default(false),
 });
 
 type InitUploadRequest = z.infer<typeof initUploadSchema>;
@@ -75,7 +77,7 @@ export const POST = withRateLimit(
         );
       }
 
-      const { filename, mimeType, fileSize, durationSec } = validationResult.data;
+      const { filename, mimeType, fileSize, durationSec, analysisType, skipAnalysis } = validationResult.data;
 
       logger.info('Initializing upload', {
         context: { requestId, orgId, userId },
@@ -84,6 +86,8 @@ export const POST = withRateLimit(
           mimeType,
           fileSizeMB: parseFloat((fileSize / 1024 / 1024).toFixed(2)),
           durationSec,
+          analysisType,
+          skipAnalysis,
         },
       });
 
@@ -175,6 +179,8 @@ export const POST = withRateLimit(
           mime_type: mimeType,
           file_size: fileSize,
           duration_sec: durationSec || null,
+          analysis_type: analysisType,
+          skip_analysis: skipAnalysis,
           metadata: {
             source: 'upload_wizard',
             initialized_at: new Date().toISOString(),
@@ -213,7 +219,8 @@ export const POST = withRateLimit(
       // Generate storage paths
       const fileExtension = `.${fileType}`;
       const filePath = `${orgId}/uploads/${recording.id}/file${fileExtension}`;
-      const thumbnailPath = `${orgId}/uploads/${recording.id}/thumbnail.jpg`;
+      // Thumbnails go in the 'thumbnails' bucket with different path pattern
+      const thumbnailPath = `org_${orgId}/recordings/${recording.id}/thumbnail.jpg`;
 
       // Generate presigned upload URL for main file
       const { data: fileUploadData, error: fileUploadError } = await supabase.storage
@@ -249,8 +256,9 @@ export const POST = withRateLimit(
       }
 
       // Generate presigned upload URL for thumbnail (optional)
+      // Use 'thumbnails' bucket which allows image MIME types
       const { data: thumbnailUploadData } = await supabase.storage
-        .from('content')
+        .from('thumbnails')
         .createSignedUploadUrl(thumbnailPath, {
           upsert: true, // Allow override
         });

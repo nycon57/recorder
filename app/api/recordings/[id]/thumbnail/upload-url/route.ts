@@ -91,10 +91,11 @@ export const GET = apiHandler(async (
     }
 
     // Generate fresh presigned upload URL for thumbnail with correct extension
-    const thumbnailPath = `${orgId}/uploads/${recordingId}/thumbnail.${extension}`;
+    // Use 'thumbnails' bucket which allows image MIME types (not 'content' bucket)
+    const thumbnailPath = `org_${orgId}/recordings/${recordingId}/thumbnail.${extension}`;
 
     const { data: thumbnailUploadData, error: uploadUrlError } = await supabase.storage
-      .from('content')
+      .from('thumbnails')
       .createSignedUploadUrl(thumbnailPath, {
         upsert: true, // Allow overwriting existing thumbnail
       });
