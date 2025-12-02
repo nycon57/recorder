@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { Button, buttonVariants } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/components/ui/tabs';
+import { ContentTabs, ContentTabsList, ContentTabsTrigger, ContentTabsContent } from '@/app/components/ui/content-tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Separator } from '@/app/components/ui/separator';
 import {
@@ -362,24 +362,21 @@ export default function RecordingDetailClient({
             )}
 
             {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList>
-                <TabsTrigger value="overview">
-                  <Play className="size-4" />
+            <ContentTabs value={activeTab} onValueChange={setActiveTab}>
+              <ContentTabsList>
+                <ContentTabsTrigger value="overview" icon={<Play className="size-4" />}>
                   Overview
-                </TabsTrigger>
-                <TabsTrigger value="transcript" disabled={!transcript}>
-                  <MessageSquare className="size-4" />
+                </ContentTabsTrigger>
+                <ContentTabsTrigger value="transcript" icon={<MessageSquare className="size-4" />} disabled={!transcript}>
                   Transcript
-                </TabsTrigger>
-                <TabsTrigger value="document" disabled={!document}>
-                  <FileText className="size-4" />
+                </ContentTabsTrigger>
+                <ContentTabsTrigger value="document" icon={<FileText className="size-4" />} disabled={!document}>
                   Document
-                </TabsTrigger>
-              </TabsList>
+                </ContentTabsTrigger>
+              </ContentTabsList>
 
               {/* Overview Tab */}
-              <TabsContent value="overview" className="space-y-4 mt-4">
+              <ContentTabsContent value="overview" className="space-y-4">
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Details</CardTitle>
@@ -451,10 +448,10 @@ export default function RecordingDetailClient({
                     </CardContent>
                   </Card>
                 )}
-              </TabsContent>
+              </ContentTabsContent>
 
               {/* Transcript Tab */}
-              <TabsContent value="transcript" className="mt-4">
+              <ContentTabsContent value="transcript">
                 {transcript ? (
                   <TranscriptViewer
                     transcript={transcript}
@@ -469,10 +466,10 @@ export default function RecordingDetailClient({
                     </CardContent>
                   </Card>
                 )}
-              </TabsContent>
+              </ContentTabsContent>
 
               {/* Document Tab */}
-              <TabsContent value="document" className="mt-4">
+              <ContentTabsContent value="document">
                 {document ? (
                   <DocumentViewer
                     document={document}
@@ -487,8 +484,8 @@ export default function RecordingDetailClient({
                     </CardContent>
                   </Card>
                 )}
-              </TabsContent>
-            </Tabs>
+              </ContentTabsContent>
+            </ContentTabs>
           </div>
 
           {/* Right Column - Sidebar */}

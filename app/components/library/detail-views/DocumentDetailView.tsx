@@ -9,7 +9,7 @@ import DOMPurify from 'dompurify';
 
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import { ContentTabs, ContentTabsContent, ContentTabsList, ContentTabsTrigger } from '@/app/components/ui/content-tabs';
 import { Alert, AlertTitle, AlertDescription } from '@/app/components/ui/alert';
 import {
   AlertDialog,
@@ -590,19 +590,17 @@ export default function DocumentDetailView({
           {/* Left Column - Main Content */}
           <div className="lg:col-span-2" style={isTrashed ? { opacity: 0.7 } : undefined}>
             {document ? (
-              <Tabs defaultValue="content" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-6">
-                  <TabsTrigger value="content" className="gap-2">
-                    <FileTextIcon className="h-4 w-4" />
+              <ContentTabs defaultValue="content" className="w-full">
+                <ContentTabsList>
+                  <ContentTabsTrigger value="content" icon={<FileTextIcon className="size-4" />}>
                     Original Content
-                  </TabsTrigger>
-                  <TabsTrigger value="insights" className="gap-2">
-                    <Sparkles className="h-4 w-4" />
+                  </ContentTabsTrigger>
+                  <ContentTabsTrigger value="insights" icon={<Sparkles className="size-4" />}>
                     AI Insights
-                  </TabsTrigger>
-                </TabsList>
+                  </ContentTabsTrigger>
+                </ContentTabsList>
 
-                <TabsContent value="content">
+                <ContentTabsContent value="content">
                   <UnifiedContentViewer
                     contentType={recording.content_type}
                     fileType={recording.file_type}
@@ -614,9 +612,9 @@ export default function DocumentDetailView({
                     originalFilename={recording.original_filename}
                     transcript={transcript}
                   />
-                </TabsContent>
+                </ContentTabsContent>
 
-                <TabsContent value="insights">
+                <ContentTabsContent value="insights">
                   <Card className="border-0 shadow-none bg-transparent">
                     <CardContent className="p-0">
                       <div className="min-h-[400px] max-h-[800px] overflow-y-auto px-6 py-8 sm:px-8 sm:py-10">
@@ -636,8 +634,8 @@ export default function DocumentDetailView({
                       </div>
                     </CardContent>
                   </Card>
-                </TabsContent>
-              </Tabs>
+                </ContentTabsContent>
+              </ContentTabs>
             ) : (
               <UnifiedContentViewer
                 contentType={recording.content_type}
