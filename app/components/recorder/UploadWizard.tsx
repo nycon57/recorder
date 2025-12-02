@@ -10,6 +10,7 @@ import FileUploadStep from './steps/FileUploadStep';
 import MetadataCollectionStep from './steps/MetadataCollectionStep';
 import UploadProgressStep from './steps/UploadProgressStep';
 import type { ContentType } from '@/lib/types/content';
+import type { AnalysisType } from '@/lib/services/analysis-templates';
 
 interface UploadWizardProps {
   open: boolean;
@@ -40,6 +41,8 @@ interface MetadataData {
   tags: string[];
   thumbnail?: string;
   thumbnailFile?: File;
+  analysisType?: AnalysisType;
+  skipAnalysis?: boolean;
 }
 
 /**
@@ -350,6 +353,7 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
 
         // Upload custom thumbnail if provided
         let thumbnailUploaded = false;
+        let thumbnailPath: string | undefined;
         if (data.thumbnailFile) {
           console.log('[UploadWizard] Uploading custom thumbnail...');
 
@@ -380,8 +384,9 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
             }
 
             const freshUploadUrl = urlData.data.uploadUrl;
+            thumbnailPath = urlData.data.path; // Capture the storage path
 
-            console.log('[UploadWizard] Got fresh upload URL, uploading thumbnail...');
+            console.log('[UploadWizard] Got fresh upload URL, uploading thumbnail...', { thumbnailPath });
 
             // Upload thumbnail with fresh URL
             const thumbnailResponse = await fetch(freshUploadUrl, {
@@ -395,17 +400,24 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
 
             if (thumbnailResponse.ok) {
               thumbnailUploaded = true;
-              console.log('[UploadWizard] Custom thumbnail uploaded successfully');
+              console.log('[UploadWizard] Custom thumbnail uploaded successfully', { thumbnailPath });
             } else {
               console.warn('[UploadWizard] Thumbnail upload failed with status:', thumbnailResponse.status);
+              thumbnailPath = undefined; // Clear path on failure
             }
           } catch (err) {
             console.warn('[UploadWizard] Custom thumbnail upload failed (non-fatal):', err);
+            thumbnailPath = undefined; // Clear path on failure
           }
         }
 
         // Save metadata and trigger processing
-        console.log('[UploadWizard] Saving metadata and starting processing...');
+        console.log('[UploadWizard] Saving metadata and starting processing...', {
+          analysisType: data.analysisType,
+          skipAnalysis: data.skipAnalysis,
+          thumbnailUploaded,
+          thumbnailPath,
+        });
 
         const metadataResponse = await fetch(
           `/api/recordings/${recordingId}/metadata`,
@@ -418,7 +430,10 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
               tags: data.tags,
               metadata: {},
               thumbnailUploaded,
+              thumbnailPath, // Pass the storage path for correct URL generation
               storagePath: uploadPath,
+              analysisType: data.analysisType,
+              skipAnalysis: data.skipAnalysis,
             }),
           }
         );

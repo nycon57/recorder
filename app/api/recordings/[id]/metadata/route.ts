@@ -30,6 +30,7 @@ const metadataSchema = z.object({
   tags: z.array(z.string()).max(20).optional(),
   metadata: z.record(z.any()).optional(),
   thumbnailUploaded: z.boolean().optional(),
+  thumbnailPath: z.string().optional(), // Path to uploaded thumbnail (if custom extension)
   storagePath: z.string().min(1), // Path where file was uploaded
 });
 
@@ -66,7 +67,7 @@ export const POST = apiHandler(async (
       );
     }
 
-    const { title, description, tags, metadata, thumbnailUploaded, storagePath } =
+    const { title, description, tags, metadata, thumbnailUploaded, thumbnailPath: providedThumbnailPath, storagePath } =
       validationResult.data;
 
     logger.info('Saving metadata and starting processing', {
@@ -106,6 +107,22 @@ export const POST = apiHandler(async (
       );
     }
 
+    // Generate thumbnail URL if thumbnail was uploaded
+    let thumbnailUrl: string | null = null;
+    if (thumbnailUploaded) {
+      // Use provided path if available, otherwise default to .jpg extension
+      const thumbnailPath = providedThumbnailPath || `${orgId}/uploads/${recordingId}/thumbnail.jpg`;
+      const { data: publicUrlData } = supabase.storage
+        .from('content')
+        .getPublicUrl(thumbnailPath);
+      thumbnailUrl = publicUrlData?.publicUrl || null;
+
+      logger.info('Thumbnail URL generated', {
+        context: { requestId, recordingId },
+        data: { thumbnailPath, thumbnailUrl, usedProvidedPath: !!providedThumbnailPath },
+      });
+    }
+
     // Update content with metadata
     const { error: updateError } = await supabase
       .from('content')
@@ -114,6 +131,7 @@ export const POST = apiHandler(async (
         description: description || null,
         status: 'uploaded', // Move to uploaded status
         storage_path_raw: storagePath,
+        thumbnail_url: thumbnailUrl, // Set thumbnail URL if uploaded
         metadata: {
           ...(recording.metadata as any),
           ...metadata,
