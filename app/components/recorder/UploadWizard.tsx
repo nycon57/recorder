@@ -354,6 +354,12 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
         // Upload custom thumbnail if provided
         let thumbnailUploaded = false;
         let thumbnailPath: string | undefined;
+        console.log('[UploadWizard] Checking for thumbnail file:', {
+          hasThumbnailFile: !!data.thumbnailFile,
+          thumbnailFileName: data.thumbnailFile?.name,
+          thumbnailFileType: data.thumbnailFile?.type,
+          thumbnailFileSize: data.thumbnailFile?.size,
+        });
         if (data.thumbnailFile) {
           console.log('[UploadWizard] Uploading custom thumbnail...');
 
@@ -386,9 +392,13 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
             const freshUploadUrl = urlData.data.uploadUrl;
             thumbnailPath = urlData.data.path; // Capture the storage path
 
-            console.log('[UploadWizard] Got fresh upload URL, uploading thumbnail...', { thumbnailPath });
+            console.log('[UploadWizard] Got fresh upload URL, uploading thumbnail...', {
+              thumbnailPath,
+              uploadUrlPreview: freshUploadUrl?.substring(0, 100) + '...',
+            });
 
             // Upload thumbnail with fresh URL
+            console.log('[UploadWizard] Starting PUT request to storage...');
             const thumbnailResponse = await fetch(freshUploadUrl, {
               method: 'PUT',
               body: data.thumbnailFile,
@@ -398,11 +408,22 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
               },
             });
 
+            console.log('[UploadWizard] Thumbnail upload response:', {
+              ok: thumbnailResponse.ok,
+              status: thumbnailResponse.status,
+              statusText: thumbnailResponse.statusText,
+            });
+
             if (thumbnailResponse.ok) {
               thumbnailUploaded = true;
               console.log('[UploadWizard] Custom thumbnail uploaded successfully', { thumbnailPath });
             } else {
-              console.warn('[UploadWizard] Thumbnail upload failed with status:', thumbnailResponse.status);
+              const errorText = await thumbnailResponse.text().catch(() => 'Unable to read error');
+              console.warn('[UploadWizard] Thumbnail upload failed:', {
+                status: thumbnailResponse.status,
+                statusText: thumbnailResponse.statusText,
+                errorText,
+              });
               thumbnailPath = undefined; // Clear path on failure
             }
           } catch (err) {
