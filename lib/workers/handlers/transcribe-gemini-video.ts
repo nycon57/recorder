@@ -22,9 +22,19 @@ import { getGoogleAI, getFileManager, FileState, GOOGLE_CONFIG } from '@/lib/goo
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
 import { streamTranscription, isStreamingAvailable, sendCompletionNotification, type VideoSource } from '@/lib/services/llm-streaming-helper';
+import {
+  shouldSplitVideo,
+  splitVideoIntoSegments,
+  getVideoDuration,
+  SPLIT_THRESHOLD_SECONDS,
+} from '@/lib/services/video-splitter';
 
 // Size threshold for using Gemini File API vs inline base64
 const FILE_API_THRESHOLD_BYTES = 20 * 1024 * 1024; // 20MB
+
+// Maximum video duration for single-pass transcription (30 minutes)
+// Videos longer than this will be split into segments
+const MAX_SINGLE_PASS_DURATION = SPLIT_THRESHOLD_SECONDS;
 
 /**
  * Sleep helper for polling file processing status
@@ -291,6 +301,190 @@ export async function transcribeRecording(job: Job): Promise<void> {
       },
     });
 
+    if (isStreaming) {
+      streamingManager.sendProgress(recordingId, 'transcribe', 25, 'Checking video duration...');
+    }
+
+    // Get video duration to check if splitting is needed
+    let videoDuration: number;
+    try {
+      videoDuration = await getVideoDuration(tempFilePath);
+      logger.info('Video duration detected', {
+        context: {
+          recordingId,
+          durationSeconds: videoDuration,
+          durationMinutes: Math.round(videoDuration / 60),
+          needsSplitting: shouldSplitVideo(videoDuration),
+        },
+      });
+    } catch (durationError) {
+      logger.warn('Could not determine video duration, proceeding without splitting', {
+        context: { error: (durationError as Error).message },
+      });
+      videoDuration = 0;
+    }
+
+    // Check if video needs splitting (>30 minutes)
+    if (shouldSplitVideo(videoDuration)) {
+      logger.info('Video exceeds duration limit, initiating segmented processing', {
+        context: {
+          recordingId,
+          durationMinutes: Math.round(videoDuration / 60),
+          threshold: Math.round(SPLIT_THRESHOLD_SECONDS / 60),
+        },
+      });
+
+      if (isStreaming) {
+        streamingManager.sendProgress(
+          recordingId,
+          'transcribe',
+          30,
+          `Video is ${Math.round(videoDuration / 60)} minutes, splitting into segments...`
+        );
+      }
+
+      // Split video into segments
+      const splitResult = await splitVideoIntoSegments(tempFilePath, {
+        onProgress: (percent, message) => {
+          if (isStreaming) {
+            streamingManager.sendProgress(recordingId, 'transcribe', 30 + percent * 0.2, message);
+          }
+        },
+      });
+
+      if (!splitResult.success) {
+        throw new Error(`Failed to split video: ${splitResult.error}`);
+      }
+
+      logger.info('Video split complete', {
+        context: {
+          recordingId,
+          segmentCount: splitResult.segments.length,
+          segments: splitResult.segments.map(s => ({
+            index: s.index,
+            duration: Math.round(s.duration),
+          })),
+        },
+      });
+
+      if (isStreaming) {
+        streamingManager.sendProgress(
+          recordingId,
+          'transcribe',
+          50,
+          `Created ${splitResult.segments.length} segments, queueing transcription jobs...`
+        );
+      }
+
+      // Create jobs for each segment
+      const segmentJobs = await Promise.all(
+        splitResult.segments.map(async (segment) => {
+          const { data: segmentJob, error: jobError } = await supabase
+            .from('jobs')
+            .insert({
+              type: 'transcribe_segment',
+              status: 'pending',
+              payload: {
+                contentId: recordingId,
+                orgId,
+                segmentPath: segment.path,
+                segmentIndex: segment.index,
+                totalSegments: splitResult.segments.length,
+                parentJobId: job.id,
+                segmentStartTime: segment.startTime,
+                segmentEndTime: segment.endTime,
+                segmentDuration: segment.duration,
+              },
+              dedupe_key: `transcribe_segment:${recordingId}:${segment.index}`,
+            })
+            .select()
+            .single();
+
+          if (jobError) {
+            throw new Error(`Failed to create segment job: ${jobError.message}`);
+          }
+
+          return segmentJob;
+        })
+      );
+
+      logger.info('Created segment transcription jobs', {
+        context: {
+          recordingId,
+          jobCount: segmentJobs.length,
+          jobIds: segmentJobs.map(j => j.id),
+        },
+      });
+
+      // Create merge job (will wait for all segments to complete)
+      const { error: mergeJobError } = await supabase
+        .from('jobs')
+        .insert({
+          type: 'merge_transcripts',
+          status: 'pending',
+          payload: {
+            contentId: recordingId,
+            orgId,
+            parentJobId: job.id,
+            segmentCount: splitResult.segments.length,
+            totalDuration: splitResult.totalDuration,
+            segments: splitResult.segments,
+          },
+          // Run after all segment jobs complete (use high run_at to ensure ordering)
+          run_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour from now initially
+          dedupe_key: `merge_transcripts:${recordingId}`,
+        });
+
+      if (mergeJobError) {
+        throw new Error(`Failed to create merge job: ${mergeJobError.message}`);
+      }
+
+      logger.info('Created merge transcripts job', {
+        context: {
+          recordingId,
+          segmentCount: splitResult.segments.length,
+        },
+      });
+
+      if (isStreaming) {
+        streamingManager.sendProgress(
+          recordingId,
+          'transcribe',
+          60,
+          `Processing ${splitResult.segments.length} segments in parallel...`
+        );
+      }
+
+      // Update content status to indicate segmented processing
+      await supabase
+        .from('content')
+        .update({
+          status: 'transcribing',
+          metadata: {
+            processing_method: 'segmented',
+            segment_count: splitResult.segments.length,
+            total_duration: splitResult.totalDuration,
+          },
+        })
+        .eq('id', recordingId);
+
+      // Clean up main temp file (segments are in their own files now)
+      // Note: Don't delete temp file yet, segments reference it
+      // Cleanup will happen in merge handler
+
+      logger.info('Segmented transcription pipeline initiated', {
+        context: {
+          recordingId,
+          segmentCount: splitResult.segments.length,
+          totalDuration: Math.round(splitResult.totalDuration / 60),
+        },
+      });
+
+      // Return early - the segment jobs will handle transcription
+      return;
+    }
+
+    // Video doesn't need splitting, proceed with single-pass transcription
     if (isStreaming) {
       streamingManager.sendProgress(recordingId, 'transcribe', 30, 'Preparing video for analysis...');
     }

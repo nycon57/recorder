@@ -183,12 +183,17 @@ export const FILE_SIZE_LIMIT_LABELS: Record<ContentType, string> = {
 
 /**
  * Maximum duration limits in seconds per content type
- * Based on Gemini API context window limits (~300 tokens/sec, 1M token limit = ~55 min max)
- * Using 30 minutes as safe limit to account for memory/processing constraints
+ *
+ * Videos >30 minutes are automatically split into segments for processing.
+ * Gemini context window (~1M tokens) supports ~58 minutes, but we use 60 min
+ * as a user-friendly limit with automatic segmentation for longer videos.
+ *
+ * Segmentation threshold: 30 minutes (videos shorter go through single-pass)
+ * Maximum supported: 60 minutes (videos longer are rejected)
  */
 export const DURATION_LIMITS: Record<ContentType, number | null> = {
-  recording: 30 * 60, // 30 minutes (1800 seconds)
-  video: 30 * 60, // 30 minutes
+  recording: 60 * 60, // 60 minutes (with automatic segmentation for >30 min)
+  video: 60 * 60, // 60 minutes (with automatic segmentation for >30 min)
   audio: 60 * 60, // 60 minutes (audio-only is less resource-intensive)
   document: null, // Not applicable
   text: null, // Not applicable
@@ -198,8 +203,8 @@ export const DURATION_LIMITS: Record<ContentType, number | null> = {
  * Human-readable duration limit labels
  */
 export const DURATION_LIMIT_LABELS: Record<ContentType, string | null> = {
-  recording: '30 minutes',
-  video: '30 minutes',
+  recording: '60 minutes',
+  video: '60 minutes',
   audio: '60 minutes',
   document: null,
   text: null,

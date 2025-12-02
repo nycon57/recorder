@@ -95,6 +95,8 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
  * - 'generate_recommendations': Analyze usage patterns and generate optimization recommendations
  * - 'perform_health_check': Monitor system health and log metrics
  * - 'archive_search_metrics': Archive search metrics from Redis to Supabase (90-day retention)
+ * - 'transcribe_segment': Transcribe a single segment of a split long video (>30 min)
+ * - 'merge_transcripts': Combine segment transcripts into final unified transcript
  */
 export type JobType =
   | 'transcribe'
@@ -121,7 +123,9 @@ export type JobType =
   | 'generate_recommendations'
   | 'perform_health_check'
   | 'archive_search_metrics'
-  | 'publish_document';
+  | 'publish_document'
+  | 'transcribe_segment'
+  | 'merge_transcripts';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 
@@ -890,6 +894,44 @@ export interface Database {
           completed_at?: string | null;
           progress_percent?: number | null;
           progress_message?: string | null;
+        };
+      };
+      /** Temporary storage for video segment transcription results during long video (>30 min) processing */
+      segment_transcripts: {
+        Row: {
+          id: string;
+          content_id: string;
+          parent_job_id: string | null;
+          segment_index: number;
+          segment_start_time: number;
+          segment_duration: number;
+          audio_transcript: Json;
+          visual_events: Json;
+          combined_narrative: string | null;
+          key_moments: Json;
+          processed_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          content_id: string;
+          parent_job_id?: string | null;
+          segment_index: number;
+          segment_start_time: number;
+          segment_duration: number;
+          audio_transcript?: Json;
+          visual_events?: Json;
+          combined_narrative?: string | null;
+          key_moments?: Json;
+          processed_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          audio_transcript?: Json;
+          visual_events?: Json;
+          combined_narrative?: string | null;
+          key_moments?: Json;
+          processed_at?: string;
         };
       };
       events: {
