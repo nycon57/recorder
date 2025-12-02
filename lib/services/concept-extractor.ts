@@ -15,6 +15,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { createLogger } from '@/lib/utils/logger';
+import { GOOGLE_CONFIG } from '@/lib/google/client';
 
 const logger = createLogger({ service: 'concept-extractor' });
 
@@ -256,6 +257,8 @@ function validateConceptType(type: string): ConceptType {
 
 /**
  * Generate embedding for a concept name and description
+ * Uses the same embedding model as the rest of the system (gemini-embedding-001)
+ * to ensure 1536-dimensional embeddings that match the database schema.
  */
 async function generateConceptEmbedding(
   name: string,
@@ -265,17 +268,24 @@ async function generateConceptEmbedding(
   const text = description ? `${name}: ${description}` : name;
 
   const result = await genai.models.embedContent({
-    model: 'text-embedding-004',
+    model: GOOGLE_CONFIG.EMBEDDING_MODEL, // gemini-embedding-001, produces 1536-dim
     contents: text,
     config: {
-      taskType: 'SEMANTIC_SIMILARITY',
-      outputDimensionality: 1536,
+      taskType: GOOGLE_CONFIG.EMBEDDING_TASK_TYPE, // RETRIEVAL_DOCUMENT
+      outputDimensionality: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS, // 1536
     },
   });
 
   const embedding = result.embeddings?.[0]?.values;
   if (!embedding) {
     throw new Error('Failed to generate concept embedding');
+  }
+
+  // Verify dimension matches expected (defense in depth)
+  if (embedding.length !== GOOGLE_CONFIG.EMBEDDING_DIMENSIONS) {
+    throw new Error(
+      `Embedding dimension mismatch: expected ${GOOGLE_CONFIG.EMBEDDING_DIMENSIONS}, got ${embedding.length}`
+    );
   }
 
   return embedding;
