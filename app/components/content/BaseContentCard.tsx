@@ -1,6 +1,7 @@
 "use client"
 
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Video,
   FileVideo,
@@ -207,8 +208,19 @@ export function BaseContentCard({ item, concepts = [], onConceptClick }: BaseCon
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
-          <div className={cn('w-full h-full flex items-center justify-center bg-gradient-to-br', config.gradient)}>
-            <Icon className="w-12 h-12 text-muted-foreground" />
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#042222] via-[#03624c]/20 to-[#042222]">
+            <div className="flex flex-col items-center gap-2">
+              <Image
+                src="/icon.svg"
+                alt="Tribora"
+                width={40}
+                height={40}
+                className="opacity-40"
+              />
+              <span className="text-xs text-muted-foreground/50 uppercase tracking-wide">
+                {config.label}
+              </span>
+            </div>
           </div>
         )}
 

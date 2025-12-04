@@ -132,8 +132,8 @@ export function TagFilter({
                       type="button"
                       onClick={() => handleTagToggle(tag.id)}
                       className={cn(
-                        'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-accent/50 transition-colors duration-150',
-                        isSelected && 'bg-accent/20'
+                        'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-primary/20 transition-colors duration-150',
+                        isSelected && 'bg-primary/25'
                       )}
                     >
                       <div
@@ -254,8 +254,8 @@ export function TagFilterCompact({
                     }
                   }}
                   className={cn(
-                    'flex items-center gap-2 w-full px-2 py-1 text-xs rounded-md hover:bg-accent/50 transition-colors duration-150',
-                    isSelected && 'bg-accent/20'
+                    'flex items-center gap-2 w-full px-2 py-1 text-xs rounded-md hover:bg-primary/20 transition-colors duration-150',
+                    isSelected && 'bg-primary/25'
                   )}
                 >
                   <div

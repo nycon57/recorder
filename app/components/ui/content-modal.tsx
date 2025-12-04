@@ -105,14 +105,14 @@ const ContentModal = React.forwardRef<HTMLDivElement, ContentModalProps>(
               // Base styling
               'rounded-xl border shadow-2xl',
 
-              // Frosted glass effect
+              // Frosted glass effect (use background for darker modal)
               glass && [
-                'bg-card/95 backdrop-blur-xl',
+                'bg-background/95 backdrop-blur-xl',
                 'border-border/50',
               ],
 
               // Non-glass fallback
-              !glass && 'bg-card border-border',
+              !glass && 'bg-background border-border',
 
               // Glow effect on focus-within
               glow && [

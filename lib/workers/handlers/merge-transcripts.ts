@@ -62,14 +62,38 @@ function formatTimestamp(seconds: number): string {
 }
 
 /**
- * Parse MM:SS timestamp to seconds
+ * Parse timestamp to seconds. Supports HH:MM:SS and MM:SS formats.
+ * @throws Error if timestamp format is invalid or contains non-numeric values
  */
 function parseTimestamp(timestamp: string): number {
   const parts = timestamp.split(':');
-  if (parts.length === 2) {
-    return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+
+  if (parts.length === 3) {
+    // HH:MM:SS format
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const seconds = parseFloat(parts[2]);
+
+    if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) {
+      throw new Error(`Invalid timestamp format: "${timestamp}" contains non-numeric values`);
+    }
+
+    return hours * 3600 + minutes * 60 + seconds;
   }
-  return 0;
+
+  if (parts.length === 2) {
+    // MM:SS format
+    const minutes = parseInt(parts[0], 10);
+    const seconds = parseFloat(parts[1]);
+
+    if (isNaN(minutes) || isNaN(seconds)) {
+      throw new Error(`Invalid timestamp format: "${timestamp}" contains non-numeric values`);
+    }
+
+    return minutes * 60 + seconds;
+  }
+
+  throw new Error(`Invalid timestamp format: "${timestamp}". Expected HH:MM:SS or MM:SS`);
 }
 
 /**
@@ -139,6 +163,60 @@ export async function mergeTranscripts(job: Job): Promise<void> {
   const supabase = createAdminClient();
 
   try {
+    // =========================================================================
+    // VALIDATION: Verify all segments are complete before merging
+    // This is a safety check - the job should only run when triggered by
+    // the last segment completion via increment_segment_completion()
+    // =========================================================================
+
+    // Check this job's segments_completed counter matches total_segments
+    const { data: jobStatus, error: jobStatusError } = await supabase
+      .from('jobs')
+      .select('segments_completed, total_segments')
+      .eq('id', job.id)
+      .single();
+
+    if (!jobStatusError && jobStatus) {
+      const { segments_completed, total_segments } = jobStatus;
+
+      if (total_segments && segments_completed < total_segments) {
+        // Not all segments have completed yet - this shouldn't happen
+        // if dependency-based triggering is working correctly
+        logger.warn('Merge job triggered before all segments complete', {
+          context: {
+            contentId,
+            segmentsCompleted: segments_completed,
+            totalSegments: total_segments,
+            jobId: job.id,
+          },
+        });
+
+        // Re-queue this job to wait for remaining segments
+        // Set back to 'waiting' status
+        await supabase
+          .from('jobs')
+          .update({
+            status: 'waiting',
+            error: `Waiting for ${total_segments - segments_completed} more segments to complete`,
+          })
+          .eq('id', job.id);
+
+        logger.info('Merge job re-queued to wait for remaining segments', {
+          context: { contentId, remaining: total_segments - segments_completed },
+        });
+
+        return; // Exit early - don't throw error, just wait
+      }
+
+      logger.info('All segments confirmed complete', {
+        context: {
+          contentId,
+          segmentsCompleted: segments_completed,
+          totalSegments: total_segments,
+        },
+      });
+    }
+
     // Fetch all segment results
     // First try the segment_transcripts table
     let segmentResults: SegmentResult[] = [];
@@ -206,15 +284,15 @@ export async function mergeTranscripts(job: Job): Promise<void> {
       const offset = segment.segmentStartTime;
 
       // Adjust and merge audio transcripts
-      const adjustedAudio = adjustAudioTimestamps(segment.audioTranscript, offset);
+      const adjustedAudio = adjustAudioTimestamps(segment.audioTranscript || [], offset);
       mergedAudioTranscript.push(...adjustedAudio);
 
       // Adjust and merge visual events
-      const adjustedVisual = adjustVisualTimestamps(segment.visualEvents, offset);
+      const adjustedVisual = adjustVisualTimestamps(segment.visualEvents || [], offset);
       mergedVisualEvents.push(...adjustedVisual);
 
       // Adjust and merge key moments
-      const adjustedMoments = adjustKeyMomentTimestamps(segment.keyMoments, offset);
+      const adjustedMoments = adjustKeyMomentTimestamps(segment.keyMoments || [], offset);
       mergedKeyMoments.push(...adjustedMoments);
 
       // Add segment narrative with context

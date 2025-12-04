@@ -67,7 +67,7 @@ export type ContentStatus =
 /** @deprecated Use ContentStatus instead */
 export type RecordingStatus = ContentStatus;
 
-export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'waiting' | 'dead_letter';
 
 /**
  * Background job types for async processing pipeline.
@@ -867,6 +867,14 @@ export interface Database {
           progress_percent: number | null;
           progress_message: string | null;
           created_at: string;
+          /** For dependency tracking: number of child segments that have completed */
+          segments_completed: number | null;
+          /** For dependency tracking: total number of child segments expected */
+          total_segments: number | null;
+          /** For dependency tracking: reference to parent merge job */
+          parent_job_id: string | null;
+          content_id: string | null;
+          priority: number | null;
         };
         Insert: {
           id?: string;
@@ -884,6 +892,14 @@ export interface Database {
           progress_percent?: number | null;
           progress_message?: string | null;
           created_at?: string;
+          /** For dependency tracking: number of child segments that have completed */
+          segments_completed?: number;
+          /** For dependency tracking: total number of child segments expected */
+          total_segments?: number;
+          /** For dependency tracking: reference to parent merge job */
+          parent_job_id?: string;
+          content_id?: string;
+          priority?: number;
         };
         Update: {
           status?: JobStatus;
@@ -894,6 +910,10 @@ export interface Database {
           completed_at?: string | null;
           progress_percent?: number | null;
           progress_message?: string | null;
+          /** For dependency tracking: number of child segments that have completed */
+          segments_completed?: number;
+          /** For dependency tracking: reference to parent merge job */
+          parent_job_id?: string;
         };
       };
       /** Temporary storage for video segment transcription results during long video (>30 min) processing */

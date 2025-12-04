@@ -1,23 +1,23 @@
 /**
  * Segment Transcription Handler
  *
- * Transcribes a single video segment as part of the long video processing pipeline.
- * Results are stored in a temporary table and merged by the merge-transcripts handler.
+ * Transcribes a single video segment as part of the progressive processing pipeline.
+ *
+ * Key Features:
+ * - Generates embeddings IMMEDIATELY after transcription
+ * - Content becomes searchable before full video processing completes
+ * - Updates progress tracking for real-time UI feedback
+ * - Logs processing events for detailed progress monitoring
  */
 
-import { createReadStream, createWriteStream } from 'fs';
-import { readFile, unlink, stat } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
-import { randomUUID } from 'crypto';
-import { pipeline } from 'stream/promises';
-import { Readable } from 'stream';
+import { readFile, stat } from 'fs/promises';
 
 import type { Database } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { getGoogleAI, getFileManager, FileState, GOOGLE_CONFIG } from '@/lib/google/client';
 import { createLogger } from '@/lib/utils/logger';
 import { streamTranscription, type VideoSource } from '@/lib/services/llm-streaming-helper';
+import { generateEmbedding } from '@/lib/utils/embeddings';
 
 const logger = createLogger({ service: 'transcribe-segment' });
 
@@ -294,7 +294,21 @@ IMPORTANT: Return ONLY the JSON object.`;
       .replace(/```\n?/g, '')
       .trim();
 
-    const parsedResponse: SegmentTranscriptResult = JSON.parse(jsonText);
+    let parsedResponse: SegmentTranscriptResult;
+    try {
+      parsedResponse = JSON.parse(jsonText);
+    } catch (parseError) {
+      const responsePreview = jsonText.slice(0, 500);
+      logger.error('Failed to parse transcription JSON response', {
+        context: {
+          contentId,
+          segmentIndex,
+          responsePreview,
+        },
+        error: parseError as Error,
+      });
+      throw new Error(`Failed to parse transcription response for segment ${segmentIndex}`);
+    }
 
     logger.info('Parsed segment transcription', {
       context: {
@@ -304,21 +318,9 @@ IMPORTANT: Return ONLY the JSON object.`;
       },
     });
 
-    // Store segment result in database
-    // We use the jobs payload to store intermediate results
-    const segmentResult = {
-      segmentIndex,
-      segmentStartTime,
-      segmentDuration,
-      audioTranscript: parsedResponse.audioTranscript,
-      visualEvents: parsedResponse.visualEvents,
-      combinedNarrative: parsedResponse.combinedNarrative,
-      keyMoments: parsedResponse.keyMoments || [],
-      processedAt: new Date().toISOString(),
-    };
+    // Store segment result in database with 'processing' status
+    const keyMoments = parsedResponse.keyMoments || [];
 
-    // Update parent job with segment result
-    // Store in a dedicated table for segment results
     const { error: insertError } = await supabase
       .from('segment_transcripts')
       .upsert({
@@ -330,25 +332,191 @@ IMPORTANT: Return ONLY the JSON object.`;
         audio_transcript: parsedResponse.audioTranscript,
         visual_events: parsedResponse.visualEvents,
         combined_narrative: parsedResponse.combinedNarrative,
-        key_moments: parsedResponse.keyMoments || [],
+        key_moments: keyMoments,
+        key_moments_count: keyMoments.length,
+        status: 'processing', // Will be updated to 'completed' after embeddings
         processed_at: new Date().toISOString(),
       }, {
         onConflict: 'content_id,segment_index',
       });
 
     if (insertError) {
-      // If segment_transcripts table doesn't exist, store in job result
-      logger.warn('Could not store in segment_transcripts table, using job result', {
+      logger.warn('Could not store in segment_transcripts table', {
         context: { error: insertError.message },
       });
+    }
 
-      // Store in job's result field instead
+    // Log processing event for progress tracking
+    try {
+      await supabase.from('content_processing_events').insert({
+        content_id: contentId,
+        event_type: 'segment_transcribed',
+        segment_index: segmentIndex,
+        payload: {
+          audioSegments: parsedResponse.audioTranscript.length,
+          visualEvents: parsedResponse.visualEvents.length,
+          keyMoments: keyMoments.length,
+          analysisTime,
+        },
+      });
+    } catch {
+      // Ignore if table doesn't exist yet
+    }
+
+    // =========================================================================
+    // PROGRESSIVE EMBEDDINGS: Generate embeddings immediately for instant search
+    // =========================================================================
+    logger.info('Generating progressive embeddings for segment', {
+      context: { contentId, segmentIndex },
+    });
+
+    try {
+      // Create chunks from segment transcript (with timestamp adjustment)
+      const chunks = createChunksFromSegment(
+        parsedResponse.combinedNarrative,
+        parsedResponse.audioTranscript,
+        segmentIndex,
+        segmentStartTime // Offset for absolute timestamps
+      );
+
+      let embeddingsGenerated = 0;
+
+      for (const chunk of chunks) {
+        try {
+          const embedding = await generateEmbedding(chunk.text);
+
+          // Store chunk with embedding - immediately searchable!
+          const { error: chunkError } = await supabase
+            .from('transcript_chunks')
+            .insert({
+              content_id: contentId,
+              org_id: orgId,
+              text: chunk.text,
+              embedding,
+              segment_index: segmentIndex,
+              start_time: chunk.startTime,
+              end_time: chunk.endTime,
+              metadata: {
+                source: 'progressive_segment',
+                segmentIndex,
+                absoluteStartTime: chunk.startTime + segmentStartTime,
+              },
+            });
+
+          if (!chunkError) {
+            embeddingsGenerated++;
+          }
+        } catch (embError) {
+          logger.warn('Failed to generate embedding for chunk', {
+            context: { contentId, segmentIndex, chunkIndex: chunks.indexOf(chunk) },
+            error: embError as Error,
+          });
+        }
+      }
+
+      logger.info('Progressive embeddings generated', {
+        context: {
+          contentId,
+          segmentIndex,
+          chunksCreated: chunks.length,
+          embeddingsGenerated,
+        },
+      });
+
+      // Update segment status to completed with embeddings flag
       await supabase
-        .from('jobs')
+        .from('segment_transcripts')
         .update({
-          result: segmentResult,
+          status: 'completed',
+          embeddings_generated: embeddingsGenerated > 0,
         })
-        .eq('id', job.id);
+        .eq('content_id', contentId)
+        .eq('segment_index', segmentIndex);
+
+      // Log embeddings event
+      try {
+        await supabase.from('content_processing_events').insert({
+          content_id: contentId,
+          event_type: 'embeddings_generated',
+          segment_index: segmentIndex,
+          payload: {
+            chunksCreated: chunks.length,
+            embeddingsGenerated,
+          },
+        });
+      } catch {
+        // Ignore if table doesn't exist
+      }
+
+    } catch (embeddingError) {
+      logger.error('Failed to generate progressive embeddings', {
+        context: { contentId, segmentIndex },
+        error: embeddingError as Error,
+      });
+
+      // Still mark segment as completed even if embeddings fail
+      // Embeddings can be regenerated later
+      await supabase
+        .from('segment_transcripts')
+        .update({
+          status: 'completed',
+          embeddings_generated: false,
+        })
+        .eq('content_id', contentId)
+        .eq('segment_index', segmentIndex);
+    }
+
+    // =========================================================================
+    // DEPENDENCY-BASED MERGE TRIGGERING: Signal completion to parent merge job
+    // =========================================================================
+
+    // The job's parent_job_id points to the merge job that should run when all segments complete
+    const mergeJobId = job.parent_job_id;
+
+    if (mergeJobId) {
+      // Use the atomic increment_segment_completion function
+      // This will automatically transition the merge job to 'pending' when all segments complete
+      const { data: completionResult, error: completionError } = await supabase
+        .rpc('increment_segment_completion', { p_merge_job_id: mergeJobId });
+
+      if (completionError) {
+        logger.warn('Failed to increment segment completion counter', {
+          context: {
+            contentId,
+            segmentIndex,
+            mergeJobId,
+            error: completionError.message
+          },
+        });
+      } else if (completionResult && completionResult.length > 0) {
+        const result = completionResult[0];
+        logger.info('Updated merge job completion status', {
+          context: {
+            contentId,
+            segmentIndex,
+            mergeJobId,
+            completedCount: result.completed_count,
+            totalCount: result.total_count,
+            allComplete: result.all_complete,
+          },
+        });
+
+        if (result.all_complete) {
+          logger.info('All segments complete - merge job triggered', {
+            context: { contentId, mergeJobId },
+          });
+        }
+      }
+
+      // Update content's completed_segments count atomically
+      const { data: newCount } = await supabase
+        .rpc('increment_completed_segments', { p_content_id: contentId });
+
+      if (newCount !== null) {
+        logger.debug('Updated content completed_segments', {
+          context: { contentId, completedSegments: newCount },
+        });
+      }
     }
 
     logger.info('Segment transcription complete', {
@@ -357,6 +525,7 @@ IMPORTANT: Return ONLY the JSON object.`;
         segmentIndex,
         totalSegments,
         analysisTime,
+        mergeJobId: mergeJobId || 'none',
       },
     });
 
@@ -372,6 +541,87 @@ IMPORTANT: Return ONLY the JSON object.`;
       error: error as Error,
     });
 
+    // Update segment status to failed
+    try {
+      const supabase = createAdminClient();
+      await supabase
+        .from('segment_transcripts')
+        .update({
+          status: 'failed',
+          error_message: errorMessage,
+        })
+        .eq('content_id', contentId)
+        .eq('segment_index', segmentIndex);
+    } catch {
+      // Ignore update failure
+    }
+
     throw error;
   }
+}
+
+/**
+ * Create searchable chunks from segment transcript
+ */
+function createChunksFromSegment(
+  narrative: string,
+  audioTranscript: AudioSegment[],
+  segmentIndex: number,
+  segmentStartTime: number
+): Array<{ text: string; startTime: number; endTime: number }> {
+  const chunks: Array<{ text: string; startTime: number; endTime: number }> = [];
+
+  // Strategy 1: Create chunks from combined narrative (broader context)
+  if (narrative && narrative.length > 100) {
+    // Split narrative into ~500 char chunks with overlap
+    const chunkSize = 500;
+    const overlap = 50;
+
+    for (let i = 0; i < narrative.length; i += chunkSize - overlap) {
+      const chunkText = narrative.slice(i, i + chunkSize);
+      if (chunkText.length >= 50) {
+        chunks.push({
+          text: chunkText,
+          startTime: segmentStartTime,
+          endTime: segmentStartTime + 60, // Approximate
+        });
+      }
+    }
+  }
+
+  // Strategy 2: Create chunks from audio transcript segments (precise timestamps)
+  const transcriptChunks: string[] = [];
+  let currentChunk = '';
+  let chunkStartTime = 0;
+  let chunkEndTime = 0;
+
+  for (const segment of audioTranscript) {
+    if (currentChunk.length === 0) {
+      chunkStartTime = segment.startTime;
+    }
+
+    currentChunk += (currentChunk ? ' ' : '') + segment.text;
+    chunkEndTime = segment.endTime;
+
+    // Create chunk when we have enough text (~300-500 chars)
+    if (currentChunk.length >= 300) {
+      chunks.push({
+        text: currentChunk,
+        startTime: segmentStartTime + chunkStartTime,
+        endTime: segmentStartTime + chunkEndTime,
+      });
+      currentChunk = '';
+    }
+  }
+
+  // Don't forget remaining text
+  if (currentChunk.length >= 50) {
+    chunks.push({
+      text: currentChunk,
+      startTime: segmentStartTime + chunkStartTime,
+      endTime: segmentStartTime + chunkEndTime,
+    });
+  }
+
+  return chunks;
 }

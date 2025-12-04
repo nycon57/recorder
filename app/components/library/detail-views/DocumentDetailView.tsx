@@ -590,12 +590,17 @@ export default function DocumentDetailView({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
           <div className="lg:col-span-2 space-y-6" style={isTrashed ? { opacity: 0.7 } : undefined}>
-            {/* Thumbnail Hero - Shows thumbnail or elegant fallback for documents */}
-            <ThumbnailHero
-              thumbnailUrl={recording.thumbnail_url}
-              title={recording.title}
-              contentType={recording.content_type}
-            />
+            {/* Thumbnail Hero - Only show when thumbnail exists */}
+            {recording.thumbnail_url && (
+              <ThumbnailHero
+                thumbnailUrl={recording.thumbnail_url}
+                title={recording.title}
+                contentType={recording.content_type}
+                editable={!isTrashed}
+                recordingId={recording.id}
+                onThumbnailChange={() => router.refresh()}
+              />
+            )}
 
             {document ? (
               <ContentTabs defaultValue="content" className="w-full">

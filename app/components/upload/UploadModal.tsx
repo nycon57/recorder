@@ -41,6 +41,8 @@ import {
   logError
 } from '@/lib/utils/error-handler';
 import type { ContentType, FileType } from '@/lib/types/database';
+import ProcessingOptions from './ProcessingOptions';
+import type { AnalysisType } from '@/lib/services/analysis-templates';
 
 /**
  * File upload status for tracking individual file states
@@ -129,6 +131,10 @@ export default function UploadModal({
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Processing options state (AI analysis)
+  const [analysisType, setAnalysisType] = useState<AnalysisType>('general');
+  const [skipAnalysis, setSkipAnalysis] = useState(false);
 
   /**
    * Handle file selection from input or drag-drop
@@ -264,6 +270,10 @@ export default function UploadModal({
     batchFiles.forEach(uploadFile => {
       formData.append('files', uploadFile.file);
     });
+
+    // Add processing options to FormData
+    formData.append('analysisType', analysisType);
+    formData.append('skipAnalysis', String(skipAnalysis));
 
     try {
       // Update all files to uploading
@@ -672,6 +682,16 @@ export default function UploadModal({
                 })}
               </div>
             </div>
+          )}
+
+          {/* Processing Options - Only show when files are selected and not uploading */}
+          {files.length > 0 && !isUploading && (
+            <ProcessingOptions
+              analysisType={analysisType}
+              onAnalysisTypeChange={setAnalysisType}
+              skipAnalysis={skipAnalysis}
+              onSkipAnalysisChange={setSkipAnalysis}
+            />
           )}
 
           {/* Overall Progress */}

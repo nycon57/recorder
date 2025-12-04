@@ -150,14 +150,14 @@ export function AdvancedFilters({
                     type="button"
                     onClick={() => onFiltersChange({ ...filters, statusFilter: status.value })}
                     className={cn(
-                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-accent/50 transition-colors duration-150',
-                      filters.statusFilter === status.value && 'bg-accent/60'
+                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-primary/20 transition-colors duration-150',
+                      filters.statusFilter === status.value && 'bg-primary/25'
                     )}
                   >
                     {status.icon}
                     <span className="flex-1 text-left">{status.label}</span>
                     {filters.statusFilter === status.value && (
-                      <div className="size-2 rounded-full bg-primary" />
+                      <div className="size-2 rounded-full bg-accent" />
                     )}
                   </button>
                 ))}
@@ -178,14 +178,14 @@ export function AdvancedFilters({
                     type="button"
                     onClick={() => toggleContentType(type.value)}
                     className={cn(
-                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-accent/50 transition-colors duration-150',
-                      filters.contentTypes.includes(type.value) && 'bg-accent/60'
+                      'flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md hover:bg-primary/20 transition-colors duration-150',
+                      filters.contentTypes.includes(type.value) && 'bg-primary/25'
                     )}
                   >
                     {type.icon}
                     <span className="flex-1 text-left">{type.label}</span>
                     {filters.contentTypes.includes(type.value) && (
-                      <div className="size-2 rounded-full bg-primary" />
+                      <div className="size-2 rounded-full bg-accent" />
                     )}
                   </button>
                 ))}

@@ -11,6 +11,8 @@ import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Label } from '@/app/components/ui/label';
 import { TagInput } from '@/app/components/tags/TagInput';
+import ProcessingOptions from '@/app/components/upload/ProcessingOptions';
+import type { AnalysisType } from '@/lib/services/analysis-templates';
 import { cn } from '@/lib/utils';
 import {
   Form,
@@ -37,6 +39,8 @@ interface MetadataCollectionStepProps {
     tags: string[]; // Tag names
     thumbnail?: string; // Base64 data URL
     thumbnailFile?: File; // Custom thumbnail file
+    analysisType?: AnalysisType; // Type of AI analysis to perform
+    skipAnalysis?: boolean; // Whether to skip AI analysis
   }) => void;
   onBack: () => void;
 }
@@ -74,6 +78,10 @@ export default function MetadataCollectionStep({
   const [isLoadingTags, setIsLoadingTags] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
+
+  // Processing options state (AI analysis)
+  const [analysisType, setAnalysisType] = useState<AnalysisType>('general');
+  const [skipAnalysis, setSkipAnalysis] = useState(false);
 
   const form = useForm<MetadataFormData>({
     resolver: zodResolver(metadataSchema),
@@ -200,6 +208,8 @@ export default function MetadataCollectionStep({
         tagCount: data.tags.length,
         hasThumbnail: !!thumbnail,
         hasCustomThumbnail: !!thumbnailFile,
+        analysisType,
+        skipAnalysis,
       });
 
       onNext({
@@ -208,9 +218,11 @@ export default function MetadataCollectionStep({
         tags: data.tags.map((t) => t.name),
         thumbnail: thumbnailFile ? undefined : thumbnail, // Use default if no custom upload
         thumbnailFile,
+        analysisType,
+        skipAnalysis,
       });
     },
-    [thumbnail, thumbnailFile, onNext]
+    [thumbnail, thumbnailFile, analysisType, skipAnalysis, onNext]
   );
 
   return (
@@ -297,6 +309,14 @@ export default function MetadataCollectionStep({
                 <FormMessage />
               </FormItem>
             )}
+          />
+
+          {/* Processing Options - AI Analysis Settings */}
+          <ProcessingOptions
+            analysisType={analysisType}
+            onAnalysisTypeChange={setAnalysisType}
+            skipAnalysis={skipAnalysis}
+            onSkipAnalysisChange={setSkipAnalysis}
           />
 
           {/* Thumbnail Section */}

@@ -255,9 +255,9 @@ export function TagInput({
               e.stopPropagation();
               onChange([]);
             }}
-            className="ml-auto p-1 hover:bg-accent rounded"
+            className="ml-auto p-1 hover:bg-muted rounded transition-colors"
           >
-            <X className="h-4 w-4 text-muted-foreground" />
+            <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
           </button>
         )}
       </div>
@@ -274,13 +274,14 @@ export function TagInput({
               onClick={handleCreateTag}
               disabled={isCreating}
               className={cn(
-                'flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-accent',
-                highlightedIndex === -1 && 'bg-accent'
+                'flex items-center gap-2 w-full px-3 py-2 text-sm text-left transition-colors',
+                'hover:bg-primary/20 hover:text-foreground',
+                highlightedIndex === -1 && 'bg-primary/20'
               )}
             >
-              <Plus className="h-4 w-4 text-muted-foreground" />
+              <Plus className="h-4 w-4 text-accent" />
               <span>
-                Create "<strong>{inputValue.trim()}</strong>"
+                Create "<strong className="text-accent">{inputValue.trim()}</strong>"
               </span>
               {isCreating && (
                 <span className="ml-auto text-xs text-muted-foreground">Creating...</span>
@@ -290,6 +291,7 @@ export function TagInput({
 
           {suggestions.map((tag, index) => {
             const isSelected = value.some((t) => t.id === tag.id);
+            const isHighlighted = highlightedIndex === index;
             return (
               <button
                 key={tag.id}
@@ -297,20 +299,20 @@ export function TagInput({
                 onClick={() => !isSelected && handleAddTag(tag)}
                 disabled={isSelected}
                 className={cn(
-                  'flex items-center gap-2 w-full px-3 py-2 text-sm text-left',
+                  'flex items-center gap-2 w-full px-3 py-2 text-sm text-left transition-colors',
                   isSelected
                     ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:bg-accent',
-                  highlightedIndex === index && 'bg-accent'
+                    : 'hover:bg-primary/20',
+                  isHighlighted && !isSelected && 'bg-primary/20'
                 )}
                 onMouseEnter={() => setHighlightedIndex(index)}
               >
                 <div
-                  className="w-4 h-4 rounded-full"
+                  className="w-4 h-4 rounded-full ring-1 ring-white/20"
                   style={{ backgroundColor: tag.color }}
                 />
                 <span className="flex-1">{tag.name}</span>
-                {isSelected && <Check className="h-4 w-4 text-green-500" />}
+                {isSelected && <Check className="h-4 w-4 text-accent" />}
               </button>
             );
           })}

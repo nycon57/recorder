@@ -5,12 +5,16 @@ export const createRecordingSchema = z.object({
   title: z.string().min(1).max(255).optional(),
   description: z.string().max(2000).optional(),
   metadata: z.record(z.any()).optional(),
+  analysisType: z.enum(['none', 'meeting', 'tutorial', 'sop', 'demo', 'general']).optional().default('general'),
+  skipAnalysis: z.boolean().optional().default(false),
 });
 
 export const updateRecordingSchema = z.object({
   title: z.string().min(1).max(255).optional(),
   description: z.string().max(2000).optional(),
   metadata: z.record(z.any()).optional(),
+  analysisType: z.enum(['none', 'meeting', 'tutorial', 'sop', 'demo', 'general']).optional(),
+  skipAnalysis: z.boolean().optional(),
 });
 
 // Schema for EditRecordingModal (stricter - title required)

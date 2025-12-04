@@ -11,6 +11,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { withRateLimit } from '@/lib/rate-limit/middleware';
 import { QuotaManager } from '@/lib/services/quotas/quota-manager';
 import { RateLimiter } from '@/lib/services/quotas/rate-limiter';
+import { createRecordingSchema } from '@/lib/validations/api';
 
 // GET /api/recordings - List all recordings for the current org
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -68,8 +69,17 @@ export const POST = withRateLimit(
     // Phase 6: Consume quota
     await QuotaManager.consumeQuota(orgId, 'recording');
 
-  const body = await request.json();
-  const { title, description, metadata } = body;
+    const body = await request.json();
+
+    // Validate request body
+    const validationResult = createRecordingSchema.safeParse(body);
+    if (!validationResult.success) {
+      return errors.badRequest('Invalid request data', {
+        errors: validationResult.error.errors,
+      });
+    }
+
+    const { title, description, metadata, analysisType, skipAnalysis } = validationResult.data;
 
   // Create content entry
   const { data: recording, error } = await supabase
@@ -81,6 +91,8 @@ export const POST = withRateLimit(
       description: description || null,
       status: 'uploading',
       metadata: metadata || {},
+      analysis_type: analysisType || 'general',
+      skip_analysis: skipAnalysis || false,
     })
     .select()
     .single();

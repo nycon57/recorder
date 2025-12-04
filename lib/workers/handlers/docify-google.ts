@@ -12,6 +12,7 @@ import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
 import { streamDocumentGeneration, isStreamingAvailable, sendCompletionNotification } from '@/lib/services/llm-streaming-helper';
 import { detectContentType, getInsightsPrompt, SCREEN_RECORDING_ENHANCEMENT } from '@/lib/prompts/insights-prompts';
+import { getAnalysisPrompt, type AnalysisType } from '@/lib/services/analysis-templates';
 import OpenAI from 'openai';
 import { checkAutoPublish } from '@/lib/workers/hooks/auto-publish';
 
@@ -206,15 +207,56 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
       streamingManager.sendProgress(recordingId, 'document', 10, 'Loading transcript and metadata...');
     }
 
-    // Fetch recording metadata for context
+    // Fetch recording metadata for context (including analysis settings)
     const { data: recording } = await supabase
       .from('content')
-      .select('title, metadata')
+      .select('title, metadata, analysis_type, skip_analysis')
       .eq('id', recordingId)
       .single();
 
     const title = recording?.title || 'Untitled Recording';
     const metadata = (recording?.metadata || {}) as Record<string, any>;
+    const analysisType = (recording?.analysis_type as AnalysisType) || null;
+    const skipAnalysis = recording?.skip_analysis || false;
+
+    // Check if we should skip analysis
+    if (skipAnalysis || analysisType === 'none') {
+      logger.info('Skipping document generation', {
+        context: {
+          skipAnalysis,
+          analysisType,
+          recordingId,
+        },
+      });
+
+      // Mark recording as completed without generating document
+      await supabase
+        .from('content')
+        .update({ status: 'completed' })
+        .eq('id', recordingId);
+
+      // Still enqueue embedding generation for raw transcript
+      await supabase.from('jobs').insert({
+        type: 'generate_embeddings',
+        status: 'pending',
+        payload: {
+          recordingId,
+          transcriptId,
+          orgId,
+        },
+        dedupe_key: `generate_embeddings:${recordingId}`,
+      });
+
+      logger.info('Skipped document generation, enqueued embedding generation', {
+        context: { recordingId },
+      });
+
+      if (isStreaming) {
+        streamingManager.sendComplete(recordingId, 'Analysis skipped as requested');
+      }
+
+      return;
+    }
 
     // Extract duration from words_json
     const wordsData = (transcript.words_json || {}) as Record<string, any>;
@@ -249,50 +291,97 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
           .join('\n');
     }
 
-    // Detect content type for specialized prompt
-    logger.info('Detecting content type for specialized insights', {
-      context: { transcriptLength: transcript.text.length },
-    });
-
-    progressCallback?.(20, 'Analyzing content type...');
-    if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'document', 20, 'Analyzing content type...');
-    }
+    // Determine which prompt system to use
+    let enhancedPrompt: string;
+    let finalAnalysisType: string;
 
     const model = googleAI.getGenerativeModel({
       model: GOOGLE_CONFIG.DOCIFY_MODEL,
     });
 
-    const contentType = await detectContentType(transcript.text, model);
+    // If analysis_type is explicitly set, use the new template system
+    if (analysisType) {
+      logger.info('Using explicit analysis type from content settings', {
+        context: { analysisType, hasVisualContext },
+      });
 
-    logger.info('Content type detected', {
-      context: { contentType, hasVisualContext },
-    });
+      progressCallback?.(20, `Using ${analysisType} analysis template...`);
+      if (isStreaming) {
+        streamingManager.sendProgress(recordingId, 'document', 20, `Using ${analysisType} analysis template...`);
+      }
 
-    progressCallback?.(25, `Generating ${contentType.replace('_', ' ')} insights...`);
-    if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'document', 25, `Generating ${contentType.replace('_', ' ')} insights...`);
-    }
+      // Get specialized prompt based on analysis type
+      const analysisPrompt = getAnalysisPrompt(analysisType, {
+        title,
+        duration: durationSeconds,
+        hasVisualContext,
+        customContext: metadata.description,
+      });
 
-    // Get content-type-specific prompt
-    const basePrompt = getInsightsPrompt(contentType);
+      if (!analysisPrompt) {
+        throw new Error(`Analysis type ${analysisType} returned null prompt`);
+      }
 
-    // Build the full prompt with context
-    let enhancedPrompt = `${basePrompt}\n\n${contextInfo}\n\n`;
+      // Build the full prompt with context
+      enhancedPrompt = `${analysisPrompt}\n\n${contextInfo}\n\n`;
 
-    // Add screen recording enhancement if visual context is available
-    if (hasVisualContext) {
-      enhancedPrompt += `${SCREEN_RECORDING_ENHANCEMENT}\n\n`;
-      enhancedPrompt += `AUDIO TRANSCRIPT:\n${transcript.text}\n${visualContext}`;
+      // Add visual context if available
+      if (hasVisualContext) {
+        enhancedPrompt += `AUDIO TRANSCRIPT:\n${transcript.text}\n${visualContext}`;
+      } else {
+        enhancedPrompt += `Content to analyze:\n${transcript.text}`;
+      }
+
+      finalAnalysisType = analysisType;
+
+      progressCallback?.(25, `Generating ${analysisType} document...`);
+      if (isStreaming) {
+        streamingManager.sendProgress(recordingId, 'document', 25, `Generating ${analysisType} document...`);
+      }
     } else {
-      enhancedPrompt += `Content to analyze:\n${transcript.text}`;
+      // Fall back to legacy content type detection system
+      logger.info('No explicit analysis type, detecting content type for insights', {
+        context: { transcriptLength: transcript.text.length },
+      });
+
+      progressCallback?.(20, 'Analyzing content type...');
+      if (isStreaming) {
+        streamingManager.sendProgress(recordingId, 'document', 20, 'Analyzing content type...');
+      }
+
+      const contentType = await detectContentType(transcript.text, model);
+
+      logger.info('Content type detected', {
+        context: { contentType, hasVisualContext },
+      });
+
+      progressCallback?.(25, `Generating ${contentType.replace('_', ' ')} insights...`);
+      if (isStreaming) {
+        streamingManager.sendProgress(recordingId, 'document', 25, `Generating ${contentType.replace('_', ' ')} insights...`);
+      }
+
+      // Get content-type-specific prompt (legacy system)
+      const basePrompt = getInsightsPrompt(contentType);
+
+      // Build the full prompt with context
+      enhancedPrompt = `${basePrompt}\n\n${contextInfo}\n\n`;
+
+      // Add screen recording enhancement if visual context is available
+      if (hasVisualContext) {
+        enhancedPrompt += `${SCREEN_RECORDING_ENHANCEMENT}\n\n`;
+        enhancedPrompt += `AUDIO TRANSCRIPT:\n${transcript.text}\n${visualContext}`;
+      } else {
+        enhancedPrompt += `Content to analyze:\n${transcript.text}`;
+      }
+
+      finalAnalysisType = contentType;
     }
 
     // Call Gemini to generate document
     logger.info('Calling Google Gemini for document generation', {
       context: {
         model: GOOGLE_CONFIG.DOCIFY_MODEL,
-        contentType,
+        analysisType: finalAnalysisType,
         hasVisualContext,
         promptLength: enhancedPrompt.length,
         temperature: GOOGLE_CONFIG.DOCIFY_TEMPERATURE,
@@ -402,9 +491,10 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
         model: modelUsed, // PERF-AI-006: Use actual model (Gemini or OpenAI)
         status: 'generated',
         metadata: {
-          content_type: contentType,
+          analysis_type: finalAnalysisType,
+          content_type: finalAnalysisType, // Keep for backward compatibility
           has_visual_context: hasVisualContext,
-          generation_method: 'insights',
+          generation_method: analysisType ? 'analysis_templates' : 'insights',
           doc_provider: docProvider, // PERF-AI-006: Track provider
         },
       })
@@ -489,11 +579,11 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
       context: {
         recordingId,
         documentId: document.id,
-        contentType,
+        analysisType: finalAnalysisType,
         hasVisualContext,
         model: modelUsed, // PERF-AI-006: Actual model used
         provider: docProvider, // PERF-AI-006: Track provider
-        generationMethod: 'insights',
+        generationMethod: analysisType ? 'analysis_templates' : 'insights',
         totalTime,
       },
     });

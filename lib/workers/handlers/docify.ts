@@ -2,11 +2,13 @@
  * Document Generation Handler (Docify)
  *
  * Uses GPT-5 Nano to convert transcripts into well-structured, readable documents.
+ * Supports content-type-aware analysis using specialized templates.
  */
 
 import { openai, PROMPTS } from '@/lib/openai/client';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
+import { getAnalysisPrompt, type AnalysisType } from '@/lib/services/analysis-templates';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -47,19 +49,63 @@ export async function generateDocument(job: Job): Promise<void> {
 
     console.log(`[Docify] Loaded transcript (${transcript.text.length} chars)`);
 
-    // Fetch recording metadata for context
+    // Fetch recording metadata for context (including analysis settings)
     const { data: recording } = await supabase
       .from('content')
-      .select('title, metadata')
+      .select('title, metadata, analysis_type, skip_analysis')
       .eq('id', recordingId)
       .single();
 
     const title = recording?.title || 'Untitled Recording';
     const metadata = (recording?.metadata || {}) as Record<string, any>;
+    const analysisType = (recording?.analysis_type as AnalysisType) || 'general';
+    const skipAnalysis = recording?.skip_analysis || false;
+
+    // Check if we should skip analysis
+    if (skipAnalysis || analysisType === 'none') {
+      console.log(`[Docify] Skipping document generation (skip_analysis: ${skipAnalysis}, analysis_type: ${analysisType})`);
+
+      // Mark recording as completed without generating document
+      await supabase
+        .from('content')
+        .update({ status: 'completed' })
+        .eq('id', recordingId);
+
+      // Still enqueue embedding generation for raw transcript
+      await supabase.from('jobs').insert({
+        type: 'generate_embeddings',
+        status: 'pending',
+        payload: {
+          recordingId,
+          transcriptId,
+          orgId,
+        },
+        dedupe_key: `generate_embeddings:${recordingId}`,
+      });
+
+      console.log(`[Docify] Skipped document generation, enqueued embedding generation for recording ${recordingId}`);
+      return;
+    }
+
+    console.log(`[Docify] Using analysis type: ${analysisType}`);
 
     // Extract duration from words_json
     const wordsData = (transcript.words_json || {}) as Record<string, any>;
     const durationSeconds = wordsData.duration || 0;
+
+    // Determine if content has visual context (screen recordings typically do)
+    const hasVisualContext = metadata.hasVisualContext || metadata.content_type === 'recording';
+
+    // Get specialized prompt based on analysis type
+    const analysisPrompt = getAnalysisPrompt(analysisType, {
+      title,
+      duration: durationSeconds,
+      hasVisualContext,
+      customContext: metadata.description,
+    });
+
+    // Fallback to default prompt if analysis template returns null (shouldn't happen after skip check)
+    const systemPrompt = analysisPrompt || PROMPTS.DOCIFY;
 
     // Build context for GPT-5 Nano
     const contextInfo = [
@@ -71,13 +117,13 @@ export async function generateDocument(job: Job): Promise<void> {
       .join('\n');
 
     // Call GPT-5 Nano to generate document
-    console.log(`[Docify] Calling GPT-5 Nano for document generation`);
+    console.log(`[Docify] Calling GPT-5 Nano for document generation with ${analysisType} template`);
     const completion = await openai.chat.completions.create({
       model: 'gpt-5-nano-2025-08-07',
       messages: [
         {
           role: 'system',
-          content: PROMPTS.DOCIFY,
+          content: systemPrompt,
         },
         {
           role: 'user',
@@ -100,6 +146,7 @@ export async function generateDocument(job: Job): Promise<void> {
       model: completion.model,
       usage: completion.usage,
       generatedAt: new Date().toISOString(),
+      analysisType,
     };
 
     // Save document to database
@@ -112,6 +159,7 @@ export async function generateDocument(job: Job): Promise<void> {
         version: 'v1',
         model: completion.model,
         status: 'generated',
+        metadata: documentMetadata,
       })
       .select()
       .single();

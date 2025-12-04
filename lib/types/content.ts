@@ -161,11 +161,16 @@ export const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
 
 /**
  * File size limits in bytes per content type
+ *
+ * Videos up to 2GB are supported. Large videos are automatically:
+ * 1. Compressed server-side if beneficial (typically 50-70% size reduction)
+ * 2. Split into segments for parallel processing
+ * 3. Made progressively searchable as segments complete
  */
 export const FILE_SIZE_LIMITS: Record<ContentType, number> = {
-  recording: 500 * 1024 * 1024, // 500 MB
-  video: 500 * 1024 * 1024, // 500 MB
-  audio: 100 * 1024 * 1024, // 100 MB
+  recording: 2 * 1024 * 1024 * 1024, // 2 GB
+  video: 2 * 1024 * 1024 * 1024, // 2 GB
+  audio: 500 * 1024 * 1024, // 500 MB
   document: 50 * 1024 * 1024, // 50 MB
   text: 1 * 1024 * 1024, // 1 MB
 };
@@ -174,9 +179,9 @@ export const FILE_SIZE_LIMITS: Record<ContentType, number> = {
  * Human-readable file size limit labels
  */
 export const FILE_SIZE_LIMIT_LABELS: Record<ContentType, string> = {
-  recording: '500 MB',
-  video: '500 MB',
-  audio: '100 MB',
+  recording: '2 GB',
+  video: '2 GB',
+  audio: '500 MB',
   document: '50 MB',
   text: '1 MB',
 };
@@ -184,17 +189,23 @@ export const FILE_SIZE_LIMIT_LABELS: Record<ContentType, string> = {
 /**
  * Maximum duration limits in seconds per content type
  *
- * Videos >30 minutes are automatically split into segments for processing.
- * Gemini context window (~1M tokens) supports ~58 minutes, but we use 60 min
- * as a user-friendly limit with automatic segmentation for longer videos.
+ * Videos up to 2 hours are supported with progressive processing:
  *
- * Segmentation threshold: 30 minutes (videos shorter go through single-pass)
- * Maximum supported: 60 minutes (videos longer are rejected)
+ * Processing Strategy:
+ * - < 30 min: Single-pass processing (no splitting)
+ * - 30-60 min: Split into ~25 min segments
+ * - 60-120 min: Split into ~15 min segments (more granular progress)
+ *
+ * Progressive Features:
+ * - Each segment becomes searchable immediately after processing
+ * - Real-time progress tracking (segment X of Y complete)
+ * - Estimated time remaining based on actual processing speed
+ * - Full video remains playable as a single file
  */
 export const DURATION_LIMITS: Record<ContentType, number | null> = {
-  recording: 60 * 60, // 60 minutes (with automatic segmentation for >30 min)
-  video: 60 * 60, // 60 minutes (with automatic segmentation for >30 min)
-  audio: 60 * 60, // 60 minutes (audio-only is less resource-intensive)
+  recording: 120 * 60, // 120 minutes (2 hours) with progressive segmentation
+  video: 120 * 60, // 120 minutes (2 hours) with progressive segmentation
+  audio: 120 * 60, // 120 minutes (2 hours)
   document: null, // Not applicable
   text: null, // Not applicable
 };
@@ -203,12 +214,111 @@ export const DURATION_LIMITS: Record<ContentType, number | null> = {
  * Human-readable duration limit labels
  */
 export const DURATION_LIMIT_LABELS: Record<ContentType, string | null> = {
-  recording: '60 minutes',
-  video: '60 minutes',
-  audio: '60 minutes',
+  recording: '2 hours',
+  video: '2 hours',
+  audio: '2 hours',
   document: null,
   text: null,
 };
+
+/**
+ * Segmentation configuration for progressive processing
+ */
+export const SEGMENTATION_CONFIG = {
+  /** Duration threshold for triggering segmentation (30 minutes) */
+  SPLIT_THRESHOLD_SECONDS: 30 * 60,
+
+  /** Segment size for videos 30-60 minutes (25 minutes) */
+  STANDARD_SEGMENT_SECONDS: 25 * 60,
+
+  /** Segment size for videos 60+ minutes (15 minutes for better progress) */
+  LONG_VIDEO_SEGMENT_SECONDS: 15 * 60,
+
+  /** Duration threshold for using smaller segments (60 minutes) */
+  LONG_VIDEO_THRESHOLD_SECONDS: 60 * 60,
+
+  /** Maximum duration we'll process (120 minutes) */
+  MAX_DURATION_SECONDS: 120 * 60,
+} as const;
+
+/**
+ * Get optimal segment duration based on total video duration
+ */
+export function getOptimalSegmentDuration(totalDurationSeconds: number): number {
+  if (totalDurationSeconds <= SEGMENTATION_CONFIG.SPLIT_THRESHOLD_SECONDS) {
+    // No splitting needed
+    return totalDurationSeconds;
+  }
+
+  if (totalDurationSeconds <= SEGMENTATION_CONFIG.LONG_VIDEO_THRESHOLD_SECONDS) {
+    // Standard 25-minute segments for 30-60 min videos
+    return SEGMENTATION_CONFIG.STANDARD_SEGMENT_SECONDS;
+  }
+
+  // Smaller 15-minute segments for 60+ min videos (better progress tracking)
+  return SEGMENTATION_CONFIG.LONG_VIDEO_SEGMENT_SECONDS;
+}
+
+/**
+ * Calculate expected number of segments for a video
+ */
+export function calculateSegmentCount(totalDurationSeconds: number): number {
+  if (totalDurationSeconds <= SEGMENTATION_CONFIG.SPLIT_THRESHOLD_SECONDS) {
+    return 1; // Single-pass, no splitting
+  }
+
+  const segmentDuration = getOptimalSegmentDuration(totalDurationSeconds);
+  return Math.ceil(totalDurationSeconds / segmentDuration);
+}
+
+/**
+ * Get processing strategy based on duration
+ */
+export function getProcessingStrategy(totalDurationSeconds: number): 'single' | 'segmented' {
+  return totalDurationSeconds <= SEGMENTATION_CONFIG.SPLIT_THRESHOLD_SECONDS
+    ? 'single'
+    : 'segmented';
+}
+
+/**
+ * Estimate total processing time in minutes
+ */
+export function estimateProcessingTime(totalDurationSeconds: number): {
+  minMinutes: number;
+  maxMinutes: number;
+  description: string;
+} {
+  const segmentCount = calculateSegmentCount(totalDurationSeconds);
+  const strategy = getProcessingStrategy(totalDurationSeconds);
+
+  if (strategy === 'single') {
+    // Single-pass: ~1-2 min per minute of video
+    const minTime = Math.ceil(totalDurationSeconds / 60 * 1);
+    const maxTime = Math.ceil(totalDurationSeconds / 60 * 2);
+    return {
+      minMinutes: minTime,
+      maxMinutes: maxTime,
+      description: `${minTime}-${maxTime} minutes`,
+    };
+  }
+
+  // Segmented: parallel processing reduces wall-clock time
+  // Each segment takes ~2-4 min, but they run in parallel (limited concurrency)
+  // Assume 3 parallel segments max
+  const parallelBatches = Math.ceil(segmentCount / 3);
+  const minTimePerBatch = 2;
+  const maxTimePerBatch = 4;
+  const mergeTime = 1;
+
+  const minTime = parallelBatches * minTimePerBatch + mergeTime;
+  const maxTime = parallelBatches * maxTimePerBatch + mergeTime;
+
+  return {
+    minMinutes: minTime,
+    maxMinutes: maxTime,
+    description: `${minTime}-${maxTime} minutes (${segmentCount} segments)`,
+  };
+}
 
 /**
  * Accepted file extensions per content type for file input

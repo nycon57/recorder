@@ -81,12 +81,6 @@ export const POST = apiHandler(async (
       },
     });
 
-    // Debug: Log thumbnail parameters
-    console.log('[Metadata Route] Thumbnail params:', {
-      recordingId,
-      thumbnailUploaded,
-      providedThumbnailPath: providedThumbnailPath || 'NOT PROVIDED',
-    });
 
     // Verify content exists and belongs to org
     const { data: recording, error: fetchError } = await supabase
@@ -117,34 +111,22 @@ export const POST = apiHandler(async (
 
     // Generate thumbnail URL if thumbnail was uploaded
     let thumbnailUrl: string | null = null;
-    console.log('[Metadata Route] thumbnailUploaded check:', { thumbnailUploaded, type: typeof thumbnailUploaded });
 
     if (thumbnailUploaded) {
       // Use provided path if available, otherwise default to .jpg extension
       // Thumbnails are stored in the 'thumbnails' bucket with path pattern: org_{orgId}/recordings/{recordingId}/thumbnail.{ext}
       const thumbnailPath = providedThumbnailPath || `org_${orgId}/recordings/${recordingId}/thumbnail.jpg`;
-      console.log('[Metadata Route] Generating thumbnail URL:', {
-        thumbnailPath,
-        bucket: 'thumbnails',
-        providedThumbnailPath: providedThumbnailPath || 'DEFAULTED TO JPG',
-      });
 
       const { data: publicUrlData } = supabase.storage
         .from('thumbnails')
         .getPublicUrl(thumbnailPath);
       thumbnailUrl = publicUrlData?.publicUrl || null;
 
-      console.log('[Metadata Route] Generated thumbnail URL:', {
-        thumbnailUrl,
-        publicUrlData,
-      });
-
       logger.info('Thumbnail URL generated', {
         context: { requestId, recordingId },
         data: { thumbnailPath, thumbnailUrl, usedProvidedPath: !!providedThumbnailPath },
       });
     } else {
-      console.log('[Metadata Route] No thumbnail uploaded, skipping URL generation');
     }
 
     // Update content with metadata

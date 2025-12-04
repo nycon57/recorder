@@ -9,6 +9,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createLogger } from '@/lib/utils/logger';
+import { updateRecordingSchema } from '@/lib/validations/api';
 
 // GET /api/recordings/[id] - Get a specific recording
 export const GET = apiHandler(
@@ -86,17 +87,32 @@ export const PUT = apiHandler(
     const { id } = await params;
 
     const body = await request.json();
-    const { title, description, metadata } = body;
+
+    // Validate request body
+    const validationResult = updateRecordingSchema.safeParse(body);
+    if (!validationResult.success) {
+      return errors.badRequest('Invalid request data', {
+        errors: validationResult.error.errors,
+      });
+    }
+
+    const { title, description, metadata, analysisType, skipAnalysis } = validationResult.data;
+
+    // Build update object with only provided fields
+    const updateData: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (metadata !== undefined) updateData.metadata = metadata;
+    if (analysisType !== undefined) updateData.analysis_type = analysisType;
+    if (skipAnalysis !== undefined) updateData.skip_analysis = skipAnalysis;
 
     // Update content
     const { data: recording, error } = await supabase
       .from('content')
-      .update({
-        title,
-        description,
-        metadata,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', id)
       .eq('org_id', orgId)
       .select()

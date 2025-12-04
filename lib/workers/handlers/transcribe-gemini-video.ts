@@ -26,8 +26,15 @@ import {
   shouldSplitVideo,
   splitVideoIntoSegments,
   getVideoDuration,
+  getSegmentConfig,
+  compressVideoBeforeSplit,
   SPLIT_THRESHOLD_SECONDS,
 } from '@/lib/services/video-splitter';
+import {
+  getProcessingStrategy,
+  calculateSegmentCount,
+  estimateProcessingTime,
+} from '@/lib/types/content';
 
 // Size threshold for using Gemini File API vs inline base64
 const FILE_API_THRESHOLD_BYTES = 20 * 1024 * 1024; // 20MB
@@ -338,19 +345,89 @@ export async function transcribeRecording(job: Job): Promise<void> {
         streamingManager.sendProgress(
           recordingId,
           'transcribe',
-          30,
-          `Video is ${Math.round(videoDuration / 60)} minutes, splitting into segments...`
+          28,
+          `Video is ${Math.round(videoDuration / 60)} minutes, compressing before split...`
         );
       }
 
-      // Split video into segments
-      const splitResult = await splitVideoIntoSegments(tempFilePath, {
+      // Compress video before splitting to reduce storage and processing time
+      let fileToSplit = tempFilePath;
+      let compressedFilePath: string | null = null;
+
+      const compressionResult = await compressVideoBeforeSplit(tempFilePath, {
+        crf: 30, // Good quality for AI analysis
+        preset: 'veryfast', // Fast compression
         onProgress: (percent, message) => {
           if (isStreaming) {
-            streamingManager.sendProgress(recordingId, 'transcribe', 30 + percent * 0.2, message);
+            // Compression takes 28-38% of progress
+            streamingManager.sendProgress(recordingId, 'transcribe', 28 + percent * 0.1, message);
           }
         },
       });
+
+      if (compressionResult.success) {
+        fileToSplit = compressionResult.outputPath;
+        compressedFilePath = compressionResult.outputPath;
+
+        logger.info('Pre-split compression successful', {
+          context: {
+            recordingId,
+            originalSizeMB: (compressionResult.originalSize / 1024 / 1024).toFixed(2),
+            compressedSizeMB: (compressionResult.compressedSize / 1024 / 1024).toFixed(2),
+            savingsPercent: ((1 - compressionResult.compressedSize / compressionResult.originalSize) * 100).toFixed(1),
+            compressionTime: compressionResult.compressionTime.toFixed(1),
+          },
+        });
+
+        if (isStreaming) {
+          const savings = ((1 - compressionResult.compressedSize / compressionResult.originalSize) * 100).toFixed(0);
+          streamingManager.sendProgress(
+            recordingId,
+            'transcribe',
+            38,
+            `Compressed ${savings}% smaller, now splitting into segments...`
+          );
+        }
+      } else {
+        // Compression failed, continue with original file
+        logger.warn('Pre-split compression failed, using original file', {
+          context: {
+            recordingId,
+            error: compressionResult.error,
+          },
+        });
+
+        if (isStreaming) {
+          streamingManager.sendProgress(
+            recordingId,
+            'transcribe',
+            38,
+            `Splitting video into segments...`
+          );
+        }
+      }
+
+      // Split video into segments (using compressed file if available)
+      const splitResult = await splitVideoIntoSegments(fileToSplit, {
+        onProgress: (percent, message) => {
+          if (isStreaming) {
+            // Splitting takes 38-50% of progress
+            streamingManager.sendProgress(recordingId, 'transcribe', 38 + percent * 0.12, message);
+          }
+        },
+      });
+
+      // Clean up compressed file after splitting (segments are now independent)
+      if (compressedFilePath) {
+        try {
+          await unlink(compressedFilePath);
+          logger.debug('Cleaned up compressed file after splitting', {
+            context: { compressedFilePath },
+          });
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
 
       if (!splitResult.success) {
         throw new Error(`Failed to split video: ${splitResult.error}`);
@@ -376,7 +453,46 @@ export async function transcribeRecording(job: Job): Promise<void> {
         );
       }
 
-      // Create jobs for each segment
+      // Create merge job FIRST with 'waiting' status
+      // This ensures segment jobs can reference it immediately, preventing race conditions
+      // where a segment might complete before its parent_job_id is set
+      const { data: mergeJob, error: mergeJobError } = await supabase
+        .from('jobs')
+        .insert({
+          type: 'merge_transcripts',
+          status: 'waiting', // Will transition to 'pending' when all segments complete
+          payload: {
+            contentId: recordingId,
+            orgId,
+            parentJobId: job.id,
+            segmentCount: splitResult.segments.length,
+            totalDuration: splitResult.totalDuration,
+            segments: splitResult.segments,
+          },
+          // No run_at delay - job will be triggered by segment completion
+          run_at: new Date().toISOString(),
+          dedupe_key: `merge_transcripts:${recordingId}`,
+          // Track segment completion progress
+          segments_completed: 0,
+          total_segments: splitResult.segments.length,
+        })
+        .select('id')
+        .single();
+
+      if (mergeJobError || !mergeJob) {
+        throw new Error(`Failed to create merge job: ${mergeJobError?.message || 'Unknown error'}`);
+      }
+
+      logger.info('Created merge transcripts job', {
+        context: {
+          recordingId,
+          mergeJobId: mergeJob.id,
+          segmentCount: splitResult.segments.length,
+        },
+      });
+
+      // Create segment jobs with parent_job_id already set
+      // This ensures segments can notify the merge job immediately upon completion
       const segmentJobs = await Promise.all(
         splitResult.segments.map(async (segment) => {
           const { data: segmentJob, error: jobError } = await supabase
@@ -396,6 +512,8 @@ export async function transcribeRecording(job: Job): Promise<void> {
                 segmentDuration: segment.duration,
               },
               dedupe_key: `transcribe_segment:${recordingId}:${segment.index}`,
+              // Set parent_job_id at creation time to prevent race condition
+              parent_job_id: mergeJob.id,
             })
             .select()
             .single();
@@ -408,41 +526,12 @@ export async function transcribeRecording(job: Job): Promise<void> {
         })
       );
 
-      logger.info('Created segment transcription jobs', {
+      logger.info('Created segment transcription jobs with dependency tracking', {
         context: {
           recordingId,
+          mergeJobId: mergeJob.id,
           jobCount: segmentJobs.length,
           jobIds: segmentJobs.map(j => j.id),
-        },
-      });
-
-      // Create merge job (will wait for all segments to complete)
-      const { error: mergeJobError } = await supabase
-        .from('jobs')
-        .insert({
-          type: 'merge_transcripts',
-          status: 'pending',
-          payload: {
-            contentId: recordingId,
-            orgId,
-            parentJobId: job.id,
-            segmentCount: splitResult.segments.length,
-            totalDuration: splitResult.totalDuration,
-            segments: splitResult.segments,
-          },
-          // Run after all segment jobs complete (use high run_at to ensure ordering)
-          run_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour from now initially
-          dedupe_key: `merge_transcripts:${recordingId}`,
-        });
-
-      if (mergeJobError) {
-        throw new Error(`Failed to create merge job: ${mergeJobError.message}`);
-      }
-
-      logger.info('Created merge transcripts job', {
-        context: {
-          recordingId,
-          segmentCount: splitResult.segments.length,
         },
       });
 
@@ -451,22 +540,78 @@ export async function transcribeRecording(job: Job): Promise<void> {
           recordingId,
           'transcribe',
           60,
-          `Processing ${splitResult.segments.length} segments in parallel...`
+          `Processing ${splitResult.segments.length} segments - content will become searchable progressively`
         );
       }
 
-      // Update content status to indicate segmented processing
+      // Get processing time estimate (use max for conservative estimate)
+      const timeEstimate = estimateProcessingTime(splitResult.totalDuration);
+      const estimatedMinutes = timeEstimate.maxMinutes;
+      const estimatedCompletionAt = new Date(Date.now() + estimatedMinutes * 60 * 1000);
+
+      // Update content with progressive processing fields
       await supabase
         .from('content')
         .update({
           status: 'transcribing',
+          processing_strategy: splitResult.processingStrategy,
+          total_segments: splitResult.segments.length,
+          completed_segments: 0,
+          estimated_completion_at: estimatedCompletionAt.toISOString(),
           metadata: {
             processing_method: 'segmented',
             segment_count: splitResult.segments.length,
             total_duration: splitResult.totalDuration,
+            segment_duration_minutes: Math.round(splitResult.segmentDuration / 60),
+            estimated_minutes: estimatedMinutes,
+            pre_split_compression: compressionResult.success ? {
+              original_size_mb: (compressionResult.originalSize / 1024 / 1024).toFixed(2),
+              compressed_size_mb: (compressionResult.compressedSize / 1024 / 1024).toFixed(2),
+              savings_percent: ((1 - compressionResult.compressedSize / compressionResult.originalSize) * 100).toFixed(1),
+              compression_time_seconds: compressionResult.compressionTime.toFixed(1),
+            } : null,
           },
         })
         .eq('id', recordingId);
+
+      // Create initial segment_transcripts records with 'pending' status
+      // This allows the progress UI to show all segments from the start
+      const segmentRecords = splitResult.segments.map(segment => ({
+        content_id: recordingId,
+        parent_job_id: job.id,
+        segment_index: segment.index,
+        segment_start_time: segment.startTime,
+        segment_duration: segment.duration,
+        status: 'pending' as const,
+        key_moments_count: 0,
+        embeddings_generated: false,
+      }));
+
+      const { error: segmentInsertError } = await supabase
+        .from('segment_transcripts')
+        .insert(segmentRecords);
+
+      if (segmentInsertError) {
+        logger.warn('Could not create segment_transcripts records', {
+          context: { error: segmentInsertError.message },
+        });
+      }
+
+      // Log processing start event for progress tracking
+      try {
+        await supabase.from('content_processing_events').insert({
+          content_id: recordingId,
+          event_type: 'processing_started',
+          payload: {
+            strategy: splitResult.processingStrategy,
+            totalSegments: splitResult.segments.length,
+            totalDuration: splitResult.totalDuration,
+            estimatedMinutes,
+          },
+        });
+      } catch {
+        // Ignore if table doesn't exist yet
+      }
 
       // Clean up main temp file (segments are in their own files now)
       // Note: Don't delete temp file yet, segments reference it
@@ -477,6 +622,8 @@ export async function transcribeRecording(job: Job): Promise<void> {
           recordingId,
           segmentCount: splitResult.segments.length,
           totalDuration: Math.round(splitResult.totalDuration / 60),
+          estimatedMinutes,
+          processingStrategy: splitResult.processingStrategy,
         },
       });
 
@@ -868,10 +1015,15 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       streamingManager.sendProgress(recordingId, 'transcribe', 90, 'Transcript saved successfully');
     }
 
-    // Update recording status
+    // Update recording status (single-pass processing)
     await supabase
       .from('content')
-      .update({ status: 'transcribed' })
+      .update({
+        status: 'transcribed',
+        processing_strategy: 'single',
+        total_segments: 1,
+        completed_segments: 1,
+      })
       .eq('id', recordingId);
 
     // PERF-AI-001: Create all dependent jobs in parallel for faster pipeline execution
