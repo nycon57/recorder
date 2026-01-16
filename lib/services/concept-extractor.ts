@@ -77,8 +77,8 @@ export interface ExtractionOptions {
 }
 
 const DEFAULT_OPTIONS: ExtractionOptions = {
-  maxConcepts: 30,
-  minConfidence: 0.6,
+  maxConcepts: 15, // Reduced - quality over quantity
+  minConfidence: 0.7, // Raised threshold for higher quality
   includeContext: true,
   generateEmbeddings: true,
 };
@@ -131,33 +131,45 @@ export async function extractConceptsFromText(
     },
   });
 
-  const prompt = `Extract key concepts from the following text. Focus on identifying:
+  const prompt = `Extract ONLY high-value, specific concepts from the following text. Be VERY selective - quality over quantity.
 
-1. **Tools & Technologies**: Software, platforms, frameworks, libraries (e.g., "React", "Docker", "Supabase")
-2. **Processes & Workflows**: Methods, procedures, workflows (e.g., "code review", "deployment", "user onboarding")
-3. **Technical Terms**: Domain-specific terminology (e.g., "API endpoint", "database migration", "authentication flow")
-4. **People & Organizations**: Key people or companies mentioned (only if significant to the content)
-5. **General Concepts**: Other important concepts that don't fit above categories
+**EXTRACT these types of concepts:**
+1. **Named Entities**: Specific products, platforms, tools, or systems with proper names (e.g., "Salesforce", "NMBPerks", "Total Expert")
+2. **Organizations**: Specific companies, teams, or departments with names (e.g., "Nationwide Mortgage Bankers", "Google Cloud")
+3. **People**: Real named individuals mentioned (e.g., "Sarah Chen", "Mike Johnson") - NOT role titles
+4. **Domain-Specific Terms**: Technical terminology unique to this field that wouldn't be understood by outsiders (e.g., "Cash-Out Refinance", "HELOC", "LTV Ratio")
+5. **Proprietary Processes**: Named internal processes, programs, or methodologies specific to the organization (e.g., "AMP Ambassador Program", "Quarterly Business Review")
+
+**DO NOT EXTRACT:**
+- Generic business terms (marketing, strategy, budgeting, planning, workflow)
+- Common words found in any dictionary (mortgage, loan, payment, customer, home)
+- Role titles without names (Department Heads, Regional Leaders, Branch Managers)
+- Outcomes or benefits (lower payments, save money, improve efficiency)
+- Vague/fluffy phrases (financial wellness, streamlining, optimization)
+- Actions or verbs disguised as concepts (debt consolidation, refinancing - unless it's a specific product name)
+
+**Quality Test**: Before including a concept, ask: "Would this term help connect this document to OTHER documents in a knowledge base?" Generic terms appear everywhere and provide no signal.
 
 For each concept, provide:
-- **name**: The concept name (use title case for proper nouns, lowercase for general terms)
-- **type**: One of: tool, process, person, organization, technical_term, general
-- **confidence**: 0.0-1.0 score of how certain you are this is a key concept
-- **description**: Brief (1 sentence) description of what this concept means in this context
-- **context**: The sentence or phrase where this concept appears
+- **name**: The exact proper noun or specific term (use title case for proper nouns)
+- **type**: One of: tool, process, person, organization, technical_term
+- **confidence**: 0.7-1.0 score (only include concepts you're confident about)
+- **description**: Brief description of what this SPECIFIC thing is
+- **context**: The sentence where this appears
 
-Return ONLY a JSON array with no markdown formatting. Maximum ${opts.maxConcepts} concepts, ordered by importance.
+Return ONLY a JSON array. Maximum ${Math.min(opts.maxConcepts || 30, 15)} concepts, ordered by specificity and importance. It's better to return 5 high-quality concepts than 20 generic ones.
 
-Example output:
+Example of GOOD concepts:
 [
-  {
-    "name": "Supabase",
-    "type": "tool",
-    "confidence": 0.95,
-    "description": "Open-source Firebase alternative for backend services",
-    "context": "We use Supabase for our database and authentication"
-  }
+  {"name": "NMBPerks", "type": "tool", "confidence": 0.95, "description": "NMB's proprietary homeowner rewards platform", "context": "..."},
+  {"name": "Total Expert", "type": "tool", "confidence": 0.9, "description": "CRM platform used for mortgage marketing", "context": "..."}
 ]
+
+Example of BAD concepts (do not extract these):
+- "Marketing" (too generic)
+- "Homeownership" (dictionary word)
+- "Lower Monthly Payments" (outcome, not concept)
+- "Department Heads" (role title, not a person)
 
 TEXT TO ANALYZE:
 ${text.substring(0, 15000)}
@@ -239,6 +251,7 @@ ${text.substring(0, 15000)}
 
 /**
  * Validate and normalize concept type
+ * Note: 'general' is still accepted for backwards compatibility but new extractions should avoid it
  */
 function validateConceptType(type: string): ConceptType {
   const validTypes: ConceptType[] = [
@@ -247,12 +260,12 @@ function validateConceptType(type: string): ConceptType {
     'person',
     'organization',
     'technical_term',
-    'general',
+    'general', // Kept for backwards compatibility, but prompt discourages this
   ];
   const normalized = type.toLowerCase().replace(/[_-]/g, '_');
   return validTypes.includes(normalized as ConceptType)
     ? (normalized as ConceptType)
-    : 'general';
+    : 'technical_term'; // Default to technical_term instead of general
 }
 
 /**

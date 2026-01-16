@@ -18,8 +18,7 @@ import {
 import { toast } from 'sonner';
 import ReactMarkdown, { Components } from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { useTheme } from 'next-themes';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { Button } from '@/app/components/ui/button';
 import { Textarea } from '@/app/components/ui/textarea';
@@ -50,7 +49,6 @@ export default function TextNoteViewer({
   fileType = 'txt',
   onContentUpdate
 }: TextNoteViewerProps) {
-  const { theme } = useTheme();
   const [isEditing, setIsEditing] = React.useState(false);
   const [editedContent, setEditedContent] = React.useState(initialContent);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -333,7 +331,7 @@ export default function TextNoteViewer({
 
                             return !inline && language ? (
                               <SyntaxHighlighter
-                                style={theme === 'dark' ? oneDark : oneLight}
+                                style={oneDark}
                                 language={language}
                                 PreTag="div"
                               >
@@ -371,7 +369,7 @@ export default function TextNoteViewer({
 
                         return !inline && language ? (
                           <SyntaxHighlighter
-                            style={theme === 'dark' ? oneDark : oneLight}
+                            style={oneDark}
                             language={language}
                             PreTag="div"
                           >

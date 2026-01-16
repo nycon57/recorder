@@ -66,8 +66,9 @@ interface SearchResultConcept {
 
 interface SearchResult {
   id: string;
-  recordingId: string;
-  recordingTitle: string;
+  contentId: string;
+  contentTitle: string;
+  contentType: string;
   chunkText: string;
   similarity: number;
   metadata: {
@@ -80,6 +81,7 @@ interface SearchResult {
     tags?: Array<{ id: string; name: string; color: string }>;
     collectionId?: string;
     isFavorite?: boolean;
+    contentType?: string;
   };
   createdAt: string;
   concepts?: SearchResultConcept[];
@@ -234,7 +236,7 @@ function SearchPageContent() {
     if (searchResults.length === 0) return;
 
     // Get unique content IDs that we haven't already fetched
-    const allContentIds = [...new Set(searchResults.map(r => r.recordingId))];
+    const allContentIds = [...new Set(searchResults.map(r => r.contentId))];
     const contentIdsToFetch = allContentIds.filter(id => !fetchedConceptsRef.current.has(id));
 
     if (contentIdsToFetch.length === 0) return;
@@ -279,7 +281,7 @@ function SearchPageContent() {
       setResults(prevResults =>
         prevResults.map(result => ({
           ...result,
-          concepts: conceptsMap.get(result.recordingId) || result.concepts,
+          concepts: conceptsMap.get(result.contentId) || result.concepts,
         }))
       );
     }
@@ -302,7 +304,7 @@ function SearchPageContent() {
       case 'date':
         return sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       case 'name':
-        return sorted.sort((a, b) => a.recordingTitle.localeCompare(b.recordingTitle));
+        return sorted.sort((a, b) => (a.contentTitle || '').localeCompare(b.contentTitle || ''));
       default:
         return sorted;
     }
@@ -784,51 +786,70 @@ function SearchPageContent() {
             className="space-y-4"
           >
             {results.map((result) => (
-              <motion.div
+              <Link
                 key={result.id}
-                variants={staggerItem}
-                className="border border-border rounded-lg p-5 transition-all hover:shadow-md"
+                href={`/library/${result.contentId}${
+                  result.metadata.startTime
+                    ? `?t=${Math.floor(result.metadata.startTime)}`
+                    : ''
+                }`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block"
               >
-                {/* Result Header */}
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <Link
-                      href={`/library/${result.recordingId}${
-                        result.metadata.startTime
-                          ? `?t=${Math.floor(result.metadata.startTime)}`
-                          : ''
-                      }`}
-                      className="text-lg font-semibold text-primary hover:text-primary/80 hover:underline"
-                    >
-                      {result.recordingTitle}
-                    </Link>
-                    <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        {result.metadata.source === 'transcript' ? (
-                          <><Video className="w-4 h-4" /> Transcript</>
-                        ) : (
-                          <><FileText className="w-4 h-4" /> Document</>
-                        )}
-                      </span>
-                      {result.metadata.startTime !== undefined && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          {formatTime(result.metadata.startTime)}
+                <motion.div
+                  variants={staggerItem}
+                  className="border border-border rounded-lg p-5 transition-all hover:shadow-md hover:border-primary/50 cursor-pointer group"
+                >
+                  {/* Result Header */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      {/* Content Title with hover state */}
+                      <h3 className="text-lg font-semibold text-primary group-hover:text-primary/80 group-hover:underline transition-colors">
+                        {result.contentTitle || 'Untitled'}
+                      </h3>
+
+                      {/* Content Type and Source Info */}
+                      <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground flex-wrap">
+                        {/* Content Type Badge */}
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted/50 text-xs font-medium">
+                          {result.contentType && CONTENT_TYPE_EMOJI[result.contentType as keyof typeof CONTENT_TYPE_EMOJI]}
+                          <span className="capitalize">{result.contentType || 'content'}</span>
                         </span>
-                      )}
-                      <span className="text-success font-medium">
-                        {Math.round(result.similarity * 100)}% match
-                      </span>
+
+                        {/* Source Badge (Transcript vs AI Document) */}
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted/50 text-xs font-medium">
+                          {result.metadata.source === 'transcript' ? (
+                            <><Video className="w-3 h-3" /> Transcript</>
+                          ) : (
+                            <><FileText className="w-3 h-3" /> AI Analysis</>
+                          )}
+                        </span>
+
+                        {/* Timestamp if available */}
+                        {result.metadata.startTime !== undefined && (
+                          <span className="inline-flex items-center gap-1 text-xs">
+                            <Clock className="w-3 h-3" />
+                            {formatTime(result.metadata.startTime)}
+                          </span>
+                        )}
+
+                        {/* Match Score */}
+                        <span className="text-success font-medium text-xs">
+                          {Math.round(result.similarity * 100)}% match
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Favorite Button - stop propagation to prevent navigation */}
+                    <div onClick={(e) => e.preventDefault()}>
+                      <FavoriteButton
+                        recordingId={result.contentId}
+                        isFavorite={result.metadata.isFavorite || false}
+                        size="sm"
+                      />
                     </div>
                   </div>
-
-                  {/* Favorite Button */}
-                  <FavoriteButton
-                    recordingId={result.recordingId}
-                    isFavorite={result.metadata.isFavorite || false}
-                    size="sm"
-                  />
-                </div>
 
                 {/* Result Text */}
                 <div className="text-foreground leading-relaxed mb-3 prose prose-sm dark:prose-invert max-w-none [&_p]:mb-2 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1">
@@ -880,6 +901,7 @@ function SearchPageContent() {
                   </div>
                 )}
               </motion.div>
+              </Link>
             ))}
           </motion.div>
         ) : hasSearched && query ? (

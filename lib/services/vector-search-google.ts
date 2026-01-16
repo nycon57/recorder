@@ -32,6 +32,7 @@ export interface SearchResult {
   id: string;
   contentId: string;
   contentTitle: string;
+  contentType: string;
   chunkText: string;
   /** Similarity score 0-1. null when similarity calculation fails (indicates unknown relevance) */
   similarity: number | null;
@@ -47,7 +48,7 @@ export interface SearchResult {
     timestampRange?: string;
     hasVisualContext?: boolean;
     visualDescription?: string;
-    contentType?: 'audio' | 'visual' | 'combined' | 'document';
+    contentType?: string;
   };
   createdAt: string;
 }
@@ -280,9 +281,13 @@ export async function vectorSearch(
       id: row.id,
       contentId: row.content_id,
       contentTitle: row.content_title,
+      contentType: row.content_type || 'recording',
       chunkText: row.chunk_text,
       similarity: row.final_score, // Use final_score which includes recency
-      metadata: row.metadata || {},
+      metadata: {
+        ...(row.metadata || {}),
+        contentType: row.content_type || row.metadata?.contentType,
+      },
       createdAt: row.created_at,
     }));
 
@@ -395,9 +400,13 @@ export async function vectorSearch(
       id: match.id,
       contentId: match.content_id,
       contentTitle: match.content_title || 'Untitled',
+      contentType: match.content_type || 'recording',
       chunkText: match.chunk_text,
       similarity: match.similarity,
-      metadata: match.metadata || {},
+      metadata: {
+        ...(match.metadata || {}),
+        contentType: match.content_type || match.metadata?.contentType,
+      },
       createdAt: match.created_at,
     }));
 
@@ -651,9 +660,13 @@ async function executeComplexFilteredSearch(
       id: chunk.id,
       contentId: chunk.content_id,
       contentTitle: chunk.content?.title || 'Untitled',
+      contentType: chunk.content?.content_type || 'recording',
       chunkText: chunk.chunk_text,
       similarity: null, // null indicates unknown relevance (calculation failed)
-      metadata: chunk.metadata || {},
+      metadata: {
+        ...(chunk.metadata || {}),
+        contentType: chunk.content?.content_type || chunk.metadata?.contentType,
+      },
       createdAt: chunk.created_at,
     }));
   }
@@ -666,9 +679,13 @@ async function executeComplexFilteredSearch(
       id: match.id,
       contentId: match.content_id,
       contentTitle: match.content_title,
+      contentType: match.content_type || 'recording',
       chunkText: match.chunk_text,
       similarity: match.similarity,
-      metadata: match.metadata || {},
+      metadata: {
+        ...(match.metadata || {}),
+        contentType: match.content_type || match.metadata?.contentType,
+      },
       createdAt: match.created_at,
     }))
     .sort((a: SearchResult, b: SearchResult) => {
@@ -778,9 +795,13 @@ async function calculateSimilarities(
         id: chunk.id,
         contentId: chunk.content_id,
         contentTitle: chunk.content?.title || 'Untitled',
+        contentType: chunk.content?.content_type || 'recording',
         chunkText: chunk.chunk_text,
         similarity: 0.8, // Placeholder
-        metadata: chunk.metadata || {},
+        metadata: {
+          ...(chunk.metadata || {}),
+          contentType: chunk.content?.content_type || chunk.metadata?.contentType,
+        },
         createdAt: chunk.created_at,
       }))
       .filter((r) => r.similarity >= threshold);
@@ -794,9 +815,13 @@ async function calculateSimilarities(
       id: match.id,
       contentId: match.content_id,
       contentTitle: match.content_title,
+      contentType: match.content_type || 'recording',
       chunkText: match.chunk_text,
       similarity: match.similarity,
-      metadata: match.metadata || {},
+      metadata: {
+        ...(match.metadata || {}),
+        contentType: match.content_type || match.metadata?.contentType,
+      },
       createdAt: match.created_at,
     }));
 }
@@ -945,9 +970,13 @@ async function keywordSearch(
     id: match.id,
     contentId: match.content_id,
     contentTitle: match.content_title || 'Untitled',
+    contentType: match.content_type || 'recording',
     chunkText: match.chunk_text,
     similarity: Math.min(0.95, 0.7 + match.rank * 0.3), // Convert rank to similarity score
-    metadata: match.metadata || {},
+    metadata: {
+      ...(match.metadata || {}),
+      contentType: match.content_type || match.metadata?.contentType,
+    },
     createdAt: match.created_at,
   }));
 }

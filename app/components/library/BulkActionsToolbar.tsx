@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from 'react';
-import { Trash2, Tag, Download, Share2, X, FolderPlus, RotateCcw } from 'lucide-react';
+import { Trash2, Tag, Download, Share2, X, FolderInput, RotateCcw } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
@@ -25,7 +25,7 @@ interface BulkActionsToolbarProps {
   onAddTags?: () => void;
   onDownload?: () => Promise<void>;
   onShare?: () => void;
-  onAddToCollection?: () => void;
+  onMoveToCollection?: () => void;
   mode?: 'active' | 'trash';
   className?: string;
 }
@@ -57,7 +57,7 @@ export function BulkActionsToolbar({
   onAddTags,
   onDownload,
   onShare,
-  onAddToCollection,
+  onMoveToCollection,
   mode = 'active',
   className,
 }: BulkActionsToolbarProps) {
@@ -139,25 +139,28 @@ export function BulkActionsToolbar({
         className={cn(
           'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
           'bg-background border border-border shadow-lg rounded-lg',
-          'px-4 py-3 flex items-center gap-4',
+          'px-3 py-2.5 sm:px-4 sm:py-3 flex items-center gap-2 sm:gap-4',
+          'max-w-[calc(100vw-2rem)] overflow-x-auto',
           'animate-in slide-in-from-bottom-2 duration-200',
+          'pb-[calc(0.625rem+env(safe-area-inset-bottom))] sm:pb-3',
           className
         )}
       >
         {/* Selection indicator */}
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="text-sm font-medium">
-            {selectedCount} {selectedCount === 1 ? 'item' : 'items'} selected
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          <Badge variant="secondary" className="text-xs sm:text-sm font-medium whitespace-nowrap">
+            {selectedCount} {selectedCount === 1 ? 'item' : 'items'}
+            <span className="hidden sm:inline"> selected</span>
           </Badge>
           <Button
             variant="ghost"
             size="sm"
             onClick={onClearSelection}
-            className="h-7 px-2 gap-1"
+            className="h-7 px-1.5 sm:px-2 gap-1"
             aria-label="Clear selection (Escape)"
           >
             <X className="h-4 w-4" />
-            <KeyboardHint keys={['Esc']} className="ml-0" />
+            <KeyboardHint keys={['Esc']} className="ml-0 hidden sm:flex" />
           </Button>
         </div>
 
@@ -175,11 +178,11 @@ export function BulkActionsToolbar({
                   size="sm"
                   onClick={handleRestore}
                   disabled={isRestoring}
-                  className="h-8 gap-2"
+                  className="h-8 gap-1 sm:gap-2"
                   aria-label="Restore selected items"
                 >
                   <RotateCcw className="h-4 w-4" />
-                  {isRestoring ? 'Restoring...' : 'Restore'}
+                  <span className="hidden sm:inline">{isRestoring ? 'Restoring...' : 'Restore'}</span>
                 </Button>
               )}
 
@@ -189,11 +192,11 @@ export function BulkActionsToolbar({
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowPermanentDeleteDialog(true)}
-                  className="h-8 gap-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                  className="h-8 gap-1 sm:gap-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
                   aria-label="Permanently delete selected items"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Delete Forever
+                  <span className="hidden sm:inline">Delete Forever</span>
                 </Button>
               )}
             </>
@@ -204,12 +207,12 @@ export function BulkActionsToolbar({
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowDeleteDialog(true)}
-                className="h-8 gap-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                className="h-8 gap-1 sm:gap-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
                 aria-label="Move selected items to trash (Delete)"
               >
                 <Trash2 className="h-4 w-4" />
-                <span>Move to Trash</span>
-                <KeyboardHint keys={['Del']} className="ml-0" />
+                <span className="hidden sm:inline">Move to Trash</span>
+                <KeyboardHint keys={['Del']} className="ml-0 hidden sm:flex" />
               </Button>
 
               {/* Add Tags */}
@@ -218,27 +221,27 @@ export function BulkActionsToolbar({
                   variant="ghost"
                   size="sm"
                   onClick={onAddTags}
-                  className="h-8 gap-2"
+                  className="h-8 gap-1 sm:gap-2"
                   aria-label="Add tags to selected items (T)"
                 >
                   <Tag className="h-4 w-4" />
-                  <span>Add Tags</span>
-                  <KeyboardHint keys={['T']} className="ml-0" />
+                  <span className="hidden sm:inline">Add Tags</span>
+                  <KeyboardHint keys={['T']} className="ml-0 hidden sm:flex" />
                 </Button>
               )}
 
-              {/* Add to Collection */}
-              {onAddToCollection && (
+              {/* Move to Collection */}
+              {onMoveToCollection && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={onAddToCollection}
-                  className="h-8 gap-2"
-                  aria-label="Add selected items to collection (C)"
+                  onClick={onMoveToCollection}
+                  className="h-8 gap-1 sm:gap-2"
+                  aria-label="Move selected items to folder (M)"
                 >
-                  <FolderPlus className="h-4 w-4" />
-                  <span>Add to Collection</span>
-                  <KeyboardHint keys={['C']} className="ml-0" />
+                  <FolderInput className="h-4 w-4" />
+                  <span className="hidden sm:inline">Move to Folder</span>
+                  <KeyboardHint keys={['M']} className="ml-0 hidden sm:flex" />
                 </Button>
               )}
 
@@ -249,11 +252,11 @@ export function BulkActionsToolbar({
                   size="sm"
                   onClick={handleDownload}
                   disabled={isDownloading}
-                  className="h-8 gap-2"
+                  className="h-8 gap-1 sm:gap-2"
                   aria-label="Download selected items"
                 >
                   <Download className="h-4 w-4" />
-                  {isDownloading ? 'Downloading...' : 'Download'}
+                  <span className="hidden sm:inline">{isDownloading ? 'Downloading...' : 'Download'}</span>
                 </Button>
               )}
 
@@ -263,11 +266,11 @@ export function BulkActionsToolbar({
                   variant="ghost"
                   size="sm"
                   onClick={onShare}
-                  className="h-8 gap-2"
+                  className="h-8 gap-1 sm:gap-2"
                   aria-label="Share selected items"
                 >
                   <Share2 className="h-4 w-4" />
-                  Share
+                  <span className="hidden sm:inline">Share</span>
                 </Button>
               )}
             </>

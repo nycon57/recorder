@@ -65,7 +65,7 @@ export const listConceptsQuerySchema = z.object({
   sort: z
     .enum(['mention_count_desc', 'last_seen_desc', 'name_asc', 'name_desc'])
     .default('mention_count_desc'),
-  minMentions: z.coerce.number().int().min(1).optional(),
+  minMentions: z.coerce.number().int().min(0).optional(),
 });
 
 export type ListConceptsQueryInput = z.infer<typeof listConceptsQuerySchema>;
@@ -98,7 +98,7 @@ export type GetConceptContentQueryInput = z.infer<typeof getConceptContentQueryS
 export const getGraphQuerySchema = z.object({
   maxNodes: z.coerce.number().int().min(10).max(200).default(100),
   minStrength: z.coerce.number().min(0).max(1).default(0.3),
-  minMentions: z.coerce.number().int().min(1).default(2),
+  minMentions: z.coerce.number().int().min(0).default(0),
   types: z
     .string()
     .optional()

@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { checkBotId } from 'botid/server';
 
 import {
   apiHandler,
@@ -51,6 +52,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = withRateLimit(
   apiHandler(async (request: NextRequest) => {
     const { orgId, userId } = await requireOrg();
+
+    // Bot protection - verify request is from a legitimate browser
+    const verification = await checkBotId();
+    if (verification.isBot) {
+      return errors.forbidden('Bot detected');
+    }
+
     // Use admin client to bypass RLS - auth already validated via requireOrg()
     const supabase = supabaseAdmin;
 

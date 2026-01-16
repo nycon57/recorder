@@ -10,6 +10,7 @@
 
 import { streamText, UIMessage, tool, stepCountIs } from 'ai';
 import { google } from '@ai-sdk/google';
+import { checkBotId } from 'botid/server';
 
 import { requireOrg } from '@/lib/utils/api';
 import { retrieveContext } from '@/lib/services/rag-google';
@@ -164,6 +165,15 @@ export async function POST(req: Request) {
   try {
     const { orgId, userId } = await requireOrg();
     console.log('[Chat API] Request from user:', { orgId, userId });
+
+    // Bot protection - verify request is from a legitimate browser
+    const verification = await checkBotId();
+    if (verification.isBot) {
+      return new Response(
+        JSON.stringify({ error: { message: 'Bot detected', code: 'BOT_DETECTED' } }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
 
     const body = await req.json();
     const {

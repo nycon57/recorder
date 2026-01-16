@@ -8,7 +8,7 @@ import {
   parseBody,
   parseSearchParams,
 } from '@/lib/utils/api';
-import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   addToFavoritesSchema,
   listFavoritesQuerySchema,
@@ -31,10 +31,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
     request,
     listFavoritesQuerySchema
   );
-  const supabase = await createClient();
 
   // Build query for favorites with content
-  let favoritesQuery = supabase
+  let favoritesQuery = supabaseAdmin
     .from('favorites')
     .select(
       `
@@ -116,10 +115,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = apiHandler(async (request: NextRequest) => {
   const { orgId, userId } = await requireOrg();
   const body = await parseBody<AddToFavoritesInput>(request, addToFavoritesSchema);
-  const supabase = await createClient();
 
   // Verify recording exists and belongs to this org
-  const { data: recording, error: recordingError } = await supabase
+  const { data: recording, error: recordingError } = await supabaseAdmin
     .from('content')
     .select('id, title')
     .eq('id', body.recording_id)
@@ -132,7 +130,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   // Add to favorites (ignore if already exists)
-  const { data: favorite, error: insertError } = await supabase
+  const { data: favorite, error: insertError } = await supabaseAdmin
     .from('favorites')
     .upsert(
       {
@@ -153,7 +151,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   // Log activity
-  await supabase.from('activity_log').insert({
+  await supabaseAdmin.from('activity_log').insert({
     org_id: orgId,
     user_id: userId,
     action: 'recording.favorited',

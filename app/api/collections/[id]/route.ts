@@ -7,7 +7,7 @@ import {
   errors,
   parseBody,
 } from '@/lib/utils/api';
-import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   updateCollectionSchema,
   type UpdateCollectionInput,
@@ -19,10 +19,9 @@ import {
 export const GET = apiHandler(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId } = await requireOrg();
-    const supabase = await createClient();
     const { id: collectionId } = await params;
 
-    const { data: collection, error } = await supabase
+    const { data: collection, error } = await supabaseAdmin
       .from('collections')
       .select('*')
       .eq('id', collectionId)
@@ -35,7 +34,7 @@ export const GET = apiHandler(
     }
 
     // Get item count
-    const { count: itemCount } = await supabase
+    const { count: itemCount } = await supabaseAdmin
       .from('collection_items')
       .select('*', { count: 'exact', head: true })
       .eq('collection_id', collectionId);
@@ -62,11 +61,10 @@ export const PATCH = apiHandler(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId, userId } = await requireOrg();
     const body = await parseBody<UpdateCollectionInput>(request, updateCollectionSchema);
-    const supabase = await createClient();
     const { id: collectionId } = await params;
 
     // Verify collection exists and belongs to this org
-    const { data: existing, error: fetchError } = await supabase
+    const { data: existing, error: fetchError } = await supabaseAdmin
       .from('collections')
       .select('id, name')
       .eq('id', collectionId)
@@ -86,7 +84,7 @@ export const PATCH = apiHandler(
       }
 
       // Verify parent exists
-      const { data: parent, error: parentError } = await supabase
+      const { data: parent, error: parentError } = await supabaseAdmin
         .from('collections')
         .select('id')
         .eq('id', body.parent_id)
@@ -114,7 +112,7 @@ export const PATCH = apiHandler(
           }
           visited.add(currentId);
 
-          const { data: parentCollection } = await supabase
+          const { data: parentCollection } = await supabaseAdmin
             .from('collections')
             .select('parent_id')
             .eq('id', currentId)
@@ -148,7 +146,7 @@ export const PATCH = apiHandler(
     if (body.icon !== undefined) updateData.icon = body.icon;
     if (body.visibility !== undefined) updateData.visibility = body.visibility;
 
-    const { data: updated, error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabaseAdmin
       .from('collections')
       .update(updateData)
       .eq('id', collectionId)
@@ -161,7 +159,7 @@ export const PATCH = apiHandler(
     }
 
     // Log activity
-    await supabase.from('activity_log').insert({
+    await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
       action: 'collection.updated',
@@ -183,11 +181,10 @@ export const PATCH = apiHandler(
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId, userId } = await requireOrg();
-    const supabase = await createClient();
     const { id: collectionId } = await params;
 
     // Verify collection exists and belongs to this org
-    const { data: existing, error: fetchError } = await supabase
+    const { data: existing, error: fetchError } = await supabaseAdmin
       .from('collections')
       .select('id, name')
       .eq('id', collectionId)
@@ -200,7 +197,7 @@ export const DELETE = apiHandler(
     }
 
     // Check if collection has children
-    const { count: childCount } = await supabase
+    const { count: childCount } = await supabaseAdmin
       .from('collections')
       .select('*', { count: 'exact', head: true })
       .eq('parent_id', collectionId)
@@ -213,7 +210,7 @@ export const DELETE = apiHandler(
     }
 
     // Soft delete the collection
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await supabaseAdmin
       .from('collections')
       .update({
         deleted_at: new Date().toISOString(),
@@ -227,13 +224,13 @@ export const DELETE = apiHandler(
     }
 
     // Remove all items from the collection
-    await supabase
+    await supabaseAdmin
       .from('collection_items')
       .delete()
       .eq('collection_id', collectionId);
 
     // Log activity
-    await supabase.from('activity_log').insert({
+    await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
       action: 'collection.deleted',

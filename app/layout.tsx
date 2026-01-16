@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { ThemeProvider } from 'next-themes';
 import Script from 'next/script';
 
 import { Toaster } from '@/app/components/ui/sonner';
@@ -54,7 +53,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -69,18 +68,11 @@ export default function RootLayout({
           />
         )}
       </head>
-      <body className="bg-background text-foreground antialiased" suppressHydrationWarning>
+      <body className="bg-background text-foreground antialiased">
         <ClerkProviderWrapper>
           <QueryProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="dark"
-              enableSystem
-              disableTransitionOnChange
-            >
-              {children}
-              <Toaster />
-            </ThemeProvider>
+            {children}
+            <Toaster />
           </QueryProvider>
         </ClerkProviderWrapper>
       </body>

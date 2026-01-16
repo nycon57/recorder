@@ -14,8 +14,7 @@ import {
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { useTheme } from 'next-themes';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -61,7 +60,6 @@ export default function AIDocumentPanel({
   onRegenerate,
   className,
 }: AIDocumentPanelProps) {
-  const { theme } = useTheme();
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = React.useState(false);
   const [isRegenerating, setIsRegenerating] = React.useState(false);
   const [isExpanded, setIsExpanded] = React.useState(true);
@@ -268,7 +266,7 @@ ${document.html || document.markdown}
 
                         return !inline && language ? (
                           <SyntaxHighlighter
-                            style={theme === 'dark' ? oneDark : oneLight}
+                            style={oneDark}
                             language={language}
                             PreTag="div"
                             {...props}

@@ -12,7 +12,6 @@ import {
   type Edge,
   type EdgeMouseHandler,
   MarkerType,
-  Panel,
   type NodeProps,
   Handle,
   Position,
@@ -852,11 +851,6 @@ export function KnowledgeGraph({
           }}
           aria-label="Graph minimap"
         />
-        <Panel position="top-right" className="bg-background/80 backdrop-blur-sm rounded-lg p-2 text-xs text-muted-foreground">
-          <span aria-live="polite" aria-atomic="true">
-            {propNodes.length} concepts, {propEdges.length} connections
-          </span>
-        </Panel>
         <EdgeLegend />
       </ReactFlow>
 

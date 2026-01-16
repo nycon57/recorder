@@ -8,7 +8,7 @@ import {
   parseBody,
   parseSearchParams,
 } from '@/lib/utils/api';
-import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   createCollectionSchema,
   listCollectionsQuerySchema,
@@ -32,9 +32,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
     request,
     listCollectionsQuerySchema
   );
-  const supabase = await createClient();
 
-  let collectionsQuery = supabase
+  let collectionsQuery = supabaseAdmin
     .from('collections')
     .select('*', { count: 'exact' })
     .eq('org_id', orgId)
@@ -74,7 +73,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     const collectionIds = collections.map((c) => c.id);
 
     // Get item counts for all collections
-    const { data: counts, error: countError } = await supabase
+    const { data: counts, error: countError } = await supabaseAdmin
       .from('collection_items')
       .select('collection_id')
       .in('collection_id', collectionIds);
@@ -119,11 +118,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = apiHandler(async (request: NextRequest) => {
   const { orgId, userId } = await requireOrg();
   const body = await parseBody<CreateCollectionInput>(request, createCollectionSchema);
-  const supabase = await createClient();
 
   // If parent_id is provided, verify it exists and belongs to this org
   if (body.parent_id) {
-    const { data: parent, error: parentError } = await supabase
+    const { data: parent, error: parentError } = await supabaseAdmin
       .from('collections')
       .select('id')
       .eq('id', body.parent_id)
@@ -137,7 +135,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   // Create the collection
-  const { data: newCollection, error } = await supabase
+  const { data: newCollection, error } = await supabaseAdmin
     .from('collections')
     .insert({
       org_id: orgId,
@@ -159,7 +157,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   // Log activity (non-blocking, errors are logged but don't fail the request)
   try {
-    await supabase.from('activity_log').insert({
+    await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
       action: 'collection.created',

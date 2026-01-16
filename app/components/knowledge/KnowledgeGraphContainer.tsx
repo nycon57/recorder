@@ -108,7 +108,7 @@ function ViewToggle({
 }) {
   return (
     <div
-      className="flex items-center border rounded-lg p-0.5 bg-muted/30"
+      className="flex items-center border border-border rounded-lg p-0.5 bg-card/95 backdrop-blur-sm shadow-md"
       role="group"
       aria-label="Graph view mode selection"
     >

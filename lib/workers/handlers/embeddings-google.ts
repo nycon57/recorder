@@ -764,8 +764,8 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
         orgId,
         fullText,
         {
-          maxConcepts: 30,
-          minConfidence: 0.6,
+          maxConcepts: 15, // Quality over quantity - only specific, high-value concepts
+          minConfidence: 0.7, // Higher threshold for better signal
           generateEmbeddings: true,
         }
       );

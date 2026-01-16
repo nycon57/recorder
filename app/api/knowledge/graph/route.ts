@@ -209,21 +209,35 @@ export const GET = apiHandler(async (request: NextRequest) => {
     return response;
   }
 
+  // Debug: Log conceptIds count
+  console.log('[GET /api/knowledge/graph] Fetching edges for', conceptIds.length, 'concepts');
+
+  // Fetch relationships where EITHER endpoint is in our concept list
+  // Then filter to only include edges where BOTH endpoints are in the list
   const { data: relationships, error: relationshipsError } = await supabase
     .from('concept_relationships')
     .select('id, concept_a_id, concept_b_id, relationship_type, strength')
     .eq('org_id', orgId)
-    .gte('strength', query.minStrength)
-    .in('concept_a_id', conceptIds)
-    .in('concept_b_id', conceptIds);
+    .gte('strength', query.minStrength);
 
   if (relationshipsError) {
     console.error('[GET /api/knowledge/graph] Error fetching relationships:', relationshipsError);
     throw new Error('Failed to fetch relationships');
   }
 
+  // Debug: Log total relationships found
+  console.log('[GET /api/knowledge/graph] Total relationships in org:', relationships?.length || 0);
+
+  // Filter to only include edges where both endpoints are in our concept list
+  const conceptIdSet = new Set(conceptIds);
+  const filteredRelationships = (relationships || []).filter(
+    (r) => conceptIdSet.has(r.concept_a_id) && conceptIdSet.has(r.concept_b_id)
+  );
+
+  console.log('[GET /api/knowledge/graph] Filtered relationships (both endpoints in concepts):', filteredRelationships.length);
+
   // Transform to GraphEdge format
-  const edges: GraphEdge[] = (relationships || []).map((r) => ({
+  const edges: GraphEdge[] = filteredRelationships.map((r) => ({
     id: r.id,
     source: r.concept_a_id,
     target: r.concept_b_id,

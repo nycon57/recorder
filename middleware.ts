@@ -7,12 +7,14 @@ const isPublicRoute = createRouteMatcher([
   '/pricing(.*)',
   '/about(.*)',
   '/contact(.*)',
+  '/blog(.*)',
   '/terms(.*)',
   '/privacy(.*)',
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhooks(.*)',
   '/api/health(.*)',
+  '/api/blog(.*)', // Public blog API
   '/s/(.*)', // Public shared content
 ]);
 

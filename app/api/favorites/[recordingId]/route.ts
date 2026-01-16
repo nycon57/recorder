@@ -6,7 +6,7 @@ import {
   successResponse,
   errors,
 } from '@/lib/utils/api';
-import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 /**
  * DELETE /api/favorites/[recordingId] - Remove item from favorites
@@ -14,11 +14,10 @@ import { createClient } from '@/lib/supabase/server';
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: { params: Promise<{ recordingId: string }> }) => {
     const { orgId, userId } = await requireOrg();
-    const supabase = await createClient();
     const { recordingId } = await params;
 
     // Verify favorite exists for this user
-    const { data: existing, error: fetchError } = await supabase
+    const { data: existing, error: fetchError } = await supabaseAdmin
       .from('favorites')
       .select('user_id, recording_id')
       .eq('user_id', userId)
@@ -30,14 +29,14 @@ export const DELETE = apiHandler(
     }
 
     // Get recording title for activity log
-    const { data: recording } = await supabase
+    const { data: recording } = await supabaseAdmin
       .from('content')
       .select('title')
       .eq('id', recordingId)
       .single();
 
     // Remove from favorites
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await supabaseAdmin
       .from('favorites')
       .delete()
       .eq('user_id', userId)
@@ -49,7 +48,7 @@ export const DELETE = apiHandler(
     }
 
     // Log activity
-    await supabase.from('activity_log').insert({
+    await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
       action: 'recording.unfavorited',

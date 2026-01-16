@@ -6,8 +6,7 @@ import { Copy, Check, BookOpen, Clock, Activity } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { useTheme } from 'next-themes';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { cn } from '@/lib/utils/cn';
 import { Button } from '@/app/components/ui/button';
@@ -30,7 +29,6 @@ export default function StreamingTextDisplay({
   showControls = true,
   processingSpeed,
 }: StreamingTextDisplayProps) {
-  const { theme } = useTheme();
   const [copied, setCopied] = React.useState(false);
   const [userScrolled, setUserScrolled] = React.useState(false);
   const [startTime] = React.useState<number>(Date.now());
@@ -231,7 +229,7 @@ export default function StreamingTextDisplay({
 
                     return !inline && match ? (
                       <SyntaxHighlighter
-                        style={theme === 'dark' ? vscDarkPlus : vs}
+                        style={vscDarkPlus}
                         language={match[1]}
                         PreTag="div"
                         className="rounded-md text-sm"

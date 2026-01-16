@@ -65,6 +65,7 @@ export interface ContentItem {
   original_filename: string | null;
   created_by: string;
   org_id: string;
+  collection_id?: string | null;
   metadata?: {
     has_transcript?: boolean;
     has_document?: boolean;

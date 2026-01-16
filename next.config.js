@@ -1,3 +1,6 @@
+// Vercel Bot ID protection
+const { withBotId } = require('botid/next/config');
+
 // Common security headers shared across all routes
 const COMMON_SECURITY_HEADERS = [
   {
@@ -199,4 +202,4 @@ const nextConfig = {
 
 };
 
-module.exports = nextConfig;
+module.exports = withBotId(nextConfig);

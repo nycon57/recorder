@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { Resend } from 'resend';
+import { checkBotId } from 'botid/server';
 
 import {
   apiHandler,
@@ -73,6 +74,15 @@ export const POST = rateLimit(RateLimitTier.PUBLIC, async (req: NextRequest) => 
   return ip || realIp || undefined;
 })(
   apiHandler(async (request: NextRequest) => {
+    // Bot protection - verify request is from a legitimate browser
+    const verification = await checkBotId();
+    if (verification.isBot) {
+      return new Response(
+        JSON.stringify({ error: 'Bot detected. Access denied.' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Validate request body
     const body = await parseBody(request, contactFormSchema);
 

@@ -8,7 +8,7 @@ import {
   parseBody,
   parseSearchParams,
 } from '@/lib/utils/api';
-import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   addCollectionItemsSchema,
   removeCollectionItemsSchema,
@@ -34,11 +34,10 @@ export const GET = apiHandler(
       request,
       listCollectionItemsQuerySchema
     );
-    const supabase = await createClient();
     const { id: collectionId } = await params;
 
     // Verify collection exists and belongs to this org
-    const { data: collection, error: collectionError } = await supabase
+    const { data: collection, error: collectionError } = await supabaseAdmin
       .from('collections')
       .select('id')
       .eq('id', collectionId)
@@ -51,7 +50,7 @@ export const GET = apiHandler(
     }
 
     // Build query for collection items with content
-    let itemsQuery = supabase
+    let itemsQuery = supabaseAdmin
       .from('collection_items')
       .select(
         `
@@ -135,11 +134,10 @@ export const POST = apiHandler(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId, userId } = await requireOrg();
     const body = await parseBody<AddCollectionItemsInput>(request, addCollectionItemsSchema);
-    const supabase = await createClient();
     const { id: collectionId } = await params;
 
     // Verify collection exists and belongs to this org
-    const { data: collection, error: collectionError } = await supabase
+    const { data: collection, error: collectionError } = await supabaseAdmin
       .from('collections')
       .select('id, name')
       .eq('id', collectionId)
@@ -152,7 +150,7 @@ export const POST = apiHandler(
     }
 
     // Verify all recordings exist and belong to this org
-    const { data: recordings, error: recordingsError } = await supabase
+    const { data: recordings, error: recordingsError } = await supabaseAdmin
       .from('content')
       .select('id')
       .in('id', body.item_ids)
@@ -175,7 +173,7 @@ export const POST = apiHandler(
       added_by: userId,
     }));
 
-    const { data: inserted, error: insertError } = await supabase
+    const { data: inserted, error: insertError } = await supabaseAdmin
       .from('collection_items')
       .upsert(itemsToInsert, {
         onConflict: 'collection_id,content_id',
@@ -189,7 +187,7 @@ export const POST = apiHandler(
     }
 
     // Log activity
-    await supabase.from('activity_log').insert({
+    await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
       action: 'collection.item_added',
@@ -218,11 +216,10 @@ export const DELETE = apiHandler(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { orgId, userId } = await requireOrg();
     const body = await parseBody<RemoveCollectionItemsInput>(request, removeCollectionItemsSchema);
-    const supabase = await createClient();
     const { id: collectionId } = await params;
 
     // Verify collection exists and belongs to this org
-    const { data: collection, error: collectionError } = await supabase
+    const { data: collection, error: collectionError } = await supabaseAdmin
       .from('collections')
       .select('id, name')
       .eq('id', collectionId)
@@ -235,7 +232,7 @@ export const DELETE = apiHandler(
     }
 
     // Remove items from collection
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await supabaseAdmin
       .from('collection_items')
       .delete()
       .eq('collection_id', collectionId)
@@ -247,7 +244,7 @@ export const DELETE = apiHandler(
     }
 
     // Log activity
-    await supabase.from('activity_log').insert({
+    await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
       action: 'collection.item_removed',
