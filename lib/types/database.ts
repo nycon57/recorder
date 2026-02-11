@@ -524,6 +524,52 @@ export interface Database {
           updated_at?: string;
         };
       };
+      /** Persistent agent state tracking across job executions per org */
+      agent_sessions: {
+        Row: {
+          id: string;
+          org_id: string;
+          agent_type: string;
+          session_status: string;
+          goal: string | null;
+          progress: Json;
+          state: Json;
+          started_at: string;
+          last_active_at: string;
+          completed_at: string | null;
+          error_message: string | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          agent_type: string;
+          session_status?: string;
+          goal?: string | null;
+          progress?: Json;
+          state?: Json;
+          started_at?: string;
+          last_active_at?: string;
+          completed_at?: string | null;
+          error_message?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          session_status?: string;
+          goal?: string | null;
+          progress?: Json;
+          state?: Json;
+          last_active_at?: string;
+          completed_at?: string | null;
+          error_message?: string | null;
+          metadata?: Json;
+          updated_at?: string;
+        };
+      };
       /** Universal content table - stores all content types (recordings, videos, audio, documents, text) */
       content: {
         Row: {
