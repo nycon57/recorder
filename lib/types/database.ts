@@ -514,9 +514,6 @@ export interface Database {
           updated_at?: string;
         };
         Update: {
-          org_id?: string;
-          agent_type?: string;
-          memory_key?: string;
           memory_value?: string;
           embedding?: number[] | null;
           importance?: number | null;
