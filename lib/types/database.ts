@@ -141,6 +141,8 @@ export type ConnectorType =
   | 'url_import'
   | 'slack';
 
+export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
+
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 
 export type ImportedDocumentStatus =
@@ -530,7 +532,7 @@ export interface Database {
           id: string;
           org_id: string;
           agent_type: string;
-          session_status: string;
+          session_status: SessionStatus;
           goal: string | null;
           progress: Json;
           state: Json;
@@ -546,7 +548,7 @@ export interface Database {
           id?: string;
           org_id: string;
           agent_type: string;
-          session_status?: string;
+          session_status?: SessionStatus;
           goal?: string | null;
           progress?: Json;
           state?: Json;
@@ -559,7 +561,7 @@ export interface Database {
           updated_at?: string;
         };
         Update: {
-          session_status?: string;
+          session_status?: SessionStatus;
           goal?: string | null;
           progress?: Json;
           state?: Json;
