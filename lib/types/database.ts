@@ -481,6 +481,52 @@ export interface Database {
           updated_at?: string;
         };
       };
+      /** Agent memory for persisting learnings, decisions, and context across sessions */
+      agent_memory: {
+        Row: {
+          id: string;
+          org_id: string;
+          agent_type: string;
+          memory_key: string;
+          memory_value: string;
+          embedding: string | null;
+          importance: number | null;
+          access_count: number | null;
+          last_accessed_at: string | null;
+          expires_at: string | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          agent_type: string;
+          memory_key: string;
+          memory_value: string;
+          embedding?: string | null;
+          importance?: number | null;
+          access_count?: number | null;
+          last_accessed_at?: string | null;
+          expires_at?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          org_id?: string;
+          agent_type?: string;
+          memory_key?: string;
+          memory_value?: string;
+          embedding?: string | null;
+          importance?: number | null;
+          access_count?: number | null;
+          last_accessed_at?: string | null;
+          expires_at?: string | null;
+          metadata?: Json;
+          updated_at?: string;
+        };
+      };
       /** Universal content table - stores all content types (recordings, videos, audio, documents, text) */
       content: {
         Row: {
