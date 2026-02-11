@@ -489,7 +489,7 @@ export interface Database {
           agent_type: string;
           memory_key: string;
           memory_value: string;
-          embedding: string | null;
+          embedding: number[] | null;
           importance: number | null;
           access_count: number | null;
           last_accessed_at: string | null;
@@ -504,7 +504,7 @@ export interface Database {
           agent_type: string;
           memory_key: string;
           memory_value: string;
-          embedding?: string | null;
+          embedding?: number[] | null;
           importance?: number | null;
           access_count?: number | null;
           last_accessed_at?: string | null;
@@ -518,7 +518,7 @@ export interface Database {
           agent_type?: string;
           memory_key?: string;
           memory_value?: string;
-          embedding?: string | null;
+          embedding?: number[] | null;
           importance?: number | null;
           access_count?: number | null;
           last_accessed_at?: string | null;
