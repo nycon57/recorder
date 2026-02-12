@@ -12,12 +12,18 @@ import {
   saveChatMessage,
   createConversation,
   getConversationHistory,
+  type CitedSource,
 } from '@/lib/services/rag-google';
 import { rateLimiters } from '@/lib/rate-limit/limiter';
 import { requireOrg } from '@/lib/utils/api';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+/** Encode an SSE event as bytes for streaming. */
+function encodeEvent(encoder: TextEncoder, data: Record<string, unknown>): Uint8Array {
+  return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
+}
 
 /**
  * POST /api/chat/stream
@@ -36,14 +42,8 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get internal org/user UUIDs (not Clerk IDs)
     const { userId, orgId, clerkUserId } = await requireOrg();
 
-    if (!userId || !orgId) {
-      return new Response('Unauthorized', { status: 401 });
-    }
-
-    // Rate limit check (use Clerk user ID for rate limiting)
     // Skip rate limiting if Redis is not configured
     const isRedisConfigured = process.env.UPSTASH_REDIS_REST_URL &&
       !process.env.UPSTASH_REDIS_REST_URL.includes('your-redis');
@@ -85,30 +85,21 @@ export async function POST(request: NextRequest) {
       return new Response('Message is required', { status: 400 });
     }
 
-    // Get or create conversation
-    let convId = conversationId;
-    if (!convId) {
-      convId = await createConversation(orgId, userId, 'New Chat');
-    }
-
-    // Get conversation history
+    const convId = conversationId || await createConversation(orgId, userId, 'New Chat');
     const history = await getConversationHistory(convId, orgId);
 
-    // Save user message
     await saveChatMessage(convId, {
       role: 'user',
       content: message,
     });
 
-    // Create readable stream
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
           let fullResponse = '';
-          let sources: any[] = [];
+          let sources: CitedSource[] = [];
 
-          // Generate streaming response
           const generator = generateStreamingRAGResponse(message, orgId, {
             conversationHistory: history,
             maxChunks,
@@ -119,46 +110,28 @@ export async function POST(request: NextRequest) {
 
           for await (const chunk of generator) {
             if (chunk.type === 'context') {
-              // Send sources first
               sources = chunk.data.sources;
-              const sourcesData = `data: ${JSON.stringify({
-                type: 'sources',
-                sources,
-              })}\n\n`;
-              controller.enqueue(encoder.encode(sourcesData));
+              controller.enqueue(encodeEvent(encoder, { type: 'sources', sources }));
             } else if (chunk.type === 'token') {
-              // Send token
               fullResponse += chunk.data.token;
-              const tokenData = `data: ${JSON.stringify({
-                type: 'token',
-                token: chunk.data.token,
-              })}\n\n`;
-              controller.enqueue(encoder.encode(tokenData));
+              controller.enqueue(encodeEvent(encoder, { type: 'token', token: chunk.data.token }));
             } else if (chunk.type === 'done') {
-              // Save assistant message
               await saveChatMessage(convId, {
                 role: 'assistant',
                 content: fullResponse,
                 metadata: { sources },
               });
-
-              // Send done signal
-              const doneData = `data: ${JSON.stringify({
-                type: 'done',
-                conversationId: convId,
-              })}\n\n`;
-              controller.enqueue(encoder.encode(doneData));
+              controller.enqueue(encodeEvent(encoder, { type: 'done', conversationId: convId }));
             }
           }
 
           controller.close();
         } catch (error) {
           console.error('[Chat Stream] Error:', error);
-          const errorData = `data: ${JSON.stringify({
+          controller.enqueue(encodeEvent(encoder, {
             type: 'error',
             error: error instanceof Error ? error.message : 'Unknown error',
-          })}\n\n`;
-          controller.enqueue(encoder.encode(errorData));
+          }));
           controller.close();
         }
       },
@@ -173,6 +146,17 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[Chat Stream] Request error:', error);
+
+    // requireOrg() throws specific messages for auth/org failures
+    if (error instanceof Error) {
+      if (error.message === 'Unauthorized') {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      if (error.message === 'Organization context required') {
+        return new Response('Organization context required', { status: 403 });
+      }
+    }
+
     return new Response('Internal server error', { status: 500 });
   }
 }
