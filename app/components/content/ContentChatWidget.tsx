@@ -32,6 +32,7 @@ export function ContentChatWidget({
   const conversationIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -41,6 +42,8 @@ export function ContentChatWidget({
     if (isOpen) {
       const timer = setTimeout(() => inputRef.current?.focus(), 100);
       return () => clearTimeout(timer);
+    } else {
+      triggerRef.current?.focus();
     }
   }, [isOpen]);
 
@@ -57,14 +60,19 @@ export function ContentChatWidget({
   }, []);
 
   const handleToggle = useCallback(() => {
-    if (isOpen) cancelStream();
-    setIsOpen((prev) => !prev);
-  }, [isOpen, cancelStream]);
+    setIsOpen((prev) => {
+      if (prev) cancelStream();
+      return !prev;
+    });
+  }, [cancelStream]);
 
   useEffect(() => {
     if (!isOpen) return;
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleToggle();
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        handleToggle();
+      }
     };
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
@@ -196,8 +204,7 @@ export function ContentChatWidget({
       {isOpen && (
         <div
           id="content-chat-panel"
-          role="dialog"
-          aria-modal="true"
+          role="region"
           aria-label={`Chat about ${contentTitle}`}
           className="mb-3 flex max-h-[500px] w-[calc(100vw-3rem)] flex-col rounded-xl border border-border/50 bg-background shadow-xl sm:w-96"
         >
@@ -210,19 +217,19 @@ export function ContentChatWidget({
                 <button
                   type="button"
                   onClick={handleClear}
-                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                  className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   aria-label="Clear conversation"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 aria-hidden="true" className="h-4 w-4" />
                 </button>
               )}
               <button
                 type="button"
                 onClick={handleToggle}
-                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 aria-label="Close chat"
               >
-                <X className="h-4 w-4" />
+                <X aria-hidden="true" className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -254,7 +261,10 @@ export function ContentChatWidget({
                   )}
                 >
                   {msg.content || (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <>
+                      <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-muted-foreground" />
+                      <span className="sr-only">Loading response</span>
+                    </>
                   )}
                 </div>
               </div>
@@ -281,20 +291,20 @@ export function ContentChatWidget({
                 onKeyDown={handleKeyDown}
                 placeholder="Ask a question about this content..."
                 disabled={isStreaming}
-                className="flex-1 rounded-lg border border-border/50 bg-muted/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
+                className="flex-1 rounded-lg border border-border/50 bg-muted/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:opacity-50"
                 aria-label="Chat message input"
               />
               <button
                 type="button"
                 onClick={handleSend}
                 disabled={isStreaming || !input.trim()}
-                className="rounded-lg bg-accent p-2 text-background transition-colors hover:bg-accent/90 disabled:opacity-50 disabled:hover:bg-accent focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
+                className="rounded-lg bg-accent p-2 text-background transition-colors hover:bg-accent/90 disabled:opacity-50 disabled:hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 aria-label="Send message"
               >
                 {isStreaming ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Send className="h-4 w-4" />
+                  <Send aria-hidden="true" className="h-4 w-4" />
                 )}
               </button>
             </div>
@@ -303,10 +313,11 @@ export function ContentChatWidget({
       )}
 
       <button
+        ref={triggerRef}
         type="button"
         onClick={handleToggle}
         className={cn(
-          'flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium shadow-lg transition-all hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2',
+          'flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium shadow-lg transition-all hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2',
           isOpen
             ? 'bg-muted text-foreground'
             : 'bg-accent text-background hover:bg-accent/90'
@@ -315,7 +326,7 @@ export function ContentChatWidget({
         aria-expanded={isOpen}
         aria-controls="content-chat-panel"
       >
-        <MessageSquare className="h-5 w-5" />
+        <MessageSquare aria-hidden="true" className="h-5 w-5" />
         {!isOpen && <span>Ask about this</span>}
       </button>
     </div>
