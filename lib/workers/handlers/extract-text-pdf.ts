@@ -201,19 +201,31 @@ export async function handleExtractTextPdf(
       'Text extraction complete, queuing document generation...'
     );
 
-    // Enqueue document generation job
-    await supabase.from('jobs').insert({
-      type: 'doc_generate',
-      status: 'pending',
-      payload: {
-        recordingId,
-        transcriptId: transcript.id,
-        orgId,
-      },
-      dedupe_key: `doc_generate:${recordingId}`,
-    });
+    // Enqueue document generation and metadata generation jobs
+    await Promise.all([
+      supabase.from('jobs').insert({
+        type: 'doc_generate',
+        status: 'pending',
+        payload: {
+          recordingId,
+          transcriptId: transcript.id,
+          orgId,
+        },
+        dedupe_key: `doc_generate:${recordingId}`,
+      }),
+      supabase.from('jobs').insert({
+        type: 'generate_metadata',
+        status: 'pending',
+        payload: {
+          recordingId,
+          orgId,
+        },
+        dedupe_key: `generate_metadata:${recordingId}`,
+        priority: 1,
+      }),
+    ]);
 
-    logger.info('Enqueued document generation job', {
+    logger.info('Enqueued document generation and metadata generation jobs', {
       context: { recordingId, transcriptId: transcript.id },
     });
 
