@@ -36,13 +36,11 @@ interface RelatedItem {
   content_type: ContentType | null;
   thumbnail_url: string | null;
   created_at: string;
-  /** Number of shared concepts, or similarity score from vector search */
   relevanceScore: number;
-  /** Whether score represents concept overlap count or similarity */
   scoreType: 'concepts' | 'similarity';
 }
 
-const contentTypeIcons: Record<ContentType, typeof VideoIcon> = {
+const CONTENT_TYPE_ICONS: Record<ContentType, typeof VideoIcon> = {
   recording: VideoIcon,
   video: FileVideoIcon,
   audio: AudioLinesIcon,
@@ -50,19 +48,8 @@ const contentTypeIcons: Record<ContentType, typeof VideoIcon> = {
   text: FileEditIcon,
 };
 
-const VALID_CONTENT_TYPES: ContentType[] = ['recording', 'video', 'audio', 'document', 'text'];
-
 function isValidContentType(type: string): type is ContentType {
-  return VALID_CONTENT_TYPES.includes(type as ContentType);
-}
-
-/** Row shape returned from the `content` table query (admin client lacks Database generic). */
-interface ContentRow {
-  id: string;
-  title: string | null;
-  content_type: ContentType | null;
-  thumbnail_url: string | null;
-  created_at: string;
+  return type in CONTENT_TYPE_ICONS;
 }
 
 async function findRelatedByConceptOverlap(
@@ -70,7 +57,6 @@ async function findRelatedByConceptOverlap(
   orgId: string,
   limit: number
 ): Promise<RelatedItem[]> {
-  // Step 1: Get concept IDs for this content
   const { data: contentConcepts, error: conceptsError } = await supabaseAdmin
     .from('concept_mentions')
     .select('concept_id')
@@ -82,15 +68,10 @@ async function findRelatedByConceptOverlap(
     return [];
   }
 
-  if (!contentConcepts || contentConcepts.length === 0) {
-    return [];
-  }
+  if (!contentConcepts?.length) return [];
 
-  const conceptIds = [
-    ...new Set(contentConcepts.map((c: { concept_id: string }) => c.concept_id)),
-  ];
+  const conceptIds = [...new Set(contentConcepts.map((c) => c.concept_id))];
 
-  // Step 2: Find other content sharing those concepts (cap rows to avoid unbounded fetch)
   const { data: relatedMentions, error: mentionsError } = await supabaseAdmin
     .from('concept_mentions')
     .select('content_id')
@@ -104,14 +85,13 @@ async function findRelatedByConceptOverlap(
     return [];
   }
 
-  if (!relatedMentions || relatedMentions.length === 0) {
-    return [];
-  }
+  if (!relatedMentions?.length) return [];
 
   // Count concept overlap per content
   const overlapCounts = new Map<string, number>();
-  for (const mention of relatedMentions as { content_id: string }[]) {
-    overlapCounts.set(mention.content_id, (overlapCounts.get(mention.content_id) || 0) + 1);
+  for (const mention of relatedMentions) {
+    const id = (mention as { content_id: string }).content_id;
+    overlapCounts.set(id, (overlapCounts.get(id) ?? 0) + 1);
   }
 
   // Sort by overlap count descending, take top N
@@ -120,7 +100,6 @@ async function findRelatedByConceptOverlap(
     .slice(0, limit)
     .map(([id]) => id);
 
-  // Step 3: Fetch content details
   const { data: contentItems, error: contentError } = await supabaseAdmin
     .from('content')
     .select('id, title, content_type, thumbnail_url, created_at')
@@ -133,29 +112,26 @@ async function findRelatedByConceptOverlap(
     return [];
   }
 
-  if (!contentItems) {
-    return [];
-  }
+  if (!contentItems) return [];
 
-  // Map content items with overlap counts, preserving sort order
-  const contentMap = new Map(
-    (contentItems as ContentRow[]).map((item) => [item.id, item])
+  // Preserve sort order from overlapCounts ranking
+  const contentById = new Map(
+    contentItems.map((item) => [item.id, item])
   );
 
-  return topContentIds.reduce<RelatedItem[]>((acc, id) => {
-    const item = contentMap.get(id);
-    if (!item) return acc;
-    acc.push({
+  return topContentIds.flatMap((id) => {
+    const item = contentById.get(id);
+    if (!item) return [];
+    return {
       id: item.id,
       title: item.title,
-      content_type: item.content_type,
+      content_type: item.content_type as ContentType | null,
       thumbnail_url: item.thumbnail_url,
       created_at: item.created_at,
-      relevanceScore: overlapCounts.get(id) || 0,
-      scoreType: 'concepts',
-    });
-    return acc;
-  }, []);
+      relevanceScore: overlapCounts.get(id) ?? 0,
+      scoreType: 'concepts' as const,
+    };
+  });
 }
 
 async function findRelatedByVectorSimilarity(
@@ -163,7 +139,6 @@ async function findRelatedByVectorSimilarity(
   orgId: string,
   limit: number
 ): Promise<RelatedItem[]> {
-  // Get the content's title for the search query
   const { data: content, error: contentError } = await supabaseAdmin
     .from('content')
     .select('title')
@@ -182,9 +157,7 @@ async function findRelatedByVectorSimilarity(
       threshold: 0.5,
     });
 
-    // Deduplicate by contentId and exclude the current content
-    const seen = new Set<string>();
-    seen.add(contentId);
+    const seen = new Set<string>([contentId]);
     const items: RelatedItem[] = [];
 
     for (const result of results) {
@@ -194,7 +167,7 @@ async function findRelatedByVectorSimilarity(
         id: result.contentId,
         title: result.contentTitle,
         content_type: isValidContentType(result.contentType) ? result.contentType : null,
-        thumbnail_url: null, // Vector search doesn't return thumbnails
+        thumbnail_url: null,
         created_at: result.createdAt,
         relevanceScore: result.similarity ?? 0,
         scoreType: 'similarity',
@@ -213,10 +186,9 @@ export async function RelatedContent({
   orgId,
   limit = 5,
 }: RelatedContentProps) {
-  // Try concept-based matching first
+  // Concept-based first, fall back to vector similarity
   let items = await findRelatedByConceptOverlap(contentId, orgId, limit);
 
-  // Fall back to vector similarity if no concept matches
   if (items.length === 0) {
     items = await findRelatedByVectorSimilarity(contentId, orgId, limit);
   }
@@ -232,8 +204,8 @@ export async function RelatedContent({
   return (
     <div className="space-y-3">
       {items.map((item) => {
-        const contentType = item.content_type || 'recording';
-        const Icon = contentTypeIcons[contentType];
+        const contentType = item.content_type ?? 'recording';
+        const Icon = CONTENT_TYPE_ICONS[contentType];
         const colors = CONTENT_TYPE_COLORS[contentType];
         const label = CONTENT_TYPE_LABELS[contentType];
 
@@ -242,11 +214,10 @@ export async function RelatedContent({
             key={item.id}
             href={`/library/${item.id}`}
             className="block focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-xl"
-            aria-label={`View ${item.title || 'Untitled'}`}
+            aria-label={`View ${item.title ?? 'Untitled'}`}
           >
             <Card className="card-interactive overflow-hidden py-0">
               <div className="flex items-center gap-3 p-3">
-                {/* Thumbnail or icon */}
                 <div
                   className={`relative shrink-0 size-12 rounded-lg ${colors.bg} flex items-center justify-center overflow-hidden`}
                 >
@@ -254,24 +225,24 @@ export async function RelatedContent({
                     <img
                       src={item.thumbnail_url}
                       alt=""
+                      loading="lazy"
                       className="size-full object-cover"
                     />
                   ) : (
-                    <Icon className={`size-5 ${colors.text}`} />
+                    <Icon className={`size-5 ${colors.text}`} aria-hidden="true" />
                   )}
                 </div>
 
-                {/* Content details */}
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-medium line-clamp-1">
-                    {item.title || 'Untitled'}
+                    {item.title ?? 'Untitled'}
                   </h4>
                   <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                       {label}
                     </Badge>
                     <span className="flex items-center gap-1">
-                      <LinkIcon className="size-3" />
+                      <LinkIcon className="size-3" aria-hidden="true" />
                       {item.scoreType === 'concepts'
                         ? `${item.relevanceScore} shared concept${item.relevanceScore !== 1 ? 's' : ''}`
                         : `${Math.round(item.relevanceScore * 100)}% similar`}
