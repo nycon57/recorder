@@ -307,17 +307,33 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
     memory?.memory_value || ''
   );
 
-  const genai = getGenAIClient();
-  const result = await genai.models.generateContent({
-    model: 'gemini-2.0-flash',
-    contents: prompt,
-    config: { temperature: 0.3, maxOutputTokens: 1024 },
-  });
+  let suggestions: TagSuggestion[];
+  try {
+    const genai = getGenAIClient();
+    const result = await genai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: prompt,
+      config: { temperature: 0.3, maxOutputTokens: 1024 },
+    });
 
-  // Parse, filter, and deduplicate suggestions
-  let suggestions = parseTagSuggestions(result.text || '');
-  suggestions = suggestions.filter(s => !existingTagNames.has(s.name.toLowerCase()));
-  suggestions = deduplicateSuggestions(suggestions, orgTagNames);
+    suggestions = parseTagSuggestions(result.text || '');
+    suggestions = suggestions.filter(s => !existingTagNames.has(s.name.toLowerCase()));
+    suggestions = deduplicateSuggestions(suggestions, orgTagNames);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[CurateKnowledge] Gemini API error for ${contentId}:`, errorMessage);
+    await logAgentAction({
+      orgId,
+      agentType: AGENT_TYPE,
+      actionType: 'suggest_tags',
+      contentId,
+      targetEntity: 'content',
+      targetId: contentId,
+      outcome: 'failure',
+      errorMessage,
+    });
+    return;
+  }
 
   // Store suggestions in agent_activity_log
   await logAgentAction({
@@ -344,25 +360,29 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
       suggestions.map(s => `${s.name} (${s.confidence})`).join(', ')
   );
 
-  // Update agent memory with org tag vocabulary
-  const allKnownTags = [
-    ...new Set([
-      ...orgTagNames.map(t => t.toLowerCase()),
-      ...suggestions.map(s => s.name.toLowerCase()),
-    ]),
-  ].sort();
+  // Update agent memory with org tag vocabulary (best-effort)
+  try {
+    const allKnownTags = [
+      ...new Set([
+        ...orgTagNames.map(t => t.toLowerCase()),
+        ...suggestions.map(s => s.name.toLowerCase()),
+      ]),
+    ].sort();
 
-  await storeMemory({
-    orgId,
-    agentType: AGENT_TYPE,
-    key: `tag_vocabulary:${orgId}`,
-    value: JSON.stringify({
-      tags: allKnownTags,
-      tagCount: allKnownTags.length,
-      updatedAt: new Date().toISOString(),
-    }),
-    importance: 0.7,
-  });
+    await storeMemory({
+      orgId,
+      agentType: AGENT_TYPE,
+      key: `tag_vocabulary:${orgId}`,
+      value: JSON.stringify({
+        tags: allKnownTags,
+        tagCount: allKnownTags.length,
+        updatedAt: new Date().toISOString(),
+      }),
+      importance: 0.7,
+    });
+  } catch (memoryError) {
+    console.error('[CurateKnowledge] Failed to update tag vocabulary memory:', memoryError);
+  }
 }
 
 /** Build the Gemini prompt for tag suggestion. */
