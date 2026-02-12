@@ -9,6 +9,8 @@ import {
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { LearningPathItem } from '@/lib/types/database';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * PATCH /api/onboarding/progress
  * Mark a learning path item as complete (or uncomplete).
@@ -53,7 +55,6 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   }
 
   // Update the item's completed state
-  const wasCompleted = learningPath[itemIndex].completed;
   learningPath[itemIndex] = {
     ...learningPath[itemIndex],
     completed,
@@ -71,7 +72,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   const { data: updated, error: updateError } = await supabaseAdmin
     .from('agent_onboarding_plans')
     .update({
-      learning_path: learningPath as unknown as LearningPathItem[],
+      learning_path: learningPath as any,
       completed_items: completedItems,
       plan_status: newStatus,
       updated_at: new Date().toISOString(),

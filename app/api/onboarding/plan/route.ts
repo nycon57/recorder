@@ -10,6 +10,8 @@ import {
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { JobType } from '@/lib/types/database';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/onboarding/plan
  * Fetch the active onboarding plan for the current user.

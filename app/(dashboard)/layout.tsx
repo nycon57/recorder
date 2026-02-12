@@ -41,7 +41,7 @@ export default async function DashboardLayout({
   try {
     const { data: userData } = await supabaseAdmin
       .from('users')
-      .select('id, role, is_system_admin')
+      .select('id, org_id, role, is_system_admin')
       .eq('clerk_id', userId)
       .single();
 
@@ -55,10 +55,11 @@ export default async function DashboardLayout({
     }
 
     // Check for active onboarding plan to conditionally show sidebar link
-    if (userData?.id) {
+    if (userData?.id && userData?.org_id) {
       const { data: planData } = await supabaseAdmin
         .from('agent_onboarding_plans')
         .select('id')
+        .eq('org_id', userData.org_id)
         .eq('user_id', userData.id)
         .eq('plan_status', 'active')
         .limit(1)

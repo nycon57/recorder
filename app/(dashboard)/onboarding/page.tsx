@@ -22,7 +22,7 @@ import { Checkbox } from '@/app/components/ui/checkbox';
 import { Badge } from '@/app/components/ui/badge';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import type { ContentType, LearningPathItem } from '@/lib/types/database';
-import { staggerContainer, staggerItem, fadeIn } from '@/lib/utils/animations';
+import { staggerContainer, staggerItem, fadeIn, withReducedMotion } from '@/lib/utils/animations';
 
 /** Map content types to Lucide icons */
 const CONTENT_ICONS: Record<ContentType, typeof Video> = {
@@ -148,8 +148,9 @@ export default function OnboardingPage() {
   if (loading) {
     return (
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <div className="flex items-center justify-center py-24" role="status" aria-live="polite">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
+          <span className="sr-only">Loading your onboarding plan</span>
         </div>
       </div>
     );
@@ -180,7 +181,7 @@ export default function OnboardingPage() {
       {/* Header */}
       <div className="space-y-2">
         <h1 className="text-heading-3 font-outfit tracking-tight flex items-center gap-3">
-          <GraduationCap className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
+          <GraduationCap className="h-7 w-7 sm:h-8 sm:w-8 text-primary" aria-hidden="true" />
           Onboarding
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground">
@@ -196,9 +197,13 @@ export default function OnboardingPage() {
           </span>
           <span className="text-muted-foreground">{progressPercent}%</span>
         </div>
-        <Progress value={progressPercent} className="h-3" />
+        <Progress
+          value={progressPercent}
+          className="h-3"
+          aria-label={`Onboarding progress: ${completedItems} of ${totalItems} completed`}
+        />
         {plan.plan_status === 'completed' && (
-          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400" role="status">
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
             All done! You have completed your onboarding plan.
           </div>
@@ -207,7 +212,7 @@ export default function OnboardingPage() {
 
       {/* Learning path checklist */}
       <motion.div
-        variants={staggerContainer}
+        variants={withReducedMotion(staggerContainer)}
         initial="hidden"
         animate="show"
         className="space-y-2"
@@ -224,7 +229,7 @@ export default function OnboardingPage() {
             return (
               <motion.div
                 key={item.contentId}
-                variants={staggerItem}
+                variants={withReducedMotion(staggerItem)}
                 role="listitem"
                 className={`group relative flex items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-accent/5 ${
                   item.completed ? 'bg-muted/30 border-muted' : 'border-border'
@@ -270,7 +275,7 @@ export default function OnboardingPage() {
 
                   {item.reason && (
                     <p className={`text-xs leading-relaxed ${
-                      item.completed ? 'text-muted-foreground/60' : 'text-muted-foreground'
+                      item.completed ? 'text-muted-foreground/80' : 'text-muted-foreground'
                     }`}>
                       {item.reason}
                     </p>
@@ -280,9 +285,8 @@ export default function OnboardingPage() {
                 {/* Link to content */}
                 <Link
                   href={`/library/${item.contentId}`}
-                  className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="shrink-0 p-2 rounded opacity-0 group-hover:opacity-100 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={`View ${item.title}`}
-                  tabIndex={-1}
                 >
                   <ExternalLink className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 </Link>
@@ -301,19 +305,19 @@ function EmptyState() {
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       <div className="space-y-2 mb-8">
         <h1 className="text-heading-3 font-outfit tracking-tight flex items-center gap-3">
-          <GraduationCap className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
+          <GraduationCap className="h-7 w-7 sm:h-8 sm:w-8 text-primary" aria-hidden="true" />
           Onboarding
         </h1>
       </div>
 
       <motion.div
-        variants={fadeIn}
+        variants={withReducedMotion(fadeIn)}
         initial="hidden"
         animate="show"
       >
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
           <div className="bg-primary/5 rounded-full p-6 mb-6">
-            <GraduationCap className="h-12 w-12 text-primary" />
+            <GraduationCap className="h-12 w-12 text-primary" aria-hidden="true" />
           </div>
           <h3 className="text-xl font-semibold mb-3">No onboarding plan yet</h3>
           <p className="text-sm text-muted-foreground max-w-md">
