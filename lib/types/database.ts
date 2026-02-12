@@ -616,6 +616,45 @@ export interface Database {
         };
         Update: Record<string, never>;
       };
+      /** Per-org agent toggle settings (one row per org) */
+      org_agent_settings: {
+        Row: {
+          id: string;
+          org_id: string;
+          curator_enabled: boolean | null;
+          gap_intelligence_enabled: boolean | null;
+          onboarding_enabled: boolean | null;
+          digest_enabled: boolean | null;
+          workflow_extraction_enabled: boolean | null;
+          global_agent_enabled: boolean | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          curator_enabled?: boolean | null;
+          gap_intelligence_enabled?: boolean | null;
+          onboarding_enabled?: boolean | null;
+          digest_enabled?: boolean | null;
+          workflow_extraction_enabled?: boolean | null;
+          global_agent_enabled?: boolean | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          curator_enabled?: boolean | null;
+          gap_intelligence_enabled?: boolean | null;
+          onboarding_enabled?: boolean | null;
+          digest_enabled?: boolean | null;
+          workflow_extraction_enabled?: boolean | null;
+          global_agent_enabled?: boolean | null;
+          metadata?: Json;
+          updated_at?: string;
+        };
+      };
       /** Universal content table - stores all content types (recordings, videos, audio, documents, text) */
       content: {
         Row: {
