@@ -155,6 +155,8 @@ export type PermissionTier = 'auto' | 'notify' | 'approve';
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
 
+export type OnboardingPlanStatus = 'active' | 'completed' | 'paused' | 'expired';
+
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
 
 export type ActivityOutcome = 'success' | 'failure' | 'skipped' | 'pending_approval';
@@ -300,6 +302,20 @@ export interface MigrateStorageTierJobPayload {
   sourcePath: string;
   /** File size in bytes */
   fileSize: number;
+}
+
+/**
+ * Individual item in an onboarding plan learning path.
+ */
+export interface LearningPathItem {
+  contentId: string;
+  title: string;
+  contentType: string;
+  reason: string;
+  order: number;
+  completed: boolean;
+  completedAt: string | null;
+  estimatedMinutes: number;
 }
 
 export interface Tag {
@@ -579,6 +595,54 @@ export interface Database {
           reviewed_by?: string | null;
           reviewed_at?: string | null;
           rejection_reason?: string | null;
+        };
+      };
+      /** Personalized learning paths for new team members */
+      agent_onboarding_plans: {
+        Row: {
+          id: string;
+          org_id: string;
+          user_id: string;
+          user_name: string | null;
+          user_role: string | null;
+          plan_status: OnboardingPlanStatus;
+          learning_path: Json;
+          total_items: number | null;
+          completed_items: number | null;
+          engagement_data: Json;
+          generated_by: string | null;
+          reviewed_by: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          user_id: string;
+          user_name?: string | null;
+          user_role?: string | null;
+          plan_status?: OnboardingPlanStatus;
+          learning_path?: Json;
+          total_items?: number | null;
+          completed_items?: number | null;
+          engagement_data?: Json;
+          generated_by?: string | null;
+          reviewed_by?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          plan_status?: OnboardingPlanStatus;
+          learning_path?: Json;
+          total_items?: number | null;
+          completed_items?: number | null;
+          engagement_data?: Json;
+          generated_by?: string | null;
+          reviewed_by?: string | null;
+          notes?: string | null;
+          updated_at?: string;
         };
       };
       /** Per-org agent permission tiers (auto/notify/approve) per action */
