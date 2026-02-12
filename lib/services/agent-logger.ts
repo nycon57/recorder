@@ -79,8 +79,8 @@ export async function logAgentAction(params: {
 
 /**
  * Higher-order wrapper that logs start time, executes fn, measures duration,
- * and records outcome as 'success' or 'failure'. On failure, stores the
- * error message in the error_message column and rethrows the original error.
+ * and records outcome as 'success' or 'failure'. On failure, captures the
+ * error message and rethrows the original error.
  */
 export async function withAgentLogging<T>(
   params: {
@@ -112,7 +112,7 @@ export async function withAgentLogging<T>(
     const errorMessage =
       error instanceof Error ? error.message : String(error);
 
-    // Best-effort logging; do not mask the original error
+    // Log failure but never suppress the original error
     try {
       await logAgentAction({
         ...params,
