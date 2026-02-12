@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { auth } from '@clerk/nextjs/server';
 import { redirect, notFound } from 'next/navigation';
 
@@ -8,6 +9,7 @@ import {
   DocumentDetailView,
   TextNoteDetailView,
 } from '@/app/components/library';
+import { RelatedContent } from '@/app/components/content/RelatedContent';
 
 async function getContentItem(id: string, clerkOrgId: string) {
   const supabase = supabaseAdmin;
@@ -186,70 +188,53 @@ export default async function LibraryItemDetailPage({
     .filter(Boolean) || [];
 
   // Route to appropriate view based on content type
+  const sharedProps = {
+    recording: item,
+    transcript,
+    document,
+    initialTags: tags,
+    sourceKey,
+    initialHighlightId: highlight,
+  };
+
+  let detailView: React.ReactNode;
   switch (item.content_type) {
     case 'recording':
     case 'video':
-      return (
-        <VideoDetailView
-          recording={item}
-          transcript={transcript}
-          document={document}
-          initialTags={tags}
-          sourceKey={sourceKey}
-          initialHighlightId={highlight}
-          initialTimestamp={initialTimestamp}
-        />
+      detailView = (
+        <VideoDetailView {...sharedProps} initialTimestamp={initialTimestamp} />
       );
-
+      break;
     case 'audio':
-      return (
-        <AudioDetailView
-          recording={item}
-          transcript={transcript}
-          document={document}
-          initialTags={tags}
-          sourceKey={sourceKey}
-          initialHighlightId={highlight}
-          initialTimestamp={initialTimestamp}
-        />
+      detailView = (
+        <AudioDetailView {...sharedProps} initialTimestamp={initialTimestamp} />
       );
-
+      break;
     case 'document':
-      return (
-        <DocumentDetailView
-          recording={item}
-          transcript={transcript}
-          document={document}
-          initialTags={tags}
-          sourceKey={sourceKey}
-          initialHighlightId={highlight}
-        />
-      );
-
+      detailView = <DocumentDetailView {...sharedProps} />;
+      break;
     case 'text':
-      return (
-        <TextNoteDetailView
-          recording={item}
-          transcript={transcript}
-          document={document}
-          initialTags={tags}
-          sourceKey={sourceKey}
-          initialHighlightId={highlight}
-        />
-      );
-
+      detailView = <TextNoteDetailView {...sharedProps} />;
+      break;
     default:
-      // Fallback to video view for unknown types
-      return (
-        <VideoDetailView
-          recording={item}
-          transcript={transcript}
-          document={document}
-          initialTags={tags}
-          sourceKey={sourceKey}
-          initialHighlightId={highlight}
-          initialTimestamp={initialTimestamp}
-        />
+      detailView = (
+        <VideoDetailView {...sharedProps} initialTimestamp={initialTimestamp} />
       );
   }
+
+  const showRelated = item.status === 'completed' || item.status === 'transcribed';
+
+  return (
+    <>
+      {detailView}
+      {showRelated && (
+        <section className="mt-8">
+          <h2 className="text-lg font-light">Related Content</h2>
+          <Suspense fallback={null}>
+            <RelatedContent contentId={id} orgId={item.org_id} />
+          </Suspense>
+        </section>
+      )}
+    </>
+  );
 }
