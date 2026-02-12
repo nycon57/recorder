@@ -207,6 +207,7 @@ export async function handleProcessTextNote(
         status: 'pending',
         payload: {
           recordingId,
+          transcriptId: transcript.id,
           orgId,
         },
         dedupe_key: `generate_metadata:${recordingId}`,

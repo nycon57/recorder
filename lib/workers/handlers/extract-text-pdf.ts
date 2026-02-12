@@ -218,6 +218,7 @@ export async function handleExtractTextPdf(
         status: 'pending',
         payload: {
           recordingId,
+          transcriptId: transcript.id,
           orgId,
         },
         dedupe_key: `generate_metadata:${recordingId}`,

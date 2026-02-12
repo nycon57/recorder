@@ -249,6 +249,7 @@ export async function handleExtractTextDocx(
         status: 'pending',
         payload: {
           recordingId,
+          transcriptId: transcript.id,
           orgId,
         },
         dedupe_key: `generate_metadata:${recordingId}`,
