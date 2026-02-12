@@ -153,6 +153,8 @@ export type KnowledgeGapStatus = 'open' | 'acknowledged' | 'resolved' | 'dismiss
 
 export type PermissionTier = 'auto' | 'notify' | 'approve';
 
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
 
 export type ActivityOutcome = 'success' | 'failure' | 'skipped' | 'pending_approval';
@@ -538,6 +540,45 @@ export interface Database {
           expires_at?: string | null;
           metadata?: Json;
           updated_at?: string;
+        };
+      };
+      /** Queue of agent actions awaiting admin approval (Tier 3) */
+      agent_approval_queue: {
+        Row: {
+          id: string;
+          org_id: string;
+          agent_type: string;
+          action_type: string;
+          content_id: string | null;
+          description: string;
+          proposed_action: Json;
+          status: ApprovalStatus;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          rejection_reason: string | null;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          agent_type: string;
+          action_type: string;
+          content_id?: string | null;
+          description: string;
+          proposed_action: Json;
+          status?: ApprovalStatus;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          rejection_reason?: string | null;
+          expires_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          status?: ApprovalStatus;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          rejection_reason?: string | null;
         };
       };
       /** Per-org agent permission tiers (auto/notify/approve) per action */

@@ -5,11 +5,14 @@
  * what agents can do autonomously per org.
  */
 
-import type { Database, PermissionTier } from '@/lib/types/database';
+import type { Database, PermissionTier, Json } from '@/lib/types/database';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export type AgentPermission =
   Database['public']['Tables']['agent_permissions']['Row'];
+
+export type AgentApproval =
+  Database['public']['Tables']['agent_approval_queue']['Row'];
 
 /**
  * Default tier mapping used when no row exists for a given
@@ -116,4 +119,146 @@ export async function setPermission(
   if (error) {
     throw new Error(`Failed to set permission: ${error.message}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Approval Queue
+// ---------------------------------------------------------------------------
+
+/**
+ * Request approval for a Tier 3 action. If a pending approval already
+ * exists for the same org/agent/action/content combo, returns the
+ * existing ID instead of creating a duplicate.
+ */
+export async function requestApproval(params: {
+  orgId: string;
+  agentType: string;
+  actionType: string;
+  contentId?: string;
+  description: string;
+  proposedAction: Json;
+}): Promise<string> {
+  // Check for existing pending approval (dedup)
+  let existingQuery = supabaseAdmin
+    .from('agent_approval_queue')
+    .select('id')
+    .eq('org_id', params.orgId)
+    .eq('agent_type', params.agentType)
+    .eq('action_type', params.actionType)
+    .eq('status', 'pending');
+
+  if (params.contentId) {
+    existingQuery = existingQuery.eq('content_id', params.contentId);
+  }
+
+  const { data: existing } = await existingQuery.maybeSingle();
+
+  if (existing) {
+    return existing.id;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('agent_approval_queue')
+    .insert({
+      org_id: params.orgId,
+      agent_type: params.agentType,
+      action_type: params.actionType,
+      content_id: params.contentId ?? null,
+      description: params.description,
+      proposed_action: params.proposedAction,
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to request approval: ${error.message}`);
+  }
+
+  return data.id;
+}
+
+/**
+ * Get pending approvals for an org, ordered newest first.
+ * Automatically expires stale entries before returning results.
+ */
+export async function getPendingApprovals(
+  orgId: string,
+): Promise<AgentApproval[]> {
+  await expireStaleApprovals(orgId);
+
+  const { data, error } = await supabaseAdmin
+    .from('agent_approval_queue')
+    .select()
+    .eq('org_id', orgId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to get approvals: ${error.message}`);
+  }
+
+  return (data ?? []) as AgentApproval[];
+}
+
+/**
+ * Approve or reject a pending approval.
+ * Returns the updated row or null if not found / not pending.
+ */
+export async function reviewApproval(
+  approvalId: string,
+  orgId: string,
+  reviewedBy: string,
+  action: 'approved' | 'rejected',
+  rejectionReason?: string,
+): Promise<AgentApproval | null> {
+  const now = new Date().toISOString();
+
+  const updatePayload: Record<string, unknown> = {
+    status: action,
+    reviewed_by: reviewedBy,
+    reviewed_at: now,
+  };
+
+  if (action === 'rejected' && rejectionReason) {
+    updatePayload.rejection_reason = rejectionReason;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('agent_approval_queue')
+    .update(updatePayload)
+    .eq('id', approvalId)
+    .eq('org_id', orgId)
+    .eq('status', 'pending')
+    .select()
+    .single();
+
+  if (error) {
+    // PGRST116 = no rows matched (already reviewed or wrong org)
+    if (error.code === 'PGRST116') return null;
+    throw new Error(`Failed to review approval: ${error.message}`);
+  }
+
+  return data as AgentApproval;
+}
+
+/**
+ * Transition pending approvals past their expiry to 'expired'.
+ * Called automatically before fetching the queue.
+ */
+export async function expireStaleApprovals(orgId: string): Promise<number> {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabaseAdmin
+    .from('agent_approval_queue')
+    .update({ status: 'expired' as const })
+    .eq('org_id', orgId)
+    .eq('status', 'pending')
+    .lt('expires_at', now)
+    .select('id');
+
+  if (error) {
+    console.error('[AgentPermissions] Failed to expire stale approvals:', error.message);
+    return 0;
+  }
+
+  return data?.length ?? 0;
 }
