@@ -143,6 +143,8 @@ export type ConnectorType =
 
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
 
+export type ActivityOutcome = 'success' | 'failure' | 'skipped' | 'pending_approval';
+
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 
 export type ImportedDocumentStatus =
@@ -571,6 +573,48 @@ export interface Database {
           metadata?: Json;
           updated_at?: string;
         };
+      };
+      /** Append-only audit log for all agent actions (observability, debugging, usage tracking) */
+      agent_activity_log: {
+        Row: {
+          id: string;
+          org_id: string;
+          agent_type: string;
+          action_type: string;
+          content_id: string | null;
+          target_entity: string | null;
+          target_id: string | null;
+          input_summary: string | null;
+          output_summary: string | null;
+          outcome: ActivityOutcome;
+          confidence: number | null;
+          duration_ms: number | null;
+          tokens_used: number | null;
+          cost_estimate: number | null;
+          error_message: string | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          agent_type: string;
+          action_type: string;
+          content_id?: string | null;
+          target_entity?: string | null;
+          target_id?: string | null;
+          input_summary?: string | null;
+          output_summary?: string | null;
+          outcome?: ActivityOutcome;
+          confidence?: number | null;
+          duration_ms?: number | null;
+          tokens_used?: number | null;
+          cost_estimate?: number | null;
+          error_message?: string | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
       };
       /** Universal content table - stores all content types (recordings, videos, audio, documents, text) */
       content: {
