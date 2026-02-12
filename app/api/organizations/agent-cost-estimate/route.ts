@@ -2,6 +2,7 @@ import {
   apiHandler,
   requireAdmin,
   successResponse,
+  errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { estimateMonthlyAgentCost } from '@/lib/services/agent-cost-estimator';
@@ -21,6 +22,7 @@ export const GET = apiHandler(async () => {
 
   if (error) {
     console.error('[agent-cost-estimate] Failed to count content:', error.message);
+    return errors.internalError();
   }
 
   const estimate = estimateMonthlyAgentCost(count ?? 0);

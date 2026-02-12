@@ -163,7 +163,7 @@ function formatCostUsd(amount: number): string {
 
 function getApprovalCost(approval: AgentApproval): { estimatedCostUsd: number; breakdown: string } | null {
   const action = approval.proposed_action as Record<string, unknown> | null;
-  if (!action?.estimatedCost) return null;
+  if (!action?.estimatedCost || typeof action.estimatedCost !== 'object') return null;
   const cost = action.estimatedCost as { estimatedCostUsd?: number; breakdown?: string };
   if (typeof cost.estimatedCostUsd !== 'number') return null;
   return { estimatedCostUsd: cost.estimatedCostUsd, breakdown: cost.breakdown ?? '' };
@@ -612,7 +612,7 @@ export default function AgentsSettingsPage() {
                               {ACTION_NAMES[approval.action_type] ?? approval.action_type}
                             </span>
                             {cost && (
-                              <Badge variant="outline" className="text-[10px] gap-1">
+                              <Badge variant="outline" className="text-[10px] gap-1" title={cost.breakdown}>
                                 <DollarSign className="h-3 w-3" aria-hidden="true" />
                                 {formatCostUsd(cost.estimatedCostUsd)}
                               </Badge>
@@ -626,11 +626,6 @@ export default function AgentsSettingsPage() {
                             )}
                             {approval.reviewed_at && (
                               <span>Reviewed {formatRelativeTime(approval.reviewed_at)}</span>
-                            )}
-                            {cost && (
-                              <span title={cost.breakdown}>
-                                ~{cost.estimatedCostUsd < 0.01 ? '<0.01' : cost.estimatedCostUsd.toFixed(2)} USD est.
-                              </span>
                             )}
                           </div>
                           {approval.rejection_reason && (
