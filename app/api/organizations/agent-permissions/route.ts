@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server';
 
 import {
   apiHandler,
-  requireOrg,
   requireAdmin,
   successResponse,
   errors,
@@ -17,7 +16,7 @@ const VALID_TIERS: PermissionTier[] = ['auto', 'notify', 'approve'];
  * Returns all agent permission rows for the authenticated user's org.
  */
 export const GET = apiHandler(async () => {
-  const { orgId } = await requireOrg();
+  const { orgId } = await requireAdmin();
   const permissions = await getPermissions(orgId);
   return successResponse(permissions);
 });

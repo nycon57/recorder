@@ -230,7 +230,8 @@ export default function AgentsSettingsPage() {
           updated[idx] = { ...updated[idx], permission_tier: payload.permission_tier };
           return updated;
         }
-        return [...old, payload];
+        // Row not found locally — let the server response handle new rows
+        return old;
       });
 
       return { previous };
@@ -253,9 +254,9 @@ export default function AgentsSettingsPage() {
   // Loading state
   if (settingsLoading || permissionsLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
+      <div className="flex items-center justify-center py-16" role="status">
         <div className="text-center">
-          <div className="inline-flex h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]" />
+          <div className="inline-flex h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]" aria-hidden="true" />
           <p className="mt-2 text-sm text-muted-foreground">Loading agent settings...</p>
         </div>
       </div>
@@ -303,13 +304,14 @@ export default function AgentsSettingsPage() {
               settingsMutation.mutate({ global_agent_enabled: checked })
             }
             disabled={settingsMutation.isPending}
+            aria-label="Enable all agents"
           />
         </CardHeader>
       </Card>
 
       {/* Global disabled banner */}
       {!globalEnabled && (
-        <div className="flex items-center gap-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
+        <div role="alert" className="flex items-center gap-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
           <Pause className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
           All agents are paused. Individual settings are preserved but inactive until you re-enable agents.
         </div>
@@ -341,7 +343,10 @@ export default function AgentsSettingsPage() {
               <Card className={cn(disabled && "opacity-60")}>
                 <CardHeader className="pb-0">
                   <div className="flex items-center justify-between">
-                    <CollapsibleTrigger className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity">
+                    <CollapsibleTrigger
+                      className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+                      aria-label={`${isExpanded ? "Collapse" : "Expand"} ${agent.name} settings`}
+                    >
                       {isExpanded ? (
                         <ChevronDown className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
                       ) : (
@@ -364,6 +369,7 @@ export default function AgentsSettingsPage() {
                         settingsMutation.mutate({ [agent.settingsKey]: checked })
                       }
                       disabled={settingsMutation.isPending || !globalEnabled}
+                      aria-label={`Enable ${agent.name} agent`}
                     />
                   </div>
 
