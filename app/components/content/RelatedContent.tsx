@@ -50,6 +50,12 @@ const contentTypeIcons: Record<ContentType, typeof VideoIcon> = {
   text: FileEditIcon,
 };
 
+const VALID_CONTENT_TYPES: ContentType[] = ['recording', 'video', 'audio', 'document', 'text'];
+
+function isValidContentType(type: string): type is ContentType {
+  return VALID_CONTENT_TYPES.includes(type as ContentType);
+}
+
 /** Row shape returned from the `content` table query (admin client lacks Database generic). */
 interface ContentRow {
   id: string;
@@ -71,7 +77,12 @@ async function findRelatedByConceptOverlap(
     .eq('content_id', contentId)
     .eq('org_id', orgId);
 
-  if (conceptsError || !contentConcepts || contentConcepts.length === 0) {
+  if (conceptsError) {
+    console.error('[RelatedContent] Failed to fetch concept mentions:', conceptsError);
+    return [];
+  }
+
+  if (!contentConcepts || contentConcepts.length === 0) {
     return [];
   }
 
@@ -79,15 +90,21 @@ async function findRelatedByConceptOverlap(
     ...new Set(contentConcepts.map((c: { concept_id: string }) => c.concept_id)),
   ];
 
-  // Step 2: Find other content sharing those concepts
+  // Step 2: Find other content sharing those concepts (cap rows to avoid unbounded fetch)
   const { data: relatedMentions, error: mentionsError } = await supabaseAdmin
     .from('concept_mentions')
     .select('content_id')
     .in('concept_id', conceptIds)
     .eq('org_id', orgId)
-    .neq('content_id', contentId);
+    .neq('content_id', contentId)
+    .limit(limit * 50);
 
-  if (mentionsError || !relatedMentions || relatedMentions.length === 0) {
+  if (mentionsError) {
+    console.error('[RelatedContent] Failed to fetch related mentions:', mentionsError);
+    return [];
+  }
+
+  if (!relatedMentions || relatedMentions.length === 0) {
     return [];
   }
 
@@ -111,7 +128,12 @@ async function findRelatedByConceptOverlap(
     .is('deleted_at', null)
     .eq('org_id', orgId);
 
-  if (contentError || !contentItems) {
+  if (contentError) {
+    console.error('[RelatedContent] Failed to fetch content details:', contentError);
+    return [];
+  }
+
+  if (!contentItems) {
     return [];
   }
 
@@ -171,7 +193,7 @@ async function findRelatedByVectorSimilarity(
       items.push({
         id: result.contentId,
         title: result.contentTitle,
-        content_type: (result.contentType as ContentType) || null,
+        content_type: isValidContentType(result.contentType) ? result.contentType : null,
         thumbnail_url: null, // Vector search doesn't return thumbnails
         created_at: result.createdAt,
         relevanceScore: result.similarity ?? 0,
