@@ -145,6 +145,10 @@ export type ConnectorType =
   | 'url_import'
   | 'slack';
 
+export type KnowledgeGapSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export type KnowledgeGapStatus = 'open' | 'acknowledged' | 'resolved' | 'dismissed';
+
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
 
 export type ActivityOutcome = 'success' | 'failure' | 'skipped' | 'pending_approval';
@@ -1092,6 +1096,65 @@ export interface Database {
           segments_completed?: number;
           /** For dependency tracking: reference to parent merge job */
           parent_job_id?: string;
+        };
+      };
+      knowledge_gaps: {
+        Row: {
+          id: string;
+          org_id: string;
+          topic: string;
+          description: string | null;
+          severity: KnowledgeGapSeverity;
+          impact_score: number | null;
+          search_count: number | null;
+          unique_searchers: number | null;
+          last_searched_at: string | null;
+          related_concept_ids: string[] | null;
+          suggested_action: string | null;
+          status: KnowledgeGapStatus;
+          resolved_by_content_id: string | null;
+          resolved_at: string | null;
+          metadata: Json | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          topic: string;
+          description?: string | null;
+          severity?: KnowledgeGapSeverity;
+          impact_score?: number | null;
+          search_count?: number | null;
+          unique_searchers?: number | null;
+          last_searched_at?: string | null;
+          related_concept_ids?: string[] | null;
+          suggested_action?: string | null;
+          status?: KnowledgeGapStatus;
+          resolved_by_content_id?: string | null;
+          resolved_at?: string | null;
+          metadata?: Json | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          topic?: string;
+          description?: string | null;
+          severity?: KnowledgeGapSeverity;
+          impact_score?: number | null;
+          search_count?: number | null;
+          unique_searchers?: number | null;
+          last_searched_at?: string | null;
+          related_concept_ids?: string[] | null;
+          suggested_action?: string | null;
+          status?: KnowledgeGapStatus;
+          resolved_by_content_id?: string | null;
+          resolved_at?: string | null;
+          metadata?: Json | null;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
       };
       /** Temporary storage for video segment transcription results during long video (>30 min) processing */
