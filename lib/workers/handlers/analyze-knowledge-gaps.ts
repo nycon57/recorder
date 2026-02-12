@@ -510,10 +510,10 @@ function clusterByEmbeddingSimilarity(items: EmbeddedAggregate[]): Cluster[] {
         if (item.lastSeen > cluster.lastSearchedAt) {
           cluster.lastSearchedAt = item.lastSeen;
         }
-        // Use the highest-frequency query as the topic label
+        // Use the highest-frequency query as the topic label,
+        // but keep the cluster embedding stable for consistent matching
         if (item.count > cluster.topCount) {
           cluster.topic = item.query;
-          cluster.embedding = item.embedding;
           cluster.topCount = item.count;
         }
         merged = true;
@@ -619,37 +619,25 @@ async function upsertKnowledgeGaps(
   let created = 0;
   let updated = 0;
 
+  // Separate gaps into updates vs inserts, then batch inserts
+  const toUpdate: Array<{ match: (typeof existingWithEmbeddings)[number]; gap: ScoredGap }> = [];
+  const toInsert: ScoredGap[] = [];
+
   for (const gap of gaps) {
     const match = findBestMatch(gap.embedding, existingWithEmbeddings);
-
     if (match) {
-      // Update existing gap: combine search counts, recalculate score
-      const combinedSearchCount = (match.searchCount || 0) + gap.searchCount;
-      const newImpactScore = Math.max(gap.impactScore, match.impactScore);
-
-      await supabase
-        .from('knowledge_gaps')
-        .update({
-          search_count: combinedSearchCount,
-          unique_searchers: gap.uniqueSearchers,
-          impact_score: newImpactScore,
-          severity: calculateSeverity(newImpactScore),
-          last_searched_at: gap.lastSearchedAt,
-          metadata: { embedding: gap.embedding } as unknown as Json,
-        })
-        .eq('id', match.id);
-
-      // Update local cache so subsequent gaps can match against it
-      match.searchCount = combinedSearchCount;
-      match.impactScore = newImpactScore;
-      match.embedding = gap.embedding;
-
-      updated++;
+      toUpdate.push({ match, gap });
     } else {
-      // Insert new gap
-      const { data: inserted } = await supabase
-        .from('knowledge_gaps')
-        .insert({
+      toInsert.push(gap);
+    }
+  }
+
+  // Batch insert new gaps
+  if (toInsert.length > 0) {
+    const { data: inserted, error: insertError } = await supabase
+      .from('knowledge_gaps')
+      .insert(
+        toInsert.map((gap) => ({
           org_id: orgId,
           topic: gap.topic,
           severity: gap.severity,
@@ -657,25 +645,54 @@ async function upsertKnowledgeGaps(
           search_count: gap.searchCount,
           unique_searchers: gap.uniqueSearchers,
           last_searched_at: gap.lastSearchedAt,
-          status: 'open',
+          status: 'open' as const,
           metadata: { embedding: gap.embedding } as unknown as Json,
-        })
-        .select('id')
-        .single();
+        }))
+      )
+      .select('id, topic, search_count, impact_score, metadata');
 
-      // Add to cache for subsequent dedup
-      if (inserted) {
+    if (insertError) {
+      console.error('[AnalyzeKnowledgeGaps] Batch insert failed:', insertError);
+    } else if (inserted) {
+      created = inserted.length;
+      for (const row of inserted) {
         existingWithEmbeddings.push({
-          id: inserted.id,
-          topic: gap.topic,
-          searchCount: gap.searchCount,
-          impactScore: gap.impactScore,
-          embedding: gap.embedding,
+          id: row.id,
+          topic: row.topic,
+          searchCount: row.search_count ?? 0,
+          impactScore: row.impact_score ?? 0,
+          embedding: extractEmbeddingFromMetadata(row.metadata),
         });
       }
-
-      created++;
     }
+  }
+
+  // Individual updates for matched gaps
+  for (const { match, gap } of toUpdate) {
+    const combinedSearchCount = (match.searchCount || 0) + gap.searchCount;
+    const newImpactScore = Math.max(gap.impactScore, match.impactScore);
+
+    const { error: updateError } = await supabase
+      .from('knowledge_gaps')
+      .update({
+        search_count: combinedSearchCount,
+        unique_searchers: gap.uniqueSearchers,
+        impact_score: newImpactScore,
+        severity: calculateSeverity(newImpactScore),
+        last_searched_at: gap.lastSearchedAt,
+        metadata: { embedding: gap.embedding } as unknown as Json,
+      })
+      .eq('id', match.id);
+
+    if (updateError) {
+      console.error(`[AnalyzeKnowledgeGaps] Failed to update gap ${match.id}:`, updateError);
+      continue;
+    }
+
+    match.searchCount = combinedSearchCount;
+    match.impactScore = newImpactScore;
+    match.embedding = gap.embedding;
+    updated++;
   }
 
   return { created, updated };
@@ -730,7 +747,15 @@ function findBestMatch(
 // ---------------------------------------------------------------------------
 
 function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return 0;
+  if (a.length !== b.length) {
+    if (a.length > 0 && b.length > 0) {
+      console.warn(
+        `[AnalyzeKnowledgeGaps] Embedding dimension mismatch: ${a.length} vs ${b.length}`
+      );
+    }
+    return 0;
+  }
+  if (a.length === 0) return 0;
 
   let dot = 0;
   let normA = 0;
