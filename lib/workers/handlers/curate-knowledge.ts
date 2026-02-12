@@ -12,6 +12,8 @@ import { isAgentEnabled } from '@/lib/services/agent-config';
 import { withAgentLogging, logAgentAction } from '@/lib/services/agent-logger';
 import { storeMemory, recallMemory } from '@/lib/services/agent-memory';
 import { getConceptsForContent } from '@/lib/services/concept-extractor';
+import { hammingDistance, hammingToSimilarity } from '@/lib/services/similarity-detector';
+import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
 import type { Database } from '@/lib/types/database';
 
 import type { ProgressCallback } from '../job-processor';
@@ -20,6 +22,7 @@ type Job = Database['public']['Tables']['jobs']['Row'];
 type SessionState = Database['public']['Tables']['agent_sessions']['Update']['state'];
 
 const AGENT_TYPE = 'curator';
+const ZERO_HASH = '0'.repeat(64);
 
 let genaiClient: GoogleGenAI | null = null;
 
@@ -39,6 +42,19 @@ interface TagSuggestion {
   name: string;
   confidence: number;
   reason: string;
+}
+
+/** Duplicate detection levels, from strongest to weakest match. */
+type DuplicateLevel = 'EXACT_DUPLICATE' | 'NEAR_DUPLICATE' | 'RELATED';
+
+/** Result of comparing a new content item against an existing one. */
+interface DuplicateMatch {
+  matchedContentId: string;
+  matchedTitle: string;
+  level: DuplicateLevel;
+  perceptualSimilarity: number | null;
+  embeddingSimilarity: number | null;
+  conceptOverlap: number | null;
 }
 
 /** Sub-task definition: action key, human label, and implementation. */
@@ -61,9 +77,7 @@ const SUB_TASKS: SubTask[] = [
   {
     actionType: 'detect_duplicates',
     label: 'Check duplicates for content',
-    run: async (contentId, orgId) => {
-      console.log(`[CurateKnowledge] TODO: detectDuplicates for ${contentId} (org: ${orgId})`);
-    },
+    run: detectDuplicates,
   },
   {
     actionType: 'detect_staleness',
@@ -363,6 +377,346 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
   } catch (memoryError) {
     console.error('[CurateKnowledge] Tag vocabulary memory update failed (non-critical):', memoryError);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate and near-duplicate detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Detect duplicate or near-duplicate content by combining three signals:
+ * 1. Perceptual hash similarity (video/audio dHash)
+ * 2. Transcript embedding cosine similarity (via transcript_chunks)
+ * 3. Concept overlap (shared concepts via concept_mentions)
+ *
+ * Classification:
+ * - EXACT_DUPLICATE:  perceptual hash similarity > 95%
+ * - NEAR_DUPLICATE:   embedding similarity > 0.9 AND concept overlap > 80%
+ * - RELATED:          embedding similarity > 0.75 OR concept overlap > 60%
+ *
+ * Logs EXACT_DUPLICATE and NEAR_DUPLICATE matches to agent_activity_log.
+ * Stores all matches in agent memory for later review. Does NOT auto-delete
+ * or merge content.
+ */
+async function detectDuplicates(contentId: string, orgId: string): Promise<void> {
+  const supabase = createAdminClient();
+
+  const logBase = {
+    orgId,
+    agentType: AGENT_TYPE,
+    actionType: 'detect_duplicate',
+    contentId,
+    targetEntity: 'content',
+    targetId: contentId,
+  } as const;
+
+  // Fetch the new content's hashes and title
+  const { data: content, error: contentError } = await supabase
+    .from('content')
+    .select('id, title, video_hash, audio_hash')
+    .eq('id', contentId)
+    .single();
+
+  if (contentError || !content) {
+    console.error(`[CurateKnowledge] Cannot load content ${contentId} for duplicate check`);
+    await logAgentAction({ ...logBase, outcome: 'failure', errorMessage: contentError?.message ?? 'Content not found' });
+    return;
+  }
+
+  // --- Signal 1: Perceptual hash similarity ---
+  const perceptualMatches = await findPerceptualMatches(supabase, content.video_hash, content.audio_hash, orgId, contentId);
+
+  // --- Signal 2: Embedding similarity ---
+  const embeddingMatches = await findEmbeddingMatches(supabase, contentId, orgId);
+
+  // --- Signal 3: Concept overlap ---
+  const conceptOverlapMap = await findConceptOverlap(supabase, contentId, orgId);
+
+  // Collect every content ID that appeared in at least one signal
+  const candidateIds = new Set([
+    ...perceptualMatches.keys(),
+    ...embeddingMatches.keys(),
+    ...conceptOverlapMap.keys(),
+  ]);
+
+  if (candidateIds.size === 0) {
+    console.log(`[CurateKnowledge] No duplicate candidates for ${contentId}`);
+    return;
+  }
+
+  // Fetch titles for matched content
+  const { data: candidateRows } = await supabase
+    .from('content')
+    .select('id, title')
+    .in('id', Array.from(candidateIds));
+
+  const titleMap = new Map((candidateRows ?? []).map(r => [r.id, r.title ?? 'Untitled']));
+
+  // Classify each candidate
+  const matches: DuplicateMatch[] = [];
+
+  for (const candidateId of candidateIds) {
+    const phash = perceptualMatches.get(candidateId) ?? null;
+    const embedding = embeddingMatches.get(candidateId) ?? null;
+    const concepts = conceptOverlapMap.get(candidateId) ?? null;
+
+    const level = classifyDuplicateLevel(phash, embedding, concepts);
+    if (!level) continue;
+
+    matches.push({
+      matchedContentId: candidateId,
+      matchedTitle: titleMap.get(candidateId) ?? 'Untitled',
+      level,
+      perceptualSimilarity: phash,
+      embeddingSimilarity: embedding,
+      conceptOverlap: concepts,
+    });
+  }
+
+  if (matches.length === 0) {
+    console.log(`[CurateKnowledge] No duplicates above threshold for ${contentId}`);
+    return;
+  }
+
+  // Log EXACT_DUPLICATE and NEAR_DUPLICATE matches to agent_activity_log
+  for (const match of matches) {
+    if (match.level === 'EXACT_DUPLICATE' || match.level === 'NEAR_DUPLICATE') {
+      await logAgentAction({
+        ...logBase,
+        outcome: 'success',
+        outputSummary: JSON.stringify({
+          level: match.level,
+          matchedContentId: match.matchedContentId,
+          matchedTitle: match.matchedTitle,
+          perceptualSimilarity: match.perceptualSimilarity,
+          embeddingSimilarity: match.embeddingSimilarity,
+          conceptOverlap: match.conceptOverlap,
+        }),
+        metadata: { level: match.level, matchedContentId: match.matchedContentId },
+      });
+    }
+  }
+
+  // Best-effort: persist all matches in agent memory
+  try {
+    await storeMemory({
+      orgId,
+      agentType: AGENT_TYPE,
+      key: `duplicate:${contentId}`,
+      value: JSON.stringify(
+        matches.map(m => ({
+          matchedContentId: m.matchedContentId,
+          level: m.level,
+          perceptualSimilarity: m.perceptualSimilarity,
+          embeddingSimilarity: m.embeddingSimilarity,
+          conceptOverlap: m.conceptOverlap,
+        }))
+      ),
+      importance: matches.some(m => m.level === 'EXACT_DUPLICATE') ? 0.9 : 0.7,
+    });
+  } catch (memoryError) {
+    console.error('[CurateKnowledge] Duplicate memory store failed (non-critical):', memoryError);
+  }
+
+  const summary = matches.map(m => `${m.level}: ${m.matchedContentId}`).join(', ');
+  console.log(`[CurateKnowledge] Duplicate detection for ${contentId}: ${summary}`);
+}
+
+/**
+ * Classify a candidate into EXACT_DUPLICATE, NEAR_DUPLICATE, RELATED, or null.
+ */
+function classifyDuplicateLevel(
+  perceptualSimilarity: number | null,
+  embeddingSimilarity: number | null,
+  conceptOverlap: number | null
+): DuplicateLevel | null {
+  // EXACT_DUPLICATE: perceptual hash > 95%
+  if (perceptualSimilarity !== null && perceptualSimilarity > 95) {
+    return 'EXACT_DUPLICATE';
+  }
+
+  // NEAR_DUPLICATE: embedding > 0.9 AND concept overlap > 80%
+  if (
+    embeddingSimilarity !== null && embeddingSimilarity > 0.9 &&
+    conceptOverlap !== null && conceptOverlap > 80
+  ) {
+    return 'NEAR_DUPLICATE';
+  }
+
+  // RELATED: embedding > 0.75 OR concept overlap > 60%
+  if (
+    (embeddingSimilarity !== null && embeddingSimilarity > 0.75) ||
+    (conceptOverlap !== null && conceptOverlap > 60)
+  ) {
+    return 'RELATED';
+  }
+
+  return null;
+}
+
+/**
+ * Find content with similar perceptual hashes. Returns a map of
+ * contentId -> overallSimilarity (0-100 percentage).
+ * Gracefully returns empty map if the content has no hashes.
+ */
+async function findPerceptualMatches(
+  supabase: ReturnType<typeof createAdminClient>,
+  videoHash: string | null,
+  audioHash: string | null,
+  orgId: string,
+  excludeContentId: string
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+
+  if (!videoHash || !audioHash) return result;
+  // Both hashes being zero indicates failed/missing hash computation
+  if (videoHash === ZERO_HASH && audioHash === ZERO_HASH) return result;
+
+  const { data: candidates } = await supabase
+    .from('content')
+    .select('id, video_hash, audio_hash')
+    .eq('org_id', orgId)
+    .not('video_hash', 'is', null)
+    .not('audio_hash', 'is', null)
+    .neq('id', excludeContentId)
+    .is('deleted_at', null);
+
+  if (!candidates || candidates.length === 0) return result;
+
+  for (const candidate of candidates) {
+    try {
+      const videoDistance = hammingDistance(videoHash, candidate.video_hash!);
+      const videoSim = hammingToSimilarity(videoDistance);
+      const audioDistance = hammingDistance(audioHash, candidate.audio_hash!);
+      const audioSim = hammingToSimilarity(audioDistance);
+      const overall = videoSim * 0.6 + audioSim * 0.4;
+
+      // Only include if overall similarity exceeds a minimum relevance threshold
+      if (overall > 50) {
+        result.set(candidate.id, Math.round(overall * 100) / 100);
+      }
+    } catch {
+      // Hash length mismatch or other issue; skip
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Find content with similar transcript embeddings. Returns a map of
+ * contentId -> cosineSimilarity (0-1 scale).
+ * Gracefully returns empty map if the content has no transcript chunks.
+ */
+async function findEmbeddingMatches(
+  supabase: ReturnType<typeof createAdminClient>,
+  contentId: string,
+  orgId: string
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+
+  // Get a representative chunk for the new content (first non-empty chunk)
+  const { data: chunks } = await supabase
+    .from('transcript_chunks')
+    .select('chunk_text')
+    .eq('content_id', contentId)
+    .eq('org_id', orgId)
+    .order('chunk_index', { ascending: true })
+    .limit(5);
+
+  if (!chunks || chunks.length === 0) return result;
+
+  // Combine the first few chunks into a representative text
+  const representativeText = chunks.map(c => c.chunk_text).join(' ').slice(0, 2000);
+  if (representativeText.trim().length === 0) return result;
+
+  let queryEmbedding: number[];
+  try {
+    const embeddingResult = await generateEmbeddingWithFallback(representativeText, 'RETRIEVAL_QUERY');
+    queryEmbedding = embeddingResult.embedding;
+  } catch (error) {
+    console.error(`[CurateKnowledge] Embedding generation failed for ${contentId}:`, error);
+    return result;
+  }
+
+  // Use match_chunks RPC to find similar content across the org
+  const embeddingString = `[${queryEmbedding.join(',')}]`;
+  const { data: matches, error } = await supabase.rpc('match_chunks', {
+    query_embedding: embeddingString,
+    match_threshold: 0.7, // Low threshold to catch RELATED items
+    match_count: 20,
+    filter_org_id: orgId,
+    filter_content_ids: null,
+    filter_source: null,
+    filter_date_from: null,
+    filter_date_to: null,
+    filter_content_types: null,
+    exclude_deleted: true,
+  });
+
+  if (error || !matches) {
+    console.error(`[CurateKnowledge] match_chunks failed for ${contentId}:`, error?.message);
+    return result;
+  }
+
+  // Aggregate: best similarity per content_id (exclude self)
+  for (const match of matches as { content_id: string; similarity: number }[]) {
+    if (match.content_id === contentId) continue;
+    const existing = result.get(match.content_id);
+    if (!existing || match.similarity > existing) {
+      result.set(match.content_id, Math.round(match.similarity * 1000) / 1000);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Find content that shares concepts with the given content. Returns a map of
+ * contentId -> overlapPercentage (0-100).
+ * Gracefully returns empty map if the content has no concepts.
+ */
+async function findConceptOverlap(
+  supabase: ReturnType<typeof createAdminClient>,
+  contentId: string,
+  orgId: string
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+
+  const concepts = await getConceptsForContent(contentId);
+  if (concepts.length === 0) return result;
+
+  const conceptIds = concepts.map(c => c.id);
+
+  // Find all other content items that mention any of these concepts
+  const { data: mentions } = await supabase
+    .from('concept_mentions')
+    .select('content_id, concept_id')
+    .in('concept_id', conceptIds)
+    .eq('org_id', orgId)
+    .neq('content_id', contentId);
+
+  if (!mentions || mentions.length === 0) return result;
+
+  // Group by content_id and count shared concepts
+  const sharedCounts = new Map<string, Set<string>>();
+  for (const mention of mentions) {
+    let conceptSet = sharedCounts.get(mention.content_id);
+    if (!conceptSet) {
+      conceptSet = new Set();
+      sharedCounts.set(mention.content_id, conceptSet);
+    }
+    conceptSet.add(mention.concept_id);
+  }
+
+  const totalConcepts = conceptIds.length;
+
+  for (const [otherContentId, sharedConceptSet] of sharedCounts) {
+    const overlapPercent = (sharedConceptSet.size / totalConcepts) * 100;
+    result.set(otherContentId, Math.round(overlapPercent * 100) / 100);
+  }
+
+  return result;
 }
 
 /** Build the Gemini prompt for tag suggestion. */
