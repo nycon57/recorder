@@ -117,6 +117,7 @@ function getCompletionMessage(jobType: string): string {
     'extract_frames': 'Video frames extracted',
     'sync_connector': 'External sync complete',
     'publish_document': 'Document published successfully',
+    'generate_metadata': 'Metadata generated successfully',
   };
 
   return messages[jobType] || 'Processing complete';
