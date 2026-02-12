@@ -245,6 +245,31 @@ export async function transcribeRecording(job: Job): Promise<void> {
       );
     }
 
+    // Enqueue metadata generation job (in case pipeline was interrupted)
+    const { data: existingMetadataJob } = await supabase
+      .from('jobs')
+      .select('id')
+      .eq('type', 'generate_metadata')
+      .eq('dedupe_key', `generate_metadata:${recordingId}`)
+      .maybeSingle();
+
+    if (!existingMetadataJob) {
+      await supabase.from('jobs').insert({
+        type: 'generate_metadata',
+        status: 'pending',
+        payload: {
+          recordingId,
+          transcriptId: existingTranscript.id,
+          orgId,
+        },
+        dedupe_key: `generate_metadata:${recordingId}`,
+        priority: 1, // JOB_PRIORITY.HIGH — titles appear quickly
+      });
+      console.log(
+        `[Transcribe-Video] Enqueued metadata generation job for existing transcript`
+      );
+    }
+
     return;
   }
 
