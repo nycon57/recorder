@@ -230,8 +230,8 @@ export default async function LibraryItemDetailPage({
     <>
       {detailView}
       {showRelated && (
-        <section className="mt-8">
-          <h2 className="text-lg font-light">Related Content</h2>
+        <section className="mt-8" aria-labelledby="related-content-heading">
+          <h2 id="related-content-heading" className="text-lg font-light">Related Content</h2>
           <Suspense fallback={null}>
             <RelatedContent contentId={id} orgId={item.org_id} />
           </Suspense>

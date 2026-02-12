@@ -147,6 +147,9 @@ async function findRelatedByVectorSimilarity(
     .single();
 
   if (contentError || !content?.title) {
+    if (contentError) {
+      console.error('[RelatedContent] Failed to fetch content for vector search:', contentError);
+    }
     return [];
   }
 
