@@ -60,11 +60,9 @@ export function ContentChatWidget({
   }, []);
 
   const handleToggle = useCallback(() => {
-    setIsOpen((prev) => {
-      if (prev) cancelStream();
-      return !prev;
-    });
-  }, [cancelStream]);
+    setIsOpen((prev) => !prev);
+    if (isOpen) cancelStream();
+  }, [isOpen, cancelStream]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -133,7 +131,7 @@ export function ContentChatWidget({
       }
 
       const reader = response.body?.getReader();
-      if (!reader) throw new Error('No response body');
+      if (!reader) throw new Error(DEFAULT_ERROR);
 
       const decoder = new TextDecoder();
       let buffer = '';
@@ -206,7 +204,7 @@ export function ContentChatWidget({
           id="content-chat-panel"
           role="region"
           aria-label={`Chat about ${contentTitle}`}
-          className="mb-3 flex max-h-[500px] w-[calc(100vw-3rem)] flex-col rounded-xl border border-border/50 bg-background shadow-xl sm:w-96"
+          className="mb-3 flex max-h-[calc(100vh-8rem)] w-[calc(100vw-3rem)] flex-col rounded-xl border border-border/50 bg-background shadow-xl sm:max-h-[500px] sm:w-96"
         >
           <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
             <h3 className="truncate text-sm font-medium text-foreground">
@@ -241,7 +239,7 @@ export function ContentChatWidget({
           >
             {messages.length === 0 && (
               <p className="text-center text-sm text-muted-foreground">
-                Ask a question about this content
+                Ask a question to get started
               </p>
             )}
             {messages.map((msg, i) => (
@@ -263,7 +261,7 @@ export function ContentChatWidget({
                   {msg.content || (
                     <>
                       <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-muted-foreground" />
-                      <span className="sr-only">Loading response</span>
+                      <span className="sr-only">Generating response</span>
                     </>
                   )}
                 </div>
@@ -281,7 +279,7 @@ export function ContentChatWidget({
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="border-t border-border/50 px-3 py-3">
+          <div className="border-t border-border/50 px-4 py-3">
             <div className="flex items-center gap-2">
               <input
                 ref={inputRef}
@@ -289,10 +287,10 @@ export function ContentChatWidget({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask a question about this content..."
+                placeholder="Ask a question..."
                 disabled={isStreaming}
                 className="flex-1 rounded-lg border border-border/50 bg-muted/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:opacity-50"
-                aria-label="Chat message input"
+                aria-label="Type your question"
               />
               <button
                 type="button"

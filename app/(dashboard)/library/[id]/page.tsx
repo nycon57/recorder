@@ -13,10 +13,8 @@ import { RelatedContent } from '@/app/components/content/RelatedContent';
 import { ContentChatWidget } from '@/app/components/content/ContentChatWidget';
 
 async function getContentItem(id: string, clerkOrgId: string) {
-  const supabase = supabaseAdmin;
-
   // Look up internal organization ID
-  const { data: org } = await supabase
+  const { data: org } = await supabaseAdmin
     .from('organizations')
     .select('id')
     .eq('clerk_org_id', clerkOrgId)
@@ -27,7 +25,7 @@ async function getContentItem(id: string, clerkOrgId: string) {
   }
 
   // Fetch content item (from content table - unified content storage)
-  const { data: item, error } = await supabase
+  const { data: item, error } = await supabaseAdmin
     .from('content')
     .select(
       `
@@ -52,7 +50,7 @@ async function getContentItem(id: string, clerkOrgId: string) {
   if (item.content_type === 'recording' || item.content_type === 'video') {
     // Prefer processed (MP4) over raw (WEBM)
     if (item.storage_path_processed) {
-      const { data: urlData } = await supabase.storage
+      const { data: urlData } = await supabaseAdmin.storage
         .from('recordings')
         .createSignedUrl(item.storage_path_processed, 3600);
 
@@ -62,7 +60,7 @@ async function getContentItem(id: string, clerkOrgId: string) {
 
     // Fallback to raw version
     if (!videoUrl && item.storage_path_raw) {
-      const { data: urlData } = await supabase.storage
+      const { data: urlData } = await supabaseAdmin.storage
         .from('recordings')
         .createSignedUrl(item.storage_path_raw, 3600);
 
@@ -73,7 +71,7 @@ async function getContentItem(id: string, clerkOrgId: string) {
 
   // For audio files
   if (item.content_type === 'audio' && item.storage_path_raw) {
-    const { data: urlData } = await supabase.storage
+    const { data: urlData } = await supabaseAdmin.storage
       .from('recordings')
       .createSignedUrl(item.storage_path_raw, 3600);
 
@@ -83,7 +81,7 @@ async function getContentItem(id: string, clerkOrgId: string) {
 
   // For documents
   if (item.content_type === 'document' && item.storage_path_raw) {
-    const { data: urlData } = await supabase.storage
+    const { data: urlData } = await supabaseAdmin.storage
       .from('recordings')
       .createSignedUrl(item.storage_path_raw, 3600);
 
@@ -95,28 +93,6 @@ async function getContentItem(id: string, clerkOrgId: string) {
     videoUrl,
     downloadUrl,
   };
-}
-
-/**
- * Fetch sources for highlighting from cache
- */
-async function getHighlightSources(sourceKey: string) {
-  try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/chat?sourcesKey=${sourceKey}`,
-      { cache: 'no-store' }
-    );
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const { sources } = await response.json();
-    return sources || null;
-  } catch (error) {
-    console.error('[Library Detail] Failed to fetch highlight sources:', error);
-    return null;
-  }
 }
 
 /**
@@ -155,9 +131,6 @@ export default async function LibraryItemDetailPage({
   const initialTimestamp = t ? parseInt(t, 10) : undefined;
 
   const item = await getContentItem(id, orgId);
-
-  // Pass sourceKey and highlight to components for client-side fetching
-  // (Server-side fetch has issues with Next.js routing/caching)
 
   if (!item) {
     notFound();
@@ -231,18 +204,18 @@ export default async function LibraryItemDetailPage({
     <>
       {detailView}
       {showRelated && (
-        <section className="mt-8" aria-labelledby="related-content-heading">
-          <h2 id="related-content-heading" className="text-lg font-light">Related Content</h2>
-          <Suspense fallback={null}>
-            <RelatedContent contentId={id} orgId={item.org_id} />
-          </Suspense>
-        </section>
-      )}
-      {showRelated && (
-        <ContentChatWidget
-          contentId={id}
-          contentTitle={item.title || 'Untitled'}
-        />
+        <>
+          <section className="mt-8" aria-labelledby="related-content-heading">
+            <h2 id="related-content-heading" className="text-lg font-light">Related Content</h2>
+            <Suspense fallback={null}>
+              <RelatedContent contentId={id} orgId={item.org_id} />
+            </Suspense>
+          </section>
+          <ContentChatWidget
+            contentId={id}
+            contentTitle={item.title || 'Untitled'}
+          />
+        </>
       )}
     </>
   );
