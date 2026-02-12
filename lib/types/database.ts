@@ -151,6 +151,8 @@ export type KnowledgeGapSeverity = 'low' | 'medium' | 'high' | 'critical';
 
 export type KnowledgeGapStatus = 'open' | 'acknowledged' | 'resolved' | 'dismissed';
 
+export type PermissionTier = 'auto' | 'notify' | 'approve';
+
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
 
 export type ActivityOutcome = 'success' | 'failure' | 'skipped' | 'pending_approval';
@@ -534,6 +536,37 @@ export interface Database {
           access_count?: number | null;
           last_accessed_at?: string | null;
           expires_at?: string | null;
+          metadata?: Json;
+          updated_at?: string;
+        };
+      };
+      /** Per-org agent permission tiers (auto/notify/approve) per action */
+      agent_permissions: {
+        Row: {
+          id: string;
+          org_id: string;
+          agent_type: string;
+          action_type: string;
+          permission_tier: PermissionTier;
+          is_enabled: boolean;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          agent_type: string;
+          action_type: string;
+          permission_tier?: PermissionTier;
+          is_enabled?: boolean;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          permission_tier?: PermissionTier;
+          is_enabled?: boolean;
           metadata?: Json;
           updated_at?: string;
         };
