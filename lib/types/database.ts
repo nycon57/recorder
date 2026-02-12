@@ -1138,8 +1138,6 @@ export interface Database {
           updated_at?: string | null;
         };
         Update: {
-          id?: string;
-          org_id?: string;
           topic?: string;
           description?: string | null;
           severity?: KnowledgeGapSeverity;
@@ -1153,8 +1151,7 @@ export interface Database {
           resolved_by_content_id?: string | null;
           resolved_at?: string | null;
           metadata?: Json | null;
-          created_at?: string | null;
-          updated_at?: string | null;
+          updated_at?: string;
         };
       };
       /** Temporary storage for video segment transcription results during long video (>30 min) processing */
