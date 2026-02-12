@@ -127,6 +127,8 @@ async function getHighlightSources(sourceKey: string) {
  * - document -> DocumentDetailView
  * - text -> TextNoteDetailView
  *
+ * Shows related content suggestions for completed/transcribed items.
+ *
  * Supports URL parameters:
  * - ?sourceKey={key} - Retrieves all cited chunks
  * - &highlight={chunkId} - Specifies which chunk to scroll to
