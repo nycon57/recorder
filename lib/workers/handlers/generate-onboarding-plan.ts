@@ -11,11 +11,11 @@
 
 import { GoogleGenAI } from '@google/genai';
 
-import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { isAgentEnabled } from '@/lib/services/agent-config';
 import { withAgentLogging } from '@/lib/services/agent-logger';
 import { getTopConceptsForOrg, type StoredConcept } from '@/lib/services/concept-extractor';
-import type { Database, LearningPathItem, ContentType, Json } from '@/lib/types/database';
+import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import type { ContentType, Database, Json, LearningPathItem } from '@/lib/types/database';
 
 import type { ProgressCallback } from '../job-processor';
 
@@ -50,6 +50,14 @@ function getGenAIClient(): GoogleGenAI {
   return genaiClient;
 }
 
+interface ContentRow {
+  id: string;
+  title: string | null;
+  content_type: string;
+  duration_sec: number | null;
+  created_at: string;
+}
+
 interface ContentCandidate {
   id: string;
   title: string;
@@ -58,6 +66,21 @@ interface ContentCandidate {
   createdAt: string;
   conceptNames: string[];
   wordCount: number;
+}
+
+function toContentCandidate(
+  row: ContentRow,
+  conceptNames: string[] = [],
+): ContentCandidate {
+  return {
+    id: row.id,
+    title: row.title ?? 'Untitled',
+    contentType: row.content_type as ContentType,
+    durationSec: row.duration_sec,
+    createdAt: row.created_at,
+    conceptNames,
+    wordCount: 0,
+  };
 }
 
 export async function handleGenerateOnboardingPlan(
@@ -92,7 +115,6 @@ export async function handleGenerateOnboardingPlan(
     async () => {
       const supabase = createAdminClient();
 
-      // Step 1: Query top concepts for the org
       progressCallback?.(10, 'Fetching knowledge concepts...');
       const allConcepts = await getTopConceptsForOrg(orgId, 100);
 
@@ -100,7 +122,6 @@ export async function handleGenerateOnboardingPlan(
         console.log(`[OnboardingPlan] No concepts found for ${orgId}, generating minimal plan`);
       }
 
-      // Step 2: Filter concepts by role relevance (if role provided)
       progressCallback?.(20, 'Analyzing role relevance...');
       let relevantConcepts = allConcepts;
 
@@ -109,13 +130,11 @@ export async function handleGenerateOnboardingPlan(
           relevantConcepts = await filterConceptsByRole(allConcepts, userRole);
         } catch (error) {
           console.error('[OnboardingPlan] Role filtering failed, using all concepts:', error);
-          // Fallback: use all concepts (no role-based filtering)
         }
       }
 
       const conceptNames = relevantConcepts.map(c => c.name);
 
-      // Step 3: Find content covering those concepts
       progressCallback?.(35, 'Finding relevant content...');
       const contentCandidates = await findContentForConcepts(
         supabase,
@@ -139,7 +158,6 @@ export async function handleGenerateOnboardingPlan(
 
       const limitedContent = contentCandidates.length < 5;
 
-      // Step 4: Sequence content into a learning path via Gemini
       progressCallback?.(55, 'Generating optimal learning sequence...');
       let learningPath: LearningPathItem[];
 
@@ -152,21 +170,14 @@ export async function handleGenerateOnboardingPlan(
         );
       } catch (error) {
         console.error('[OnboardingPlan] Gemini sequencing failed, using fallback order:', error);
-        // Fallback: order by concept mention count DESC (most-referenced first)
         learningPath = buildFallbackPath(contentCandidates);
       }
 
-      // Trim to configured bounds
-      const targetSize = Math.min(
-        Math.max(MIN_PATH_ITEMS, learningPath.length),
-        MAX_PATH_ITEMS,
-      );
-      learningPath = learningPath.slice(0, targetSize);
+      const targetSize = Math.min(Math.max(MIN_PATH_ITEMS, learningPath.length), MAX_PATH_ITEMS);
+      learningPath = learningPath
+        .slice(0, targetSize)
+        .map((item, i) => ({ ...item, order: i + 1 }));
 
-      // Re-number after trimming
-      learningPath = learningPath.map((item, i) => ({ ...item, order: i + 1 }));
-
-      // Step 5: Insert into agent_onboarding_plans
       progressCallback?.(80, 'Saving onboarding plan...');
       const notes = limitedContent
         ? 'Limited content available — path may be incomplete'
@@ -188,10 +199,6 @@ export async function handleGenerateOnboardingPlan(
     },
   );
 }
-
-// ---------------------------------------------------------------------------
-// Role-based concept filtering via Gemini
-// ---------------------------------------------------------------------------
 
 async function filterConceptsByRole(
   concepts: StoredConcept[],
@@ -224,7 +231,6 @@ Example: ["Kubernetes", "CI/CD", "API Design", "Local Development Setup"]`;
   const relevantNames = parseStringArray(responseText);
 
   if (relevantNames.length === 0) {
-    // If Gemini returned nothing useful, keep all concepts
     return concepts;
   }
 
@@ -242,16 +248,11 @@ Example: ["Kubernetes", "CI/CD", "API Design", "Local Development Setup"]`;
   return filtered;
 }
 
-// ---------------------------------------------------------------------------
-// Content discovery via concept_mentions
-// ---------------------------------------------------------------------------
-
 async function findContentForConcepts(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
   conceptIds: string[],
 ): Promise<ContentCandidate[]> {
-  // Fetch completed/transcribed content for the org
   const { data: contentRows, error: contentError } = await supabase
     .from('content')
     .select('id, title, content_type, duration_sec, created_at')
@@ -265,20 +266,10 @@ async function findContentForConcepts(
     return [];
   }
 
-  // If no concepts, return content sorted by freshness
   if (conceptIds.length === 0) {
-    return contentRows.map(c => ({
-      id: c.id,
-      title: c.title ?? 'Untitled',
-      contentType: c.content_type as ContentType,
-      durationSec: c.duration_sec,
-      createdAt: c.created_at,
-      conceptNames: [],
-      wordCount: 0,
-    }));
+    return contentRows.map(c => toContentCandidate(c));
   }
 
-  // Find concept mentions for these content items (batched to avoid PostgREST URL limits)
   const contentIds = contentRows.map(c => c.id);
   const BATCH_SIZE = 100;
   const allMentions: { content_id: string; concept_id: string }[] = [];
@@ -299,22 +290,10 @@ async function findContentForConcepts(
     if (batchMentions) allMentions.push(...batchMentions);
   }
 
-  const mentions = allMentions;
-
-  if (!mentions.length) {
-    // No concept overlap — return content by freshness
-    return contentRows.slice(0, MAX_PATH_ITEMS).map(c => ({
-      id: c.id,
-      title: c.title ?? 'Untitled',
-      contentType: c.content_type as ContentType,
-      durationSec: c.duration_sec,
-      createdAt: c.created_at,
-      conceptNames: [],
-      wordCount: 0,
-    }));
+  if (!allMentions.length) {
+    return contentRows.slice(0, MAX_PATH_ITEMS).map(c => toContentCandidate(c));
   }
 
-  // Build concept names lookup
   const { data: conceptRows, error: conceptError } = await supabase
     .from('knowledge_concepts')
     .select('id, name')
@@ -325,41 +304,28 @@ async function findContentForConcepts(
   }
   const conceptNameMap = new Map((conceptRows ?? []).map(c => [c.id, c.name]));
 
-  // Map content -> covered concept names, count
   const contentConceptMap = new Map<string, Set<string>>();
-  for (const { content_id, concept_id } of mentions) {
-    if (!contentConceptMap.has(content_id)) {
-      contentConceptMap.set(content_id, new Set());
+  for (const { content_id, concept_id } of allMentions) {
+    const existing = contentConceptMap.get(content_id);
+    if (existing) {
+      existing.add(concept_id);
+    } else {
+      contentConceptMap.set(content_id, new Set([concept_id]));
     }
-    contentConceptMap.get(content_id)!.add(concept_id);
   }
 
-  // Score by concept coverage count, then freshness
   const scored = contentRows
     .map(c => {
       const coveredIds = contentConceptMap.get(c.id);
-      const conceptNames = coveredIds
+      const names = coveredIds
         ? [...coveredIds].map(id => conceptNameMap.get(id) ?? id)
         : [];
-      return {
-        id: c.id,
-        title: c.title ?? 'Untitled',
-        contentType: c.content_type as ContentType,
-        durationSec: c.duration_sec,
-        createdAt: c.created_at,
-        conceptNames,
-        wordCount: 0,
-        score: conceptNames.length,
-      };
+      return { ...toContentCandidate(c, names), score: names.length };
     })
     .filter(c => c.score > 0)
     .sort((a, b) => b.score - a.score || b.createdAt.localeCompare(a.createdAt));
 
-  // Enrich with word counts for time estimation
-  const topCandidates = scored.slice(0, MAX_PATH_ITEMS * 2);
-  const enriched = await enrichWithWordCounts(supabase, topCandidates);
-
-  return enriched;
+  return enrichWithWordCounts(supabase, scored.slice(0, MAX_PATH_ITEMS * 2));
 }
 
 async function enrichWithWordCounts(
@@ -381,7 +347,6 @@ async function enrichWithWordCounts(
 
   if (!chunks?.length) return candidates;
 
-  // Sum word counts per content
   const wordCountMap = new Map<string, number>();
   for (const chunk of chunks) {
     const count = chunk.chunk_text?.split(/\s+/).length ?? 0;
@@ -396,10 +361,6 @@ async function enrichWithWordCounts(
     wordCount: wordCountMap.get(c.id) ?? 0,
   }));
 }
-
-// ---------------------------------------------------------------------------
-// Gemini-powered content sequencing
-// ---------------------------------------------------------------------------
 
 async function sequenceContentWithGemini(
   candidates: ContentCandidate[],
@@ -488,35 +449,25 @@ Example:
   return items;
 }
 
+const DEFAULT_MINUTES: Record<string, number> = {
+  recording: 10,
+  video: 10,
+  audio: 5,
+  document: 8,
+  text: 3,
+};
+
 function estimateMinutes(candidate: ContentCandidate): number {
-  // For recordings/videos/audio, use duration
   if (candidate.durationSec && candidate.durationSec > 0) {
     return Math.max(1, Math.ceil(candidate.durationSec / 60));
   }
-
-  // For documents/text, use word count
   if (candidate.wordCount > 0) {
     return Math.max(1, Math.ceil(candidate.wordCount / WORDS_PER_MINUTE));
   }
-
-  // Default estimate based on content type
-  const defaults: Record<string, number> = {
-    recording: 10,
-    video: 10,
-    audio: 5,
-    document: 8,
-    text: 3,
-  };
-
-  return defaults[candidate.contentType] ?? 5;
+  return DEFAULT_MINUTES[candidate.contentType] ?? 5;
 }
 
-// ---------------------------------------------------------------------------
-// Fallback ordering (when Gemini fails)
-// ---------------------------------------------------------------------------
-
 function buildFallbackPath(candidates: ContentCandidate[]): LearningPathItem[] {
-  // Order by concept coverage (most-referenced first), already sorted
   return candidates.slice(0, MAX_PATH_ITEMS).map((c, i) => ({
     contentId: c.id,
     title: c.title,
@@ -528,10 +479,6 @@ function buildFallbackPath(candidates: ContentCandidate[]): LearningPathItem[] {
     estimatedMinutes: estimateMinutes(c),
   }));
 }
-
-// ---------------------------------------------------------------------------
-// Database insertion
-// ---------------------------------------------------------------------------
 
 async function insertOnboardingPlan(
   supabase: ReturnType<typeof createAdminClient>,
@@ -569,23 +516,26 @@ async function insertOnboardingPlan(
 // Response parsing utilities
 // ---------------------------------------------------------------------------
 
-function parseStringArray(responseText: string): string[] {
+/** Extract the first JSON array from a Gemini response, stripping code fences. */
+function extractJsonArray(responseText: string): unknown[] | null {
   try {
     let cleaned = responseText.trim();
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
     }
-
-    const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed.filter((item): item is string => typeof item === 'string');
+    const match = cleaned.match(/\[[\s\S]*\]/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    return Array.isArray(parsed) ? parsed : null;
   } catch {
-    return [];
+    return null;
   }
+}
+
+function parseStringArray(responseText: string): string[] {
+  const arr = extractJsonArray(responseText);
+  if (!arr) return [];
+  return arr.filter((item): item is string => typeof item === 'string');
 }
 
 interface SequenceItem {
@@ -594,32 +544,20 @@ interface SequenceItem {
 }
 
 function parseSequenceResponse(responseText: string): SequenceItem[] {
-  try {
-    let cleaned = responseText.trim();
-    if (cleaned.startsWith('```')) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
-    }
+  const arr = extractJsonArray(responseText);
+  if (!arr) return [];
 
-    const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (!Array.isArray(parsed)) return [];
-
-    const seen = new Set<number>();
-    return (parsed as Partial<SequenceItem>[])
-      .filter(
-        (item): item is SequenceItem =>
-          typeof item?.contentIndex === 'number' &&
-          item.contentIndex > 0 &&
-          typeof item?.reason === 'string',
-      )
-      .filter(item => {
-        if (seen.has(item.contentIndex)) return false;
-        seen.add(item.contentIndex);
-        return true;
-      });
-  } catch {
-    return [];
-  }
+  const seen = new Set<number>();
+  return (arr as Partial<SequenceItem>[])
+    .filter(
+      (item): item is SequenceItem =>
+        typeof item?.contentIndex === 'number' &&
+        item.contentIndex > 0 &&
+        typeof item?.reason === 'string',
+    )
+    .filter(item => {
+      if (seen.has(item.contentIndex)) return false;
+      seen.add(item.contentIndex);
+      return true;
+    });
 }
