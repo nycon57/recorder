@@ -606,7 +606,7 @@ export interface Database {
           user_name: string | null;
           user_role: string | null;
           plan_status: OnboardingPlanStatus;
-          learning_path: Json;
+          learning_path: LearningPathItem[];
           total_items: number | null;
           completed_items: number | null;
           engagement_data: Json;
@@ -623,7 +623,7 @@ export interface Database {
           user_name?: string | null;
           user_role?: string | null;
           plan_status?: OnboardingPlanStatus;
-          learning_path?: Json;
+          learning_path?: LearningPathItem[];
           total_items?: number | null;
           completed_items?: number | null;
           engagement_data?: Json;
@@ -635,7 +635,7 @@ export interface Database {
         };
         Update: {
           plan_status?: OnboardingPlanStatus;
-          learning_path?: Json;
+          learning_path?: LearningPathItem[];
           total_items?: number | null;
           completed_items?: number | null;
           engagement_data?: Json;
