@@ -21,7 +21,6 @@ type SessionState = Database['public']['Tables']['agent_sessions']['Update']['st
 
 const AGENT_TYPE = 'curator';
 
-// Lazy-initialized Gemini client for tag suggestion
 let genaiClient: GoogleGenAI | null = null;
 
 function getGenAIClient(): GoogleGenAI {
@@ -42,11 +41,15 @@ interface TagSuggestion {
   reason: string;
 }
 
-/** Sub-task definition: action key, human label, and stub implementation. */
+/** Sub-task definition: action key, human label, and implementation. */
 interface SubTask {
   actionType: string;
   label: string;
   run: (contentId: string, orgId: string) => Promise<void>;
+}
+
+function curatorState(lastProcessedAt: string | null): SessionState {
+  return { lastProcessedAt } as unknown as SessionState;
 }
 
 const SUB_TASKS: SubTask[] = [
@@ -93,7 +96,7 @@ export async function handleCurateKnowledge(
   const supabase = createAdminClient();
   const now = new Date().toISOString();
 
-  // Get or create a curator session
+  // PGRST116 = no rows found (expected when no session exists)
   const { data: existingSession, error: sessionError } = await supabase
     .from('agent_sessions')
     .select()
@@ -104,7 +107,6 @@ export async function handleCurateKnowledge(
     .limit(1)
     .single();
 
-  // PGRST116 = no rows found (expected when no session exists)
   if (sessionError && sessionError.code !== 'PGRST116') {
     throw new Error(`Failed to query curator session: ${sessionError.message}`);
   }
@@ -131,7 +133,7 @@ export async function handleCurateKnowledge(
         agent_type: AGENT_TYPE,
         session_status: 'active',
         goal: 'Curate and organize knowledge base content',
-        state: { lastProcessedAt: null } as unknown as SessionState,
+        state: curatorState(null),
         started_at: now,
         last_active_at: now,
       })
@@ -147,7 +149,6 @@ export async function handleCurateKnowledge(
 
   progressCallback?.(20, 'Fetching new content...');
 
-  // Fetch content created since the last successful run
   let contentQuery = supabase
     .from('content')
     .select('id, created_at')
@@ -180,18 +181,15 @@ export async function handleCurateKnowledge(
       .eq('id', sessionId);
 
     progressCallback?.(100, 'No new content to process');
-    console.log(`[CurateKnowledge] No new content for ${orgId} since ${lastProcessedAt ?? 'beginning'}`);
+    console.log(`[CurateKnowledge] No new content for ${orgId} since ${lastProcessedAt ?? 'first run'}`);
     return;
   }
 
   console.log(`[CurateKnowledge] Found ${newContent.length} new content items for ${orgId}`);
 
-  const totalItems = newContent.length;
-
-  for (let i = 0; i < totalItems; i++) {
-    const item = newContent[i];
-    const progressPercent = 30 + Math.round((i / totalItems) * 60);
-    progressCallback?.(progressPercent, `Processing item ${i + 1} of ${totalItems}...`);
+  for (const [i, item] of newContent.entries()) {
+    const progressPercent = 30 + Math.round((i / newContent.length) * 60);
+    progressCallback?.(progressPercent, `Processing item ${i + 1} of ${newContent.length}...`);
 
     try {
       for (const task of SUB_TASKS) {
@@ -207,12 +205,11 @@ export async function handleCurateKnowledge(
         );
       }
 
-      // Checkpoint: advance lastProcessedAt so retries skip this item
       await supabase
         .from('agent_sessions')
         .update({
           last_active_at: new Date().toISOString(),
-          state: { lastProcessedAt: item.created_at } as unknown as SessionState,
+          state: curatorState(item.created_at),
         })
         .eq('id', sessionId);
     } catch (error) {
@@ -233,7 +230,7 @@ export async function handleCurateKnowledge(
   }
 
   progressCallback?.(100, 'Knowledge curation complete');
-  console.log(`[CurateKnowledge] Curation complete for ${orgId} — processed ${totalItems} items`);
+  console.log(`[CurateKnowledge] Curation complete for ${orgId} -- processed ${newContent.length} items`);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,32 +240,32 @@ export async function handleCurateKnowledge(
 /**
  * Suggest tags for a content item based on its extracted concepts
  * and the org's existing tag vocabulary. Results are stored in
- * agent_activity_log (action_type 'suggest_tags') — tags are NOT
+ * agent_activity_log (action_type 'suggest_tags'). Tags are NOT
  * auto-applied (requires authorization framework E06).
  */
 async function categorizeContent(contentId: string, orgId: string): Promise<void> {
   const supabase = createAdminClient();
-
-  // Get extracted concepts for this content
   const concepts = await getConceptsForContent(contentId);
 
-  // Edge case: no concepts → skip
+  const tagLogBase = {
+    orgId,
+    agentType: AGENT_TYPE,
+    actionType: 'suggest_tags',
+    contentId,
+    targetEntity: 'content',
+    targetId: contentId,
+  } as const;
+
   if (concepts.length === 0) {
-    console.log(`[CurateKnowledge] No concepts for ${contentId}, skipping categorization`);
+    console.log(`[CurateKnowledge] Skipping categorization: no extracted concepts for ${contentId}`);
     await logAgentAction({
-      orgId,
-      agentType: AGENT_TYPE,
-      actionType: 'suggest_tags',
-      contentId,
-      targetEntity: 'content',
-      targetId: contentId,
+      ...tagLogBase,
       outcome: 'skipped',
       outputSummary: JSON.stringify({ reason: 'No extracted concepts' }),
     });
     return;
   }
 
-  // Get existing org tags (non-deleted)
   const { data: orgTags } = await supabase
     .from('tags')
     .select('id, name')
@@ -276,35 +273,33 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
     .is('deleted_at', null)
     .order('name');
 
-  const orgTagNames = (orgTags || []).map(t => t.name);
+  const tags = orgTags ?? [];
+  const orgTagNames = tags.map(t => t.name);
 
-  // Get existing content-tag associations to avoid re-suggesting
   const { data: existingAssociations } = await supabase
     .from('content_tags')
     .select('tag_id')
     .eq('content_id', contentId);
 
-  const existingTagIds = new Set((existingAssociations || []).map(a => a.tag_id));
+  const existingTagIds = new Set((existingAssociations ?? []).map(a => a.tag_id));
   const existingTagNames = new Set(
-    (orgTags || [])
+    tags
       .filter(t => existingTagIds.has(t.id))
       .map(t => t.name.toLowerCase())
   );
 
-  // Recall agent memory for tag vocabulary patterns
-  const memory = await recallMemory({
+  const tagVocabulary = await recallMemory({
     orgId,
     agentType: AGENT_TYPE,
     key: `tag_vocabulary:${orgId}`,
   });
 
-  // Call Gemini for tag suggestions
   const conceptNames = concepts.map(c => c.name);
   const prompt = buildCategorizationPrompt(
     conceptNames,
     orgTagNames,
     existingTagNames,
-    memory?.memory_value || ''
+    tagVocabulary?.memory_value ?? ''
   );
 
   let suggestions: TagSuggestion[];
@@ -316,33 +311,18 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
       config: { temperature: 0.3, maxOutputTokens: 1024 },
     });
 
-    suggestions = parseTagSuggestions(result.text || '');
-    suggestions = suggestions.filter(s => !existingTagNames.has(s.name.toLowerCase()));
-    suggestions = deduplicateSuggestions(suggestions, orgTagNames);
+    const parsed = parseTagSuggestions(result.text ?? '');
+    const filtered = parsed.filter(s => !existingTagNames.has(s.name.toLowerCase()));
+    suggestions = deduplicateSuggestions(filtered, orgTagNames);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[CurateKnowledge] Gemini API error for ${contentId}:`, errorMessage);
-    await logAgentAction({
-      orgId,
-      agentType: AGENT_TYPE,
-      actionType: 'suggest_tags',
-      contentId,
-      targetEntity: 'content',
-      targetId: contentId,
-      outcome: 'failure',
-      errorMessage,
-    });
+    console.error(`[CurateKnowledge] Tag suggestion failed for ${contentId}:`, errorMessage);
+    await logAgentAction({ ...tagLogBase, outcome: 'failure', errorMessage });
     return;
   }
 
-  // Store suggestions in agent_activity_log
   await logAgentAction({
-    orgId,
-    agentType: AGENT_TYPE,
-    actionType: 'suggest_tags',
-    contentId,
-    targetEntity: 'content',
-    targetId: contentId,
+    ...tagLogBase,
     outcome: 'success',
     outputSummary: JSON.stringify(
       suggestions.map(s => ({ name: s.name, confidence: s.confidence }))
@@ -350,7 +330,7 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
     metadata: {
       conceptCount: concepts.length,
       concepts: conceptNames,
-      existingTagsOnContent: [...existingTagNames],
+      existingTagsOnContent: Array.from(existingTagNames),
       orgTagCount: orgTagNames.length,
     },
   });
@@ -360,7 +340,7 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
       suggestions.map(s => `${s.name} (${s.confidence})`).join(', ')
   );
 
-  // Update agent memory with org tag vocabulary (best-effort)
+  // Best-effort: update agent memory with org tag vocabulary
   try {
     const allKnownTags = [
       ...new Set([
@@ -381,7 +361,7 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
       importance: 0.7,
     });
   } catch (memoryError) {
-    console.error('[CurateKnowledge] Failed to update tag vocabulary memory:', memoryError);
+    console.error('[CurateKnowledge] Tag vocabulary memory update failed (non-critical):', memoryError);
   }
 }
 
@@ -447,25 +427,19 @@ function parseTagSuggestions(responseText: string): TagSuggestion[] {
     const parsed = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(parsed)) return [];
 
-    interface RawSuggestion {
-      name: string;
-      confidence: number;
-      reason?: string;
-    }
-
-    return (parsed as RawSuggestion[])
+    return (parsed as Partial<TagSuggestion>[])
       .filter(
-        s =>
-          s.name &&
-          typeof s.name === 'string' &&
-          typeof s.confidence === 'number' &&
+        (s): s is TagSuggestion =>
+          typeof s?.name === 'string' &&
+          s.name.length > 0 &&
+          typeof s?.confidence === 'number' &&
           s.confidence >= 0 &&
           s.confidence <= 1
       )
       .map(s => ({
         name: s.name.trim().toLowerCase(),
         confidence: Math.round(s.confidence * 100) / 100,
-        reason: s.reason?.trim() || '',
+        reason: s.reason?.trim() ?? '',
       }));
   } catch {
     console.error('[CurateKnowledge] Failed to parse tag suggestions from Gemini response');
@@ -489,10 +463,8 @@ function deduplicateSuggestions(
     const lower = suggestion.name.toLowerCase();
     if (seen.has(lower)) continue;
 
-    // Check for near-duplicate of an already-kept suggestion
     const dupeIdx = result.findIndex(kept => areSimilarTags(kept.name, lower));
     if (dupeIdx >= 0) {
-      // Replace if the new one matches org vocabulary and the existing one does not
       if (orgTagSet.has(lower) && !orgTagSet.has(result[dupeIdx].name)) {
         result[dupeIdx] = suggestion;
       }
@@ -506,14 +478,10 @@ function deduplicateSuggestions(
   return result;
 }
 
-/**
- * Check if two tag names are near-duplicates.
- * Handles "deploy" / "deployment", "api" / "apis", etc.
- */
+/** Check if two tag names are near-duplicates (e.g., "deploy"/"deployment"). */
 function areSimilarTags(a: string, b: string): boolean {
   if (a === b) return true;
   const longer = a.length >= b.length ? a : b;
   const shorter = a.length >= b.length ? b : a;
-  if (longer.startsWith(shorter) && longer.length - shorter.length <= 5) return true;
-  return false;
+  return longer.startsWith(shorter) && longer.length - shorter.length <= 5;
 }
