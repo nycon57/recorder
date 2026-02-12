@@ -574,7 +574,7 @@ export interface Database {
           updated_at?: string;
         };
       };
-      /** Append-only audit log for all agent actions (observability, debugging, usage tracking) */
+      /** Append-only audit log for all agent actions */
       agent_activity_log: {
         Row: {
           id: string;
