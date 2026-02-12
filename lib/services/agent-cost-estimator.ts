@@ -1,22 +1,13 @@
-/**
- * Agent Action Cost Estimator
- *
- * Estimates token usage and USD cost for agent actions.
- * Uses Gemini Flash pricing as the baseline model for all agent operations.
- *
- * Pricing reference (Gemini 2.0 Flash):
- *   Input:  $0.10 per 1M tokens  ($0.0000001 per token)
- *   Output: $0.40 per 1M tokens  ($0.0000004 per token)
- *   Blended: ~$0.002 per 1000 tokens (conservative estimate)
- */
-
 export interface CostEstimate {
   estimatedTokens: number;
   estimatedCostUsd: number;
   breakdown: string;
 }
 
-/** Per-token blended cost (input + output) in USD */
+/**
+ * Per-token blended cost (input + output) in USD.
+ * Based on Gemini 2.0 Flash: $0.10/1M input + $0.40/1M output.
+ */
 const COST_PER_TOKEN_USD = 0.000002;
 
 interface ActionCostProfile {
@@ -24,10 +15,6 @@ interface ActionCostProfile {
   breakdown: string;
 }
 
-/**
- * Known action types and their estimated token profiles.
- * Each entry includes the total token count and a human-readable breakdown.
- */
 const ACTION_PROFILES: Record<string, ActionCostProfile> = {
   generate_metadata: {
     tokens: 500,
@@ -49,7 +36,6 @@ const ACTION_PROFILES: Record<string, ActionCostProfile> = {
     tokens: 3000,
     breakdown: '~1800 input tokens (concept graph + content catalog) + ~1200 output tokens (sequenced learning path) using Gemini Flash',
   },
-  // Additional known actions mapped to the closest profile
   extract_concepts: {
     tokens: 800,
     breakdown: '~500 input tokens (transcript chunk) + ~300 output tokens (concept list) using Gemini Flash',
@@ -92,19 +78,11 @@ const ACTION_PROFILES: Record<string, ActionCostProfile> = {
   },
 };
 
-/** Conservative fallback for unknown action types */
 const UNKNOWN_ACTION_PROFILE: ActionCostProfile = {
   tokens: 5000,
   breakdown: 'Unknown action type — using maximum estimate',
 };
 
-/**
- * Estimate the token usage and cost for an agent action.
- *
- * @param agentType - The agent performing the action (e.g. 'curator')
- * @param actionType - The specific action (e.g. 'auto_categorize')
- * @param _metadata - Reserved for future per-invocation adjustments
- */
 export async function estimateActionCost(
   agentType: string,
   actionType: string,
@@ -119,15 +97,6 @@ export async function estimateActionCost(
   };
 }
 
-/**
- * Estimate the aggregate monthly agent cost for an org based on content volume.
- *
- * Assumes each content item triggers one round of: generate_metadata,
- * auto_categorize, and detect_duplicate per month. Gap analysis and
- * onboarding run once per month regardless of volume.
- *
- * @param contentCount - Number of content items in the org
- */
 export function estimateMonthlyAgentCost(contentCount: number): {
   estimatedMonthlyCostUsd: number;
   breakdown: string;
@@ -136,14 +105,12 @@ export function estimateMonthlyAgentCost(contentCount: number): {
     return { estimatedMonthlyCostUsd: 0, breakdown: '$0.00 estimated' };
   }
 
-  // Per-content actions (run once per item per month)
   const perContentTokens =
     (ACTION_PROFILES.generate_metadata.tokens +
       ACTION_PROFILES.auto_categorize.tokens +
       ACTION_PROFILES.detect_duplicate.tokens) *
     contentCount;
 
-  // Fixed monthly actions
   const fixedTokens =
     ACTION_PROFILES.analyze_gaps.tokens +
     ACTION_PROFILES.generate_onboarding_plan.tokens;

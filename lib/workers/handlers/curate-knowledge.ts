@@ -70,6 +70,42 @@ function curatorState(lastProcessedAt: string | null): SessionState {
   return { lastProcessedAt } as unknown as SessionState;
 }
 
+/**
+ * Check permission tier and, if 'approve', request approval with an
+ * attached cost estimate. Silently skips if tier is not 'approve'.
+ */
+async function requestApprovalWithCost(
+  orgId: string,
+  actionType: string,
+  contentId: string,
+  params: { description: string; proposedAction: Record<string, unknown> },
+): Promise<void> {
+  const tier = await checkPermission(orgId, AGENT_TYPE, actionType);
+  if (tier !== 'approve') return;
+
+  try {
+    const cost = await estimateActionCost(AGENT_TYPE, actionType);
+    await requestApproval({
+      orgId,
+      agentType: AGENT_TYPE,
+      actionType,
+      contentId,
+      description: params.description,
+      proposedAction: {
+        ...params.proposedAction,
+        estimatedCost: {
+          estimatedTokens: cost.estimatedTokens,
+          estimatedCostUsd: cost.estimatedCostUsd,
+          breakdown: cost.breakdown,
+        },
+      },
+    });
+    console.log(`[CurateKnowledge] Approval requested for ${actionType} on ${contentId}`);
+  } catch (error) {
+    console.error(`[CurateKnowledge] Failed to request approval for ${actionType} on ${contentId}:`, error);
+  }
+}
+
 const SUB_TASKS: SubTask[] = [
   {
     actionType: 'auto_categorize',
@@ -354,33 +390,14 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
       suggestions.map(s => `${s.name} (${s.confidence})`).join(', ')
   );
 
-  // Request approval for auto_apply_tags if permission tier is 'approve'
   if (suggestions.length > 0) {
-    const applyTier = await checkPermission(orgId, AGENT_TYPE, 'auto_apply_tags');
-    if (applyTier === 'approve') {
-      try {
-        const tagCost = await estimateActionCost(AGENT_TYPE, 'auto_apply_tags');
-        await requestApproval({
-          orgId,
-          agentType: AGENT_TYPE,
-          actionType: 'auto_apply_tags',
-          contentId,
-          description: `Auto-apply ${suggestions.length} suggested tags: ${suggestions.map(s => s.name).join(', ')}`,
-          proposedAction: {
-            type: 'apply_tags',
-            tags: suggestions.map(s => ({ name: s.name, confidence: s.confidence })),
-            estimatedCost: {
-              estimatedTokens: tagCost.estimatedTokens,
-              estimatedCostUsd: tagCost.estimatedCostUsd,
-              breakdown: tagCost.breakdown,
-            },
-          },
-        });
-        console.log(`[CurateKnowledge] Approval requested for auto_apply_tags on ${contentId}`);
-      } catch (approvalError) {
-        console.error(`[CurateKnowledge] Failed to request approval for auto_apply_tags on ${contentId}:`, approvalError);
-      }
-    }
+    await requestApprovalWithCost(orgId, 'auto_apply_tags', contentId, {
+      description: `Auto-apply ${suggestions.length} suggested tags: ${suggestions.map(s => s.name).join(', ')}`,
+      proposedAction: {
+        type: 'apply_tags',
+        tags: suggestions.map(s => ({ name: s.name, confidence: s.confidence })),
+      },
+    });
   }
 
   // Best-effort: update agent memory with org tag vocabulary
@@ -516,35 +533,15 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
     });
   }
 
-  // Request approval for merge_content if permission tier is 'approve'
   if (actionableMatches.length > 0) {
-    const mergeTier = await checkPermission(orgId, AGENT_TYPE, 'merge_content');
-    if (mergeTier === 'approve') {
-      try {
-        const sourceIds = actionableMatches.map(m => m.matchedContentId);
-        const topMatch = actionableMatches[0];
-        const mergeCost = await estimateActionCost(AGENT_TYPE, 'merge_content');
-        await requestApproval({
-          orgId,
-          agentType: AGENT_TYPE,
-          actionType: 'merge_content',
-          contentId,
-          description: `Merge duplicate recordings: ${topMatch.matchedTitle} (${topMatch.level})`,
-          proposedAction: {
-            type: 'merge',
-            sourceIds,
-            estimatedCost: {
-              estimatedTokens: mergeCost.estimatedTokens,
-              estimatedCostUsd: mergeCost.estimatedCostUsd,
-              breakdown: mergeCost.breakdown,
-            },
-          },
-        });
-        console.log(`[CurateKnowledge] Approval requested for merge_content on ${contentId}`);
-      } catch (approvalError) {
-        console.error(`[CurateKnowledge] Failed to request approval for merge_content on ${contentId}:`, approvalError);
-      }
-    }
+    const topMatch = actionableMatches[0];
+    await requestApprovalWithCost(orgId, 'merge_content', contentId, {
+      description: `Merge duplicate recordings: ${topMatch.matchedTitle} (${topMatch.level})`,
+      proposedAction: {
+        type: 'merge',
+        sourceIds: actionableMatches.map(m => m.matchedContentId),
+      },
+    });
   }
 
   try {
@@ -1063,7 +1060,6 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
     if (reasons.length === 0) continue;
     flaggedCount++;
 
-    // Log to agent_activity_log with action_type 'detect_stale'
     await logAgentAction({
       orgId,
       agentType: AGENT_TYPE,
@@ -1082,38 +1078,18 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
       },
     });
 
-    // Request approval for archive_content if permission tier is 'approve'
     if (confidence >= 0.7) {
-      const archiveTier = await checkPermission(orgId, AGENT_TYPE, 'archive_content');
-      if (archiveTier === 'approve') {
-        try {
-          const archiveCost = await estimateActionCost(AGENT_TYPE, 'archive_content');
-          await requestApproval({
-            orgId,
-            agentType: AGENT_TYPE,
-            actionType: 'archive_content',
-            contentId: item.id,
-            description: `Archive stale content: ${item.title ?? 'Untitled'} (${reasons[0]})`,
-            proposedAction: {
-              type: 'archive',
-              contentId: item.id,
-              reason: reasons.join('; '),
-              confidence,
-              estimatedCost: {
-                estimatedTokens: archiveCost.estimatedTokens,
-                estimatedCostUsd: archiveCost.estimatedCostUsd,
-                breakdown: archiveCost.breakdown,
-              },
-            },
-          });
-          console.log(`[CurateKnowledge] Approval requested for archive_content on ${item.id}`);
-        } catch (approvalError) {
-          console.error(`[CurateKnowledge] Failed to request approval for archive_content on ${item.id}:`, approvalError);
-        }
-      }
+      await requestApprovalWithCost(orgId, 'archive_content', item.id, {
+        description: `Archive stale content: ${item.title ?? 'Untitled'} (${reasons[0]})`,
+        proposedAction: {
+          type: 'archive',
+          contentId: item.id,
+          reason: reasons.join('; '),
+          confidence,
+        },
+      });
     }
 
-    // Store in agent memory with key 'stale:{contentId}'
     try {
       await storeMemory({
         orgId,

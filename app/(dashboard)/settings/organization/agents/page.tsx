@@ -157,15 +157,18 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 function formatCostUsd(amount: number): string {
-  if (amount < 0.01) return `$${amount.toFixed(4)}`;
-  return `$${amount.toFixed(2)}`;
+  return amount < 0.01 ? `$${amount.toFixed(4)}` : `$${amount.toFixed(2)}`;
 }
 
-function getApprovalCost(approval: AgentApproval): { estimatedCostUsd: number; breakdown: string } | null {
-  const action = approval.proposed_action as Record<string, unknown> | null;
-  if (!action?.estimatedCost || typeof action.estimatedCost !== 'object') return null;
-  const cost = action.estimatedCost as { estimatedCostUsd?: number; breakdown?: string };
-  if (typeof cost.estimatedCostUsd !== 'number') return null;
+interface ApprovalCost {
+  estimatedCostUsd: number;
+  breakdown: string;
+}
+
+function getApprovalCost(approval: AgentApproval): ApprovalCost | null {
+  const cost = (approval.proposed_action as Record<string, unknown> | null)
+    ?.estimatedCost as ApprovalCost | undefined;
+  if (typeof cost?.estimatedCostUsd !== 'number') return null;
   return { estimatedCostUsd: cost.estimatedCostUsd, breakdown: cost.breakdown ?? '' };
 }
 

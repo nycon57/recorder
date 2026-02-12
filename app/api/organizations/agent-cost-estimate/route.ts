@@ -7,10 +7,6 @@ import {
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { estimateMonthlyAgentCost } from '@/lib/services/agent-cost-estimator';
 
-/**
- * GET /api/organizations/agent-cost-estimate
- * Returns the estimated monthly agent cost based on current content volume.
- */
 export const GET = apiHandler(async () => {
   const { orgId } = await requireAdmin();
 
@@ -25,10 +21,10 @@ export const GET = apiHandler(async () => {
     return errors.internalError();
   }
 
-  const estimate = estimateMonthlyAgentCost(count ?? 0);
+  const contentCount = count ?? 0;
 
   return successResponse({
-    contentCount: count ?? 0,
-    ...estimate,
+    contentCount,
+    ...estimateMonthlyAgentCost(contentCount),
   });
 });
