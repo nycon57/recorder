@@ -5,6 +5,8 @@ import { MessageSquare, Send, Trash2, X, Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
+const DEFAULT_ERROR = 'Unable to get a response. Please try again.';
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -30,7 +32,6 @@ export function ContentChatWidget({
   const conversationIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -56,11 +57,9 @@ export function ContentChatWidget({
   }, []);
 
   const handleToggle = useCallback(() => {
-    setIsOpen((prev) => {
-      if (prev) cancelStream();
-      return !prev;
-    });
-  }, [cancelStream]);
+    if (isOpen) cancelStream();
+    setIsOpen((prev) => !prev);
+  }, [isOpen, cancelStream]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -79,6 +78,14 @@ export function ContentChatWidget({
     conversationIdRef.current = null;
     inputRef.current?.focus();
   }, [cancelStream]);
+
+  const appendToken = useCallback((token: string) => {
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last?.role !== 'assistant') return prev;
+      return [...prev.slice(0, -1), { ...last, content: last.content + token }];
+    });
+  }, []);
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
@@ -107,7 +114,7 @@ export function ContentChatWidget({
       });
 
       if (!response.ok) {
-        let errorMessage = 'Unable to get a response. Please try again.';
+        let errorMessage = DEFAULT_ERROR;
         try {
           const errorData = await response.json();
           if (errorData.error) errorMessage = errorData.error;
@@ -140,27 +147,15 @@ export function ContentChatWidget({
 
             switch (event.type) {
               case 'token':
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last?.role === 'assistant') {
-                    updated[updated.length - 1] = {
-                      ...last,
-                      content: last.content + event.token,
-                    };
-                  }
-                  return updated;
-                });
+                appendToken(event.token);
                 break;
               case 'done':
                 if (event.conversationId) {
                   conversationIdRef.current = event.conversationId;
                 }
                 break;
-              case 'sources':
-                break;
               case 'error':
-                setError('Unable to get a response. Please try again.');
+                setError(DEFAULT_ERROR);
                 break;
             }
           } catch {
@@ -171,11 +166,8 @@ export function ContentChatWidget({
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
 
-      setError(
-        err instanceof Error && err.message !== ''
-          ? err.message
-          : 'Unable to get a response. Please try again.'
-      );
+      const message = err instanceof Error ? err.message : '';
+      setError(message || DEFAULT_ERROR);
       setMessages((prev) => {
         const last = prev[prev.length - 1];
         if (last?.role === 'assistant' && !last.content) {
@@ -187,7 +179,7 @@ export function ContentChatWidget({
       abortControllerRef.current = null;
       setIsStreaming(false);
     }
-  }, [input, isStreaming, contentId]);
+  }, [input, isStreaming, contentId, appendToken]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -204,12 +196,10 @@ export function ContentChatWidget({
       {isOpen && (
         <div
           id="content-chat-panel"
-          ref={panelRef}
           role="dialog"
           aria-modal="true"
           aria-label={`Chat about ${contentTitle}`}
-          className="mb-3 flex w-80 flex-col rounded-xl border border-border/50 bg-background shadow-xl sm:w-96"
-          style={{ maxHeight: '500px' }}
+          className="mb-3 flex max-h-[500px] w-80 flex-col rounded-xl border border-border/50 bg-background shadow-xl sm:w-96"
         >
           <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
             <h3 className="truncate text-sm font-medium text-foreground">
