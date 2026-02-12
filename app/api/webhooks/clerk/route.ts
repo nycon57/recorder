@@ -23,13 +23,12 @@ export async function POST(request: Request) {
 
   try {
     evt = await verifyWebhook(request);
-  } catch (err) {
-    console.error('[Clerk Webhook] Signature verification failed:', err);
+  } catch {
+    console.error('[Clerk Webhook] Signature verification failed');
     return new Response('Invalid signature', { status: 401 });
   }
 
   const eventType = evt.type;
-  console.log(`[Clerk Webhook] Received event: ${eventType}`);
 
   try {
     switch (eventType) {
@@ -38,7 +37,6 @@ export async function POST(request: Request) {
         break;
 
       default:
-        // Acknowledge unhandled event types without error
         break;
     }
 
@@ -58,42 +56,45 @@ async function handleOrganizationMembershipCreated(
   evt: OrganizationMembershipWebhookEvent
 ) {
   const { organization, public_user_data, role } = evt.data;
+
+  if (!organization?.id || !public_user_data?.user_id) {
+    console.error('[Clerk Webhook] Missing required fields in membership event');
+    return;
+  }
+
   const orgId = organization.id;
   const userId = public_user_data.user_id;
   const userName = [public_user_data.first_name, public_user_data.last_name]
     .filter(Boolean)
     .join(' ') || 'Unknown';
 
-  console.log(
-    `[Clerk Webhook] New member: ${userName} (${userId}) joined org ${orgId} as ${role}`
-  );
-
   const enabled = await isAgentEnabled(orgId, 'onboarding');
 
-  // Log the detection regardless of whether onboarding is enabled
-  await logAgentAction({
-    orgId,
-    agentType: 'onboarding',
-    actionType: 'detect_new_member',
-    targetEntity: 'user',
-    targetId: userId,
-    inputSummary: `New member ${userName} joined as ${role}`,
-    outputSummary: enabled
-      ? 'Onboarding enabled — creating plan generation job'
-      : 'Onboarding disabled — skipping plan generation',
-    outcome: 'success',
-  });
+  // Log detection regardless of whether onboarding is enabled (best-effort)
+  try {
+    await logAgentAction({
+      orgId,
+      agentType: 'onboarding',
+      actionType: 'detect_new_member',
+      targetEntity: 'user',
+      targetId: userId,
+      inputSummary: `New member ${userName} joined as ${role}`,
+      outputSummary: enabled
+        ? 'Onboarding enabled — creating plan generation job'
+        : 'Onboarding disabled — skipping plan generation',
+      outcome: 'success',
+    });
+  } catch (logErr) {
+    console.error('[Clerk Webhook] Failed to log agent action:', logErr);
+  }
 
   if (!enabled) {
-    console.log(
-      `[Clerk Webhook] Onboarding disabled for org ${orgId}, skipping plan generation`
-    );
     return;
   }
 
-  // Insert job with dedupe_key to prevent duplicate plans for the same user
   const { error } = await supabaseAdmin.from('jobs').insert({
-    type: 'generate_onboarding_plan' as any,
+    type: 'generate_onboarding_plan',
+    status: 'pending',
     payload: {
       orgId,
       userId,
@@ -104,17 +105,10 @@ async function handleOrganizationMembershipCreated(
   });
 
   if (error) {
-    // Unique constraint on dedupe_key means a plan job already exists
+    // Unique constraint violation means a plan job already exists for this user
     if (error.code === '23505') {
-      console.log(
-        `[Clerk Webhook] Plan job already exists for user ${userId} in org ${orgId} (dedupe)`
-      );
       return;
     }
     throw new Error(`Failed to create onboarding plan job: ${error.message}`);
   }
-
-  console.log(
-    `[Clerk Webhook] Created generate_onboarding_plan job for ${userName} (${userId}) in org ${orgId}`
-  );
 }
