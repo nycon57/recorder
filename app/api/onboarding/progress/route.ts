@@ -81,8 +81,8 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     return errors.internalError();
   }
 
-  // Trigger engagement analysis when plan completes (fire-and-forget)
-  if (newStatus === 'completed' && plan.plan_status !== 'completed') {
+  // Trigger engagement analysis when the DB confirms status transitioned to completed
+  if (updated?.plan_status === 'completed' && plan.plan_status !== 'completed') {
     const engagement = (plan.engagement_data ?? {}) as Partial<EngagementData>;
     analyzeOnboardingEngagement({
       orgId,

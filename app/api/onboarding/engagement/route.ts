@@ -7,7 +7,7 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import type { EngagementData, ContentViewEvent } from '@/lib/types/database';
+import type { EngagementData, ContentViewEvent, Json, LearningPathItem } from '@/lib/types/database';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,14 +35,14 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     if (!contentView.contentId || typeof contentView.contentId !== 'string') {
       return errors.badRequest('contentView.contentId is required');
     }
-    if (typeof contentView.durationSec !== 'number' || contentView.durationSec < 0) {
-      return errors.badRequest('contentView.durationSec must be a non-negative number');
+    if (typeof contentView.durationSec !== 'number' || contentView.durationSec < 0 || contentView.durationSec > 86400) {
+      return errors.badRequest('contentView.durationSec must be between 0 and 86400');
     }
   }
 
   const { data: plan, error: fetchError } = await supabaseAdmin
     .from('agent_onboarding_plans')
-    .select('id, engagement_data')
+    .select('id, engagement_data, learning_path')
     .eq('org_id', orgId)
     .eq('user_id', userId)
     .in('plan_status', ['active', 'completed'])
@@ -57,6 +57,15 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
 
   if (!plan) {
     return errors.notFound('Onboarding plan');
+  }
+
+  // Validate contentView.contentId is part of the plan's learning path
+  if (contentView) {
+    const learningPath = (plan.learning_path ?? []) as LearningPathItem[];
+    const validIds = new Set(learningPath.map((item) => item.contentId));
+    if (!validIds.has(contentView.contentId)) {
+      return errors.badRequest('contentId is not in the learning path');
+    }
   }
 
   const existing = (plan.engagement_data ?? {}) as Partial<EngagementData>;
@@ -101,7 +110,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   const { error: updateError } = await supabaseAdmin
     .from('agent_onboarding_plans')
     .update({
-      engagement_data: engagement as unknown as Record<string, unknown>,
+      engagement_data: engagement as unknown as Json,
       updated_at: new Date().toISOString(),
     })
     .eq('id', plan.id);

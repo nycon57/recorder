@@ -13,6 +13,24 @@ import type { LearningPathItem, EngagementData, Json } from '@/lib/types/databas
 
 const AGENT_TYPE = 'onboarding';
 
+/** Sanitize user-provided strings before embedding in Gemini prompts. */
+function sanitize(input: string, maxLength = 200): string {
+  return input
+    .replace(/["""''`]/g, '')
+    .replace(/[\n\r\t]/g, ' ')
+    .substring(0, maxLength)
+    .trim();
+}
+
+/** Safely extract a numeric sampleCount from metadata JSON. */
+function getSampleCount(metadata: unknown): number {
+  if (metadata && typeof metadata === 'object' && 'sampleCount' in metadata) {
+    const val = (metadata as Record<string, unknown>).sampleCount;
+    return typeof val === 'number' ? val : 0;
+  }
+  return 0;
+}
+
 let genaiClient: GoogleGenAI | null = null;
 
 function getGenAIClient(): GoogleGenAI {
@@ -89,10 +107,10 @@ export async function analyzeOnboardingEngagement(input: AnalysisInput): Promise
 **Completion rate:** ${completedItems}/${totalItems} (${Math.round(completionRate * 100)}%)
 
 **Learning path items:**
-${itemSummaries.map((s, i) => `${i + 1}. "${s.title}" [${s.contentType}] — completed: ${s.completed}, estimated: ${s.estimatedMin}min, actual: ${Math.round(s.actualSec / 60)}min, time ratio: ${s.timeRatio}, skipped: ${s.skipped}`).join('\n')}
+${itemSummaries.map((s, i) => `${i + 1}. "${sanitize(s.title)}" [${s.contentType}] — completed: ${s.completed}, estimated: ${s.estimatedMin}min, actual: ${Math.round(s.actualSec / 60)}min, time ratio: ${s.timeRatio}, skipped: ${s.skipped}`).join('\n')}
 
-**Search queries from the user:** ${engagementData.searchQueries.length > 0 ? engagementData.searchQueries.join(', ') : 'none'}
-**Chat questions asked:** ${engagementData.chatQuestions.length > 0 ? engagementData.chatQuestions.join('; ') : 'none'}
+**Search queries from the user:** ${engagementData.searchQueries.length > 0 ? engagementData.searchQueries.map((q) => sanitize(q)).join(', ') : 'none'}
+**Chat questions asked:** ${engagementData.chatQuestions.length > 0 ? engagementData.chatQuestions.map((q) => sanitize(q, 500)).join('; ') : 'none'}
 
 Provide a JSON object with these fields:
 {
@@ -118,19 +136,21 @@ Provide a JSON object with these fields:
           return;
         }
 
-        // Merge with existing memory if available
-        const existingMemory = await recallMemory({
-          orgId,
-          agentType: AGENT_TYPE,
-          key: memoryKey,
-        });
-
-        let mergedInsights: string;
-        if (existingMemory) {
-          mergedInsights = mergeInsights(existingMemory.memory_value, analysis);
-        } else {
-          mergedInsights = JSON.stringify(analysis);
+        // Merge with existing memory if available (best-effort recall)
+        let existingMemory = null;
+        try {
+          existingMemory = await recallMemory({
+            orgId,
+            agentType: AGENT_TYPE,
+            key: memoryKey,
+          });
+        } catch (recallError) {
+          console.warn('[OnboardingEngagement] Failed to recall prior memory:', recallError);
         }
+
+        const mergedInsights = existingMemory
+          ? mergeInsights(existingMemory.memory_value, analysis)
+          : JSON.stringify(analysis);
 
         await storeMemory({
           orgId,
@@ -143,7 +163,7 @@ Provide a JSON object with these fields:
             completionRate: Math.round(completionRate * 100),
             analyzedAt: new Date().toISOString(),
             sampleCount: existingMemory
-              ? ((existingMemory.metadata as Record<string, unknown>)?.sampleCount as number ?? 0) + 1
+              ? getSampleCount(existingMemory.metadata) + 1
               : 1,
           } as Json,
         });
