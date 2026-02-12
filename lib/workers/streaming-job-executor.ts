@@ -48,6 +48,17 @@ import { handleCollectMetrics } from './handlers/collect-metrics';
 import { handleGenerateAlerts } from './handlers/generate-alerts';
 import { handleGenerateRecommendations } from './handlers/generate-recommendations';
 import { handlePerformHealthCheck } from './handlers/perform-health-check';
+import { handleArchiveSearchMetrics } from './handlers/archive-search-metrics';
+
+// Publishing handlers
+import { handlePublishDocument } from './handlers/publish-document';
+
+// Long video segmentation handlers
+import { transcribeSegment } from './handlers/transcribe-segment';
+import { mergeTranscripts } from './handlers/merge-transcripts';
+
+// Knowledge curation handler
+import { handleCurateKnowledge } from './handlers/curate-knowledge';
 
 const logger = createLogger({ service: 'streaming-job-executor' });
 
@@ -131,6 +142,17 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   generate_alerts: handleGenerateAlerts,
   generate_recommendations: handleGenerateRecommendations,
   perform_health_check: handlePerformHealthCheck,
+  archive_search_metrics: handleArchiveSearchMetrics,
+
+  // Publishing handlers
+  publish_document: handlePublishDocument,
+
+  // Long video segmentation handlers
+  transcribe_segment: transcribeSegment,
+  merge_transcripts: mergeTranscripts,
+
+  // Knowledge curation handler
+  curate_knowledge: handleCurateKnowledge,
 };
 
 /**

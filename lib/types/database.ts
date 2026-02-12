@@ -98,6 +98,7 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'wai
  * - 'archive_search_metrics': Archive search metrics from Redis to Supabase (90-day retention)
  * - 'transcribe_segment': Transcribe a single segment of a split long video (>30 min)
  * - 'merge_transcripts': Combine segment transcripts into final unified transcript
+ * - 'curate_knowledge': Knowledge Curator Agent — categorize, deduplicate, and detect staleness
  */
 export type JobType =
   | 'transcribe'
@@ -127,7 +128,8 @@ export type JobType =
   | 'archive_search_metrics'
   | 'publish_document'
   | 'transcribe_segment'
-  | 'merge_transcripts';
+  | 'merge_transcripts'
+  | 'curate_knowledge';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 

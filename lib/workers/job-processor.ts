@@ -56,6 +56,9 @@ import { handlePublishDocument } from './handlers/publish-document';
 import { transcribeSegment } from './handlers/transcribe-segment';
 import { mergeTranscripts } from './handlers/merge-transcripts';
 
+// Knowledge curation handler
+import { handleCurateKnowledge } from './handlers/curate-knowledge';
+
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
 // import { generateDocument } from './handlers/docify-google';
@@ -238,6 +241,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   // Long video segmentation handlers
   transcribe_segment: transcribeSegment, // Transcribe a single video segment
   merge_transcripts: mergeTranscripts, // Merge segment transcripts into final transcript
+
+  // Knowledge curation handler
+  curate_knowledge: handleCurateKnowledge, // Knowledge Curator Agent
 };
 
 // PERF-WK-001: Job priority levels (0 = highest, 3 = lowest)
