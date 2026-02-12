@@ -1,138 +1,117 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Bot, ChevronDown, ChevronRight, Pause } from "lucide-react";
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Bot, ChevronDown, ChevronRight, Pause } from 'lucide-react';
 
-import { Switch } from "@/app/components/ui/switch";
+import { Alert, AlertDescription } from '@/app/components/ui/alert';
+import { Switch } from '@/app/components/ui/switch';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/app/components/ui/select";
+} from '@/app/components/ui/select';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/app/components/ui/card";
+} from '@/app/components/ui/card';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/app/components/ui/collapsible";
-import { cn } from "@/lib/utils/cn";
-import type { PermissionTier } from "@/lib/types/database";
-
-// --- Agent configuration ---
-
-interface AgentAction {
-  id: string;
-  name: string;
-  description: string;
-}
+} from '@/app/components/ui/collapsible';
+import { cn } from '@/lib/utils/cn';
+import type { PermissionTier } from '@/lib/types/database';
 
 interface AgentTypeConfig {
   id: string;
   name: string;
   description: string;
   settingsKey: string;
-  actions: AgentAction[];
+  actions: { id: string; name: string; description: string }[];
 }
 
 const AGENT_TYPES: AgentTypeConfig[] = [
   {
-    id: "curator",
-    name: "Curator",
-    description: "Organizes and categorizes your knowledge base",
-    settingsKey: "curator_enabled",
+    id: 'curator',
+    name: 'Curator',
+    description: 'Organizes and categorizes your knowledge base',
+    settingsKey: 'curator_enabled',
     actions: [
-      { id: "extract_concepts", name: "Extract Concepts", description: "Identify key topics from content" },
-      { id: "generate_metadata", name: "Generate Metadata", description: "Create titles and summaries" },
-      { id: "suggest_tags", name: "Suggest Tags", description: "Recommend tags based on content" },
-      { id: "auto_apply_tags", name: "Auto-Apply Tags", description: "Apply suggested tags automatically" },
-      { id: "detect_duplicate", name: "Detect Duplicates", description: "Find duplicate content" },
-      { id: "detect_stale", name: "Detect Stale Content", description: "Flag outdated content" },
-      { id: "merge_content", name: "Merge Content", description: "Combine duplicate items" },
-      { id: "archive_content", name: "Archive Content", description: "Move stale content to archive" },
+      { id: 'extract_concepts', name: 'Extract Concepts', description: 'Identify key topics from content' },
+      { id: 'generate_metadata', name: 'Generate Metadata', description: 'Create titles and summaries' },
+      { id: 'suggest_tags', name: 'Suggest Tags', description: 'Recommend tags based on content' },
+      { id: 'auto_apply_tags', name: 'Auto-Apply Tags', description: 'Apply suggested tags automatically' },
+      { id: 'detect_duplicate', name: 'Detect Duplicates', description: 'Find duplicate content' },
+      { id: 'detect_stale', name: 'Detect Stale Content', description: 'Flag outdated content' },
+      { id: 'merge_content', name: 'Merge Content', description: 'Combine duplicate items' },
+      { id: 'archive_content', name: 'Archive Content', description: 'Move stale content to archive' },
     ],
   },
   {
-    id: "gap_intelligence",
-    name: "Gap Intelligence",
-    description: "Identifies knowledge gaps and missing documentation",
-    settingsKey: "gap_intelligence_enabled",
+    id: 'gap_intelligence',
+    name: 'Gap Intelligence',
+    description: 'Identifies knowledge gaps and missing documentation',
+    settingsKey: 'gap_intelligence_enabled',
     actions: [
-      { id: "detect_bus_factor", name: "Detect Bus Factor", description: "Find knowledge concentrated in few people" },
-      { id: "gap_alert", name: "Gap Alerts", description: "Notify about knowledge gaps" },
-      { id: "suggest_merge", name: "Suggest Merge", description: "Recommend merging related content" },
-      { id: "publish_external", name: "Publish External", description: "Share knowledge externally" },
+      { id: 'detect_bus_factor', name: 'Detect Bus Factor', description: 'Find knowledge concentrated in few people' },
+      { id: 'gap_alert', name: 'Gap Alerts', description: 'Notify about knowledge gaps' },
+      { id: 'suggest_merge', name: 'Suggest Merge', description: 'Recommend merging related content' },
+      { id: 'publish_external', name: 'Publish External', description: 'Share knowledge externally' },
     ],
   },
   {
-    id: "onboarding",
-    name: "Onboarding",
-    description: "Guides new team members through your knowledge base",
-    settingsKey: "onboarding_enabled",
+    id: 'onboarding',
+    name: 'Onboarding',
+    description: 'Guides new team members through your knowledge base',
+    settingsKey: 'onboarding_enabled',
     actions: [],
   },
   {
-    id: "digest",
-    name: "Digest",
-    description: "Creates periodic summaries of new and updated content",
-    settingsKey: "digest_enabled",
+    id: 'digest',
+    name: 'Digest',
+    description: 'Creates periodic summaries of new and updated content',
+    settingsKey: 'digest_enabled',
     actions: [],
   },
   {
-    id: "workflow_extraction",
-    name: "Workflow Extraction",
-    description: "Discovers and documents recurring processes",
-    settingsKey: "workflow_extraction_enabled",
+    id: 'workflow_extraction',
+    name: 'Workflow Extraction',
+    description: 'Discovers and documents recurring processes',
+    settingsKey: 'workflow_extraction_enabled',
     actions: [],
   },
 ];
 
-const TIER_LABELS: Record<PermissionTier, string> = {
-  auto: "Auto",
-  notify: "Notify",
-  approve: "Approve",
-};
+const PERMISSION_TIERS: { value: PermissionTier; label: string; description: string }[] = [
+  { value: 'auto', label: 'Auto', description: 'Agent acts immediately' },
+  { value: 'notify', label: 'Notify', description: 'Agent acts and notifies you' },
+  { value: 'approve', label: 'Approve', description: 'Agent requests your approval first' },
+];
 
-const TIER_DESCRIPTIONS: Record<PermissionTier, string> = {
-  auto: "Agent acts immediately",
-  notify: "Agent acts and notifies you",
-  approve: "Agent requests your approval first",
-};
-
-// Default tiers matching lib/services/agent-permissions.ts
 const DEFAULT_TIERS: Record<string, PermissionTier> = {
-  extract_concepts: "auto",
-  generate_metadata: "auto",
-  detect_duplicate: "auto",
-  detect_stale: "auto",
-  suggest_tags: "notify",
-  suggest_merge: "notify",
-  detect_bus_factor: "notify",
-  gap_alert: "notify",
-  auto_apply_tags: "approve",
-  merge_content: "approve",
-  archive_content: "approve",
-  publish_external: "approve",
+  extract_concepts: 'auto',
+  generate_metadata: 'auto',
+  detect_duplicate: 'auto',
+  detect_stale: 'auto',
+  suggest_tags: 'notify',
+  suggest_merge: 'notify',
+  detect_bus_factor: 'notify',
+  gap_alert: 'notify',
+  auto_apply_tags: 'approve',
+  merge_content: 'approve',
+  archive_content: 'approve',
+  publish_external: 'approve',
 };
-
-// --- API types ---
 
 interface AgentSettings {
   global_agent_enabled: boolean | null;
-  curator_enabled: boolean | null;
-  gap_intelligence_enabled: boolean | null;
-  onboarding_enabled: boolean | null;
-  digest_enabled: boolean | null;
-  workflow_extraction_enabled: boolean | null;
   [key: string]: unknown;
 }
 
@@ -142,116 +121,104 @@ interface AgentPermissionRow {
   permission_tier: PermissionTier;
 }
 
-// --- Component ---
-
 export default function AgentsSettingsPage() {
   const queryClient = useQueryClient();
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({
-    curator: true, // First agent expanded by default
+    curator: true,
   });
 
-  // Fetch agent settings (global + per-agent toggles)
   const { data: settings, isLoading: settingsLoading } = useQuery<AgentSettings>({
-    queryKey: ["agent-settings"],
+    queryKey: ['agent-settings'],
     queryFn: async () => {
-      const res = await fetch("/api/organizations/agent-settings");
-      if (!res.ok) throw new Error("Failed to load agent settings");
+      const res = await fetch('/api/organizations/agent-settings');
+      if (!res.ok) throw new Error('Failed to load agent settings');
       const json = await res.json();
       return json.data;
     },
   });
 
-  // Fetch agent permissions (per-action tiers)
   const { data: permissions, isLoading: permissionsLoading } = useQuery<AgentPermissionRow[]>({
-    queryKey: ["agent-permissions"],
+    queryKey: ['agent-permissions'],
     queryFn: async () => {
-      const res = await fetch("/api/organizations/agent-permissions");
-      if (!res.ok) throw new Error("Failed to load agent permissions");
+      const res = await fetch('/api/organizations/agent-permissions');
+      if (!res.ok) throw new Error('Failed to load agent permissions');
       const json = await res.json();
       return json.data;
     },
   });
 
-  // Mutation: update agent settings (toggles)
   const settingsMutation = useMutation({
     mutationFn: async (updates: Record<string, boolean>) => {
-      const res = await fetch("/api/organizations/agent-settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/organizations/agent-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "Failed to update setting");
+        throw new Error(err.message || 'Failed to update setting');
       }
       return res.json();
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["agent-settings"] });
+      queryClient.invalidateQueries({ queryKey: ['agent-settings'] });
       const field = Object.keys(variables)[0];
-      if (field === "global_agent_enabled") {
-        toast.success(variables[field] ? "All agents resumed" : "All agents paused");
+      if (field === 'global_agent_enabled') {
+        toast.success(variables[field] ? 'All agents resumed' : 'All agents paused');
       } else {
-        toast.success("Agent setting updated");
+        toast.success('Agent setting updated');
       }
     },
     onError: (error: Error) => {
-      queryClient.invalidateQueries({ queryKey: ["agent-settings"] });
+      queryClient.invalidateQueries({ queryKey: ['agent-settings'] });
       toast.error(error.message);
     },
   });
 
-  // Mutation: update permission tier
   const permissionMutation = useMutation({
     mutationFn: async (payload: { agent_type: string; action_type: string; permission_tier: PermissionTier }) => {
-      const res = await fetch("/api/organizations/agent-permissions", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/organizations/agent-permissions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "Failed to update permission");
+        throw new Error(err.message || 'Failed to update permission');
       }
       return res.json();
     },
     onMutate: async (payload) => {
-      // Optimistic update
-      await queryClient.cancelQueries({ queryKey: ["agent-permissions"] });
-      const previous = queryClient.getQueryData<AgentPermissionRow[]>(["agent-permissions"]);
+      await queryClient.cancelQueries({ queryKey: ['agent-permissions'] });
+      const previous = queryClient.getQueryData<AgentPermissionRow[]>(['agent-permissions']);
 
-      queryClient.setQueryData<AgentPermissionRow[]>(["agent-permissions"], (old) => {
+      queryClient.setQueryData<AgentPermissionRow[]>(['agent-permissions'], (old) => {
         if (!old) return old;
         const idx = old.findIndex(
           (p) => p.agent_type === payload.agent_type && p.action_type === payload.action_type,
         );
-        if (idx >= 0) {
-          const updated = [...old];
-          updated[idx] = { ...updated[idx], permission_tier: payload.permission_tier };
-          return updated;
-        }
-        // Row not found locally — let the server response handle new rows
-        return old;
+        if (idx < 0) return old;
+        const updated = [...old];
+        updated[idx] = { ...updated[idx], permission_tier: payload.permission_tier };
+        return updated;
       });
 
       return { previous };
     },
     onSuccess: () => {
-      toast.success("Permission updated");
+      toast.success('Permission updated');
     },
     onError: (error: Error, _vars, context) => {
-      // Revert optimistic update
       if (context?.previous) {
-        queryClient.setQueryData(["agent-permissions"], context.previous);
+        queryClient.setQueryData(['agent-permissions'], context.previous);
       }
       toast.error(error.message);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["agent-permissions"] });
+      queryClient.invalidateQueries({ queryKey: ['agent-permissions'] });
     },
   });
 
-  // Loading state
   if (settingsLoading || permissionsLoading) {
     return (
       <div className="flex items-center justify-center py-16" role="status">
@@ -269,27 +236,26 @@ export default function AgentsSettingsPage() {
     const row = permissions?.find(
       (p) => p.agent_type === agentType && p.action_type === actionType,
     );
-    return row?.permission_tier ?? DEFAULT_TIERS[actionType] ?? "notify";
+    return row?.permission_tier ?? DEFAULT_TIERS[actionType] ?? 'notify';
   }
 
   function isAgentEnabled(settingsKey: string): boolean {
     return (settings?.[settingsKey] as boolean | null) ?? false;
   }
 
-  function toggleExpanded(agentId: string) {
+  function toggleExpanded(agentId: string): void {
     setExpandedAgents((prev) => ({ ...prev, [agentId]: !prev[agentId] }));
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-normal">Agents</h2>
+        <h2 className="text-2xl font-semibold">Agents</h2>
         <p className="text-muted-foreground mt-1">
           Control what AI agents do automatically, what they notify about, and what requires your approval.
         </p>
       </div>
 
-      {/* Global toggle */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div>
@@ -309,25 +275,24 @@ export default function AgentsSettingsPage() {
         </CardHeader>
       </Card>
 
-      {/* Global disabled banner */}
       {!globalEnabled && (
-        <div role="alert" className="flex items-center gap-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
-          <Pause className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
-          All agents are paused. Individual settings are preserved but inactive until you re-enable agents.
-        </div>
+        <Alert variant="warning">
+          <Pause className="h-4 w-4" />
+          <AlertDescription>
+            All agents are paused. Individual settings are preserved but inactive until you re-enable agents.
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* Tier legend */}
       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-        {(["auto", "notify", "approve"] as PermissionTier[]).map((tier) => (
-          <span key={tier} className="flex items-center gap-1.5">
-            <span className="font-medium text-foreground">{TIER_LABELS[tier]}:</span>
-            {TIER_DESCRIPTIONS[tier]}
+        {PERMISSION_TIERS.map((tier) => (
+          <span key={tier.value} className="flex items-center gap-1.5">
+            <span className="font-medium text-foreground">{tier.label}:</span>
+            {tier.description}
           </span>
         ))}
       </div>
 
-      {/* Agent sections */}
       <div className="space-y-3">
         {AGENT_TYPES.map((agent) => {
           const enabled = isAgentEnabled(agent.settingsKey);
@@ -373,7 +338,6 @@ export default function AgentsSettingsPage() {
                     />
                   </div>
 
-                  {/* Enable prompt when disabled */}
                   {!enabled && globalEnabled && (
                     <p className="text-xs text-muted-foreground ml-6 mt-1">
                       Enable this agent to configure its permissions.
@@ -418,9 +382,9 @@ export default function AgentsSettingsPage() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {(["auto", "notify", "approve"] as PermissionTier[]).map((tier) => (
-                                  <SelectItem key={tier} value={tier}>
-                                    {TIER_LABELS[tier]}
+                                {PERMISSION_TIERS.map((tier) => (
+                                  <SelectItem key={tier.value} value={tier.value}>
+                                    {tier.label}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
