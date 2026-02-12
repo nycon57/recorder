@@ -53,14 +53,14 @@ export async function checkPermission(
     .eq('org_id', orgId)
     .eq('agent_type', agentType)
     .eq('action_type', actionType)
-    .single();
+    .maybeSingle();
 
   if (error) {
-    // PGRST116 = no rows found — fall back to defaults
-    if (error.code === 'PGRST116') {
-      return DEFAULT_TIERS[actionType] ?? 'notify';
-    }
     throw new Error(`Failed to check permission: ${error.message}`);
+  }
+
+  if (!data) {
+    return DEFAULT_TIERS[actionType] ?? 'notify';
   }
 
   return data.permission_tier as PermissionTier;
