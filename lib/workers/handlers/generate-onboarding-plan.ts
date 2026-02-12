@@ -28,6 +28,15 @@ const MAX_PATH_ITEMS = 20;
 // Average reading speed: ~200 words/min for technical content
 const WORDS_PER_MINUTE = 200;
 
+/** Sanitize user-provided strings before embedding in Gemini prompts. */
+function sanitizeForPrompt(input: string, maxLength = 100): string {
+  return input
+    .replace(/["""''`]/g, '')
+    .replace(/[\n\r\t]/g, ' ')
+    .substring(0, maxLength)
+    .trim();
+}
+
 let genaiClient: GoogleGenAI | null = null;
 
 function getGenAIClient(): GoogleGenAI {
@@ -194,7 +203,9 @@ async function filterConceptsByRole(
     .map(c => `- ${c.name}${c.description ? `: ${c.description}` : ''}`)
     .join('\n');
 
-  const prompt = `You are an onboarding specialist. Given a list of knowledge concepts from an organization, identify which are relevant for a new team member with the role "${role}".
+  const safeRole = sanitizeForPrompt(role);
+
+  const prompt = `You are an onboarding specialist. Given a list of knowledge concepts from an organization, identify which are relevant for a new team member with the role "${safeRole}".
 
 **Concepts:**
 ${conceptList}
@@ -247,7 +258,8 @@ async function findContentForConcepts(
     .eq('org_id', orgId)
     .in('status', ['completed', 'transcribed'])
     .is('deleted_at', null)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(500);
 
   if (contentError || !contentRows?.length) {
     return [];
@@ -266,16 +278,30 @@ async function findContentForConcepts(
     }));
   }
 
-  // Find concept mentions for these content items
+  // Find concept mentions for these content items (batched to avoid PostgREST URL limits)
   const contentIds = contentRows.map(c => c.id);
-  const { data: mentions } = await supabase
-    .from('concept_mentions')
-    .select('content_id, concept_id')
-    .in('concept_id', conceptIds)
-    .eq('org_id', orgId)
-    .in('content_id', contentIds);
+  const BATCH_SIZE = 100;
+  const allMentions: { content_id: string; concept_id: string }[] = [];
 
-  if (!mentions?.length) {
+  for (let i = 0; i < contentIds.length; i += BATCH_SIZE) {
+    const batch = contentIds.slice(i, i + BATCH_SIZE);
+    const { data: batchMentions, error: mentionError } = await supabase
+      .from('concept_mentions')
+      .select('content_id, concept_id')
+      .in('concept_id', conceptIds)
+      .eq('org_id', orgId)
+      .in('content_id', batch);
+
+    if (mentionError) {
+      console.warn('[OnboardingPlan] Failed to fetch concept mentions batch:', mentionError.message);
+      continue;
+    }
+    if (batchMentions) allMentions.push(...batchMentions);
+  }
+
+  const mentions = allMentions;
+
+  if (!mentions.length) {
     // No concept overlap — return content by freshness
     return contentRows.slice(0, MAX_PATH_ITEMS).map(c => ({
       id: c.id,
@@ -289,10 +315,14 @@ async function findContentForConcepts(
   }
 
   // Build concept names lookup
-  const { data: conceptRows } = await supabase
+  const { data: conceptRows, error: conceptError } = await supabase
     .from('knowledge_concepts')
     .select('id, name')
     .in('id', conceptIds);
+
+  if (conceptError) {
+    console.warn('[OnboardingPlan] Failed to fetch concept names:', conceptError.message);
+  }
   const conceptNameMap = new Map((conceptRows ?? []).map(c => [c.id, c.name]));
 
   // Map content -> covered concept names, count
@@ -339,10 +369,15 @@ async function enrichWithWordCounts(
   if (candidates.length === 0) return candidates;
 
   const ids = candidates.map(c => c.id);
-  const { data: chunks } = await supabase
+  const { data: chunks, error: chunkError } = await supabase
     .from('transcript_chunks')
     .select('content_id, chunk_text')
     .in('content_id', ids);
+
+  if (chunkError) {
+    console.warn('[OnboardingPlan] Failed to fetch transcript chunks:', chunkError.message);
+    return candidates;
+  }
 
   if (!chunks?.length) return candidates;
 
@@ -382,10 +417,10 @@ async function sequenceContentWithGemini(
     .join('\n');
 
   const roleContext = userRole
-    ? `The learner is a new ${userRole}.`
+    ? `The learner is a new ${sanitizeForPrompt(userRole)}.`
     : 'The learner is a new team member (role unspecified).';
 
-  const nameContext = userName ? ` Their name is ${userName}.` : '';
+  const nameContext = userName ? ` Their name is ${sanitizeForPrompt(userName)}.` : '';
 
   const prompt = `You are an onboarding plan designer. Given a list of content items, sequence them into an optimal learning path for a new team member.
 
@@ -426,6 +461,11 @@ Example:
 
   const items: LearningPathItem[] = [];
   for (const [i, item] of sequenced.entries()) {
+    if (item.contentIndex < 1 || item.contentIndex > candidates.length) {
+      console.warn(`[OnboardingPlan] Invalid content index ${item.contentIndex} (valid: 1-${candidates.length})`);
+      continue;
+    }
+
     const candidate = candidates[item.contentIndex - 1];
     if (!candidate) continue;
 
@@ -440,6 +480,11 @@ Example:
       estimatedMinutes: estimateMinutes(candidate),
     });
   }
+
+  if (items.length === 0) {
+    throw new Error('Gemini sequencing produced zero valid items');
+  }
+
   return items;
 }
 
@@ -561,12 +606,19 @@ function parseSequenceResponse(responseText: string): SequenceItem[] {
     const parsed = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(parsed)) return [];
 
-    return (parsed as Partial<SequenceItem>[]).filter(
-      (item): item is SequenceItem =>
-        typeof item?.contentIndex === 'number' &&
-        item.contentIndex > 0 &&
-        typeof item?.reason === 'string',
-    );
+    const seen = new Set<number>();
+    return (parsed as Partial<SequenceItem>[])
+      .filter(
+        (item): item is SequenceItem =>
+          typeof item?.contentIndex === 'number' &&
+          item.contentIndex > 0 &&
+          typeof item?.reason === 'string',
+      )
+      .filter(item => {
+        if (seen.has(item.contentIndex)) return false;
+        seen.add(item.contentIndex);
+        return true;
+      });
   } catch {
     return [];
   }
