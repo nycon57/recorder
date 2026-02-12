@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { MessageSquare, Send, Trash2, X, Loader2 } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 
 interface Message {
@@ -25,9 +26,8 @@ export function ContentChatWidget({
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-
   const abortControllerRef = useRef<AbortController | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -62,12 +62,21 @@ export function ContentChatWidget({
     });
   }, [cancelStream]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleToggle();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, handleToggle]);
+
   const handleClear = useCallback(() => {
     cancelStream();
     setMessages([]);
     setInput('');
     setError(null);
-    setConversationId(null);
+    conversationIdRef.current = null;
     inputRef.current?.focus();
   }, [cancelStream]);
 
@@ -92,13 +101,20 @@ export function ContentChatWidget({
         body: JSON.stringify({
           message: trimmed,
           recordingIds: [contentId],
-          conversationId,
+          conversationId: conversationIdRef.current,
         }),
         signal: controller.signal,
       });
 
       if (!response.ok) {
-        throw new Error(`${response.status}`);
+        let errorMessage = 'Unable to get a response. Please try again.';
+        try {
+          const errorData = await response.json();
+          if (errorData.error) errorMessage = errorData.error;
+        } catch {
+          // Non-JSON error body — use default message
+        }
+        throw new Error(errorMessage);
       }
 
       const reader = response.body?.getReader();
@@ -138,8 +154,10 @@ export function ContentChatWidget({
                 break;
               case 'done':
                 if (event.conversationId) {
-                  setConversationId(event.conversationId);
+                  conversationIdRef.current = event.conversationId;
                 }
+                break;
+              case 'sources':
                 break;
               case 'error':
                 setError('Unable to get a response. Please try again.');
@@ -153,7 +171,11 @@ export function ContentChatWidget({
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
 
-      setError('Unable to get a response. Please try again.');
+      setError(
+        err instanceof Error && err.message !== ''
+          ? err.message
+          : 'Unable to get a response. Please try again.'
+      );
       setMessages((prev) => {
         const last = prev[prev.length - 1];
         if (last?.role === 'assistant' && !last.content) {
@@ -165,7 +187,7 @@ export function ContentChatWidget({
       abortControllerRef.current = null;
       setIsStreaming(false);
     }
-  }, [input, isStreaming, contentId, conversationId]);
+  }, [input, isStreaming, contentId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -184,6 +206,7 @@ export function ContentChatWidget({
           id="content-chat-panel"
           ref={panelRef}
           role="dialog"
+          aria-modal="true"
           aria-label={`Chat about ${contentTitle}`}
           className="mb-3 flex w-80 flex-col rounded-xl border border-border/50 bg-background shadow-xl sm:w-96"
           style={{ maxHeight: '500px' }}
@@ -197,7 +220,7 @@ export function ContentChatWidget({
                 <button
                   type="button"
                   onClick={handleClear}
-                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
                   aria-label="Clear conversation"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -206,7 +229,7 @@ export function ContentChatWidget({
               <button
                 type="button"
                 onClick={handleToggle}
-                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
                 aria-label="Close chat"
               >
                 <X className="h-4 w-4" />
@@ -275,7 +298,7 @@ export function ContentChatWidget({
                 type="button"
                 onClick={handleSend}
                 disabled={isStreaming || !input.trim()}
-                className="rounded-lg bg-accent p-2 text-background transition-colors hover:bg-accent/90 disabled:opacity-50 disabled:hover:bg-accent"
+                className="rounded-lg bg-accent p-2 text-background transition-colors hover:bg-accent/90 disabled:opacity-50 disabled:hover:bg-accent focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
                 aria-label="Send message"
               >
                 {isStreaming ? (
@@ -293,7 +316,7 @@ export function ContentChatWidget({
         type="button"
         onClick={handleToggle}
         className={cn(
-          'flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium shadow-lg transition-all hover:shadow-xl',
+          'flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium shadow-lg transition-all hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2',
           isOpen
             ? 'bg-muted text-foreground'
             : 'bg-accent text-background hover:bg-accent/90'
