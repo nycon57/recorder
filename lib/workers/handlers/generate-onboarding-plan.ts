@@ -26,10 +26,8 @@ const AGENT_TYPE = 'onboarding';
 const MIN_PATH_ITEMS = 10;
 const MAX_PATH_ITEMS = 20;
 
-// Average reading speed: ~200 words/min for technical content
 const WORDS_PER_MINUTE = 200;
 
-/** Sanitize user-provided strings before embedding in Gemini prompts. */
 function sanitizeForPrompt(input: string, maxLength = 100): string {
   return input
     .replace(/["""''`]/g, '')
@@ -326,12 +324,10 @@ async function findContentForConcepts(
 
   const contentConceptMap = new Map<string, Set<string>>();
   for (const { content_id, concept_id } of allMentions) {
-    const existing = contentConceptMap.get(content_id);
-    if (existing) {
-      existing.add(concept_id);
-    } else {
-      contentConceptMap.set(content_id, new Set([concept_id]));
+    if (!contentConceptMap.has(content_id)) {
+      contentConceptMap.set(content_id, new Set());
     }
+    contentConceptMap.get(content_id)!.add(concept_id);
   }
 
   const scored = contentRows
@@ -475,7 +471,6 @@ Example:
     }
 
     const candidate = candidates[item.contentIndex - 1];
-    if (!candidate) continue;
 
     items.push({
       contentId: candidate.id,
@@ -563,7 +558,6 @@ async function insertOnboardingPlan(
 // Response parsing utilities
 // ---------------------------------------------------------------------------
 
-/** Extract the first JSON array from a Gemini response, stripping code fences. */
 function extractJsonArray(responseText: string): unknown[] | null {
   try {
     let cleaned = responseText.trim();

@@ -87,7 +87,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     analyzeOnboardingEngagement({
       orgId,
       planId: plan.id,
-      userRole: plan.user_role ?? null,
+      userRole: plan.user_role,
       learningPath,
       engagementData: {
         viewedContent: engagement.viewedContent ?? [],

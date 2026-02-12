@@ -26,12 +26,7 @@ function sendEngagement(body: Record<string, unknown>): void {
   });
 }
 
-/**
- * Track time spent viewing a specific content item.
- * Starts timing on mount, flushes accumulated duration periodically
- * and on unmount/visibility change.
- */
-export function useContentViewTracking(contentId: string | null) {
+export function useContentViewTracking(contentId: string | null): void {
   const startRef = useRef<number | null>(null);
   const accumulatedRef = useRef(0);
 
@@ -41,7 +36,7 @@ export function useContentViewTracking(contentId: string | null) {
     let duration = accumulatedRef.current;
     if (startRef.current !== null) {
       duration += (Date.now() - startRef.current) / 1000;
-      startRef.current = Date.now(); // Reset timer
+      startRef.current = Date.now();
     }
     accumulatedRef.current = 0;
 

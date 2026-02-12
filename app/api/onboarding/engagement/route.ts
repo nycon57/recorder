@@ -59,7 +59,6 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     return errors.notFound('Onboarding plan');
   }
 
-  // Validate contentView.contentId is part of the plan's learning path
   if (contentView) {
     const learningPath = (plan.learning_path ?? []) as LearningPathItem[];
     const validIds = new Set(learningPath.map((item) => item.contentId));
@@ -85,7 +84,6 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       durationSec: contentView.durationSec,
     };
     if (existingIndex >= 0) {
-      // Accumulate duration for repeat views
       event.durationSec += engagement.viewedContent[existingIndex].durationSec;
       engagement.viewedContent[existingIndex] = event;
     } else {
@@ -93,14 +91,14 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     }
   }
 
-  if (searchQuery && typeof searchQuery === 'string') {
+  if (searchQuery) {
     const trimmed = searchQuery.trim();
     if (trimmed && !engagement.searchQueries.includes(trimmed)) {
       engagement.searchQueries.push(trimmed);
     }
   }
 
-  if (chatQuestion && typeof chatQuestion === 'string') {
+  if (chatQuestion) {
     const trimmed = chatQuestion.trim();
     if (trimmed) {
       engagement.chatQuestions.push(trimmed);

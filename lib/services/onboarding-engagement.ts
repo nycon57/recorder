@@ -13,7 +13,6 @@ import type { LearningPathItem, EngagementData, Json } from '@/lib/types/databas
 
 const AGENT_TYPE = 'onboarding';
 
-/** Sanitize user-provided strings before embedding in Gemini prompts. */
 function sanitize(input: string, maxLength = 200): string {
   return input
     .replace(/["""''`]/g, '')
@@ -22,11 +21,14 @@ function sanitize(input: string, maxLength = 200): string {
     .trim();
 }
 
-/** Safely extract a numeric sampleCount from metadata JSON. */
 function getSampleCount(metadata: unknown): number {
-  if (metadata && typeof metadata === 'object' && 'sampleCount' in metadata) {
-    const val = (metadata as Record<string, unknown>).sampleCount;
-    return typeof val === 'number' ? val : 0;
+  if (
+    metadata !== null &&
+    typeof metadata === 'object' &&
+    'sampleCount' in metadata &&
+    typeof (metadata as { sampleCount: unknown }).sampleCount === 'number'
+  ) {
+    return (metadata as { sampleCount: number }).sampleCount;
   }
   return 0;
 }
@@ -63,7 +65,6 @@ export async function analyzeOnboardingEngagement(input: AnalysisInput): Promise
   const roleKey = userRole ?? 'general';
   const memoryKey = `onboarding_analysis:${orgId}:${roleKey}`;
 
-  // Determine if this is low engagement (abandoned plan)
   const completionRate = totalItems > 0 ? completedItems / totalItems : 0;
   const isLowEngagement = completionRate < 0.2;
   const importance = isLowEngagement ? 0.5 : 0.8;
@@ -78,14 +79,13 @@ export async function analyzeOnboardingEngagement(input: AnalysisInput): Promise
     async () => {
       const genai = getGenAIClient();
 
-      // Build analysis context
       const viewedMap = new Map(
         engagementData.viewedContent.map((v) => [v.contentId, v]),
       );
 
       const itemSummaries = learningPath.map((item) => {
         const view = viewedMap.get(item.contentId);
-        const timeSpent = view ? view.durationSec : 0;
+        const timeSpent = view?.durationSec ?? 0;
         const ratio = item.estimatedMinutes > 0
           ? timeSpent / (item.estimatedMinutes * 60)
           : 0;
@@ -136,7 +136,6 @@ Provide a JSON object with these fields:
           return;
         }
 
-        // Merge with existing memory if available (best-effort recall)
         let existingMemory = null;
         try {
           existingMemory = await recallMemory({
@@ -210,10 +209,6 @@ function parseAnalysisResponse(text: string): AnalysisResult | null {
   }
 }
 
-/**
- * Merge new analysis with existing insights from memory.
- * Deduplicates arrays and updates the summary.
- */
 function mergeInsights(existingValue: string, newAnalysis: AnalysisResult): string {
   try {
     const existing = JSON.parse(existingValue) as AnalysisResult;
@@ -225,7 +220,7 @@ function mergeInsights(existingValue: string, newAnalysis: AnalysisResult): stri
       highEngagementTopics: dedup([...existing.highEngagementTopics, ...newAnalysis.highEngagementTopics]),
       missingTopics: dedup([...existing.missingTopics, ...newAnalysis.missingTopics]),
       orderingInsights: dedup([...existing.orderingInsights, ...newAnalysis.orderingInsights]),
-      summary: newAnalysis.summary, // Latest summary takes precedence
+      summary: newAnalysis.summary,
     } satisfies AnalysisResult);
   } catch {
     return JSON.stringify(newAnalysis);

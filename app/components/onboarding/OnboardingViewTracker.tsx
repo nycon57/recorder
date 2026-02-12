@@ -2,11 +2,11 @@
 
 import { useContentViewTracking } from '@/lib/hooks/useEngagementTracking';
 
-/**
- * Invisible component that tracks time spent viewing a content item
- * for onboarding engagement. Renders no UI.
- */
-export function OnboardingViewTracker({ contentId }: { contentId: string }) {
+interface Props {
+  contentId: string;
+}
+
+export function OnboardingViewTracker({ contentId }: Props): null {
   useContentViewTracking(contentId);
   return null;
 }
