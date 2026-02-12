@@ -60,6 +60,9 @@ import { mergeTranscripts } from './handlers/merge-transcripts';
 // Knowledge curation handler
 import { handleCurateKnowledge } from './handlers/curate-knowledge';
 
+// Knowledge gap analysis handler
+import { handleAnalyzeKnowledgeGaps } from './handlers/analyze-knowledge-gaps';
+
 const logger = createLogger({ service: 'streaming-job-executor' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
@@ -153,6 +156,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Knowledge curation handler
   curate_knowledge: handleCurateKnowledge,
+
+  // Knowledge gap analysis handler
+  analyze_knowledge_gaps: handleAnalyzeKnowledgeGaps,
 };
 
 /**

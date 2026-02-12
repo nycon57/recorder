@@ -99,6 +99,7 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'wai
  * - 'transcribe_segment': Transcribe a single segment of a split long video (>30 min)
  * - 'merge_transcripts': Combine segment transcripts into final unified transcript
  * - 'curate_knowledge': Knowledge Curator Agent — categorize, deduplicate, and detect staleness
+ * - 'analyze_knowledge_gaps': Gap Intelligence Agent — detect knowledge gaps from search/chat signals
  */
 export type JobType =
   | 'transcribe'
@@ -129,7 +130,8 @@ export type JobType =
   | 'publish_document'
   | 'transcribe_segment'
   | 'merge_transcripts'
-  | 'curate_knowledge';
+  | 'curate_knowledge'
+  | 'analyze_knowledge_gaps';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 

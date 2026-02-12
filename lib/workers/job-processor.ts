@@ -59,6 +59,9 @@ import { mergeTranscripts } from './handlers/merge-transcripts';
 // Knowledge curation handler
 import { handleCurateKnowledge } from './handlers/curate-knowledge';
 
+// Knowledge gap analysis handler
+import { handleAnalyzeKnowledgeGaps } from './handlers/analyze-knowledge-gaps';
+
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
 // import { generateDocument } from './handlers/docify-google';
@@ -244,6 +247,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Knowledge curation handler
   curate_knowledge: handleCurateKnowledge, // Knowledge Curator Agent
+
+  // Knowledge gap analysis handler
+  analyze_knowledge_gaps: handleAnalyzeKnowledgeGaps, // Gap Intelligence Agent
 };
 
 // PERF-WK-001: Job priority levels (0 = highest, 3 = lowest)
