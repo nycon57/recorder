@@ -884,7 +884,7 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
       .eq('org_id', orgId)
       .neq('content_id', contentId);
 
-    for (const { content_id, concept_id } of mentions ?? []) {
+    for (const { content_id } of mentions ?? []) {
       conceptOverlap.set(content_id, (conceptOverlap.get(content_id) ?? 0) + 1);
     }
   }
@@ -913,9 +913,38 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
     .from('content')
     .select('id, title, updated_at')
     .in('id', Array.from(candidateIds))
-    .is('deleted_at', null);
+    .is('deleted_at', null)
+    .in('status', ['completed', 'transcribed']);
 
   if (!candidates?.length) return;
+
+  // Batch-fetch total concept counts per candidate (for overlap %)
+  const candidateConceptCounts = new Map<string, number>();
+  if (conceptOverlap.size > 0) {
+    const overlapIds = [...conceptOverlap.keys()].filter(id =>
+      candidates.some(c => c.id === id)
+    );
+    if (overlapIds.length > 0) {
+      const { data: allMentions } = await supabase
+        .from('concept_mentions')
+        .select('content_id, concept_id')
+        .in('content_id', overlapIds)
+        .eq('org_id', orgId);
+
+      const perContent = new Map<string, Set<string>>();
+      for (const { content_id, concept_id } of allMentions ?? []) {
+        const set = perContent.get(content_id);
+        if (set) {
+          set.add(concept_id);
+        } else {
+          perContent.set(content_id, new Set([concept_id]));
+        }
+      }
+      for (const [cid, conceptSet] of perContent) {
+        candidateConceptCounts.set(cid, conceptSet.size);
+      }
+    }
+  }
 
   let flaggedCount = 0;
 
@@ -944,7 +973,10 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
     const isOlderThanNew = item.updated_at < newContent.updated_at;
     if (isOlderThanNew && newConceptIds.length > 0) {
       const sharedCount = conceptOverlap.get(item.id) ?? 0;
-      const overlapPercent = (sharedCount / newConceptIds.length) * 100;
+      const oldConceptCount = candidateConceptCounts.get(item.id) ?? 0;
+      const overlapPercent = oldConceptCount > 0
+        ? (sharedCount / oldConceptCount) * 100
+        : 0;
 
       // Criterion 3: supersession (80%+ concept overlap OR matching title)
       const titleMatch =
