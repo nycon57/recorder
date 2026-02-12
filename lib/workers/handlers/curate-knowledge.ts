@@ -75,7 +75,7 @@ const SUB_TASKS: SubTask[] = [
     run: categorizeContent,
   },
   {
-    actionType: 'detect_duplicates',
+    actionType: 'detect_duplicate',
     label: 'Check duplicates for content',
     run: detectDuplicates,
   },
@@ -444,11 +444,12 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
     return;
   }
 
-  // Fetch titles for matched content
+  // Fetch titles for matched content (exclude deleted)
   const { data: candidateRows } = await supabase
     .from('content')
     .select('id, title')
-    .in('id', Array.from(candidateIds));
+    .in('id', Array.from(candidateIds))
+    .is('deleted_at', null);
 
   const titleMap = new Map((candidateRows ?? []).map(r => [r.id, r.title ?? 'Untitled']));
 
@@ -688,13 +689,25 @@ async function findConceptOverlap(
 
   const conceptIds = concepts.map(c => c.id);
 
-  // Find all other content items that mention any of these concepts
+  // Find non-deleted content that shares these concepts
+  const { data: activeContentIds } = await supabase
+    .from('content')
+    .select('id')
+    .eq('org_id', orgId)
+    .neq('id', contentId)
+    .is('deleted_at', null)
+    .in('status', ['completed', 'transcribed']);
+
+  if (!activeContentIds || activeContentIds.length === 0) return result;
+
+  const activeIds = activeContentIds.map(c => c.id);
+
   const { data: mentions } = await supabase
     .from('concept_mentions')
     .select('content_id, concept_id')
     .in('concept_id', conceptIds)
     .eq('org_id', orgId)
-    .neq('content_id', contentId);
+    .in('content_id', activeIds);
 
   if (!mentions || mentions.length === 0) return result;
 
