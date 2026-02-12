@@ -6,4 +6,5 @@
 export { BaseContentCard } from './BaseContentCard';
 export { ContentCard } from './ContentCard';
 export { RelatedContent } from './RelatedContent';
+export { ContentChatWidget } from './ContentChatWidget';
 export type { ContentItem } from './BaseContentCard';
