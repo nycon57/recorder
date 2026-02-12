@@ -21,7 +21,18 @@ export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/chat/stream
- * Stream AI response with RAG
+ *
+ * Streams AI responses token-by-token using Server-Sent Events.
+ *
+ * Request body:
+ * - message: string (required) — the user's chat message
+ * - conversationId?: string — existing conversation to continue
+ * - recordingIds?: string[] — scope RAG retrieval to specific content IDs.
+ *     When provided, only transcript chunks belonging to these content items
+ *     are searched. Pass an empty array or omit to search all org content.
+ * - maxChunks?: number — max context chunks (default: 5)
+ * - threshold?: number — similarity threshold (default: 0.7)
+ * - rerank?: boolean — enable Cohere reranking (default: false)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -102,7 +113,7 @@ export async function POST(request: NextRequest) {
             conversationHistory: history,
             maxChunks,
             threshold,
-            contentIds: recordingIds, // Map recordingIds to contentIds
+            contentIds: recordingIds?.length ? recordingIds : undefined,
             rerank,
           });
 
