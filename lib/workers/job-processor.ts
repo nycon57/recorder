@@ -17,6 +17,7 @@ import { transcribeRecording } from './handlers/transcribe-gemini-video';
 import { generateDocument } from './handlers/docify-google';
 import { generateEmbeddings } from './handlers/embeddings-google';
 import { generateSummary } from './handlers/generate-summary';
+import { handleGenerateMetadata } from './handlers/generate-metadata';
 import { handleExtractFrames } from './handlers/extract-frames';
 import { syncConnector } from './handlers/sync-connector';
 import { processImportedDocument } from './handlers/process-imported-doc';
@@ -161,6 +162,7 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   doc_generate: generateDocument,
   generate_embeddings: generateEmbeddings,
   generate_summary: generateSummary,
+  generate_metadata: handleGenerateMetadata,
   extract_frames: handleExtractFrames as unknown as JobHandler, // Phase 4 - Video frame extraction and indexing
   sync_connector: syncConnector, // Phase 5 - Connector sync
   process_imported_doc: processImportedDocument, // Phase 5 - Process imported documents

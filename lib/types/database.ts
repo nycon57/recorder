@@ -75,6 +75,7 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'wai
  * - 'doc_generate': Generate markdown documentation via GPT
  * - 'generate_embeddings': Create vector embeddings for semantic search
  * - 'generate_summary': Generate summary for recording
+ * - 'generate_metadata': Generate title, description, and tags via Gemini
  * - 'extract_frames': Extract key frames from videos
  * - 'extract_audio': Extract audio track from video files
  * - 'extract_text_pdf': Extract text content from PDF documents
@@ -103,6 +104,7 @@ export type JobType =
   | 'doc_generate'
   | 'generate_embeddings'
   | 'generate_summary'
+  | 'generate_metadata'
   | 'extract_frames'
   | 'extract_audio'
   | 'extract_text_pdf'
