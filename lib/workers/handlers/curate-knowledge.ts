@@ -10,6 +10,7 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { isAgentEnabled } from '@/lib/services/agent-config';
 import { withAgentLogging, logAgentAction } from '@/lib/services/agent-logger';
 import type { Database } from '@/lib/types/database';
+
 import type { ProgressCallback } from '../job-processor';
 
 type Job = Database['public']['Tables']['jobs']['Row'] & {
@@ -76,7 +77,7 @@ export async function handleCurateKnowledge(
   const now = new Date().toISOString();
 
   // Step 2: Get or create a curator session for this org
-  const { data: existingSession } = await supabase
+  const { data: existingSession, error: sessionError } = await supabase
     .from('agent_sessions')
     .select()
     .eq('org_id', orgId)
@@ -85,6 +86,11 @@ export async function handleCurateKnowledge(
     .order('last_active_at', { ascending: false })
     .limit(1)
     .single();
+
+  // PGRST116 = no rows found (expected when no session exists)
+  if (sessionError && sessionError.code !== 'PGRST116') {
+    throw new Error(`Failed to query curator session: ${sessionError.message}`);
+  }
 
   let sessionId: string;
   let sessionState: CuratorSessionState;
@@ -126,7 +132,7 @@ export async function handleCurateKnowledge(
   // Step 3: Get new content since last run
   let contentQuery = supabase
     .from('content')
-    .select('id')
+    .select('id, created_at')
     .eq('org_id', orgId)
     .in('status', ['completed', 'transcribed'])
     .is('deleted_at', null)
@@ -205,8 +211,19 @@ export async function handleCurateKnowledge(
         },
         () => detectStaleness(item.id, orgId)
       );
+
+      // Update lastProcessedAt after each successful item to prevent
+      // re-processing on partial failure (idempotent checkpoint)
+      await supabase
+        .from('agent_sessions')
+        .update({
+          last_active_at: new Date().toISOString(),
+          state: { lastProcessedAt: item.created_at } as unknown as Database['public']['Tables']['agent_sessions']['Update']['state'],
+        })
+        .eq('id', sessionId);
     } catch (error) {
-      // Log failure for this item but do not update lastProcessedAt
+      // Log failure for this item; lastProcessedAt already reflects the
+      // last successful item, so only this item and later ones will retry.
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`[CurateKnowledge] Error processing content ${item.id}: ${errorMessage}`);
 
@@ -219,20 +236,16 @@ export async function handleCurateKnowledge(
         errorMessage,
       });
 
-      // Stop processing — failed content will be retried on next run
       throw error;
     }
   }
 
-  // Step 5: All items processed successfully — update session state
-  progressCallback?.(95, 'Updating session state...');
+  // Step 5: All items processed — finalize session
+  progressCallback?.(95, 'Finalizing session...');
 
   await supabase
     .from('agent_sessions')
-    .update({
-      last_active_at: now,
-      state: { lastProcessedAt: now } as unknown as Database['public']['Tables']['agent_sessions']['Update']['state'],
-    })
+    .update({ last_active_at: new Date().toISOString() })
     .eq('id', sessionId);
 
   progressCallback?.(100, 'Knowledge curation complete');
