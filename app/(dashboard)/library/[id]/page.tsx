@@ -10,6 +10,7 @@ import {
   TextNoteDetailView,
 } from '@/app/components/library';
 import { RelatedContent } from '@/app/components/content/RelatedContent';
+import { ContentChatWidget } from '@/app/components/content/ContentChatWidget';
 
 async function getContentItem(id: string, clerkOrgId: string) {
   const supabase = supabaseAdmin;
@@ -236,6 +237,12 @@ export default async function LibraryItemDetailPage({
             <RelatedContent contentId={id} orgId={item.org_id} />
           </Suspense>
         </section>
+      )}
+      {showRelated && (
+        <ContentChatWidget
+          contentId={id}
+          contentTitle={item.title || 'Untitled'}
+        />
       )}
     </>
   );

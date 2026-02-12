@@ -192,14 +192,14 @@ export function ContentChatWidget({
   );
 
   return (
-    <div className={cn('fixed bottom-6 right-6 z-50', className)}>
+    <div className={cn('fixed bottom-6 right-6 z-40', className)}>
       {isOpen && (
         <div
           id="content-chat-panel"
           role="dialog"
           aria-modal="true"
           aria-label={`Chat about ${contentTitle}`}
-          className="mb-3 flex max-h-[500px] w-80 flex-col rounded-xl border border-border/50 bg-background shadow-xl sm:w-96"
+          className="mb-3 flex max-h-[500px] w-[calc(100vw-3rem)] flex-col rounded-xl border border-border/50 bg-background shadow-xl sm:w-96"
         >
           <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
             <h3 className="truncate text-sm font-medium text-foreground">
