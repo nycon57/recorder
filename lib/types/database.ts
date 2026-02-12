@@ -1115,8 +1115,8 @@ export interface Database {
           resolved_by_content_id: string | null;
           resolved_at: string | null;
           metadata: Json | null;
-          created_at: string | null;
-          updated_at: string | null;
+          created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -1134,8 +1134,8 @@ export interface Database {
           resolved_by_content_id?: string | null;
           resolved_at?: string | null;
           metadata?: Json | null;
-          created_at?: string | null;
-          updated_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
         Update: {
           topic?: string;
