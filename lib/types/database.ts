@@ -310,7 +310,7 @@ export interface MigrateStorageTierJobPayload {
 export interface LearningPathItem {
   contentId: string;
   title: string;
-  contentType: string;
+  contentType: ContentType;
   reason: string;
   order: number;
   completed: boolean;
