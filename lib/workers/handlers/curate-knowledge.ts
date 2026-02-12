@@ -688,12 +688,10 @@ async function findConceptOverlap(
 
   const sharedCounts = new Map<string, Set<string>>();
   for (const { content_id, concept_id } of mentions) {
-    const existing = sharedCounts.get(content_id);
-    if (existing) {
-      existing.add(concept_id);
-    } else {
-      sharedCounts.set(content_id, new Set([concept_id]));
+    if (!sharedCounts.has(content_id)) {
+      sharedCounts.set(content_id, new Set());
     }
+    sharedCounts.get(content_id)!.add(concept_id);
   }
 
   for (const [otherContentId, sharedSet] of sharedCounts) {
@@ -869,11 +867,10 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
     return;
   }
 
-  // Get the new item's concepts for supersession/freshness checks
   const newConcepts = await getConceptsForContent(contentId);
   const newConceptIds = newConcepts.map(c => c.id);
 
-  // Build concept overlap map: other contentId -> shared concept count
+  // Concept overlap: other contentId -> shared concept count
   const conceptOverlap = new Map<string, number>();
 
   if (newConceptIds.length > 0) {
@@ -899,9 +896,10 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
     .in('status', ['completed', 'transcribed'])
     .lt('updated_at', thresholdDate.toISOString());
 
-  const candidateIds = new Set<string>();
-  for (const item of agedContent ?? []) candidateIds.add(item.id);
-  for (const cid of conceptOverlap.keys()) candidateIds.add(cid);
+  const candidateIds = new Set([
+    ...(agedContent ?? []).map(c => c.id),
+    ...conceptOverlap.keys(),
+  ]);
 
   if (candidateIds.size === 0) {
     console.log(`[CurateKnowledge] No staleness candidates for ${contentId}`);
@@ -920,29 +918,25 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
 
   // Batch-fetch total concept counts per candidate (for overlap %)
   const candidateConceptCounts = new Map<string, number>();
-  if (conceptOverlap.size > 0) {
-    const overlapIds = [...conceptOverlap.keys()].filter(id =>
-      candidates.some(c => c.id === id)
-    );
-    if (overlapIds.length > 0) {
-      const { data: allMentions } = await supabase
-        .from('concept_mentions')
-        .select('content_id, concept_id')
-        .in('content_id', overlapIds)
-        .eq('org_id', orgId);
+  const candidateIdSet = new Set(candidates.map(c => c.id));
+  const overlapIds = [...conceptOverlap.keys()].filter(id => candidateIdSet.has(id));
 
-      const perContent = new Map<string, Set<string>>();
-      for (const { content_id, concept_id } of allMentions ?? []) {
-        const set = perContent.get(content_id);
-        if (set) {
-          set.add(concept_id);
-        } else {
-          perContent.set(content_id, new Set([concept_id]));
-        }
+  if (overlapIds.length > 0) {
+    const { data: allMentions } = await supabase
+      .from('concept_mentions')
+      .select('content_id, concept_id')
+      .in('content_id', overlapIds)
+      .eq('org_id', orgId);
+
+    const perContent = new Map<string, Set<string>>();
+    for (const { content_id, concept_id } of allMentions ?? []) {
+      if (!perContent.has(content_id)) {
+        perContent.set(content_id, new Set());
       }
-      for (const [cid, conceptSet] of perContent) {
-        candidateConceptCounts.set(cid, conceptSet.size);
-      }
+      perContent.get(content_id)!.add(concept_id);
+    }
+    for (const [cid, conceptSet] of perContent) {
+      candidateConceptCounts.set(cid, conceptSet.size);
     }
   }
 
@@ -980,8 +974,8 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
 
       // Criterion 3: supersession (80%+ concept overlap OR matching title)
       const titleMatch =
-        !!newContent.title &&
-        !!item.title &&
+        newContent.title != null &&
+        item.title != null &&
         areSimilarTitles(item.title, newContent.title);
 
       if (overlapPercent >= 80 || titleMatch) {
