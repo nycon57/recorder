@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  DollarSign,
   Pause,
   X,
 } from 'lucide-react';
@@ -155,6 +156,19 @@ function formatRelativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
+function formatCostUsd(amount: number): string {
+  if (amount < 0.01) return `$${amount.toFixed(4)}`;
+  return `$${amount.toFixed(2)}`;
+}
+
+function getApprovalCost(approval: AgentApproval): { estimatedCostUsd: number; breakdown: string } | null {
+  const action = approval.proposed_action as Record<string, unknown> | null;
+  if (!action?.estimatedCost) return null;
+  const cost = action.estimatedCost as { estimatedCostUsd?: number; breakdown?: string };
+  if (typeof cost.estimatedCostUsd !== 'number') return null;
+  return { estimatedCostUsd: cost.estimatedCostUsd, breakdown: cost.breakdown ?? '' };
+}
+
 function formatExpiresIn(dateStr: string): string {
   const diff = new Date(dateStr).getTime() - Date.now();
   if (diff <= 0) return 'Expired';
@@ -218,6 +232,20 @@ export default function AgentsSettingsPage() {
     queryFn: async () => {
       const res = await fetch('/api/organizations/agent-approvals');
       if (!res.ok) throw new Error('Failed to load approvals');
+      const json = await res.json();
+      return json.data;
+    },
+  });
+
+  const { data: costEstimate } = useQuery<{
+    contentCount: number;
+    estimatedMonthlyCostUsd: number;
+    breakdown: string;
+  }>({
+    queryKey: ['agent-cost-estimate'],
+    queryFn: async () => {
+      const res = await fetch('/api/organizations/agent-cost-estimate');
+      if (!res.ok) throw new Error('Failed to load cost estimate');
       const json = await res.json();
       return json.data;
     },
@@ -383,6 +411,22 @@ export default function AgentsSettingsPage() {
           />
         </CardHeader>
       </Card>
+
+      {costEstimate && (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
+            <DollarSign className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+            <div>
+              <CardTitle className="text-base font-medium">
+                Estimated monthly agent cost: {formatCostUsd(costEstimate.estimatedMonthlyCostUsd)}
+              </CardTitle>
+              <CardDescription>
+                Based on {costEstimate.contentCount} content item{costEstimate.contentCount !== 1 ? 's' : ''} in your organization
+              </CardDescription>
+            </div>
+          </CardHeader>
+        </Card>
+      )}
 
       {!globalEnabled && (
         <Alert variant="warning">
@@ -552,6 +596,7 @@ export default function AgentsSettingsPage() {
                 const statusCfg = STATUS_CONFIG[approval.status];
                 const isPending = approval.status === 'pending';
                 const isRejecting = rejectingId === approval.id;
+                const cost = getApprovalCost(approval);
 
                 return (
                   <Card key={approval.id} className={cn(!isPending && 'opacity-60')}>
@@ -566,6 +611,12 @@ export default function AgentsSettingsPage() {
                             <span className="text-xs text-muted-foreground">
                               {ACTION_NAMES[approval.action_type] ?? approval.action_type}
                             </span>
+                            {cost && (
+                              <Badge variant="outline" className="text-[10px] gap-1">
+                                <DollarSign className="h-3 w-3" aria-hidden="true" />
+                                {formatCostUsd(cost.estimatedCostUsd)}
+                              </Badge>
+                            )}
                           </div>
                           <p className="text-sm mt-1">{approval.description}</p>
                           <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
@@ -575,6 +626,11 @@ export default function AgentsSettingsPage() {
                             )}
                             {approval.reviewed_at && (
                               <span>Reviewed {formatRelativeTime(approval.reviewed_at)}</span>
+                            )}
+                            {cost && (
+                              <span title={cost.breakdown}>
+                                ~{cost.estimatedCostUsd < 0.01 ? '<0.01' : cost.estimatedCostUsd.toFixed(2)} USD est.
+                              </span>
                             )}
                           </div>
                           {approval.rejection_reason && (

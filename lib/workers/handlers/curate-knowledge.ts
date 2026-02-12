@@ -10,6 +10,7 @@ import { GoogleGenAI } from '@google/genai';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { isAgentEnabled, getAgentSettings } from '@/lib/services/agent-config';
 import { checkPermission, requestApproval } from '@/lib/services/agent-permissions';
+import { estimateActionCost } from '@/lib/services/agent-cost-estimator';
 import { withAgentLogging, logAgentAction } from '@/lib/services/agent-logger';
 import { storeMemory, recallMemory } from '@/lib/services/agent-memory';
 import { getConceptsForContent } from '@/lib/services/concept-extractor';
@@ -358,6 +359,7 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
     const applyTier = await checkPermission(orgId, AGENT_TYPE, 'auto_apply_tags');
     if (applyTier === 'approve') {
       try {
+        const tagCost = await estimateActionCost(AGENT_TYPE, 'auto_apply_tags');
         await requestApproval({
           orgId,
           agentType: AGENT_TYPE,
@@ -367,6 +369,11 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
           proposedAction: {
             type: 'apply_tags',
             tags: suggestions.map(s => ({ name: s.name, confidence: s.confidence })),
+            estimatedCost: {
+              estimatedTokens: tagCost.estimatedTokens,
+              estimatedCostUsd: tagCost.estimatedCostUsd,
+              breakdown: tagCost.breakdown,
+            },
           },
         });
         console.log(`[CurateKnowledge] Approval requested for auto_apply_tags on ${contentId}`);
@@ -516,13 +523,22 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
       try {
         const sourceIds = actionableMatches.map(m => m.matchedContentId);
         const topMatch = actionableMatches[0];
+        const mergeCost = await estimateActionCost(AGENT_TYPE, 'merge_content');
         await requestApproval({
           orgId,
           agentType: AGENT_TYPE,
           actionType: 'merge_content',
           contentId,
           description: `Merge duplicate recordings: ${topMatch.matchedTitle} (${topMatch.level})`,
-          proposedAction: { type: 'merge', sourceIds },
+          proposedAction: {
+            type: 'merge',
+            sourceIds,
+            estimatedCost: {
+              estimatedTokens: mergeCost.estimatedTokens,
+              estimatedCostUsd: mergeCost.estimatedCostUsd,
+              breakdown: mergeCost.breakdown,
+            },
+          },
         });
         console.log(`[CurateKnowledge] Approval requested for merge_content on ${contentId}`);
       } catch (approvalError) {
@@ -1071,6 +1087,7 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
       const archiveTier = await checkPermission(orgId, AGENT_TYPE, 'archive_content');
       if (archiveTier === 'approve') {
         try {
+          const archiveCost = await estimateActionCost(AGENT_TYPE, 'archive_content');
           await requestApproval({
             orgId,
             agentType: AGENT_TYPE,
@@ -1082,6 +1099,11 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
               contentId: item.id,
               reason: reasons.join('; '),
               confidence,
+              estimatedCost: {
+                estimatedTokens: archiveCost.estimatedTokens,
+                estimatedCostUsd: archiveCost.estimatedCostUsd,
+                breakdown: archiveCost.breakdown,
+              },
             },
           });
           console.log(`[CurateKnowledge] Approval requested for archive_content on ${item.id}`);
