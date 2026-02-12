@@ -7,7 +7,8 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import type { LearningPathItem } from '@/lib/types/database';
+import type { LearningPathItem, EngagementData } from '@/lib/types/database';
+import { analyzeOnboardingEngagement } from '@/lib/services/onboarding-engagement';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
 
   const { data: plan, error: fetchError } = await supabaseAdmin
     .from('agent_onboarding_plans')
-    .select('id, learning_path, completed_items, total_items, plan_status')
+    .select('id, learning_path, completed_items, total_items, plan_status, engagement_data, user_role')
     .eq('org_id', orgId)
     .eq('user_id', userId)
     .eq('plan_status', 'active')
@@ -78,6 +79,26 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   if (updateError) {
     console.error('[onboarding/progress] Error updating plan:', updateError);
     return errors.internalError();
+  }
+
+  // Trigger engagement analysis when plan completes (fire-and-forget)
+  if (newStatus === 'completed' && plan.plan_status !== 'completed') {
+    const engagement = (plan.engagement_data ?? {}) as Partial<EngagementData>;
+    analyzeOnboardingEngagement({
+      orgId,
+      planId: plan.id,
+      userRole: plan.user_role ?? null,
+      learningPath,
+      engagementData: {
+        viewedContent: engagement.viewedContent ?? [],
+        searchQueries: engagement.searchQueries ?? [],
+        chatQuestions: engagement.chatQuestions ?? [],
+      },
+      totalItems,
+      completedItems,
+    }).catch((err) => {
+      console.error('[onboarding/progress] Engagement analysis failed:', err);
+    });
   }
 
   return successResponse(updated);

@@ -57,6 +57,7 @@ import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/K
 import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/app/hooks/useKeyboardShortcuts';
 import { ContentType } from '@/lib/types/database';
 import { CONTENT_TYPE_EMOJI } from '@/lib/types/content';
+import { trackSearchQuery } from '@/lib/hooks/useEngagementTracking';
 
 interface SearchResultConcept {
   id: string;
@@ -156,6 +157,7 @@ function SearchPageContent() {
     setLoading(true);
     setShowSuggestions(false);
     setError(null);
+    trackSearchQuery(searchQuery);
     // Clear fetched concepts cache for fresh results
     fetchedConceptsRef.current.clear();
 

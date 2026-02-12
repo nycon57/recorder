@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { MessageSquare, Send, Trash2, X, Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { trackChatQuestion } from '@/lib/hooks/useEngagementTracking';
 
 const DEFAULT_ERROR = 'Unable to get a response. Please try again.';
 
@@ -103,6 +104,7 @@ export function ContentChatWidget({
     const userMessage: Message = { role: 'user', content: trimmed };
     setMessages((prev) => [...prev, userMessage, { role: 'assistant', content: '' }]);
     setIsStreaming(true);
+    trackChatQuestion(trimmed);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;

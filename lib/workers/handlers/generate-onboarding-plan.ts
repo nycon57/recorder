@@ -13,6 +13,7 @@ import { GoogleGenAI } from '@google/genai';
 
 import { isAgentEnabled } from '@/lib/services/agent-config';
 import { withAgentLogging } from '@/lib/services/agent-logger';
+import { recallMemory } from '@/lib/services/agent-memory';
 import { getTopConceptsForOrg, type StoredConcept } from '@/lib/services/concept-extractor';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { ContentType, Database, Json, LearningPathItem } from '@/lib/types/database';
@@ -135,6 +136,24 @@ export async function handleGenerateOnboardingPlan(
 
       const conceptNames = relevantConcepts.map(c => c.name);
 
+      // Recall engagement insights from previous onboardings for this role
+      progressCallback?.(30, 'Checking past onboarding insights...');
+      let priorInsights: string | null = null;
+      const roleKey = userRole ?? 'general';
+      try {
+        const memory = await recallMemory({
+          orgId,
+          agentType: AGENT_TYPE,
+          key: `onboarding_analysis:${orgId}:${roleKey}`,
+        });
+        if (memory) {
+          priorInsights = memory.memory_value;
+          console.log(`[OnboardingPlan] Found prior insights for role "${roleKey}"`);
+        }
+      } catch (error) {
+        console.warn('[OnboardingPlan] Failed to recall engagement memory:', error);
+      }
+
       progressCallback?.(35, 'Finding relevant content...');
       const contentCandidates = await findContentForConcepts(
         supabase,
@@ -167,6 +186,7 @@ export async function handleGenerateOnboardingPlan(
           conceptNames,
           userRole,
           userName,
+          priorInsights,
         );
       } catch (error) {
         console.error('[OnboardingPlan] Gemini sequencing failed, using fallback order:', error);
@@ -367,6 +387,7 @@ async function sequenceContentWithGemini(
   conceptNames: string[],
   userRole: string | null,
   userName: string | null,
+  priorInsights: string | null = null,
 ): Promise<LearningPathItem[]> {
   const genai = getGenAIClient();
 
@@ -383,6 +404,31 @@ async function sequenceContentWithGemini(
 
   const nameContext = userName ? ` Their name is ${sanitizeForPrompt(userName)}.` : '';
 
+  let insightsSection = '';
+  if (priorInsights) {
+    try {
+      const insights = JSON.parse(priorInsights);
+      const parts: string[] = [];
+      if (insights.skippedTopics?.length) {
+        parts.push(`- Items about these topics are frequently skipped: ${insights.skippedTopics.join(', ')}. Deprioritize or exclude them.`);
+      }
+      if (insights.highEngagementTopics?.length) {
+        parts.push(`- These topics get high engagement: ${insights.highEngagementTopics.join(', ')}. Prioritize them.`);
+      }
+      if (insights.missingTopics?.length) {
+        parts.push(`- Previous learners searched for these topics not in the plan: ${insights.missingTopics.join(', ')}. Include related content if available.`);
+      }
+      if (insights.orderingInsights?.length) {
+        parts.push(`- Ordering insights: ${insights.orderingInsights.join('; ')}`);
+      }
+      if (parts.length > 0) {
+        insightsSection = `\n**Insights from previous onboardings for this role:**\n${parts.join('\n')}\n`;
+      }
+    } catch {
+      // Invalid JSON in memory — skip insights
+    }
+  }
+
   const prompt = `You are an onboarding plan designer. Given a list of content items, sequence them into an optimal learning path for a new team member.
 
 ${roleContext}${nameContext}
@@ -391,7 +437,7 @@ ${roleContext}${nameContext}
 ${contentList}
 
 **Organization's core topics:** ${conceptNames.slice(0, 30).join(', ') || 'various'}
-
+${insightsSection}
 **Rules:**
 1. Start with foundational/setup content (local dev setup, getting started guides).
 2. Progress from general knowledge to specific/advanced topics.
@@ -399,6 +445,7 @@ ${contentList}
 4. End with advanced or production-focused content.
 5. Select ${MIN_PATH_ITEMS}-${MAX_PATH_ITEMS} items maximum.
 6. Each item needs a brief reason explaining why it's at that position.
+${priorInsights ? '7. Apply the insights from previous onboardings to improve this plan.' : ''}
 
 Return ONLY a JSON array ordered by learning sequence. Each element:
 {"contentIndex": <1-based index from the list above>, "reason": "<brief reason for this position>"}

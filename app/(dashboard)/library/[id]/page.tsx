@@ -11,6 +11,7 @@ import {
 } from '@/app/components/library';
 import { RelatedContent } from '@/app/components/content/RelatedContent';
 import { ContentChatWidget } from '@/app/components/content/ContentChatWidget';
+import { OnboardingViewTracker } from '@/app/components/onboarding/OnboardingViewTracker';
 
 async function getContentItem(id: string, clerkOrgId: string) {
   // Look up internal organization ID
@@ -202,6 +203,7 @@ export default async function LibraryItemDetailPage({
 
   return (
     <>
+      <OnboardingViewTracker contentId={id} />
       {detailView}
       {showRelated && (
         <>

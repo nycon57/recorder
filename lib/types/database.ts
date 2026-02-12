@@ -320,6 +320,20 @@ export interface LearningPathItem {
   estimatedMinutes: number;
 }
 
+/** Tracked engagement signal for a single content view. */
+export interface ContentViewEvent {
+  contentId: string;
+  viewedAt: string;
+  durationSec: number;
+}
+
+/** Structured engagement data stored in agent_onboarding_plans.engagement_data. */
+export interface EngagementData {
+  viewedContent: ContentViewEvent[];
+  searchQueries: string[];
+  chatQuestions: string[];
+}
+
 export interface Tag {
   id: string;
   org_id: string;
