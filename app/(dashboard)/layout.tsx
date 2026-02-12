@@ -36,11 +36,12 @@ export default async function DashboardLayout({
   // Using admin client to bypass RLS (safe in server component)
   let userRole: 'owner' | 'admin' | 'contributor' | 'reader' = 'reader';
   let isSystemAdmin = false;
+  let hasOnboardingPlan = false;
 
   try {
     const { data: userData } = await supabaseAdmin
       .from('users')
-      .select('role, is_system_admin')
+      .select('id, role, is_system_admin')
       .eq('clerk_id', userId)
       .single();
 
@@ -52,6 +53,19 @@ export default async function DashboardLayout({
     if (userData?.is_system_admin === true) {
       isSystemAdmin = true;
     }
+
+    // Check for active onboarding plan to conditionally show sidebar link
+    if (userData?.id) {
+      const { data: planData } = await supabaseAdmin
+        .from('agent_onboarding_plans')
+        .select('id')
+        .eq('user_id', userData.id)
+        .eq('plan_status', 'active')
+        .limit(1)
+        .maybeSingle();
+
+      hasOnboardingPlan = !!planData;
+    }
   } catch (error) {
     console.error('[DashboardLayout] Error fetching user data:', error);
     // Continue with defaults if fetch fails
@@ -59,7 +73,7 @@ export default async function DashboardLayout({
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <AuroraSidebar role={userRole} isSystemAdmin={isSystemAdmin} />
+      <AuroraSidebar role={userRole} isSystemAdmin={isSystemAdmin} hasOnboardingPlan={hasOnboardingPlan} />
       <SidebarInset>
         {/* Header with sidebar trigger and breadcrumbs */}
         <header className="flex h-16 shrink-0 items-center gap-2 px-4 sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-accent/10 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">

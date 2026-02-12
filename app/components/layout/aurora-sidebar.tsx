@@ -40,6 +40,7 @@ import { NavUserAurora } from "@/app/components/layout/nav-user-aurora"
 interface AuroraSidebarProps extends React.ComponentProps<typeof Sidebar> {
   role?: "owner" | "admin" | "contributor" | "reader"
   isSystemAdmin?: boolean
+  hasOnboardingPlan?: boolean
 }
 
 // Motion variants for logo entrance
@@ -57,7 +58,7 @@ const logoVariants = {
   },
 }
 
-export function AuroraSidebar({ role, isSystemAdmin = false, ...props }: AuroraSidebarProps) {
+export function AuroraSidebar({ role, isSystemAdmin = false, hasOnboardingPlan = false, ...props }: AuroraSidebarProps) {
   // System admin access is only for platform operators, not org-level admins
   const hasSystemAdminAccess = isSystemAdmin === true
   const [mounted, setMounted] = React.useState(false)
@@ -114,7 +115,7 @@ export function AuroraSidebar({ role, isSystemAdmin = false, ...props }: AuroraS
       {/* Main content: Navigation groups with aurora styling */}
       <SidebarContent>
         {/* Core navigation */}
-        <NavMainAurora />
+        <NavMainAurora hasOnboardingPlan={hasOnboardingPlan} />
 
         <SidebarSeparator className="mx-0" />
 

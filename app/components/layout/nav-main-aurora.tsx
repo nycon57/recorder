@@ -13,6 +13,7 @@ import {
   AiSearchIcon,
   AiBrain01Icon,
   MessageMultiple01Icon,
+  BookOpen01Icon,
 } from "@hugeicons/core-free-icons"
 
 import {
@@ -42,7 +43,7 @@ interface NavItem {
   description: string
 }
 
-const navItems: NavItem[] = [
+const baseNavItems: NavItem[] = [
   {
     title: "Dashboard",
     url: "/dashboard",
@@ -81,6 +82,17 @@ const navItems: NavItem[] = [
   },
 ]
 
+const onboardingNavItem: NavItem = {
+  title: "Onboarding",
+  url: "/onboarding",
+  icon: BookOpen01Icon,
+  description: "Your learning path",
+}
+
+interface NavMainAuroraProps {
+  hasOnboardingPlan?: boolean
+}
+
 // Motion variants for staggered entrance
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -106,9 +118,15 @@ const itemVariants = {
   },
 }
 
-export function NavMainAurora() {
+export function NavMainAurora({ hasOnboardingPlan = false }: NavMainAuroraProps) {
   const pathname = usePathname()
   const [mounted, setMounted] = React.useState(false)
+
+  const navItems = React.useMemo(() => {
+    return hasOnboardingPlan
+      ? [...baseNavItems, onboardingNavItem]
+      : baseNavItems
+  }, [hasOnboardingPlan])
 
   // Prevent hydration mismatch
   React.useEffect(() => {
