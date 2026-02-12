@@ -1059,6 +1059,18 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
         },
         dedupe_key: `generate_embeddings:${recordingId}`,
       })).then(res => res.data),
+      // Metadata generation job - generates title, description, and tags
+      Promise.resolve(supabase.from('jobs').insert({
+        type: 'generate_metadata',
+        status: 'pending',
+        payload: {
+          recordingId,
+          transcriptId: transcript.id,
+          orgId,
+        },
+        dedupe_key: `generate_metadata:${recordingId}`,
+        priority: 1, // JOB_PRIORITY.HIGH — titles appear quickly
+      })).then(res => res.data),
     ];
 
     // Add compression job if applicable
@@ -1095,7 +1107,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
         recordingId,
         transcriptId: transcript.id,
         jobCount: jobPromises.length,
-        jobs: ['doc_generate', 'generate_embeddings', recording?.storage_path_raw ? 'compression' : null].filter(Boolean),
+        jobs: ['doc_generate', 'generate_embeddings', 'generate_metadata', recording?.storage_path_raw ? 'compression' : null].filter(Boolean),
       },
     });
 

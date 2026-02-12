@@ -376,7 +376,7 @@ export async function mergeTranscripts(job: Job): Promise<void> {
       .update({ status: 'transcribed' })
       .eq('id', contentId);
 
-    // Create downstream jobs (doc generation, embeddings)
+    // Create downstream jobs (doc generation, embeddings, metadata)
     const jobPromises = [
       supabase.from('jobs').insert({
         type: 'doc_generate',
@@ -398,6 +398,17 @@ export async function mergeTranscripts(job: Job): Promise<void> {
         },
         dedupe_key: `generate_embeddings:${contentId}`,
       }),
+      supabase.from('jobs').insert({
+        type: 'generate_metadata',
+        status: 'pending',
+        payload: {
+          recordingId: contentId,
+          transcriptId: transcript.id,
+          orgId,
+        },
+        dedupe_key: `generate_metadata:${contentId}`,
+        priority: 1, // JOB_PRIORITY.HIGH — titles appear quickly
+      }),
     ];
 
     await Promise.all(jobPromises);
@@ -406,7 +417,7 @@ export async function mergeTranscripts(job: Job): Promise<void> {
       context: {
         contentId,
         transcriptId: transcript.id,
-        jobs: ['doc_generate', 'generate_embeddings'],
+        jobs: ['doc_generate', 'generate_embeddings', 'generate_metadata'],
       },
     });
 
