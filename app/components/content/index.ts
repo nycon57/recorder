@@ -5,4 +5,5 @@
 
 export { BaseContentCard } from './BaseContentCard';
 export { ContentCard } from './ContentCard';
+export { RelatedContent } from './RelatedContent';
 export type { ContentItem } from './BaseContentCard';
