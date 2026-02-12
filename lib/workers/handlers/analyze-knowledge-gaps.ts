@@ -23,7 +23,7 @@ const MAX_UNIQUE_QUERIES = 200;
 const CLUSTER_THRESHOLD = 0.8;
 const MERGE_THRESHOLD = 0.9;
 
-/** Phrases that indicate the assistant could not answer. */
+/** Patterns used to detect unanswerable chat queries. */
 const LOW_CONFIDENCE_PATTERNS = [
   'could not find',
   "couldn't find",
@@ -38,7 +38,7 @@ const LOW_CONFIDENCE_PATTERNS = [
 // Types
 // ---------------------------------------------------------------------------
 
-/** Raw gap signal from any data source. */
+/** A single failed-query event from search, agentic search, or chat. */
 interface GapSignal {
   query: string;
   userId: string | null;
@@ -46,7 +46,7 @@ interface GapSignal {
   source: 'search_metrics' | 'agentic_search' | 'chat';
 }
 
-/** Deduplicated query with aggregate counts and embedding. */
+/** Aggregated query with frequency, users, and embedding for clustering. */
 interface EmbeddedAggregate {
   query: string;
   count: number;
@@ -55,7 +55,7 @@ interface EmbeddedAggregate {
   embedding: number[];
 }
 
-/** Scored knowledge gap ready for upsert. */
+/** Clustered gap with impact score and severity classification. */
 interface ScoredGap {
   topic: string;
   searchCount: number;
@@ -78,7 +78,7 @@ export async function handleAnalyzeKnowledgeGaps(
   const orgId = (payload.orgId as string) || '';
 
   if (!orgId) {
-    console.warn('[AnalyzeKnowledgeGaps] Missing orgId in job payload, skipping');
+    console.warn('[AnalyzeKnowledgeGaps] Missing orgId, skipping');
     return;
   }
 
@@ -87,7 +87,7 @@ export async function handleAnalyzeKnowledgeGaps(
     return;
   }
 
-  progressCallback?.(5, 'Gap intelligence enabled, collecting signals...');
+  progressCallback?.(5, 'Collecting gap signals...');
 
   await withAgentLogging(
     {
@@ -102,7 +102,6 @@ export async function handleAnalyzeKnowledgeGaps(
         Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000
       ).toISOString();
 
-      // Phase 1: Collect gap signals from all data sources
       progressCallback?.(10, 'Mining search metrics...');
       const searchSignals = await collectSearchMetricGaps(supabase, orgId, since);
 
@@ -120,7 +119,7 @@ export async function handleAnalyzeKnowledgeGaps(
           agentType: AGENT_TYPE,
           actionType: 'analyze_gaps',
           outcome: 'skipped',
-          outputSummary: JSON.stringify({ reason: 'insufficient data' }),
+          outputSummary: 'No gap signals found — insufficient data',
         });
         progressCallback?.(100, 'No gap signals found');
         console.log(`[AnalyzeKnowledgeGaps] No data for ${orgId}, skipping`);
@@ -132,7 +131,6 @@ export async function handleAnalyzeKnowledgeGaps(
           `(search: ${searchSignals.length}, agentic: ${agenticSignals.length}, chat: ${chatSignals.length})`
       );
 
-      // Phase 2: Deduplicate and embed
       progressCallback?.(40, 'Generating embeddings for gap queries...');
       const aggregated = aggregateSignals(allSignals);
       const embedded = await embedAggregates(aggregated);
@@ -142,15 +140,12 @@ export async function handleAnalyzeKnowledgeGaps(
         return;
       }
 
-      // Phase 3: Cluster by embedding similarity (>0.8)
       progressCallback?.(60, 'Clustering similar queries...');
       const clusters = clusterByEmbeddingSimilarity(embedded);
 
-      // Phase 4: Score and classify
       progressCallback?.(70, 'Calculating impact scores...');
       const scoredGaps = clusters.map(scoreCluster);
 
-      // Phase 5: Upsert into knowledge_gaps
       progressCallback?.(80, 'Upserting knowledge gaps...');
       const { created, updated } = await upsertKnowledgeGaps(supabase, orgId, scoredGaps);
 
@@ -169,17 +164,13 @@ export async function handleAnalyzeKnowledgeGaps(
 // Data collection: search metrics
 // ---------------------------------------------------------------------------
 
-/**
- * Query search_metrics_archive for queries with 0 results or low avg
- * similarity (<0.5). Filters out records with null user_id (bot traffic).
- */
+/** Collect zero-result and low-similarity searches. Filters out bot traffic (null user_id). */
 async function collectSearchMetricGaps(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
   since: string
 ): Promise<GapSignal[]> {
   try {
-    // Zero-result searches
     const { data: zeroResults } = await supabase
       .from('search_metrics_archive')
       .select('query_text, user_id, search_timestamp')
@@ -189,7 +180,6 @@ async function collectSearchMetricGaps(
       .gte('search_timestamp', since)
       .limit(500);
 
-    // Low-similarity searches (results found but poor quality)
     const { data: lowSimilarity } = await supabase
       .from('search_metrics_archive')
       .select('query_text, user_id, search_timestamp')
@@ -200,29 +190,13 @@ async function collectSearchMetricGaps(
       .gte('search_timestamp', since)
       .limit(500);
 
-    const signals: GapSignal[] = [];
-
-    for (const row of zeroResults ?? []) {
-      signals.push({
-        query: row.query_text,
-        userId: row.user_id,
-        timestamp: row.search_timestamp,
-        source: 'search_metrics',
-      });
-    }
-
-    for (const row of lowSimilarity ?? []) {
-      signals.push({
-        query: row.query_text,
-        userId: row.user_id,
-        timestamp: row.search_timestamp,
-        source: 'search_metrics',
-      });
-    }
-
-    return signals;
+    return [...(zeroResults ?? []), ...(lowSimilarity ?? [])].map((row) => ({
+      query: row.query_text,
+      userId: row.user_id,
+      timestamp: row.search_timestamp,
+      source: 'search_metrics' as const,
+    }));
   } catch (error) {
-    // Table may not exist; degrade gracefully
     console.warn('[AnalyzeKnowledgeGaps] search_metrics_archive query failed:', error);
     return [];
   }
@@ -232,10 +206,7 @@ async function collectSearchMetricGaps(
 // Data collection: agentic search logs
 // ---------------------------------------------------------------------------
 
-/**
- * Query agentic_search_logs for iterations that identified gaps.
- * Filters out records with null user_id.
- */
+/** Collect queries from agentic_search_logs where iterations identified gaps. */
 async function collectAgenticSearchGaps(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
@@ -252,45 +223,37 @@ async function collectAgenticSearchGaps(
 
     if (!logs) return [];
 
-    const signals: GapSignal[] = [];
-
-    for (const log of logs) {
-      const iterations = log.iterations as Array<{
-        gaps?: string[];
-      }> | null;
-
-      if (!iterations) continue;
+    return logs.flatMap((log) => {
+      const iterations = log.iterations as Array<{ gaps?: string[] }> | null;
+      if (!iterations) return [];
 
       const hasGaps = iterations.some(
         (iter) => Array.isArray(iter.gaps) && iter.gaps.length > 0
       );
+      if (!hasGaps) return [];
 
-      if (hasGaps) {
-        // Use the original query as the gap signal
-        signals.push({
-          query: log.original_query as string,
-          userId: log.user_id as string,
-          timestamp: log.created_at as string,
-          source: 'agentic_search',
-        });
+      // Original query as the primary gap signal
+      const primary: GapSignal = {
+        query: log.original_query as string,
+        userId: log.user_id as string,
+        timestamp: log.created_at as string,
+        source: 'agentic_search',
+      };
 
-        // Also add individual gap descriptions as signals
-        for (const iter of iterations) {
-          for (const gap of iter.gaps ?? []) {
-            if (gap && gap.length > 3) {
-              signals.push({
-                query: gap,
-                userId: log.user_id as string,
-                timestamp: log.created_at as string,
-                source: 'agentic_search',
-              });
-            }
-          }
-        }
-      }
-    }
+      // Individual gap descriptions as additional signals
+      const gapSignals: GapSignal[] = iterations.flatMap((iter) =>
+        (iter.gaps ?? [])
+          .filter((gap) => gap && gap.length > 3)
+          .map((gap) => ({
+            query: gap,
+            userId: log.user_id as string,
+            timestamp: log.created_at as string,
+            source: 'agentic_search' as const,
+          }))
+      );
 
-    return signals;
+      return [primary, ...gapSignals];
+    });
   } catch (error) {
     console.warn('[AnalyzeKnowledgeGaps] agentic_search_logs query failed:', error);
     return [];
@@ -301,18 +264,13 @@ async function collectAgenticSearchGaps(
 // Data collection: chat conversations
 // ---------------------------------------------------------------------------
 
-/**
- * Find chat conversations where the assistant responded with low-confidence
- * phrases like "I could not find". Extracts the preceding user message
- * as the gap query.
- */
+/** Collect user queries from chats where the assistant gave low-confidence responses. */
 async function collectChatGaps(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
   since: string
 ): Promise<GapSignal[]> {
   try {
-    // Get conversation IDs for this org in the lookback window
     const { data: conversations } = await supabase
       .from('conversations')
       .select('id, user_id')
@@ -325,7 +283,6 @@ async function collectChatGaps(
     const conversationIds = conversations.map((c) => c.id);
     const userMap = new Map(conversations.map((c) => [c.id, c.user_id]));
 
-    // Fetch recent messages from these conversations
     const { data: messages } = await supabase
       .from('chat_messages')
       .select('id, conversation_id, role, content, created_at')
@@ -336,7 +293,6 @@ async function collectChatGaps(
 
     if (!messages?.length) return [];
 
-    // Group messages by conversation for sequential access
     const byConversation = new Map<string, typeof messages>();
     for (const msg of messages) {
       const list = byConversation.get(msg.conversation_id) ?? [];
@@ -348,7 +304,7 @@ async function collectChatGaps(
 
     for (const [convId, convMessages] of byConversation) {
       const userId = userMap.get(convId) ?? null;
-      if (!userId) continue; // Filter bot/system conversations
+      if (!userId) continue;
 
       for (let i = 0; i < convMessages.length; i++) {
         const msg = convMessages[i];
@@ -363,7 +319,6 @@ async function collectChatGaps(
 
         if (!isLowConfidence) continue;
 
-        // Find the preceding user message as the gap query
         const userQuery = findPrecedingUserMessage(convMessages, i);
         if (userQuery) {
           signals.push({
@@ -383,12 +338,11 @@ async function collectChatGaps(
   }
 }
 
-/** Extract plain text from a chat message content field (Json type). */
+/** Extract plain text from chat message content. */
 function extractTextFromContent(content: Json): string | null {
   if (typeof content === 'string') return content;
 
   if (Array.isArray(content)) {
-    // Content blocks format: [{ type: 'text', text: '...' }, ...]
     return content
       .filter(
         (block): block is { type: string; text: string } =>
@@ -408,7 +362,7 @@ function extractTextFromContent(content: Json): string | null {
   return null;
 }
 
-/** Find the most recent user message before the given index. */
+/** Find preceding user message. */
 function findPrecedingUserMessage(
   messages: Array<{ role: string; content: Json }>,
   beforeIndex: number
@@ -425,7 +379,7 @@ function findPrecedingUserMessage(
 // Aggregation and embedding
 // ---------------------------------------------------------------------------
 
-/** Deduplicate signals by query text, aggregating counts and user IDs. */
+/** Deduplicate signals by query text, aggregate counts and users. */
 function aggregateSignals(
   signals: GapSignal[]
 ): Array<{ query: string; count: number; userIds: Set<string>; lastSeen: string }> {
@@ -459,7 +413,7 @@ function aggregateSignals(
     .slice(0, MAX_UNIQUE_QUERIES);
 }
 
-/** Generate embeddings for aggregated queries. */
+/** Generate embeddings for aggregated queries, skipping failures. */
 async function embedAggregates(
   aggregates: Array<{ query: string; count: number; userIds: Set<string>; lastSeen: string }>
 ): Promise<EmbeddedAggregate[]> {
@@ -496,7 +450,7 @@ interface Cluster {
   topCount: number; // count of the highest-frequency query in the cluster
 }
 
-/** Group queries with >0.8 cosine similarity into clusters. */
+/** Group queries by embedding similarity into clusters. */
 function clusterByEmbeddingSimilarity(items: EmbeddedAggregate[]): Cluster[] {
   const clusters: Cluster[] = [];
 
@@ -510,8 +464,7 @@ function clusterByEmbeddingSimilarity(items: EmbeddedAggregate[]): Cluster[] {
         if (item.lastSeen > cluster.lastSearchedAt) {
           cluster.lastSearchedAt = item.lastSeen;
         }
-        // Use the highest-frequency query as the topic label,
-        // but keep the cluster embedding stable for consistent matching
+        // Use highest-frequency query as topic label
         if (item.count > cluster.topCount) {
           cluster.topic = item.query;
           cluster.topCount = item.count;
@@ -540,7 +493,7 @@ function clusterByEmbeddingSimilarity(items: EmbeddedAggregate[]): Cluster[] {
 // Scoring
 // ---------------------------------------------------------------------------
 
-/** Calculate impact score and severity for a cluster. */
+/** Score a cluster: impact_score = (count * 0.4) + (users * 0.3) + (recency * 0.3). */
 function scoreCluster(cluster: Cluster): ScoredGap {
   const recencyScore = calculateRecencyScore(cluster.lastSearchedAt);
   const impactScore =
@@ -548,7 +501,6 @@ function scoreCluster(cluster: Cluster): ScoredGap {
     cluster.uniqueSearcherIds.size * 0.3 +
     recencyScore * 0.3;
 
-  // Round to two decimal places
   const rounded = Math.round(impactScore * 100) / 100;
 
   return {
@@ -562,10 +514,7 @@ function scoreCluster(cluster: Cluster): ScoredGap {
   };
 }
 
-/**
- * Recency score on a 0-1 scale.
- * 1.0 if the last query was today, decaying linearly to 0 over 30 days.
- */
+/** Recency score (0-1) decaying linearly over the lookback period. */
 function calculateRecencyScore(lastSearchedAt: string): number {
   const daysSince =
     (Date.now() - new Date(lastSearchedAt).getTime()) / (24 * 60 * 60 * 1000);
@@ -583,17 +532,12 @@ function calculateSeverity(impactScore: number): KnowledgeGapSeverity {
 // Upsert
 // ---------------------------------------------------------------------------
 
-/**
- * Upsert scored gaps into knowledge_gaps.
- * If an existing gap has >0.9 embedding similarity, update it.
- * Otherwise insert a new gap.
- */
+/** Upsert gaps: update existing gaps with high embedding similarity, insert new ones. */
 async function upsertKnowledgeGaps(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
   gaps: ScoredGap[]
 ): Promise<{ created: number; updated: number }> {
-  // Fetch existing open gaps for this org
   const { data: existingGaps } = await supabase
     .from('knowledge_gaps')
     .select('id, topic, metadata, search_count, impact_score')
@@ -601,7 +545,6 @@ async function upsertKnowledgeGaps(
     .in('status', ['open', 'acknowledged'])
     .limit(500);
 
-  // Build map of existing gaps with their stored embeddings
   const existingWithEmbeddings: Array<{
     id: string;
     topic: string;
@@ -619,7 +562,6 @@ async function upsertKnowledgeGaps(
   let created = 0;
   let updated = 0;
 
-  // Separate gaps into updates vs inserts, then batch inserts
   const toUpdate: Array<{ match: (typeof existingWithEmbeddings)[number]; gap: ScoredGap }> = [];
   const toInsert: ScoredGap[] = [];
 
@@ -632,7 +574,6 @@ async function upsertKnowledgeGaps(
     }
   }
 
-  // Batch insert new gaps
   if (toInsert.length > 0) {
     const { data: inserted, error: insertError } = await supabase
       .from('knowledge_gaps')
@@ -667,9 +608,8 @@ async function upsertKnowledgeGaps(
     }
   }
 
-  // Individual updates for matched gaps
   for (const { match, gap } of toUpdate) {
-    const combinedSearchCount = (match.searchCount || 0) + gap.searchCount;
+    const combinedSearchCount = match.searchCount + gap.searchCount;
     const newImpactScore = Math.max(gap.impactScore, match.impactScore);
 
     const { error: updateError } = await supabase
@@ -698,24 +638,14 @@ async function upsertKnowledgeGaps(
   return { created, updated };
 }
 
-/** Extract the stored embedding from a knowledge_gap's metadata field. */
+/** Extract embedding array from metadata, or null. */
 function extractEmbeddingFromMetadata(metadata: Json | null): number[] | null {
-  if (
-    typeof metadata === 'object' &&
-    metadata !== null &&
-    !Array.isArray(metadata) &&
-    'embedding' in metadata &&
-    Array.isArray((metadata as Record<string, unknown>).embedding)
-  ) {
-    return (metadata as Record<string, unknown>).embedding as number[];
-  }
-  return null;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const embedding = (metadata as Record<string, unknown>).embedding;
+  return Array.isArray(embedding) ? (embedding as number[]) : null;
 }
 
-/**
- * Find the best-matching existing gap with >0.9 cosine similarity.
- * Returns null if no match above threshold.
- */
+/** Find best-matching existing gap above merge threshold, or null. */
 function findBestMatch(
   embedding: number[],
   existing: Array<{
@@ -747,15 +677,13 @@ function findBestMatch(
 // ---------------------------------------------------------------------------
 
 function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length === 0 || b.length === 0) return 0;
   if (a.length !== b.length) {
-    if (a.length > 0 && b.length > 0) {
-      console.warn(
-        `[AnalyzeKnowledgeGaps] Embedding dimension mismatch: ${a.length} vs ${b.length}`
-      );
-    }
+    console.warn(
+      `[AnalyzeKnowledgeGaps] Embedding dimension mismatch: ${a.length} vs ${b.length}`
+    );
     return 0;
   }
-  if (a.length === 0) return 0;
 
   let dot = 0;
   let normA = 0;
@@ -767,6 +695,6 @@ function cosineSimilarity(a: number[], b: number[]): number {
     normB += b[i] * b[i];
   }
 
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  const denom = Math.sqrt(normA * normB);
   return denom === 0 ? 0 : dot / denom;
 }
