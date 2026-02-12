@@ -8,7 +8,7 @@
 import { GoogleGenAI } from '@google/genai';
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
-import { isAgentEnabled } from '@/lib/services/agent-config';
+import { isAgentEnabled, getAgentSettings } from '@/lib/services/agent-config';
 import { withAgentLogging, logAgentAction } from '@/lib/services/agent-logger';
 import { storeMemory, recallMemory } from '@/lib/services/agent-memory';
 import { getConceptsForContent } from '@/lib/services/concept-extractor';
@@ -82,9 +82,7 @@ const SUB_TASKS: SubTask[] = [
   {
     actionType: 'detect_staleness',
     label: 'Check staleness for content',
-    run: async (contentId, orgId) => {
-      console.log(`[CurateKnowledge] TODO: detectStaleness for ${contentId} (org: ${orgId})`);
-    },
+    run: detectStaleness,
   },
 ];
 
@@ -825,4 +823,216 @@ function areSimilarTags(a: string, b: string): boolean {
   const longer = a.length >= b.length ? a : b;
   const shorter = a.length >= b.length ? b : a;
   return longer.startsWith(shorter) && longer.length - shorter.length <= 5;
+}
+
+// ---------------------------------------------------------------------------
+// Staleness detection
+// ---------------------------------------------------------------------------
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const DEFAULT_STALENESS_THRESHOLD_DAYS = 90;
+
+/**
+ * Detect stale content in the org triggered by a new content item.
+ *
+ * Three independent criteria:
+ * 1. Content age: updated_at older than configurable threshold (default 90 days)
+ * 2. Concept freshness: newer content covers the same concepts
+ * 3. Supersession: newer content has same title pattern or 80%+ concept overlap
+ *
+ * Each stale item is logged to agent_activity_log (action_type 'detect_stale')
+ * and stored in agent memory with key 'stale:{contentId}'.
+ */
+async function detectStaleness(contentId: string, orgId: string): Promise<void> {
+  const supabase = createAdminClient();
+
+  // Read configurable threshold from org_agent_settings.metadata
+  const settings = await getAgentSettings(orgId);
+  const metadata = (settings.metadata ?? {}) as Record<string, unknown>;
+  const thresholdDays =
+    typeof metadata.staleness_threshold_days === 'number'
+      ? metadata.staleness_threshold_days
+      : DEFAULT_STALENESS_THRESHOLD_DAYS;
+
+  const now = new Date();
+  const thresholdDate = new Date(now.getTime() - thresholdDays * MS_PER_DAY);
+
+  // Fetch the new content item (used for supersession/freshness comparison)
+  const { data: newContent, error: contentError } = await supabase
+    .from('content')
+    .select('id, title, updated_at')
+    .eq('id', contentId)
+    .single();
+
+  if (contentError || !newContent) {
+    console.error(`[CurateKnowledge] Cannot load content ${contentId} for staleness check`);
+    return;
+  }
+
+  // Get the new item's concepts for supersession/freshness checks
+  const newConcepts = await getConceptsForContent(contentId);
+  const newConceptIds = newConcepts.map(c => c.id);
+
+  // Build concept overlap map: other contentId -> shared concept count
+  const conceptOverlap = new Map<string, number>();
+
+  if (newConceptIds.length > 0) {
+    const { data: mentions } = await supabase
+      .from('concept_mentions')
+      .select('content_id, concept_id')
+      .in('concept_id', newConceptIds)
+      .eq('org_id', orgId)
+      .neq('content_id', contentId);
+
+    for (const { content_id, concept_id } of mentions ?? []) {
+      conceptOverlap.set(content_id, (conceptOverlap.get(content_id) ?? 0) + 1);
+    }
+  }
+
+  // Criterion 1: age-based candidates (updated_at before threshold)
+  const { data: agedContent } = await supabase
+    .from('content')
+    .select('id')
+    .eq('org_id', orgId)
+    .neq('id', contentId)
+    .is('deleted_at', null)
+    .in('status', ['completed', 'transcribed'])
+    .lt('updated_at', thresholdDate.toISOString());
+
+  const candidateIds = new Set<string>();
+  for (const item of agedContent ?? []) candidateIds.add(item.id);
+  for (const cid of conceptOverlap.keys()) candidateIds.add(cid);
+
+  if (candidateIds.size === 0) {
+    console.log(`[CurateKnowledge] No staleness candidates for ${contentId}`);
+    return;
+  }
+
+  // Fetch full details for all candidates in one query
+  const { data: candidates } = await supabase
+    .from('content')
+    .select('id, title, updated_at')
+    .in('id', Array.from(candidateIds))
+    .is('deleted_at', null);
+
+  if (!candidates?.length) return;
+
+  let flaggedCount = 0;
+
+  for (const item of candidates) {
+    const reasons: string[] = [];
+    let confidence = 0;
+    let supersededBy: string | null = null;
+
+    const updatedAt = new Date(item.updated_at);
+    const daysSinceUpdate = Math.floor(
+      (now.getTime() - updatedAt.getTime()) / MS_PER_DAY
+    );
+
+    // Criterion 1: content age
+    if (daysSinceUpdate > thresholdDays) {
+      reasons.push(
+        `Content is ${daysSinceUpdate} days old (threshold: ${thresholdDays} days) and has not been updated`
+      );
+      confidence = Math.max(
+        confidence,
+        Math.min(0.9, 0.5 + (daysSinceUpdate - thresholdDays) / 365)
+      );
+    }
+
+    // Criteria 2 & 3 only apply to content older than the new item
+    const isOlderThanNew = item.updated_at < newContent.updated_at;
+    if (isOlderThanNew && newConceptIds.length > 0) {
+      const sharedCount = conceptOverlap.get(item.id) ?? 0;
+      const overlapPercent = (sharedCount / newConceptIds.length) * 100;
+
+      // Criterion 3: supersession (80%+ concept overlap OR matching title)
+      const titleMatch =
+        !!newContent.title &&
+        !!item.title &&
+        areSimilarTitles(item.title, newContent.title);
+
+      if (overlapPercent >= 80 || titleMatch) {
+        supersededBy = contentId;
+        const detail =
+          overlapPercent >= 80
+            ? `${Math.round(overlapPercent)}% concept overlap`
+            : 'matching title pattern';
+        reasons.push(
+          `Potentially superseded by "${newContent.title ?? 'Untitled'}" (${detail})`
+        );
+        confidence = Math.max(confidence, 0.8);
+      }
+      // Criterion 2: concept freshness (any shared concepts, lower signal)
+      else if (sharedCount > 0) {
+        reasons.push(
+          `Newer content "${newContent.title ?? 'Untitled'}" covers similar concepts`
+        );
+        confidence = Math.max(confidence, 0.6);
+      }
+    }
+
+    if (reasons.length === 0) continue;
+    flaggedCount++;
+
+    // Log to agent_activity_log with action_type 'detect_stale'
+    await logAgentAction({
+      orgId,
+      agentType: AGENT_TYPE,
+      actionType: 'detect_stale',
+      contentId: item.id,
+      targetEntity: 'content',
+      targetId: item.id,
+      outcome: 'success',
+      confidence,
+      outputSummary: reasons.join('; '),
+      metadata: {
+        daysSinceUpdate,
+        thresholdDays,
+        supersededBy,
+        triggeredByContentId: contentId,
+      },
+    });
+
+    // Store in agent memory with key 'stale:{contentId}'
+    try {
+      await storeMemory({
+        orgId,
+        agentType: AGENT_TYPE,
+        key: `stale:${item.id}`,
+        value: JSON.stringify({
+          reason: reasons.join('; '),
+          confidence,
+          daysSinceUpdate,
+          thresholdDays,
+          supersededBy,
+          detectedAt: now.toISOString(),
+        }),
+        importance: confidence,
+      });
+    } catch (memoryError) {
+      console.error(
+        '[CurateKnowledge] Staleness memory store failed (non-critical):',
+        memoryError
+      );
+    }
+  }
+
+  console.log(
+    `[CurateKnowledge] Staleness check triggered by ${contentId}: flagged ${flaggedCount} of ${candidates.length} candidates`
+  );
+}
+
+/**
+ * Check if two titles follow the same pattern. True when titles match
+ * case-insensitively or one contains the other (minimum 5 chars to avoid
+ * false positives on very short titles).
+ */
+function areSimilarTitles(a: string, b: string): boolean {
+  const normA = a.toLowerCase().trim();
+  const normB = b.toLowerCase().trim();
+  if (normA === normB) return true;
+  const longer = normA.length >= normB.length ? normA : normB;
+  const shorter = normA.length >= normB.length ? normB : normA;
+  return shorter.length >= 5 && longer.includes(shorter);
 }
