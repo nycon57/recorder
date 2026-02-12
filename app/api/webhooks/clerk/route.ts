@@ -1,11 +1,3 @@
-/**
- * Clerk Webhook Handler
- *
- * Receives Clerk webhook events (via svix) and routes them to handlers.
- * Currently handles organizationMembership.created to auto-trigger
- * onboarding plan generation for new org members.
- */
-
 import { verifyWebhook } from '@clerk/backend/webhooks';
 import type {
   OrganizationMembershipWebhookEvent,
@@ -16,9 +8,11 @@ import { isAgentEnabled } from '@/lib/services/agent-config';
 import { logAgentAction } from '@/lib/services/agent-logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
+const PG_UNIQUE_VIOLATION = '23505';
+
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<Response> {
   let evt: WebhookEvent;
 
   try {
@@ -28,33 +22,23 @@ export async function POST(request: Request) {
     return new Response('Invalid signature', { status: 401 });
   }
 
-  const eventType = evt.type;
-
   try {
-    switch (eventType) {
+    switch (evt.type) {
       case 'organizationMembership.created':
         await handleOrganizationMembershipCreated(evt);
-        break;
-
-      default:
         break;
     }
 
     return new Response('OK', { status: 200 });
   } catch (error) {
-    console.error(`[Clerk Webhook] Error handling ${eventType}:`, error);
+    console.error(`[Clerk Webhook] Error handling ${evt.type}:`, error);
     return new Response('Internal server error', { status: 500 });
   }
 }
 
-/**
- * Handle a new member joining an organization.
- * If the onboarding agent is enabled for the org, create a
- * generate_onboarding_plan job with dedupe protection.
- */
 async function handleOrganizationMembershipCreated(
   evt: OrganizationMembershipWebhookEvent
-) {
+): Promise<void> {
   const { organization, public_user_data, role } = evt.data;
 
   if (!organization?.id || !public_user_data?.user_id) {
@@ -64,13 +48,14 @@ async function handleOrganizationMembershipCreated(
 
   const orgId = organization.id;
   const userId = public_user_data.user_id;
-  const userName = [public_user_data.first_name, public_user_data.last_name]
-    .filter(Boolean)
-    .join(' ') || 'Unknown';
+  const userName =
+    [public_user_data.first_name, public_user_data.last_name]
+      .filter(Boolean)
+      .join(' ') || 'Unknown';
 
   const enabled = await isAgentEnabled(orgId, 'onboarding');
 
-  // Log detection regardless of whether onboarding is enabled (best-effort)
+  // Best-effort logging -- failures must not block the handler
   try {
     await logAgentAction({
       orgId,
@@ -95,18 +80,12 @@ async function handleOrganizationMembershipCreated(
   const { error } = await supabaseAdmin.from('jobs').insert({
     type: 'generate_onboarding_plan',
     status: 'pending',
-    payload: {
-      orgId,
-      userId,
-      userName,
-      userRole: role,
-    },
+    payload: { orgId, userId, userName, userRole: role },
     dedupe_key: `onboarding_plan:${orgId}:${userId}`,
   });
 
   if (error) {
-    // Unique constraint violation means a plan job already exists for this user
-    if (error.code === '23505') {
+    if (error.code === PG_UNIQUE_VIOLATION) {
       return;
     }
     throw new Error(`Failed to create onboarding plan job: ${error.message}`);
