@@ -148,6 +148,29 @@ const STATUS_CONFIG: Record<ApprovalStatus, { label: string; variant: 'default' 
 };
 
 // ---------------------------------------------------------------------------
+// Helpers (hoisted outside component to avoid redefinition on every render)
+// ---------------------------------------------------------------------------
+
+function formatRelativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatExpiresIn(dateStr: string): string {
+  const diff = new Date(dateStr).getTime() - Date.now();
+  if (diff <= 0) return 'Expired';
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  if (days > 0) return `${days}d ${hours}h`;
+  return `${hours}h`;
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -351,25 +374,6 @@ export default function AgentsSettingsPage() {
 
   function toggleExpanded(agentId: string): void {
     setExpandedAgents((prev) => ({ ...prev, [agentId]: !prev[agentId] }));
-  }
-
-  function formatRelativeTime(dateStr: string): string {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  }
-
-  function formatExpiresIn(dateStr: string): string {
-    const diff = new Date(dateStr).getTime() - Date.now();
-    if (diff <= 0) return 'Expired';
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    if (days > 0) return `${days}d ${hours}h`;
-    return `${hours}h`;
   }
 
   // --- Render ---

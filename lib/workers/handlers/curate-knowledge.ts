@@ -357,18 +357,22 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
   if (suggestions.length > 0) {
     const applyTier = await checkPermission(orgId, AGENT_TYPE, 'auto_apply_tags');
     if (applyTier === 'approve') {
-      await requestApproval({
-        orgId,
-        agentType: AGENT_TYPE,
-        actionType: 'auto_apply_tags',
-        contentId,
-        description: `Auto-apply ${suggestions.length} suggested tags: ${suggestions.map(s => s.name).join(', ')}`,
-        proposedAction: {
-          type: 'apply_tags',
-          tags: suggestions.map(s => ({ name: s.name, confidence: s.confidence })),
-        },
-      });
-      console.log(`[CurateKnowledge] Approval requested for auto_apply_tags on ${contentId}`);
+      try {
+        await requestApproval({
+          orgId,
+          agentType: AGENT_TYPE,
+          actionType: 'auto_apply_tags',
+          contentId,
+          description: `Auto-apply ${suggestions.length} suggested tags: ${suggestions.map(s => s.name).join(', ')}`,
+          proposedAction: {
+            type: 'apply_tags',
+            tags: suggestions.map(s => ({ name: s.name, confidence: s.confidence })),
+          },
+        });
+        console.log(`[CurateKnowledge] Approval requested for auto_apply_tags on ${contentId}`);
+      } catch (approvalError) {
+        console.error(`[CurateKnowledge] Failed to request approval for auto_apply_tags on ${contentId}:`, approvalError);
+      }
     }
   }
 
@@ -509,17 +513,21 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
   if (actionableMatches.length > 0) {
     const mergeTier = await checkPermission(orgId, AGENT_TYPE, 'merge_content');
     if (mergeTier === 'approve') {
-      const sourceIds = actionableMatches.map(m => m.matchedContentId);
-      const topMatch = actionableMatches[0];
-      await requestApproval({
-        orgId,
-        agentType: AGENT_TYPE,
-        actionType: 'merge_content',
-        contentId,
-        description: `Merge duplicate recordings: ${topMatch.matchedTitle} (${topMatch.level})`,
-        proposedAction: { type: 'merge', sourceIds },
-      });
-      console.log(`[CurateKnowledge] Approval requested for merge_content on ${contentId}`);
+      try {
+        const sourceIds = actionableMatches.map(m => m.matchedContentId);
+        const topMatch = actionableMatches[0];
+        await requestApproval({
+          orgId,
+          agentType: AGENT_TYPE,
+          actionType: 'merge_content',
+          contentId,
+          description: `Merge duplicate recordings: ${topMatch.matchedTitle} (${topMatch.level})`,
+          proposedAction: { type: 'merge', sourceIds },
+        });
+        console.log(`[CurateKnowledge] Approval requested for merge_content on ${contentId}`);
+      } catch (approvalError) {
+        console.error(`[CurateKnowledge] Failed to request approval for merge_content on ${contentId}:`, approvalError);
+      }
     }
   }
 
@@ -1062,20 +1070,24 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
     if (confidence >= 0.7) {
       const archiveTier = await checkPermission(orgId, AGENT_TYPE, 'archive_content');
       if (archiveTier === 'approve') {
-        await requestApproval({
-          orgId,
-          agentType: AGENT_TYPE,
-          actionType: 'archive_content',
-          contentId: item.id,
-          description: `Archive stale content: ${item.title ?? 'Untitled'} (${reasons[0]})`,
-          proposedAction: {
-            type: 'archive',
+        try {
+          await requestApproval({
+            orgId,
+            agentType: AGENT_TYPE,
+            actionType: 'archive_content',
             contentId: item.id,
-            reason: reasons.join('; '),
-            confidence,
-          },
-        });
-        console.log(`[CurateKnowledge] Approval requested for archive_content on ${item.id}`);
+            description: `Archive stale content: ${item.title ?? 'Untitled'} (${reasons[0]})`,
+            proposedAction: {
+              type: 'archive',
+              contentId: item.id,
+              reason: reasons.join('; '),
+              confidence,
+            },
+          });
+          console.log(`[CurateKnowledge] Approval requested for archive_content on ${item.id}`);
+        } catch (approvalError) {
+          console.error(`[CurateKnowledge] Failed to request approval for archive_content on ${item.id}:`, approvalError);
+        }
       }
     }
 

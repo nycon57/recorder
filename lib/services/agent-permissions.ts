@@ -149,6 +149,8 @@ export async function requestApproval(params: {
 
   if (params.contentId) {
     existingQuery = existingQuery.eq('content_id', params.contentId);
+  } else {
+    existingQuery = existingQuery.is('content_id', null);
   }
 
   const { data: existing } = await existingQuery.maybeSingle();
@@ -229,15 +231,13 @@ export async function reviewApproval(
     .eq('org_id', orgId)
     .eq('status', 'pending')
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) {
-    // PGRST116 = no rows matched (already reviewed or wrong org)
-    if (error.code === 'PGRST116') return null;
     throw new Error(`Failed to review approval: ${error.message}`);
   }
 
-  return data as AgentApproval;
+  return (data as AgentApproval) ?? null;
 }
 
 /**
