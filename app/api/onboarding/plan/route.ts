@@ -8,7 +8,6 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import type { JobType } from '@/lib/types/database';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,11 +53,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
     return errors.badRequest('targetUserId is required');
   }
 
-  // Enqueue the generate_onboarding_plan job
   const { data: job, error } = await supabaseAdmin
     .from('jobs')
     .insert({
-      type: 'generate_onboarding_plan' as JobType,
+      type: 'generate_onboarding_plan',
       status: 'pending',
       payload: {
         orgId,

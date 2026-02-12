@@ -24,7 +24,6 @@ import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import type { ContentType, LearningPathItem } from '@/lib/types/database';
 import { staggerContainer, staggerItem, fadeIn, withReducedMotion } from '@/lib/utils/animations';
 
-/** Map content types to Lucide icons */
 const CONTENT_ICONS: Record<ContentType, typeof Video> = {
   recording: Video,
   video: FileVideo,
@@ -55,8 +54,6 @@ interface OnboardingPlan {
   learning_path: LearningPathItem[];
   total_items: number | null;
   completed_items: number | null;
-  user_name: string | null;
-  created_at: string;
 }
 
 export default function OnboardingPage() {
@@ -100,7 +97,6 @@ export default function OnboardingPage() {
 
     setUpdatingItems((prev) => new Set(prev).add(contentId));
 
-    // Optimistic update
     setPlan((prev) => {
       if (!prev) return prev;
       const updatedPath = prev.learning_path.map((item) =>
@@ -133,7 +129,6 @@ export default function OnboardingPage() {
       setPlan(result.data);
     } catch (err) {
       console.error('Error updating progress:', err);
-      // Revert optimistic update on error
       const controller = new AbortController();
       fetchPlan(controller.signal);
     } finally {
@@ -178,7 +173,6 @@ export default function OnboardingPage() {
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
-      {/* Header */}
       <div className="space-y-2">
         <h1 className="text-heading-3 font-outfit tracking-tight flex items-center gap-3">
           <GraduationCap className="h-7 w-7 sm:h-8 sm:w-8 text-primary" aria-hidden="true" />
@@ -189,7 +183,6 @@ export default function OnboardingPage() {
         </p>
       </div>
 
-      {/* Progress bar */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm">
           <span className="font-medium">
@@ -205,12 +198,11 @@ export default function OnboardingPage() {
         {plan.plan_status === 'completed' && (
           <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400" role="status">
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            All done! You have completed your onboarding plan.
+            Onboarding complete!
           </div>
         )}
       </div>
 
-      {/* Learning path checklist */}
       <motion.div
         variants={withReducedMotion(staggerContainer)}
         initial="hidden"
@@ -235,7 +227,6 @@ export default function OnboardingPage() {
                   item.completed ? 'bg-muted/30 border-muted' : 'border-border'
                 }`}
               >
-                {/* Checkbox */}
                 <div className="pt-0.5">
                   <Checkbox
                     checked={item.completed}
@@ -247,7 +238,6 @@ export default function OnboardingPage() {
                   />
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm text-muted-foreground font-mono">
@@ -282,7 +272,6 @@ export default function OnboardingPage() {
                   )}
                 </div>
 
-                {/* Link to content */}
                 <Link
                   href={`/library/${item.contentId}`}
                   className="shrink-0 p-2 rounded opacity-0 group-hover:opacity-100 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -299,7 +288,6 @@ export default function OnboardingPage() {
   );
 }
 
-/** Empty state shown when no active onboarding plan exists */
 function EmptyState() {
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">

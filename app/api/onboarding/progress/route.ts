@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * PATCH /api/onboarding/progress
- * Mark a learning path item as complete (or uncomplete).
+ * Mark a learning path item as complete or incomplete.
  *
  * Body: { contentId: string, completed?: boolean }
  */
@@ -27,7 +27,6 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     return errors.badRequest('contentId is required');
   }
 
-  // Fetch the active plan for this user
   const { data: plan, error: fetchError } = await supabaseAdmin
     .from('agent_onboarding_plans')
     .select('id, learning_path, completed_items, total_items, plan_status')
@@ -54,25 +53,20 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     return errors.notFound('Learning path item');
   }
 
-  // Update the item's completed state
   learningPath[itemIndex] = {
     ...learningPath[itemIndex],
     completed,
     completedAt: completed ? new Date().toISOString() : null,
   };
 
-  // Recalculate completed_items count
   const completedItems = learningPath.filter((item) => item.completed).length;
   const totalItems = plan.total_items ?? learningPath.length;
-
-  // Determine if plan should transition to 'completed'
-  const allDone = completedItems >= totalItems;
-  const newStatus = allDone ? 'completed' : 'active';
+  const newStatus = completedItems >= totalItems ? 'completed' : 'active';
 
   const { data: updated, error: updateError } = await supabaseAdmin
     .from('agent_onboarding_plans')
     .update({
-      learning_path: learningPath as any,
+      learning_path: learningPath,
       completed_items: completedItems,
       plan_status: newStatus,
       updated_at: new Date().toISOString(),
