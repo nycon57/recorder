@@ -12,6 +12,7 @@ import {
   Plug,
   CreditCard,
   BarChart3,
+  Bot,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -65,6 +66,13 @@ const navItems: NavItem[] = [
     href: "/settings/organization/billing",
     icon: CreditCard,
     description: "Subscription & usage",
+    requiredRole: "admin",
+  },
+  {
+    title: "Agents",
+    href: "/settings/organization/agents",
+    icon: Bot,
+    description: "AI agent permissions",
     requiredRole: "admin",
   },
   {
