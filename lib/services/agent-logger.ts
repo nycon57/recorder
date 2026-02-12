@@ -45,6 +45,7 @@ export async function logAgentAction(params: {
   durationMs?: number;
   tokensUsed?: number;
   costEstimate?: number;
+  errorMessage?: string;
   metadata?: Json;
 }): Promise<string> {
   const { data, error } = await supabaseAdmin
@@ -63,6 +64,7 @@ export async function logAgentAction(params: {
       duration_ms: params.durationMs ?? null,
       tokens_used: params.tokensUsed ?? null,
       cost_estimate: params.costEstimate ?? null,
+      error_message: params.errorMessage ?? null,
       metadata: params.metadata ?? {},
     })
     .select('id')
@@ -72,13 +74,13 @@ export async function logAgentAction(params: {
     throw new Error(`Failed to log agent action: ${error.message}`);
   }
 
-  return (data as AgentActivityLog).id;
+  return (data as { id: string }).id;
 }
 
 /**
  * Higher-order wrapper that logs start time, executes fn, measures duration,
- * and records outcome as 'success' or 'failure'. On failure, stores
- * error_message in metadata and rethrows the original error.
+ * and records outcome as 'success' or 'failure'. On failure, stores the
+ * error message in the error_message column and rethrows the original error.
  */
 export async function withAgentLogging<T>(
   params: {
@@ -116,7 +118,7 @@ export async function withAgentLogging<T>(
         ...params,
         outcome: 'failure',
         durationMs,
-        metadata: { error_message: errorMessage },
+        errorMessage,
       });
     } catch (logError) {
       console.error('[AgentLogger] Failed to log action failure:', logError);
