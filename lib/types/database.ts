@@ -100,6 +100,7 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'wai
  * - 'merge_transcripts': Combine segment transcripts into final unified transcript
  * - 'curate_knowledge': Knowledge Curator Agent — categorize, deduplicate, and detect staleness
  * - 'analyze_knowledge_gaps': Gap Intelligence Agent — detect knowledge gaps from search/chat signals
+ * - 'generate_onboarding_plan': Onboarding Agent — generate personalized learning paths for new team members
  */
 export type JobType =
   | 'transcribe'
@@ -131,7 +132,8 @@ export type JobType =
   | 'transcribe_segment'
   | 'merge_transcripts'
   | 'curate_knowledge'
-  | 'analyze_knowledge_gaps';
+  | 'analyze_knowledge_gaps'
+  | 'generate_onboarding_plan';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 

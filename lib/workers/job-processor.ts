@@ -62,6 +62,9 @@ import { handleCurateKnowledge } from './handlers/curate-knowledge';
 // Knowledge gap analysis handler
 import { handleAnalyzeKnowledgeGaps } from './handlers/analyze-knowledge-gaps';
 
+// Onboarding plan generation handler
+import { handleGenerateOnboardingPlan } from './handlers/generate-onboarding-plan';
+
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
 // import { generateDocument } from './handlers/docify-google';
@@ -250,6 +253,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Knowledge gap analysis handler
   analyze_knowledge_gaps: handleAnalyzeKnowledgeGaps, // Gap Intelligence Agent
+
+  // Onboarding plan generation handler
+  generate_onboarding_plan: handleGenerateOnboardingPlan, // Onboarding Agent
 };
 
 // PERF-WK-001: Job priority levels (0 = highest, 3 = lowest)

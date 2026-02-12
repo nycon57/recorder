@@ -63,6 +63,9 @@ import { handleCurateKnowledge } from './handlers/curate-knowledge';
 // Knowledge gap analysis handler
 import { handleAnalyzeKnowledgeGaps } from './handlers/analyze-knowledge-gaps';
 
+// Onboarding plan generation handler
+import { handleGenerateOnboardingPlan } from './handlers/generate-onboarding-plan';
+
 const logger = createLogger({ service: 'streaming-job-executor' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
@@ -159,6 +162,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Knowledge gap analysis handler
   analyze_knowledge_gaps: handleAnalyzeKnowledgeGaps,
+
+  // Onboarding plan generation handler
+  generate_onboarding_plan: handleGenerateOnboardingPlan,
 };
 
 /**
