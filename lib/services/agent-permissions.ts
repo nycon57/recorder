@@ -91,7 +91,7 @@ export async function getPermissions(
     throw new Error(`Failed to get permissions: ${error.message}`);
   }
 
-  return (data ?? []) as AgentPermission[];
+  return data ?? [];
 }
 
 /**
@@ -198,7 +198,7 @@ export async function getPendingApprovals(
     throw new Error(`Failed to get approvals: ${error.message}`);
   }
 
-  return (data ?? []) as AgentApproval[];
+  return data ?? [];
 }
 
 /**
@@ -214,19 +214,14 @@ export async function reviewApproval(
 ): Promise<AgentApproval | null> {
   const now = new Date().toISOString();
 
-  const updatePayload: Record<string, unknown> = {
-    status: action,
-    reviewed_by: reviewedBy,
-    reviewed_at: now,
-  };
-
-  if (action === 'rejected' && rejectionReason) {
-    updatePayload.rejection_reason = rejectionReason;
-  }
-
   const { data, error } = await supabaseAdmin
     .from('agent_approval_queue')
-    .update(updatePayload)
+    .update({
+      status: action,
+      reviewed_by: reviewedBy,
+      reviewed_at: now,
+      ...(action === 'rejected' && rejectionReason ? { rejection_reason: rejectionReason } : {}),
+    })
     .eq('id', approvalId)
     .eq('org_id', orgId)
     .eq('status', 'pending')
@@ -237,7 +232,7 @@ export async function reviewApproval(
     throw new Error(`Failed to review approval: ${error.message}`);
   }
 
-  return (data as AgentApproval) ?? null;
+  return data ?? null;
 }
 
 /**
@@ -249,7 +244,7 @@ export async function expireStaleApprovals(orgId: string): Promise<number> {
 
   const { data, error } = await supabaseAdmin
     .from('agent_approval_queue')
-    .update({ status: 'expired' as const })
+    .update({ status: 'expired' })
     .eq('org_id', orgId)
     .eq('status', 'pending')
     .lt('expires_at', now)

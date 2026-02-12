@@ -38,6 +38,7 @@ import {
 } from '@/app/components/ui/collapsible';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { cn } from '@/lib/utils/cn';
+import type { AgentApproval } from '@/lib/services/agent-permissions';
 import type { ApprovalStatus, PermissionTier } from '@/lib/types/database';
 
 // ---------------------------------------------------------------------------
@@ -125,27 +126,20 @@ const DEFAULT_TIERS: Record<string, PermissionTier> = {
   publish_external: 'approve',
 };
 
-const AGENT_NAMES: Record<string, string> = {
-  curator: 'Curator',
-  gap_intelligence: 'Gap Intelligence',
-  onboarding: 'Onboarding',
-  digest: 'Digest',
-  workflow_extraction: 'Workflow Extraction',
-};
+const AGENT_NAMES: Record<string, string> = Object.fromEntries(
+  AGENT_TYPES.map((a) => [a.id, a.name]),
+);
 
-const ACTION_NAMES: Record<string, string> = {
-  auto_apply_tags: 'Auto-Apply Tags',
-  merge_content: 'Merge Content',
-  archive_content: 'Archive Content',
-  publish_external: 'Publish External',
-};
+const ACTION_NAMES: Record<string, string> = Object.fromEntries(
+  AGENT_TYPES.flatMap((a) => a.actions.map((act) => [act.id, act.name])),
+);
 
-const STATUS_CONFIG: Record<ApprovalStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+const STATUS_CONFIG = {
   pending: { label: 'Pending', variant: 'outline' },
   approved: { label: 'Approved', variant: 'default' },
   rejected: { label: 'Rejected', variant: 'destructive' },
   expired: { label: 'Expired', variant: 'secondary' },
-};
+} as const satisfies Record<ApprovalStatus, { label: string; variant: string }>;
 
 // ---------------------------------------------------------------------------
 // Helpers (hoisted outside component to avoid redefinition on every render)
@@ -185,22 +179,6 @@ interface AgentPermissionRow {
   permission_tier: PermissionTier;
 }
 
-interface ApprovalRow {
-  id: string;
-  org_id: string;
-  agent_type: string;
-  action_type: string;
-  content_id: string | null;
-  description: string;
-  proposed_action: Record<string, unknown>;
-  status: ApprovalStatus;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  rejection_reason: string | null;
-  expires_at: string;
-  created_at: string;
-}
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -235,7 +213,7 @@ export default function AgentsSettingsPage() {
     },
   });
 
-  const { data: approvals, isLoading: approvalsLoading } = useQuery<ApprovalRow[]>({
+  const { data: approvals, isLoading: approvalsLoading } = useQuery<AgentApproval[]>({
     queryKey: ['agent-approvals'],
     queryFn: async () => {
       const res = await fetch('/api/organizations/agent-approvals');
