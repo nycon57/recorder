@@ -27,14 +27,14 @@ export async function storeMemory(params: {
 }): Promise<AgentMemory> {
   const { orgId, agentType, key, value, importance, metadata, expiresAt } = params;
 
-  // Skip embedding for empty strings (tombstones)
+  // Generate embedding only for non-empty values
   let embedding: number[] | null = null;
   if (value.length > 0) {
     try {
       const result = await generateEmbeddingWithFallback(value, 'RETRIEVAL_DOCUMENT');
       embedding = result.embedding;
     } catch (error) {
-      console.error('[AgentMemory] Failed to generate embedding, storing without:', error);
+      console.error('[AgentMemory] Embedding generation failed, storing without embedding:', error);
     }
   }
 
@@ -83,7 +83,7 @@ export async function recallMemory(params: {
     .single();
 
   if (error) {
-    if (error.code === 'PGRST116') return null; // No rows found
+    if (error.code === 'PGRST116') return null; // Not found
     throw new Error(`Failed to recall memory: ${error.message}`);
   }
 
@@ -93,7 +93,7 @@ export async function recallMemory(params: {
   const now = new Date().toISOString();
   const newAccessCount = (row.access_count ?? 0) + 1;
 
-  // Increment access_count and update last_accessed_at (best-effort)
+  // Update access metrics (best-effort; failure does not affect return value)
   const { error: updateError } = await supabaseAdmin
     .from('agent_memory')
     .update({
@@ -103,8 +103,8 @@ export async function recallMemory(params: {
     .eq('id', row.id);
 
   if (updateError) {
-    console.error('[AgentMemory] Failed to update access tracking:', updateError);
-    return row; // Return original data if tracking update fails
+    console.error('[AgentMemory] Failed to update access metrics:', updateError);
+    return row;
   }
 
   return { ...row, access_count: newAccessCount, last_accessed_at: now };
@@ -133,7 +133,7 @@ export async function searchMemory(params: {
   }
 
   const { data, error } = await supabaseAdmin.rpc('match_agent_memories', {
-    query_embedding: queryEmbedding as any, // pgvector type mismatch
+    query_embedding: queryEmbedding as any, // RPC not in generated types
     match_org_id: orgId,
     match_agent_type: agentType,
     match_limit: limit,
@@ -170,7 +170,7 @@ export async function deleteMemory(params: {
 }
 
 /**
- * Delete all expired memories for an organization.
+ * Delete memories where expires_at is in the past.
  * Returns the count of deleted rows.
  */
 export async function pruneExpiredMemories(orgId: string): Promise<number> {
