@@ -423,16 +423,10 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
     return;
   }
 
-  // --- Signal 1: Perceptual hash similarity ---
   const perceptualMatches = await findPerceptualMatches(supabase, content.video_hash, content.audio_hash, orgId, contentId);
-
-  // --- Signal 2: Embedding similarity ---
   const embeddingMatches = await findEmbeddingMatches(supabase, contentId, orgId);
-
-  // --- Signal 3: Concept overlap ---
   const conceptOverlapMap = await findConceptOverlap(supabase, contentId, orgId);
 
-  // Collect every content ID that appeared in at least one signal
   const candidateIds = new Set([
     ...perceptualMatches.keys(),
     ...embeddingMatches.keys(),
@@ -444,7 +438,6 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
     return;
   }
 
-  // Fetch titles for matched content (exclude deleted)
   const { data: candidateRows } = await supabase
     .from('content')
     .select('id, title')
@@ -453,52 +446,47 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
 
   const titleMap = new Map((candidateRows ?? []).map(r => [r.id, r.title ?? 'Untitled']));
 
-  // Classify each candidate
-  const matches: DuplicateMatch[] = [];
-
-  for (const candidateId of candidateIds) {
+  const matches: DuplicateMatch[] = [...candidateIds].flatMap(candidateId => {
     const phash = perceptualMatches.get(candidateId) ?? null;
     const embedding = embeddingMatches.get(candidateId) ?? null;
     const concepts = conceptOverlapMap.get(candidateId) ?? null;
-
     const level = classifyDuplicateLevel(phash, embedding, concepts);
-    if (!level) continue;
 
-    matches.push({
+    if (!level) return [];
+    return [{
       matchedContentId: candidateId,
       matchedTitle: titleMap.get(candidateId) ?? 'Untitled',
       level,
       perceptualSimilarity: phash,
       embeddingSimilarity: embedding,
       conceptOverlap: concepts,
-    });
-  }
+    }];
+  });
 
   if (matches.length === 0) {
     console.log(`[CurateKnowledge] No duplicates above threshold for ${contentId}`);
     return;
   }
 
-  // Log EXACT_DUPLICATE and NEAR_DUPLICATE matches to agent_activity_log
-  for (const match of matches) {
-    if (match.level === 'EXACT_DUPLICATE' || match.level === 'NEAR_DUPLICATE') {
-      await logAgentAction({
-        ...logBase,
-        outcome: 'success',
-        outputSummary: JSON.stringify({
-          level: match.level,
-          matchedContentId: match.matchedContentId,
-          matchedTitle: match.matchedTitle,
-          perceptualSimilarity: match.perceptualSimilarity,
-          embeddingSimilarity: match.embeddingSimilarity,
-          conceptOverlap: match.conceptOverlap,
-        }),
-        metadata: { level: match.level, matchedContentId: match.matchedContentId },
-      });
-    }
+  const actionableMatches = matches.filter(
+    m => m.level === 'EXACT_DUPLICATE' || m.level === 'NEAR_DUPLICATE'
+  );
+  for (const match of actionableMatches) {
+    await logAgentAction({
+      ...logBase,
+      outcome: 'success',
+      outputSummary: JSON.stringify({
+        level: match.level,
+        matchedContentId: match.matchedContentId,
+        matchedTitle: match.matchedTitle,
+        perceptualSimilarity: match.perceptualSimilarity,
+        embeddingSimilarity: match.embeddingSimilarity,
+        conceptOverlap: match.conceptOverlap,
+      }),
+      metadata: { level: match.level, matchedContentId: match.matchedContentId },
+    });
   }
 
-  // Best-effort: persist all matches in agent memory
   try {
     await storeMemory({
       orgId,
@@ -570,7 +558,7 @@ async function findPerceptualMatches(
   const result = new Map<string, number>();
 
   if (!videoHash || !audioHash) return result;
-  // Both hashes being zero indicates failed/missing hash computation
+  // Zero hashes indicate failed or missing hash computation
   if (videoHash === ZERO_HASH && audioHash === ZERO_HASH) return result;
 
   const { data: candidates } = await supabase
@@ -582,22 +570,19 @@ async function findPerceptualMatches(
     .neq('id', excludeContentId)
     .is('deleted_at', null);
 
-  if (!candidates || candidates.length === 0) return result;
+  if (!candidates?.length) return result;
 
   for (const candidate of candidates) {
     try {
-      const videoDistance = hammingDistance(videoHash, candidate.video_hash!);
-      const videoSim = hammingToSimilarity(videoDistance);
-      const audioDistance = hammingDistance(audioHash, candidate.audio_hash!);
-      const audioSim = hammingToSimilarity(audioDistance);
+      const videoSim = hammingToSimilarity(hammingDistance(videoHash, candidate.video_hash!));
+      const audioSim = hammingToSimilarity(hammingDistance(audioHash, candidate.audio_hash!));
       const overall = videoSim * 0.6 + audioSim * 0.4;
 
-      // Only include if overall similarity exceeds a minimum relevance threshold
       if (overall > 50) {
         result.set(candidate.id, Math.round(overall * 100) / 100);
       }
     } catch {
-      // Hash length mismatch or other issue; skip
+      // Hash length mismatch; skip candidate
     }
   }
 
@@ -616,7 +601,6 @@ async function findEmbeddingMatches(
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>();
 
-  // Get a representative chunk for the new content (first non-empty chunk)
   const { data: chunks } = await supabase
     .from('transcript_chunks')
     .select('chunk_text')
@@ -625,11 +609,10 @@ async function findEmbeddingMatches(
     .order('chunk_index', { ascending: true })
     .limit(5);
 
-  if (!chunks || chunks.length === 0) return result;
+  if (!chunks?.length) return result;
 
-  // Combine the first few chunks into a representative text
   const representativeText = chunks.map(c => c.chunk_text).join(' ').slice(0, 2000);
-  if (representativeText.trim().length === 0) return result;
+  if (!representativeText.trim()) return result;
 
   let queryEmbedding: number[];
   try {
@@ -640,10 +623,8 @@ async function findEmbeddingMatches(
     return result;
   }
 
-  // Use match_chunks RPC to find similar content across the org
-  const embeddingString = `[${queryEmbedding.join(',')}]`;
   const { data: matches, error } = await supabase.rpc('match_chunks', {
-    query_embedding: embeddingString,
+    query_embedding: `[${queryEmbedding.join(',')}]`,
     match_threshold: 0.7, // Low threshold to catch RELATED items
     match_count: 20,
     filter_org_id: orgId,
@@ -660,7 +641,6 @@ async function findEmbeddingMatches(
     return result;
   }
 
-  // Aggregate: best similarity per content_id (exclude self)
   for (const match of matches as { content_id: string; similarity: number }[]) {
     if (match.content_id === contentId) continue;
     const existing = result.get(match.content_id);
@@ -689,8 +669,7 @@ async function findConceptOverlap(
 
   const conceptIds = concepts.map(c => c.id);
 
-  // Find non-deleted content that shares these concepts
-  const { data: activeContentIds } = await supabase
+  const { data: activeContent } = await supabase
     .from('content')
     .select('id')
     .eq('org_id', orgId)
@@ -698,34 +677,29 @@ async function findConceptOverlap(
     .is('deleted_at', null)
     .in('status', ['completed', 'transcribed']);
 
-  if (!activeContentIds || activeContentIds.length === 0) return result;
-
-  const activeIds = activeContentIds.map(c => c.id);
+  if (!activeContent?.length) return result;
 
   const { data: mentions } = await supabase
     .from('concept_mentions')
     .select('content_id, concept_id')
     .in('concept_id', conceptIds)
     .eq('org_id', orgId)
-    .in('content_id', activeIds);
+    .in('content_id', activeContent.map(c => c.id));
 
-  if (!mentions || mentions.length === 0) return result;
+  if (!mentions?.length) return result;
 
-  // Group by content_id and count shared concepts
   const sharedCounts = new Map<string, Set<string>>();
-  for (const mention of mentions) {
-    let conceptSet = sharedCounts.get(mention.content_id);
-    if (!conceptSet) {
-      conceptSet = new Set();
-      sharedCounts.set(mention.content_id, conceptSet);
+  for (const { content_id, concept_id } of mentions) {
+    const existing = sharedCounts.get(content_id);
+    if (existing) {
+      existing.add(concept_id);
+    } else {
+      sharedCounts.set(content_id, new Set([concept_id]));
     }
-    conceptSet.add(mention.concept_id);
   }
 
-  const totalConcepts = conceptIds.length;
-
-  for (const [otherContentId, sharedConceptSet] of sharedCounts) {
-    const overlapPercent = (sharedConceptSet.size / totalConcepts) * 100;
+  for (const [otherContentId, sharedSet] of sharedCounts) {
+    const overlapPercent = (sharedSet.size / conceptIds.length) * 100;
     result.set(otherContentId, Math.round(overlapPercent * 100) / 100);
   }
 
