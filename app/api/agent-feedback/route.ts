@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/admin';
 import type { FeedbackType } from '@/lib/types/database';
 
 const feedbackSchema = z.object({
-  agent_activity_log_id: z.string().uuid('Invalid activity log ID'),
+  agent_activity_log_id: z.string().uuid('Invalid activity log ID').optional(),
   feedback_type: z.enum(['thumbs_up', 'thumbs_down', 'correction', 'rating']),
   score: z.number().int().min(1).max(5).optional(),
   correction_value: z.string().max(2000).optional(),
@@ -21,8 +21,13 @@ const feedbackSchema = z.object({
 });
 
 /**
- * Submit feedback on an agent action. Upserts so repeated submissions
- * from the same user on the same activity log update the existing record.
+ * Submit feedback on an agent action or RAG response.
+ *
+ * When agent_activity_log_id is provided, verifies the entry exists and
+ * upserts on (agent_activity_log_id, user_id).
+ *
+ * When omitted (e.g. chat response ratings), checks for an existing
+ * feedback row matching user_id + metadata.responseId to update in place.
  */
 export const POST = apiHandler(async (request: NextRequest) => {
   const { userId, orgId } = await requireOrg();
@@ -30,45 +35,104 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   const supabase = createClient();
 
-  const { data: activity, error: activityError } = await supabase
-    .from('agent_activity_log')
-    .select('id, org_id')
-    .eq('id', body.agent_activity_log_id)
-    .maybeSingle();
+  // --- Path A: feedback tied to an agent activity log entry ---
+  if (body.agent_activity_log_id) {
+    const { data: activity, error: activityError } = await supabase
+      .from('agent_activity_log')
+      .select('id, org_id')
+      .eq('id', body.agent_activity_log_id)
+      .maybeSingle();
 
-  if (activityError) {
-    console.error('[POST /api/agent-feedback] Activity lookup error:', activityError);
-    return errors.internalError();
+    if (activityError) {
+      console.error('[POST /api/agent-feedback] Activity lookup error:', activityError);
+      return errors.internalError();
+    }
+
+    if (!activity) {
+      return errors.notFound('Activity log entry not found');
+    }
+
+    if (activity.org_id !== orgId) {
+      return errors.forbidden();
+    }
+
+    const { data: feedback, error: upsertError } = await supabase
+      .from('agent_feedback')
+      .upsert(
+        {
+          org_id: orgId,
+          user_id: userId,
+          agent_activity_log_id: body.agent_activity_log_id,
+          feedback_type: body.feedback_type as FeedbackType,
+          score: body.score ?? null,
+          correction_value: body.correction_value ?? null,
+          comment: body.comment ?? null,
+          metadata: body.metadata ?? {},
+        },
+        { onConflict: 'agent_activity_log_id,user_id' }
+      )
+      .select('id, feedback_type, created_at')
+      .single();
+
+    if (upsertError || !feedback) {
+      console.error('[POST /api/agent-feedback] Upsert error:', upsertError);
+      return errors.internalError();
+    }
+
+    return successResponse({ feedback }, undefined, 201);
   }
 
-  if (!activity) {
-    return errors.notFound('Activity log entry not found');
+  // --- Path B: direct feedback (e.g. chat response rating) ---
+  const responseId = (body.metadata as Record<string, unknown> | undefined)?.responseId;
+
+  // Dedup: if a responseId is present, check for existing rating by this user
+  if (responseId && typeof responseId === 'string') {
+    const { data: existing } = await supabase
+      .from('agent_feedback')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('org_id', orgId)
+      .eq('feedback_type', body.feedback_type)
+      .contains('metadata', { responseId })
+      .maybeSingle();
+
+    if (existing) {
+      const { data: updated, error: updateError } = await supabase
+        .from('agent_feedback')
+        .update({
+          score: body.score ?? null,
+          comment: body.comment ?? null,
+          metadata: body.metadata ?? {},
+        })
+        .eq('id', existing.id)
+        .select('id, feedback_type, created_at')
+        .single();
+
+      if (updateError || !updated) {
+        console.error('[POST /api/agent-feedback] Update error:', updateError);
+        return errors.internalError();
+      }
+
+      return successResponse({ feedback: updated }, undefined, 200);
+    }
   }
 
-  if (activity.org_id !== orgId) {
-    return errors.forbidden();
-  }
-
-  const { data: feedback, error: upsertError } = await supabase
+  const { data: feedback, error: insertError } = await supabase
     .from('agent_feedback')
-    .upsert(
-      {
-        org_id: orgId,
-        user_id: userId,
-        agent_activity_log_id: body.agent_activity_log_id,
-        feedback_type: body.feedback_type as FeedbackType,
-        score: body.score ?? null,
-        correction_value: body.correction_value ?? null,
-        comment: body.comment ?? null,
-        metadata: body.metadata ?? {},
-      },
-      { onConflict: 'agent_activity_log_id,user_id' }
-    )
+    .insert({
+      org_id: orgId,
+      user_id: userId,
+      feedback_type: body.feedback_type as FeedbackType,
+      score: body.score ?? null,
+      correction_value: body.correction_value ?? null,
+      comment: body.comment ?? null,
+      metadata: body.metadata ?? {},
+    })
     .select('id, feedback_type, created_at')
     .single();
 
-  if (upsertError || !feedback) {
-    console.error('[POST /api/agent-feedback] Upsert error:', upsertError);
+  if (insertError || !feedback) {
+    console.error('[POST /api/agent-feedback] Insert error:', insertError);
     return errors.internalError();
   }
 

@@ -5,12 +5,17 @@ import { MessageSquare, Send, Trash2, X, Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { trackChatQuestion } from '@/lib/hooks/useEngagementTracking';
+import { ResponseRating } from '@/app/components/chat/ResponseRating';
 
 const DEFAULT_ERROR = 'Unable to get a response. Please try again.';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  /** Set when the assistant message finishes streaming */
+  done?: boolean;
+  /** The user query that produced this assistant response */
+  query?: string;
 }
 
 interface ContentChatWidgetProps {
@@ -83,8 +88,12 @@ export function ContentChatWidget({
     setInput('');
     setError(null);
     conversationIdRef.current = null;
+    messageCounterRef.current = 0;
     inputRef.current?.focus();
   }, [cancelStream]);
+
+  // Counter for generating unique response IDs
+  const messageCounterRef = useRef(0);
 
   const appendToken = useCallback((token: string) => {
     setMessages((prev) => {
@@ -102,7 +111,8 @@ export function ContentChatWidget({
     setInput('');
 
     const userMessage: Message = { role: 'user', content: trimmed };
-    setMessages((prev) => [...prev, userMessage, { role: 'assistant', content: '' }]);
+    const currentQuery = trimmed;
+    setMessages((prev) => [...prev, userMessage, { role: 'assistant', content: '', query: currentQuery }]);
     setIsStreaming(true);
     trackChatQuestion(trimmed);
 
@@ -161,6 +171,13 @@ export function ContentChatWidget({
                 if (event.conversationId) {
                   conversationIdRef.current = event.conversationId;
                 }
+                messageCounterRef.current += 1;
+                // Mark the last assistant message as done for rating
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  if (last?.role !== 'assistant') return prev;
+                  return [...prev.slice(0, -1), { ...last, done: true }];
+                });
                 break;
               case 'error':
                 setError(DEFAULT_ERROR);
@@ -267,6 +284,14 @@ export function ContentChatWidget({
                     </>
                   )}
                 </div>
+                {msg.role === 'assistant' && msg.done && msg.content && (
+                  <ResponseRating
+                    responseId={`${contentId}-${i}`}
+                    query={msg.query ?? ''}
+                    responseSnippet={msg.content}
+                    className="mt-1"
+                  />
+                )}
               </div>
             ))}
 

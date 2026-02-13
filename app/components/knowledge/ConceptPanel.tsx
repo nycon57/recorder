@@ -35,6 +35,7 @@ import {
   type ConceptType,
   CONCEPT_TYPE_COLORS,
 } from '@/lib/validations/knowledge';
+import { ConceptCorrection } from './ConceptCorrection';
 
 // Edge relationship colors - MUST match KnowledgeGraph.tsx getEdgeColor()
 const EDGE_TYPE_COLORS: Record<string, string> = {
@@ -361,15 +362,26 @@ export function ConceptPanel({
                   <span className="text-white">{typeLabels[conceptType]}</span>
                 </motion.div>
 
-                {/* Concept name */}
-                <motion.h2
+                {/* Concept name + edit */}
+                <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.15 }}
-                  className="mt-4 text-2xl font-semibold tracking-tight text-foreground"
+                  className="mt-4 flex items-center gap-2"
                 >
-                  {data.concept.name}
-                </motion.h2>
+                  <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                    {data.concept.name}
+                  </h2>
+                  <ConceptCorrection
+                    conceptId={data.concept.id}
+                    conceptName={data.concept.name}
+                    conceptType={data.concept.conceptType}
+                    onCorrected={() => {
+                      // Close panel and let parent re-fetch
+                      onClose();
+                    }}
+                  />
+                </motion.div>
 
                 {/* Description */}
                 {data.concept.description && (

@@ -34,6 +34,9 @@ export {
 // Slide-over panel for concept details
 export { ConceptPanel } from './ConceptPanel';
 
+// Concept correction (edit, merge, remove)
+export { ConceptCorrection } from './ConceptCorrection';
+
 // Filter components for concept type filtering
 export {
   ConceptFilter,
