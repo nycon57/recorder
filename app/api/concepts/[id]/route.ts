@@ -21,16 +21,12 @@ const patchSchema = z
     marked_incorrect: z.boolean().optional(),
   })
   .refine(
-    (data) => {
-      // At least one field must be provided
-      return (
-        data.name !== undefined ||
-        data.concept_type !== undefined ||
-        data.description !== undefined ||
-        data.merge_into_id !== undefined ||
-        data.marked_incorrect !== undefined
-      );
-    },
+    (data) =>
+      data.name !== undefined ||
+      data.concept_type !== undefined ||
+      data.description !== undefined ||
+      data.merge_into_id !== undefined ||
+      data.marked_incorrect !== undefined,
     { message: 'At least one field must be provided' }
   );
 
@@ -38,13 +34,7 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-/**
- * PATCH /api/concepts/[id] - Update a concept or merge it into another.
- *
- * Supports renaming, changing type, updating description,
- * merging into another concept, or marking as incorrect.
- * Every correction is logged in agent_feedback.
- */
+/** PATCH /api/concepts/[id] - Rename, retype, merge, or remove a concept. */
 export const PATCH = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
   const { userId, orgId } = await requireOrg();
   const { id } = await params;
@@ -52,7 +42,6 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
 
   const supabase = createClient();
 
-  // Verify the concept exists and belongs to this org
   const { data: concept, error: fetchError } = await supabase
     .from('knowledge_concepts')
     .select('id, org_id, name, concept_type')
@@ -60,14 +49,11 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
     .eq('org_id', orgId)
     .maybeSingle();
 
-  if (fetchError) {
-    console.error('[PATCH /api/concepts] Fetch error:', fetchError);
-    return errors.internalError();
-  }
+  if (fetchError) return logAndFail('Fetch error', fetchError);
+  if (!concept) return errors.notFound('Concept');
 
-  if (!concept) {
-    return errors.notFound('Concept');
-  }
+  const log = (correctionValue: string, metadata: Record<string, unknown>) =>
+    logCorrection(supabase, { orgId, userId, correctionValue, metadata });
 
   // --- Handle merge ---
   if (body.merge_into_id) {
@@ -75,7 +61,6 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
       return errors.badRequest('Cannot merge a concept into itself');
     }
 
-    // Verify target concept exists in same org
     const { data: target, error: targetError } = await supabase
       .from('knowledge_concepts')
       .select('id, name')
@@ -83,97 +68,63 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
       .eq('org_id', orgId)
       .maybeSingle();
 
-    if (targetError) {
-      console.error('[PATCH /api/concepts] Target lookup error:', targetError);
-      return errors.internalError();
-    }
+    if (targetError) return logAndFail('Target lookup error', targetError);
+    if (!target) return errors.notFound('Target concept');
 
-    if (!target) {
-      return errors.notFound('Target concept');
-    }
-
-    // Reassign all concept_mentions from old concept to target
     const { error: mentionError } = await supabase
       .from('concept_mentions')
       .update({ concept_id: body.merge_into_id })
       .eq('concept_id', id)
       .eq('org_id', orgId);
 
-    if (mentionError) {
-      console.error('[PATCH /api/concepts] Mention reassign error:', mentionError);
-      return errors.internalError();
-    }
+    if (mentionError) return logAndFail('Mention reassign error', mentionError);
 
-    // Update the target concept's mention_count
     const { count, error: countError } = await supabase
       .from('concept_mentions')
       .select('id', { count: 'exact', head: true })
       .eq('concept_id', body.merge_into_id)
       .eq('org_id', orgId);
 
-    if (countError) {
-      console.error('[PATCH /api/concepts] Mention count error:', countError);
-      return errors.internalError();
-    }
+    if (countError) return logAndFail('Mention count error', countError);
 
     if (count !== null) {
       const { error: updateCountError } = await supabase
         .from('knowledge_concepts')
         .update({ mention_count: count })
-        .eq('id', body.merge_into_id);
+        .eq('id', body.merge_into_id)
+        .eq('org_id', orgId);
 
-      if (updateCountError) {
-        console.error('[PATCH /api/concepts] Update mention count error:', updateCountError);
-        return errors.internalError();
-      }
+      if (updateCountError) return logAndFail('Update mention count error', updateCountError);
     }
 
-    // Delete the old concept
     const { error: deleteError } = await supabase
       .from('knowledge_concepts')
       .delete()
       .eq('id', id)
       .eq('org_id', orgId);
 
-    if (deleteError) {
-      console.error('[PATCH /api/concepts] Delete source concept error:', deleteError);
-      return errors.internalError();
-    }
+    if (deleteError) return logAndFail('Delete source concept error', deleteError);
 
-    // Log merge correction
-    await logCorrection(supabase, {
-      orgId,
-      userId,
-      correctionValue: `Merged "${concept.name}" into "${target.name}"`,
-      metadata: {
-        action: 'merge',
-        sourceConceptId: id,
-        sourceConceptName: concept.name,
-        targetConceptId: body.merge_into_id,
-        targetConceptName: target.name,
-      },
+    await log(`Merged "${concept.name}" into "${target.name}"`, {
+      action: 'merge',
+      sourceConceptId: id,
+      sourceConceptName: concept.name,
+      targetConceptId: body.merge_into_id,
+      targetConceptName: target.name,
     });
 
-    return successResponse({
-      merged: true,
-      sourceId: id,
-      targetId: body.merge_into_id,
-    });
+    return successResponse({ merged: true, sourceId: id, targetId: body.merge_into_id });
   }
 
   // --- Handle mark as incorrect ---
   if (body.marked_incorrect) {
-    // Delete concept_mentions first (FK), then delete concept
     const { error: deleteMentionsError } = await supabase
       .from('concept_mentions')
       .delete()
       .eq('concept_id', id)
       .eq('org_id', orgId);
 
-    if (deleteMentionsError) {
-      console.error('[PATCH /api/concepts] Delete mentions error:', deleteMentionsError);
-      return errors.internalError();
-    }
+    if (deleteMentionsError) return logAndFail('Delete mentions error', deleteMentionsError);
 
     const { error: deleteConceptError } = await supabase
       .from('knowledge_concepts')
@@ -181,21 +132,13 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
       .eq('id', id)
       .eq('org_id', orgId);
 
-    if (deleteConceptError) {
-      console.error('[PATCH /api/concepts] Delete concept error:', deleteConceptError);
-      return errors.internalError();
-    }
+    if (deleteConceptError) return logAndFail('Delete concept error', deleteConceptError);
 
-    await logCorrection(supabase, {
-      orgId,
-      userId,
-      correctionValue: `Marked "${concept.name}" as incorrect`,
-      metadata: {
-        action: 'mark_incorrect',
-        conceptId: id,
-        conceptName: concept.name,
-        conceptType: concept.concept_type,
-      },
+    await log(`Marked "${concept.name}" as incorrect`, {
+      action: 'mark_incorrect',
+      conceptId: id,
+      conceptName: concept.name,
+      conceptType: concept.concept_type,
     });
 
     return successResponse({ deleted: true, id });
@@ -233,29 +176,24 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
     .select('*')
     .single();
 
-  if (updateError) {
-    console.error('[PATCH /api/concepts] Update error:', updateError);
-    return errors.internalError();
-  }
+  if (updateError) return logAndFail('Update error', updateError);
 
-  // Log the correction
-  await logCorrection(supabase, {
-    orgId,
-    userId,
-    correctionValue: changes.join('; '),
-    metadata: {
-      action: 'update',
-      conceptId: id,
-      changes: changes,
-      before: { name: concept.name, concept_type: concept.concept_type },
-      after: updates,
-    },
+  await log(changes.join('; '), {
+    action: 'update',
+    conceptId: id,
+    changes,
+    before: { name: concept.name, concept_type: concept.concept_type },
+    after: updates,
   });
 
   return successResponse({ concept: updated, changed: true });
 });
 
-/** Log a concept correction to agent_feedback */
+function logAndFail(label: string, err: unknown) {
+  console.error(`[PATCH /api/concepts] ${label}:`, err);
+  return errors.internalError();
+}
+
 async function logCorrection(
   supabase: ReturnType<typeof createClient>,
   params: {
@@ -264,7 +202,7 @@ async function logCorrection(
     correctionValue: string;
     metadata: Record<string, unknown>;
   }
-) {
+): Promise<void> {
   const { error } = await supabase.from('agent_feedback').insert({
     org_id: params.orgId,
     user_id: params.userId,

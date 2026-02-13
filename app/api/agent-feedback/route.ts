@@ -20,22 +20,23 @@ const feedbackSchema = z.object({
   metadata: z.record(z.unknown()).optional(),
 });
 
-/**
- * Submit feedback on an agent action or RAG response.
- *
- * When agent_activity_log_id is provided, verifies the entry exists and
- * upserts on (agent_activity_log_id, user_id).
- *
- * When omitted (e.g. chat response ratings), checks for an existing
- * feedback row matching user_id + metadata.responseId to update in place.
- */
+const FEEDBACK_SELECT = 'id, feedback_type, created_at' as const;
+
+/** POST /api/agent-feedback - Submit feedback on an agent action or RAG response. */
 export const POST = apiHandler(async (request: NextRequest) => {
   const { userId, orgId } = await requireOrg();
   const body = await parseBody<z.infer<typeof feedbackSchema>>(request, feedbackSchema);
 
   const supabase = createClient();
 
-  // --- Path A: feedback tied to an agent activity log entry ---
+  const feedbackFields = {
+    score: body.score ?? null,
+    correction_value: body.correction_value ?? null,
+    comment: body.comment ?? null,
+    metadata: body.metadata ?? {},
+  };
+
+  // Feedback tied to an agent activity log entry
   if (body.agent_activity_log_id) {
     const { data: activity, error: activityError } = await supabase
       .from('agent_activity_log')
@@ -47,14 +48,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
       console.error('[POST /api/agent-feedback] Activity lookup error:', activityError);
       return errors.internalError();
     }
-
-    if (!activity) {
-      return errors.notFound('Activity log entry not found');
-    }
-
-    if (activity.org_id !== orgId) {
-      return errors.forbidden();
-    }
+    if (!activity) return errors.notFound('Activity log entry not found');
+    if (activity.org_id !== orgId) return errors.forbidden();
 
     const { data: feedback, error: upsertError } = await supabase
       .from('agent_feedback')
@@ -64,14 +59,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
           user_id: userId,
           agent_activity_log_id: body.agent_activity_log_id,
           feedback_type: body.feedback_type as FeedbackType,
-          score: body.score ?? null,
-          correction_value: body.correction_value ?? null,
-          comment: body.comment ?? null,
-          metadata: body.metadata ?? {},
+          ...feedbackFields,
         },
         { onConflict: 'agent_activity_log_id,user_id' }
       )
-      .select('id, feedback_type, created_at')
+      .select(FEEDBACK_SELECT)
       .single();
 
     if (upsertError || !feedback) {
@@ -82,10 +74,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
     return successResponse({ feedback }, undefined, 201);
   }
 
-  // --- Path B: direct feedback (e.g. chat response rating) ---
-  const responseId = (body.metadata as Record<string, unknown> | undefined)?.responseId;
+  // Direct feedback (e.g. chat response rating) -- dedup by responseId
+  const responseId = body.metadata?.responseId;
 
-  // Dedup: if a responseId is present, check for existing rating by this user
   if (responseId && typeof responseId === 'string') {
     const { data: existing } = await supabase
       .from('agent_feedback')
@@ -99,13 +90,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
     if (existing) {
       const { data: updated, error: updateError } = await supabase
         .from('agent_feedback')
-        .update({
-          score: body.score ?? null,
-          comment: body.comment ?? null,
-          metadata: body.metadata ?? {},
-        })
+        .update({ score: feedbackFields.score, comment: feedbackFields.comment, metadata: feedbackFields.metadata })
         .eq('id', existing.id)
-        .select('id, feedback_type, created_at')
+        .select(FEEDBACK_SELECT)
         .single();
 
       if (updateError || !updated) {
@@ -113,7 +100,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
         return errors.internalError();
       }
 
-      return successResponse({ feedback: updated }, undefined, 200);
+      return successResponse({ feedback: updated });
     }
   }
 
@@ -123,12 +110,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
       org_id: orgId,
       user_id: userId,
       feedback_type: body.feedback_type as FeedbackType,
-      score: body.score ?? null,
-      correction_value: body.correction_value ?? null,
-      comment: body.comment ?? null,
-      metadata: body.metadata ?? {},
+      ...feedbackFields,
     })
-    .select('id, feedback_type, created_at')
+    .select(FEEDBACK_SELECT)
     .single();
 
   if (insertError || !feedback) {

@@ -6,21 +6,12 @@ import { Star, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ResponseRatingProps {
-  /** Unique identifier for this response (e.g. conversationId + message index) */
   responseId: string;
-  /** The user query that produced this response */
   query: string;
-  /** First ~200 chars of the assistant response for context */
   responseSnippet: string;
   className?: string;
 }
 
-/**
- * ResponseRating - 1-5 star rating for RAG assistant responses.
- *
- * Stores feedback via POST /api/agent-feedback with feedback_type 'rating'.
- * Duplicate ratings by the same user on the same responseId are updated in place.
- */
 export function ResponseRating({
   responseId,
   query,
@@ -44,21 +35,12 @@ export function ResponseRating({
           body: JSON.stringify({
             feedback_type: 'rating',
             score,
-            comment: userComment || undefined,
-            metadata: {
-              responseId,
-              query,
-              responseSnippet: responseSnippet.slice(0, 200),
-            },
+            comment: userComment,
+            metadata: { responseId, query, responseSnippet: responseSnippet.slice(0, 200) },
           }),
         });
 
-        if (!res.ok) {
-          console.error('Failed to submit rating');
-          return;
-        }
-
-        setSaved(true);
+        if (res.ok) setSaved(true);
       } catch (err) {
         console.error('Rating submission error:', err);
       } finally {
@@ -72,7 +54,6 @@ export function ResponseRating({
     (star: number) => {
       setRating(star);
       setShowComment(true);
-      // Submit immediately; user can add comment after
       submitRating(star);
     },
     [submitRating]
@@ -119,9 +100,6 @@ export function ResponseRating({
         ))}
         {isSaving && (
           <Loader2 aria-hidden="true" className="ml-1 h-3 w-3 animate-spin text-muted-foreground" />
-        )}
-        {saved && !showComment && (
-          <span className="ml-1 text-xs text-muted-foreground">Saved</span>
         )}
       </div>
 

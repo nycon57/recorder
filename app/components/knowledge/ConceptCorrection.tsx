@@ -32,7 +32,6 @@ interface ConceptCorrectionProps {
   conceptId: string;
   conceptName: string;
   conceptType: ConceptType;
-  /** Called after a successful correction with the action taken */
   onCorrected?: (action: 'updated' | 'merged' | 'deleted') => void;
 }
 
@@ -45,12 +44,18 @@ const TYPE_LABELS: Record<ConceptType, string> = {
   general: 'General',
 };
 
-/**
- * ConceptCorrection - Edit, merge, or remove extracted concepts.
- *
- * Renders a pencil button that opens a dialog for corrections.
- * All changes go through PATCH /api/concepts/[id].
- */
+const MODE_ACTIONS: Record<CorrectionMode, 'updated' | 'merged' | 'deleted'> = {
+  edit: 'updated',
+  merge: 'merged',
+  incorrect: 'deleted',
+};
+
+const MODE_LABELS: Record<CorrectionMode, string> = {
+  edit: 'Save',
+  merge: 'Merge',
+  incorrect: 'Remove',
+};
+
 export function ConceptCorrection({
   conceptId,
   conceptName,
@@ -90,7 +95,6 @@ export function ConceptCorrection({
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Cancel debounce on unmount
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -177,10 +181,7 @@ export function ConceptCorrection({
       }
 
       setOpen(false);
-
-      const action =
-        mode === 'merge' ? 'merged' : mode === 'incorrect' ? 'deleted' : 'updated';
-      onCorrected?.(action);
+      onCorrected?.(MODE_ACTIONS[mode]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -207,7 +208,6 @@ export function ConceptCorrection({
             <DialogTitle>Edit Concept</DialogTitle>
           </DialogHeader>
 
-          {/* Mode tabs */}
           <div className="flex gap-1 rounded-lg bg-muted/50 p-1" role="tablist" aria-label="Correction mode">
             {(
               [
@@ -235,7 +235,6 @@ export function ConceptCorrection({
             ))}
           </div>
 
-          {/* Edit mode */}
           {mode === 'edit' && (
             <div id="correction-panel-edit" role="tabpanel" aria-labelledby="correction-tab-edit" className="space-y-4">
               <div className="space-y-2">
@@ -265,7 +264,6 @@ export function ConceptCorrection({
             </div>
           )}
 
-          {/* Merge mode */}
           {mode === 'merge' && (
             <div id="correction-panel-merge" role="tabpanel" aria-labelledby="correction-tab-merge" className="space-y-3">
               <p className="text-sm text-muted-foreground">
@@ -319,7 +317,6 @@ export function ConceptCorrection({
             </div>
           )}
 
-          {/* Incorrect mode */}
           {mode === 'incorrect' && (
             <div id="correction-panel-incorrect" role="tabpanel" aria-labelledby="correction-tab-incorrect" className="space-y-2">
               <p className="text-sm text-muted-foreground">
@@ -352,9 +349,7 @@ export function ConceptCorrection({
               {isSaving && (
                 <Loader2 aria-hidden="true" className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {mode === 'edit' && 'Save'}
-              {mode === 'merge' && 'Merge'}
-              {mode === 'incorrect' && 'Remove'}
+              {MODE_LABELS[mode]}
             </Button>
           </DialogFooter>
         </DialogContent>

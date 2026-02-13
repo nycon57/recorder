@@ -12,11 +12,8 @@ const DEFAULT_ERROR = 'Unable to get a response. Please try again.';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  /** Set when the assistant message finishes streaming */
   done?: boolean;
-  /** The user query that produced this assistant response */
   query?: string;
-  /** Stable unique ID for rating dedup */
   ratingId?: string;
 }
 
@@ -93,7 +90,6 @@ export function ContentChatWidget({
     inputRef.current?.focus();
   }, [cancelStream]);
 
-  // Counter for generating unique response IDs (never reset)
   const messageCounterRef = useRef(0);
   const sessionIdRef = useRef(crypto.randomUUID().slice(0, 8));
 
@@ -139,7 +135,7 @@ export function ContentChatWidget({
           const errorData = await response.json();
           if (errorData.error) errorMessage = errorData.error;
         } catch {
-          // Non-JSON error body — use default message
+          // use default message
         }
         throw new Error(errorMessage);
       }
@@ -174,21 +170,19 @@ export function ContentChatWidget({
                   conversationIdRef.current = event.conversationId;
                 }
                 messageCounterRef.current += 1;
-                {
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  if (last?.role !== 'assistant') return prev;
                   const ratingId = `${sessionIdRef.current}-${messageCounterRef.current}`;
-                  setMessages((prev) => {
-                    const last = prev[prev.length - 1];
-                    if (last?.role !== 'assistant') return prev;
-                    return [...prev.slice(0, -1), { ...last, done: true, ratingId }];
-                  });
-                }
+                  return [...prev.slice(0, -1), { ...last, done: true, ratingId }];
+                });
                 break;
               case 'error':
                 setError(DEFAULT_ERROR);
                 break;
             }
           } catch {
-            // Malformed JSON — skip
+            // skip malformed JSON
           }
         }
       }

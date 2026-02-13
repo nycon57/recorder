@@ -376,10 +376,7 @@ export function ConceptPanel({
                     conceptId={data.concept.id}
                     conceptName={data.concept.name}
                     conceptType={data.concept.conceptType}
-                    onCorrected={() => {
-                      // Close panel and let parent re-fetch
-                      onClose();
-                    }}
+                    onCorrected={onClose}
                   />
                 </motion.div>
 
