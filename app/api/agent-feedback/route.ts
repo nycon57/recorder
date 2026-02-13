@@ -20,21 +20,16 @@ const feedbackSchema = z.object({
   metadata: z.record(z.unknown()).optional(),
 });
 
-type FeedbackInput = z.infer<typeof feedbackSchema>;
-
 /**
- * POST /api/agent-feedback
- *
- * Submit feedback on an agent action. If the user already submitted feedback
- * for the same activity log entry, the existing record is updated.
+ * Submit feedback on an agent action. Upserts so repeated submissions
+ * from the same user on the same activity log update the existing record.
  */
 export const POST = apiHandler(async (request: NextRequest) => {
   const { userId, orgId } = await requireOrg();
-  const body = await parseBody<FeedbackInput>(request, feedbackSchema);
+  const body = await parseBody<z.infer<typeof feedbackSchema>>(request, feedbackSchema);
 
   const supabase = createClient();
 
-  // Verify the activity log entry exists and belongs to the user's org
   const { data: activity, error: activityError } = await supabase
     .from('agent_activity_log')
     .select('id, org_id')
@@ -50,12 +45,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
     return errors.notFound('Activity log entry not found');
   }
 
-  // Verify org membership — the activity must belong to the same org
   if (activity.org_id !== orgId) {
     return errors.forbidden();
   }
 
-  // Upsert: insert or update on conflict (same user + same activity log)
   const { data: feedback, error: upsertError } = await supabase
     .from('agent_feedback')
     .upsert(
