@@ -65,6 +65,9 @@ import { handleAnalyzeKnowledgeGaps } from './handlers/analyze-knowledge-gaps';
 // Onboarding plan generation handler
 import { handleGenerateOnboardingPlan } from './handlers/generate-onboarding-plan';
 
+// Weekly digest generation handler
+import { handleGenerateWeeklyDigest } from './handlers/generate-weekly-digest';
+
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
 // import { generateDocument } from './handlers/docify-google';
@@ -256,6 +259,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Onboarding plan generation handler
   generate_onboarding_plan: handleGenerateOnboardingPlan, // Onboarding Agent
+
+  // Weekly digest generation handler
+  generate_weekly_digest: handleGenerateWeeklyDigest, // Digest Agent
 };
 
 // PERF-WK-001: Job priority levels (0 = highest, 3 = lowest)

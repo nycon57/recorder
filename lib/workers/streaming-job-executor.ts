@@ -66,6 +66,9 @@ import { handleAnalyzeKnowledgeGaps } from './handlers/analyze-knowledge-gaps';
 // Onboarding plan generation handler
 import { handleGenerateOnboardingPlan } from './handlers/generate-onboarding-plan';
 
+// Weekly digest generation handler
+import { handleGenerateWeeklyDigest } from './handlers/generate-weekly-digest';
+
 const logger = createLogger({ service: 'streaming-job-executor' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
@@ -165,6 +168,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Onboarding plan generation handler
   generate_onboarding_plan: handleGenerateOnboardingPlan,
+
+  // Weekly digest generation handler
+  generate_weekly_digest: handleGenerateWeeklyDigest,
 };
 
 /**
