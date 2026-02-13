@@ -163,6 +163,8 @@ export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
 
 export type ActivityOutcome = 'success' | 'failure' | 'skipped' | 'pending_approval';
 
+export type FeedbackType = 'thumbs_up' | 'thumbs_down' | 'correction' | 'rating';
+
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 
 export type ImportedDocumentStatus =
@@ -779,6 +781,40 @@ export interface Database {
           created_at?: string;
         };
         Update: Record<string, never>;
+      };
+      /** User feedback on agent actions (thumbs up/down, corrections, ratings) */
+      agent_feedback: {
+        Row: {
+          id: string;
+          org_id: string;
+          user_id: string;
+          agent_activity_log_id: string | null;
+          feedback_type: FeedbackType;
+          score: number | null;
+          correction_value: string | null;
+          comment: string | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          user_id: string;
+          agent_activity_log_id?: string | null;
+          feedback_type: FeedbackType;
+          score?: number | null;
+          correction_value?: string | null;
+          comment?: string | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: {
+          feedback_type?: FeedbackType;
+          score?: number | null;
+          correction_value?: string | null;
+          comment?: string | null;
+          metadata?: Json;
+        };
       };
       /** Per-org agent toggle settings (one row per org) */
       org_agent_settings: {
