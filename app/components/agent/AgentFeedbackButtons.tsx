@@ -57,7 +57,7 @@ export function AgentFeedbackButtons({
         aria-label="Thumbs up"
         aria-pressed={selected === 'thumbs_up'}
         className={cn(
-          'inline-flex items-center justify-center rounded p-1 transition-colors',
+          'inline-flex items-center justify-center rounded p-1.5 transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           'disabled:pointer-events-none disabled:opacity-40',
           selected === 'thumbs_up'
@@ -66,6 +66,7 @@ export function AgentFeedbackButtons({
         )}
       >
         <ThumbsUp
+          aria-hidden="true"
           className="size-3.5"
           fill={selected === 'thumbs_up' ? 'currentColor' : 'none'}
         />
@@ -77,7 +78,7 @@ export function AgentFeedbackButtons({
         aria-label="Thumbs down"
         aria-pressed={selected === 'thumbs_down'}
         className={cn(
-          'inline-flex items-center justify-center rounded p-1 transition-colors',
+          'inline-flex items-center justify-center rounded p-1.5 transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           'disabled:pointer-events-none disabled:opacity-40',
           selected === 'thumbs_down'
@@ -86,6 +87,7 @@ export function AgentFeedbackButtons({
         )}
       >
         <ThumbsDown
+          aria-hidden="true"
           className="size-3.5"
           fill={selected === 'thumbs_down' ? 'currentColor' : 'none'}
         />

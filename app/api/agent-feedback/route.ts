@@ -47,7 +47,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   if (!activity) {
-    throw errors.notFound('Activity log entry not found');
+    return errors.notFound('Activity log entry not found');
   }
 
   // Verify org membership — the activity must belong to the same org
@@ -74,7 +74,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     .select('id, feedback_type, created_at')
     .single();
 
-  if (upsertError) {
+  if (upsertError || !feedback) {
     console.error('[POST /api/agent-feedback] Upsert error:', upsertError);
     return errors.internalError();
   }
