@@ -22,12 +22,7 @@ const patchSchema = z
     marked_incorrect: z.boolean().optional(),
   })
   .refine(
-    (data) =>
-      data.name !== undefined ||
-      data.concept_type !== undefined ||
-      data.description !== undefined ||
-      data.merge_into_id !== undefined ||
-      data.marked_incorrect !== undefined,
+    (data) => Object.values(data).some((v) => v !== undefined),
     { message: 'At least one field must be provided' }
   );
 
@@ -53,8 +48,8 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
   if (fetchError) return logAndFail('Fetch error', fetchError);
   if (!concept) return errors.notFound('Concept');
 
-  const log = (correctionValue: string, metadata: Record<string, unknown>) =>
-    logCorrection(supabase, { orgId, userId, correctionValue, metadata });
+  const recordCorrection = (correctionValue: string, metadata: Record<string, unknown>) =>
+    recordCorrectionFeedback(supabase, { orgId, userId, correctionValue, metadata });
 
   // --- Handle merge ---
   if (body.merge_into_id) {
@@ -106,7 +101,7 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
 
     if (deleteError) return logAndFail('Delete source concept error', deleteError);
 
-    await log(`Merged "${concept.name}" into "${target.name}"`, {
+    await recordCorrection(`Merged "${concept.name}" into "${target.name}"`, {
       action: 'merge',
       sourceConceptId: id,
       sourceConceptName: concept.name,
@@ -135,7 +130,7 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
 
     if (deleteConceptError) return logAndFail('Delete concept error', deleteConceptError);
 
-    await log(`Marked "${concept.name}" as incorrect`, {
+    await recordCorrection(`Marked "${concept.name}" as incorrect`, {
       action: 'mark_incorrect',
       conceptId: id,
       conceptName: concept.name,
@@ -179,7 +174,7 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
 
   if (updateError) return logAndFail('Update error', updateError);
 
-  await log(changes.join('; '), {
+  await recordCorrection(changes.join('; '), {
     action: 'update',
     conceptId: id,
     changes,
@@ -195,7 +190,7 @@ function logAndFail(label: string, err: unknown) {
   return errors.internalError();
 }
 
-async function logCorrection(
+async function recordCorrectionFeedback(
   supabase: ReturnType<typeof createClient>,
   params: {
     orgId: string;

@@ -118,12 +118,10 @@ export async function processFeedback(feedbackId: string): Promise<void> {
 async function handleThumbsDown(fb: FeedbackRow, activity: ActivityRow | null): Promise<void> {
   if (!activity) return;
 
-  const isCategorizationAction = activity.action_type === 'auto_categorize' || activity.action_type === 'auto_apply_tags';
   const contentId = activity.content_id ?? 'unknown';
-
-  const memoryKey = isCategorizationAction
-    ? `negative_feedback:categorize:${contentId}`
-    : `negative_feedback:${activity.action_type}:${contentId}`;
+  const categorizationActions = ['auto_categorize', 'auto_apply_tags'];
+  const actionKey = categorizationActions.includes(activity.action_type) ? 'categorize' : activity.action_type;
+  const memoryKey = `negative_feedback:${actionKey}:${contentId}`;
 
   const description = buildNegativeDescription(activity, fb);
 
@@ -290,7 +288,7 @@ async function escalateImportance(
       return Math.min(current + IMPORTANCE_BUMP, IMPORTANCE_CAP);
     }
   } catch (err) {
-    console.error('[FeedbackProcessor] escalateImportance: recallMemory failed, using base importance:', err);
+    console.error('[FeedbackProcessor] recallMemory failed, falling back to base importance:', err);
   }
   return baseImportance;
 }

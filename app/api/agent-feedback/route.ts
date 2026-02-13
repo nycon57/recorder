@@ -23,6 +23,13 @@ const feedbackSchema = z.object({
 
 const FEEDBACK_SELECT = 'id, feedback_type, created_at' as const;
 
+/** Fire-and-forget: integrate feedback into agent memory (non-blocking). */
+function processInBackground(feedbackId: string): void {
+  processFeedback(feedbackId).catch((err) =>
+    console.error('[POST /api/agent-feedback] processFeedback failed:', err)
+  );
+}
+
 /** POST /api/agent-feedback - Submit feedback on an agent action or RAG response. */
 export const POST = apiHandler(async (request: NextRequest) => {
   const { userId, orgId } = await requireOrg();
@@ -72,10 +79,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       return errors.internalError();
     }
 
-    // Fire-and-forget: integrate feedback into agent memory
-    processFeedback(feedback.id).catch((err) =>
-      console.error('[POST /api/agent-feedback] processFeedback failed:', err)
-    );
+    processInBackground(feedback.id);
 
     return successResponse({ feedback }, undefined, 201);
   }
@@ -106,9 +110,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
         return errors.internalError();
       }
 
-      processFeedback(updated.id).catch((err) =>
-        console.error('[POST /api/agent-feedback] processFeedback failed:', err)
-      );
+      processInBackground(updated.id);
 
       return successResponse({ feedback: updated });
     }
@@ -130,9 +132,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     return errors.internalError();
   }
 
-  processFeedback(feedback.id).catch((err) =>
-    console.error('[POST /api/agent-feedback] processFeedback failed:', err)
-  );
+  processInBackground(feedback.id);
 
   return successResponse({ feedback }, undefined, 201);
 });
