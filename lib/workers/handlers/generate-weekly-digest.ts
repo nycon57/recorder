@@ -23,6 +23,14 @@ const AGENT_TYPE = 'digest';
 const LOOKBACK_DAYS = 7;
 const MAX_CONTENT_FOR_SUMMARY = 20;
 const MAX_CONCEPTS_FOR_SUMMARY = 10;
+const MAX_TITLE_LENGTH = 80;
+
+const EMPTY_GAPS: KnowledgeGapsData = { openCount: 0, newCount: 0, topics: [] };
+
+/** Simple pluralization: pluralize(3, 'search', 'es') => 'searches' */
+function pluralize(count: number, noun: string, suffix = 's'): string {
+  return count === 1 ? noun : noun + suffix;
+}
 
 // Lazy-init Gemini client
 let genaiClient: GoogleGenAI | null = null;
@@ -134,27 +142,18 @@ export async function handleGenerateWeeklyDigest(
       // --- Generate summary via Gemini ---
       progressCallback?.(60, 'Generating AI summary...');
 
-      let summary: string;
-      let highlights: string[];
-
-      try {
-        const aiResult = await generateDigestSummary({
-          contentData,
-          conceptData,
-          gapsData,
-          searchData,
-          curatorData,
-          agentData,
-          stats,
-        });
-        summary = aiResult.summary;
-        highlights = aiResult.highlights;
-      } catch (error) {
+      const { summary, highlights } = await generateDigestSummary({
+        contentData,
+        conceptData,
+        gapsData,
+        searchData,
+        curatorData,
+        agentData,
+        stats,
+      }).catch((error) => {
         console.error('[WeeklyDigest] Gemini summary failed, using fallback:', error);
-        const fallback = buildFallbackSummary(stats, contentData, conceptData);
-        summary = fallback.summary;
-        highlights = fallback.highlights;
-      }
+        return buildFallbackSummary(stats, contentData, conceptData);
+      });
 
       // --- Compose digest ---
       const digest: WeeklyDigest = {
@@ -199,9 +198,10 @@ async function collectContentActivity(
   orgId: string,
   since: string
 ): Promise<ContentActivityData> {
-  const { data, error } = await supabase
+  // Use exact count to get accurate total even when more than 100 items exist
+  const { data, count, error } = await supabase
     .from('content')
-    .select('id, title')
+    .select('id, title', { count: 'exact' })
     .eq('org_id', orgId)
     .gte('created_at', since)
     .is('deleted_at', null)
@@ -215,7 +215,7 @@ async function collectContentActivity(
 
   const items = data ?? [];
   return {
-    count: items.length,
+    count: count ?? items.length,
     titles: items.map(c => c.title ?? 'Untitled'),
   };
 }
@@ -259,6 +259,15 @@ interface KnowledgeGapsData {
   topics: string[];
 }
 
+/** Check whether an error indicates the knowledge_gaps table does not exist yet. */
+function isTableMissingError(error: { message?: string; code?: string } | Error | unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? (error as { code: string }).code
+    : '';
+  return msg.includes('does not exist') || code === '42P01';
+}
+
 async function collectKnowledgeGaps(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
@@ -273,13 +282,9 @@ async function collectKnowledgeGaps(
       .gte('created_at', since);
 
     if (newError) {
-      // Table might not exist yet (E05 not implemented)
-      if (
-        newError.message.includes('does not exist') ||
-        newError.code === '42P01'
-      ) {
+      if (isTableMissingError(newError)) {
         console.log('[WeeklyDigest] knowledge_gaps table not available, omitting gaps');
-        return { openCount: 0, newCount: 0, topics: [] };
+        return EMPTY_GAPS;
       }
       throw newError;
     }
@@ -303,14 +308,12 @@ async function collectKnowledgeGaps(
         .slice(0, 10),
     };
   } catch (error) {
-    // Gracefully handle if the table doesn't exist
-    const msg = error instanceof Error ? error.message : String(error);
-    if (msg.includes('does not exist') || msg.includes('42P01')) {
+    if (isTableMissingError(error)) {
       console.log('[WeeklyDigest] knowledge_gaps table not available, omitting gaps');
-      return { openCount: 0, newCount: 0, topics: [] };
+      return EMPTY_GAPS;
     }
     console.warn('[WeeklyDigest] Failed to fetch knowledge gaps:', error);
-    return { openCount: 0, newCount: 0, topics: [] };
+    return EMPTY_GAPS;
   }
 }
 
@@ -324,29 +327,24 @@ async function collectCuratorActions(
   orgId: string,
   since: string
 ): Promise<CuratorActivityData> {
-  try {
-    const { data, error } = await supabase
-      .from('agent_activity_log')
-      .select('action_type')
-      .eq('org_id', orgId)
-      .eq('agent_type', 'curator')
-      .eq('outcome', 'success')
-      .gte('created_at', since);
+  const { data, error } = await supabase
+    .from('agent_activity_log')
+    .select('action_type')
+    .eq('org_id', orgId)
+    .eq('agent_type', 'curator')
+    .eq('outcome', 'success')
+    .gte('created_at', since);
 
-    if (error) {
-      console.warn('[WeeklyDigest] Failed to fetch curator actions:', error.message);
-      return { duplicates: 0, stale: 0 };
-    }
-
-    const actions = data ?? [];
-    return {
-      duplicates: actions.filter(a => a.action_type === 'detect_duplicate').length,
-      stale: actions.filter(a => a.action_type === 'detect_staleness').length,
-    };
-  } catch (error) {
-    console.warn('[WeeklyDigest] Failed to fetch curator actions:', error);
+  if (error) {
+    console.warn('[WeeklyDigest] Failed to fetch curator actions:', error.message);
     return { duplicates: 0, stale: 0 };
   }
+
+  const actions = data ?? [];
+  return {
+    duplicates: actions.filter(a => a.action_type === 'detect_duplicate').length,
+    stale: actions.filter(a => a.action_type === 'detect_staleness').length,
+  };
 }
 
 interface SearchActivityData {
@@ -360,37 +358,32 @@ async function collectSearchActivity(
   orgId: string,
   since: string
 ): Promise<SearchActivityData> {
-  try {
-    const { data, error } = await supabase
-      .from('search_analytics')
-      .select('query, results_count')
-      .eq('org_id', orgId)
-      .gte('created_at', since);
+  const { data, error } = await supabase
+    .from('search_analytics')
+    .select('query, results_count')
+    .eq('org_id', orgId)
+    .gte('created_at', since);
 
-    if (error) {
-      console.warn('[WeeklyDigest] Failed to fetch search activity:', error.message);
-      return { total: 0, failed: 0, topQueries: [] };
-    }
-
-    const searches = data ?? [];
-    const failed = searches.filter(s => (s.results_count ?? 0) === 0).length;
-
-    // Top queries by frequency
-    const queryCounts = new Map<string, number>();
-    for (const s of searches) {
-      const q = s.query.toLowerCase().trim();
-      queryCounts.set(q, (queryCounts.get(q) ?? 0) + 1);
-    }
-    const topQueries = [...queryCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([q]) => q);
-
-    return { total: searches.length, failed, topQueries };
-  } catch (error) {
-    console.warn('[WeeklyDigest] Failed to fetch search activity:', error);
+  if (error) {
+    console.warn('[WeeklyDigest] Failed to fetch search activity:', error.message);
     return { total: 0, failed: 0, topQueries: [] };
   }
+
+  const searches = data ?? [];
+  const failed = searches.filter(s => (s.results_count ?? 0) === 0).length;
+
+  // Top queries by frequency
+  const queryCounts = new Map<string, number>();
+  for (const s of searches) {
+    const q = s.query.toLowerCase().trim();
+    queryCounts.set(q, (queryCounts.get(q) ?? 0) + 1);
+  }
+  const topQueries = [...queryCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([q]) => q);
+
+  return { total: searches.length, failed, topQueries };
 }
 
 interface AgentActivityData {
@@ -403,31 +396,26 @@ async function collectAgentActivity(
   orgId: string,
   since: string
 ): Promise<AgentActivityData> {
-  try {
-    const { data, error } = await supabase
-      .from('agent_activity_log')
-      .select('outcome')
-      .eq('org_id', orgId)
-      .gte('created_at', since);
+  const { data, error } = await supabase
+    .from('agent_activity_log')
+    .select('outcome')
+    .eq('org_id', orgId)
+    .gte('created_at', since);
 
-    if (error) {
-      console.warn('[WeeklyDigest] Failed to fetch agent activity:', error.message);
-      return { total: 0, successRate: 0 };
-    }
-
-    const actions = data ?? [];
-    const total = actions.length;
-    if (total === 0) return { total: 0, successRate: 0 };
-
-    const successes = actions.filter(a => a.outcome === 'success').length;
-    return {
-      total,
-      successRate: Math.round((successes / total) * 100),
-    };
-  } catch (error) {
-    console.warn('[WeeklyDigest] Failed to fetch agent activity:', error);
+  if (error) {
+    console.warn('[WeeklyDigest] Failed to fetch agent activity:', error.message);
     return { total: 0, successRate: 0 };
   }
+
+  const actions = data ?? [];
+  const total = actions.length;
+  if (total === 0) return { total: 0, successRate: 0 };
+
+  const successes = actions.filter(a => a.outcome === 'success').length;
+  return {
+    total,
+    successRate: Math.round((successes / total) * 100),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -480,12 +468,15 @@ async function generateDigestSummary(
 ): Promise<{ summary: string; highlights: string[] }> {
   const genai = getGenAIClient();
 
-  // Limit content titles for large orgs
+  // Truncate individual titles and limit count for large orgs
+  const truncatedTitles = input.contentData.titles.map(t =>
+    t.length > MAX_TITLE_LENGTH ? t.slice(0, MAX_TITLE_LENGTH) + '...' : t
+  );
   const titleList =
     input.contentData.count > MAX_CONTENT_FOR_SUMMARY
-      ? input.contentData.titles.slice(0, MAX_CONTENT_FOR_SUMMARY).join(', ') +
+      ? truncatedTitles.slice(0, MAX_CONTENT_FOR_SUMMARY).join(', ') +
         ` (and ${input.contentData.count - MAX_CONTENT_FOR_SUMMARY} more)`
-      : input.contentData.titles.join(', ');
+      : truncatedTitles.join(', ');
 
   const conceptList = input.conceptData.topConcepts
     .map(c => `${c.name} (${c.mentionCount} mentions)`)
@@ -541,8 +532,11 @@ function parseDigestResponse(
         ),
       };
     }
-  } catch {
-    // Fall through to error
+  } catch (parseError) {
+    console.warn('[WeeklyDigest] Failed to parse Gemini response:', {
+      error: parseError instanceof Error ? parseError.message : String(parseError),
+      responsePreview: responseText.slice(0, 200),
+    });
   }
   throw new Error('Failed to parse Gemini digest response');
 }
@@ -570,15 +564,16 @@ function buildFallbackSummary(
   const parts: string[] = [];
 
   if (stats.contentAdded > 0) {
-    parts.push(`Your team added ${stats.contentAdded} recording${stats.contentAdded === 1 ? '' : 's'} this week`);
+    parts.push(`Your team added ${stats.contentAdded} ${pluralize(stats.contentAdded, 'recording')} this week`);
   }
 
   if (stats.conceptsExtracted > 0) {
-    parts.push(`${stats.conceptsExtracted} new concept${stats.conceptsExtracted === 1 ? '' : 's'} ${stats.conceptsExtracted === 1 ? 'was' : 'were'} extracted`);
+    const verb = stats.conceptsExtracted === 1 ? 'was' : 'were';
+    parts.push(`${stats.conceptsExtracted} new ${pluralize(stats.conceptsExtracted, 'concept')} ${verb} extracted`);
   }
 
   if (stats.searches > 0) {
-    parts.push(`${stats.searches} search${stats.searches === 1 ? '' : 'es'} were performed`);
+    parts.push(`${stats.searches} ${pluralize(stats.searches, 'search', 'es')} were performed`);
   }
 
   const summary =
@@ -588,20 +583,15 @@ function buildFallbackSummary(
   const highlights: string[] = [];
 
   if (stats.contentAdded > 0 && contentData.titles.length > 0) {
-    highlights.push(
-      `${stats.contentAdded} new recording${stats.contentAdded === 1 ? '' : 's'} added`
-    );
+    highlights.push(`${stats.contentAdded} new ${pluralize(stats.contentAdded, 'recording')} added`);
   }
 
   if (conceptData.topConcepts.length > 0) {
-    const topName = conceptData.topConcepts[0].name;
-    highlights.push(`Top concept: ${topName}`);
+    highlights.push(`Top concept: ${conceptData.topConcepts[0].name}`);
   }
 
   if (stats.failedSearches > 0) {
-    highlights.push(
-      `${stats.failedSearches} search${stats.failedSearches === 1 ? '' : 'es'} returned no results`
-    );
+    highlights.push(`${stats.failedSearches} ${pluralize(stats.failedSearches, 'search', 'es')} returned no results`);
   }
 
   return { summary, highlights };
