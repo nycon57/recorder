@@ -1,9 +1,13 @@
+import 'server-only';
+
 /**
  * Feedback Processor
  *
  * Converts user feedback (thumbs, corrections, ratings) into agent memory
  * entries so agents learn from corrections and reinforce good patterns.
  */
+
+import { createHash } from 'crypto';
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { storeMemory, recallMemory } from '@/lib/services/agent-memory';
@@ -76,6 +80,7 @@ export async function processFeedback(feedbackId: string): Promise<void> {
       .from('agent_activity_log')
       .select('id, org_id, agent_type, action_type, content_id, output_summary, metadata')
       .eq('id', fb.agent_activity_log_id)
+      .eq('org_id', fb.org_id)
       .maybeSingle();
 
     if (error) {
@@ -174,7 +179,12 @@ async function handleThumbsUp(fb: FeedbackRow, activity: ActivityRow | null): Pr
  */
 async function handleCorrection(fb: FeedbackRow): Promise<void> {
   const meta = fb.metadata as Record<string, unknown> | null;
-  const conceptId = (meta?.conceptId as string) ?? (meta?.concept_id as string) ?? 'unknown';
+  const conceptId = (meta?.conceptId as string) ?? (meta?.concept_id as string);
+
+  if (!conceptId) {
+    console.warn('[FeedbackProcessor] Correction feedback missing conceptId, skipping:', fb.id);
+    return;
+  }
 
   const memoryKey = `concept_correction:${conceptId}`;
 
@@ -214,8 +224,8 @@ async function handleRating(fb: FeedbackRow): Promise<void> {
 
   if (score <= 2) {
     // Low rating — store as negative signal for RAG
-    const queryHash = simpleHash(query);
-    const memoryKey = `low_rated_query:${queryHash}`;
+    const hash = queryHash(query);
+    const memoryKey = `low_rated_query:${hash}`;
 
     const description = query
       ? `Low-rated response (${score}/5) for query: "${query}". Response was: "${truncate(responseSnippet, 200)}". ${fb.comment ? `User comment: ${fb.comment}` : ''}`
@@ -239,8 +249,8 @@ async function handleRating(fb: FeedbackRow): Promise<void> {
     });
   } else if (score >= 4) {
     // High rating — reinforce good pattern
-    const queryHash = simpleHash(query);
-    const memoryKey = `high_rated_query:${queryHash}`;
+    const hash = queryHash(query);
+    const memoryKey = `high_rated_query:${hash}`;
 
     const description = query
       ? `Well-rated response (${score}/5) for query: "${query}".`
@@ -279,8 +289,8 @@ async function escalateImportance(
       const current = existing.importance ?? baseImportance;
       return Math.min(current + IMPORTANCE_BUMP, IMPORTANCE_CAP);
     }
-  } catch {
-    // If recall fails, use base importance
+  } catch (err) {
+    console.error('[FeedbackProcessor] escalateImportance: recallMemory failed, using base importance:', err);
   }
   return baseImportance;
 }
@@ -301,13 +311,8 @@ function buildNegativeDescription(activity: ActivityRow, fb: FeedbackRow): strin
   return parts.join(' ');
 }
 
-function simpleHash(input: string): string {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    const char = input.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-  return Math.abs(hash).toString(36);
+function queryHash(input: string): string {
+  return createHash('sha256').update(input).digest('hex').substring(0, 16);
 }
 
 function truncate(str: string, maxLen: number): string {
