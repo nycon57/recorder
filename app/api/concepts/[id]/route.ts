@@ -9,6 +9,7 @@ import {
   parseBody,
 } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/admin';
+import { processFeedback } from '@/lib/services/feedback-processor';
 import { CONCEPT_TYPES } from '@/lib/validations/knowledge';
 import type { FeedbackType } from '@/lib/types/database';
 
@@ -203,15 +204,24 @@ async function logCorrection(
     metadata: Record<string, unknown>;
   }
 ): Promise<void> {
-  const { error } = await supabase.from('agent_feedback').insert({
-    org_id: params.orgId,
-    user_id: params.userId,
-    feedback_type: 'correction' as FeedbackType,
-    correction_value: params.correctionValue,
-    metadata: params.metadata,
-  });
+  const { data, error } = await supabase
+    .from('agent_feedback')
+    .insert({
+      org_id: params.orgId,
+      user_id: params.userId,
+      feedback_type: 'correction' as FeedbackType,
+      correction_value: params.correctionValue,
+      metadata: params.metadata,
+    })
+    .select('id')
+    .single();
 
   if (error) {
     console.error('[PATCH /api/concepts] Failed to log correction:', error);
+    return;
   }
+
+  processFeedback(data.id).catch((err) =>
+    console.error('[PATCH /api/concepts] processFeedback failed:', err)
+  );
 }

@@ -9,6 +9,7 @@ import {
   parseBody,
 } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/admin';
+import { processFeedback } from '@/lib/services/feedback-processor';
 import type { FeedbackType } from '@/lib/types/database';
 
 const feedbackSchema = z.object({
@@ -71,6 +72,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
       return errors.internalError();
     }
 
+    // Fire-and-forget: integrate feedback into agent memory
+    processFeedback(feedback.id).catch((err) =>
+      console.error('[POST /api/agent-feedback] processFeedback failed:', err)
+    );
+
     return successResponse({ feedback }, undefined, 201);
   }
 
@@ -100,6 +106,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
         return errors.internalError();
       }
 
+      processFeedback(updated.id).catch((err) =>
+        console.error('[POST /api/agent-feedback] processFeedback failed:', err)
+      );
+
       return successResponse({ feedback: updated });
     }
   }
@@ -119,6 +129,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
     console.error('[POST /api/agent-feedback] Insert error:', insertError);
     return errors.internalError();
   }
+
+  processFeedback(feedback.id).catch((err) =>
+    console.error('[POST /api/agent-feedback] processFeedback failed:', err)
+  );
 
   return successResponse({ feedback }, undefined, 201);
 });
