@@ -12,12 +12,7 @@ import { NextRequest } from 'next/server';
 
 import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-
-/** Safely extract the digest object from an agent_activity_log metadata column. */
-function extractDigest(metadata: unknown): Record<string, unknown> | null {
-  const meta = metadata as Record<string, unknown> | null;
-  return (meta?.digest as Record<string, unknown>) ?? null;
-}
+import { extractDigest, toDigestEntry } from '@/lib/utils/digest';
 
 /** Build a base query for successful weekly digest entries scoped to an org. */
 function digestQuery(orgId: string) {
@@ -36,7 +31,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const includeHistory =
     request.nextUrl.searchParams.get('history') === 'true';
 
-  // Fetch the most recent weekly digest for this org
   const { data: latest, error: latestError } = await digestQuery(orgId)
     .limit(1)
     .maybeSingle();
@@ -45,15 +39,31 @@ export const GET = apiHandler(async (request: NextRequest) => {
     throw new Error(`Failed to fetch digest: ${latestError.message}`);
   }
 
-  let history = null;
-  if (includeHistory) {
-    const { data: historyData, error: historyError } = await digestQuery(orgId)
-      .limit(12);
+  if (!latest) {
+    return successResponse({
+      latest: null,
+      previous: null,
+      history: includeHistory ? [] : null,
+    });
+  }
 
-    if (historyError) {
-      console.error('[Digest API] Failed to fetch history:', historyError);
+  // Run history + previous queries in parallel (both depend only on latest)
+  const [historyResult, prevResult] = await Promise.all([
+    includeHistory
+      ? digestQuery(orgId).limit(12)
+      : Promise.resolve(null),
+    digestQuery(orgId)
+      .lt('created_at', latest.created_at)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  let history = null;
+  if (includeHistory && historyResult) {
+    if (historyResult.error) {
+      console.error('[Digest API] Failed to fetch history:', historyResult.error);
     } else {
-      history = (historyData ?? []).map((entry) => ({
+      history = (historyResult.data ?? []).map((entry) => ({
         id: entry.id,
         createdAt: entry.created_at,
         period: extractDigest(entry.metadata)?.period ?? null,
@@ -61,31 +71,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
     }
   }
 
-  // Fetch the previous week's digest for comparison stats
   let previous = null;
-  if (latest) {
-    const { data: prevData } = await digestQuery(orgId)
-      .lt('created_at', latest.created_at)
-      .limit(1)
-      .maybeSingle();
-
-    if (prevData) {
-      previous = {
-        id: prevData.id,
-        createdAt: prevData.created_at,
-        digest: extractDigest(prevData.metadata),
-      };
-    }
+  if (prevResult.error) {
+    console.error('[Digest API] Failed to fetch previous digest:', prevResult.error);
+  } else if (prevResult.data) {
+    previous = toDigestEntry(prevResult.data);
   }
 
   return successResponse({
-    latest: latest
-      ? {
-          id: latest.id,
-          createdAt: latest.created_at,
-          digest: extractDigest(latest.metadata),
-        }
-      : null,
+    latest: toDigestEntry(latest),
     previous,
     history,
   });

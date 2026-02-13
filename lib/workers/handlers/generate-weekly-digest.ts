@@ -14,6 +14,7 @@ import { withAgentLogging, logAgentAction } from '@/lib/services/agent-logger';
 import { getTopConceptsForOrg } from '@/lib/services/concept-extractor';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database, Json } from '@/lib/types/database';
+import type { DigestStats, WeeklyDigest } from '@/lib/utils/digest';
 
 import type { ProgressCallback } from '../job-processor';
 
@@ -44,26 +45,6 @@ function getGenAIClient(): GoogleGenAI {
     genaiClient = new GoogleGenAI({ apiKey });
   }
   return genaiClient;
-}
-
-interface DigestStats {
-  contentAdded: number;
-  conceptsExtracted: number;
-  healthScore: number;
-  searches: number;
-  failedSearches: number;
-  curatorDuplicatesFound: number;
-  curatorStaleDetected: number;
-  agentActionsTotal: number;
-  agentSuccessRate: number;
-}
-
-interface WeeklyDigest {
-  period: { start: string; end: string };
-  summary: string;
-  stats: DigestStats;
-  highlights: string[];
-  gaps: string[];
 }
 
 export async function handleGenerateWeeklyDigest(

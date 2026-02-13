@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AlertCircle,
   ArrowDown,
   ArrowUp,
   BarChart3,
@@ -29,34 +30,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
+import type { DigestEntry, WeeklyDigest } from '@/lib/utils/digest';
 
-// ---------- Types ----------
-
-interface DigestStats {
-  contentAdded: number;
-  conceptsExtracted: number;
-  healthScore: number;
-  searches: number;
-  failedSearches: number;
-  curatorDuplicatesFound: number;
-  curatorStaleDetected: number;
-  agentActionsTotal: number;
-  agentSuccessRate: number;
-}
-
-interface WeeklyDigest {
-  period: { start: string; end: string };
-  summary: string;
-  stats: DigestStats;
-  highlights: string[];
-  gaps: string[];
-}
-
-interface DigestEntry {
-  id: string;
-  createdAt: string;
-  digest: WeeklyDigest | null;
-}
+// ---------- Client-Only Types ----------
 
 interface HistoryItem {
   id: string;
@@ -80,22 +56,22 @@ interface DigestDetailResponse {
 // ---------- Helpers ----------
 
 function formatDateRange(start: string, end: string): string {
-  const s = new Date(start);
-  const e = new Date(end);
-  const opts: Intl.DateTimeFormatOptions = {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const baseOpts: Intl.DateTimeFormatOptions = {
     month: 'short',
     day: 'numeric',
   };
-  const yearOpts: Intl.DateTimeFormatOptions = { ...opts, year: 'numeric' };
-  if (s.getFullYear() !== e.getFullYear()) {
-    return `${s.toLocaleDateString('en-US', yearOpts)} - ${e.toLocaleDateString('en-US', yearOpts)}`;
-  }
-  return `${s.toLocaleDateString('en-US', opts)} - ${e.toLocaleDateString('en-US', yearOpts)}`;
+  const withYear: Intl.DateTimeFormatOptions = { ...baseOpts, year: 'numeric' };
+
+  const startOpts =
+    startDate.getFullYear() !== endDate.getFullYear() ? withYear : baseOpts;
+  return `${startDate.toLocaleDateString('en-US', startOpts)} - ${endDate.toLocaleDateString('en-US', withYear)}`;
 }
 
 function formatWeekLabel(createdAt: string): string {
-  const d = new Date(createdAt);
-  return `Week of ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  const date = new Date(createdAt);
+  return `Week of ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
 function pctChange(current: number, previous: number): number | null {
@@ -105,37 +81,49 @@ function pctChange(current: number, previous: number): number | null {
 
 // ---------- Sub-components ----------
 
-function ChangeIndicator({
-  current,
-  previous,
-}: {
+interface ChangeIndicatorProps {
   current: number;
   previous: number | undefined;
-}) {
+}
+
+function ChangeIndicator({ current, previous }: ChangeIndicatorProps) {
   if (previous === undefined) return null;
   const change = pctChange(current, previous);
   if (change === null) return null;
 
-  let Icon = Minus;
-  let color = '';
-  let display = '0';
-
   if (change > 0) {
-    Icon = ArrowUp;
-    color = 'text-green-500';
-    display = String(change);
-  } else if (change < 0) {
-    Icon = ArrowDown;
-    color = 'text-red-500';
-    display = String(Math.abs(change));
+    return (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <ArrowUp className="h-3 w-3 text-green-500" aria-hidden />
+        <span className="text-green-500">{change}%</span> vs last week
+      </span>
+    );
+  }
+
+  if (change < 0) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <ArrowDown className="h-3 w-3 text-red-500" aria-hidden />
+        <span className="text-red-500">{Math.abs(change)}%</span> vs last week
+      </span>
+    );
   }
 
   return (
     <span className="flex items-center gap-1 text-xs text-muted-foreground">
-      <Icon className={`h-3 w-3 ${color}`} aria-hidden />
-      <span className={color}>{display}%</span> vs last week
+      <Minus className="h-3 w-3" aria-hidden />
+      <span>0%</span> vs last week
     </span>
   );
+}
+
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  icon: React.ComponentType<{ className?: string }>;
+  suffix?: string;
+  current?: number;
+  previous?: number;
 }
 
 function StatCard({
@@ -145,21 +133,14 @@ function StatCard({
   suffix,
   current,
   previous,
-}: {
-  title: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
-  suffix?: string;
-  current?: number;
-  previous?: number;
-}) {
+}: StatCardProps) {
   return (
     <Card>
       <CardContent className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold">
+            <p className="text-2xl font-bold tabular-nums">
               {value}
               {suffix && (
                 <span className="text-sm font-normal text-muted-foreground">
@@ -168,10 +149,7 @@ function StatCard({
               )}
             </p>
             {current !== undefined && (
-              <ChangeIndicator
-                current={current}
-                previous={previous}
-              />
+              <ChangeIndicator current={current} previous={previous} />
             )}
           </div>
           <div className="rounded-lg bg-muted p-2">
@@ -221,6 +199,8 @@ function EmptyState() {
 
 export function DigestContent() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [switching, setSwitching] = useState(false);
   const [data, setData] = useState<DigestApiResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedDigest, setSelectedDigest] = useState<WeeklyDigest | null>(
@@ -230,13 +210,17 @@ export function DigestContent() {
     null
   );
 
+  // Ref to avoid stale closures in handleSelectDigest
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
   // Fetch initial data (latest + history)
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
         const res = await fetch('/api/digest?history=true');
-        if (!res.ok) throw new Error('Failed to fetch digest');
+        if (!res.ok) throw new Error('Failed to load digest data');
         const json = await res.json();
         const payload = json.data as DigestApiResponse;
         if (cancelled) return;
@@ -248,6 +232,7 @@ export function DigestContent() {
         }
       } catch (err) {
         console.error('Failed to load digest:', err);
+        if (!cancelled) setError('Unable to load digest. Please try again later.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -262,12 +247,17 @@ export function DigestContent() {
   const handleSelectDigest = useCallback(
     async (id: string) => {
       if (id === selectedId) return;
+      const previousId = selectedId;
       setSelectedId(id);
+      setSwitching(true);
+
+      const currentData = dataRef.current;
 
       // If it's the latest, use cached data
-      if (data?.latest && id === data.latest.id) {
-        setSelectedDigest(data.latest.digest);
-        setSelectedPrevious(data.previous);
+      if (currentData?.latest && id === currentData.latest.id) {
+        setSelectedDigest(currentData.latest.digest);
+        setSelectedPrevious(currentData.previous);
+        setSwitching(false);
         return;
       }
 
@@ -280,14 +270,18 @@ export function DigestContent() {
         setSelectedPrevious(detail.previous);
       } catch (err) {
         console.error('Failed to load digest:', err);
+        // Revert to previous selection so the UI stays consistent
+        setSelectedId(previousId);
+      } finally {
+        setSwitching(false);
       }
     },
-    [selectedId, data]
+    [selectedId]
   );
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" aria-busy="true" aria-label="Loading digest">
         <div className="h-8 w-48 bg-muted animate-pulse rounded" />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -307,6 +301,20 @@ export function DigestContent() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Weekly Digest</h1>
+        <Card>
+          <CardContent className="flex items-center gap-3 px-6 py-8">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" aria-hidden />
+            <p className="text-muted-foreground">{error}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!data?.latest || !selectedDigest) {
     return (
       <div className="space-y-6">
@@ -316,29 +324,27 @@ export function DigestContent() {
     );
   }
 
-  const digest = selectedDigest;
-  const prev = selectedPrevious?.digest ?? undefined;
-  const history = data.history;
+  const prevStats = selectedPrevious?.digest?.stats;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" aria-live="polite" aria-busy={switching}>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Weekly Digest</h1>
           <p className="text-sm text-muted-foreground">
-            {formatDateRange(digest.period.start, digest.period.end)}
+            {formatDateRange(selectedDigest.period.start, selectedDigest.period.end)}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <HealthScoreBadge score={digest.stats.healthScore} />
-          {history && history.length > 1 && (
+          <HealthScoreBadge score={selectedDigest.stats.healthScore} />
+          {data.history && data.history.length > 1 && (
             <Select value={selectedId ?? ''} onValueChange={handleSelectDigest}>
-              <SelectTrigger className="w-[220px]">
+              <SelectTrigger className="w-[220px]" aria-label="Select digest week">
                 <SelectValue placeholder="Select week" />
               </SelectTrigger>
               <SelectContent>
-                {history.map((item) => (
+                {data.history.map((item) => (
                   <SelectItem key={item.id} value={item.id}>
                     {formatWeekLabel(item.createdAt)}
                   </SelectItem>
@@ -348,6 +354,9 @@ export function DigestContent() {
           )}
         </div>
       </div>
+
+      {/* Digest content -- fades while switching between weeks */}
+      <div className={`space-y-6 transition-opacity ${switching ? 'opacity-50' : ''}`}>
 
       {/* Summary */}
       <Card>
@@ -359,7 +368,7 @@ export function DigestContent() {
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground leading-relaxed">
-            {digest.summary}
+            {selectedDigest.summary}
           </p>
         </CardContent>
       </Card>
@@ -368,36 +377,36 @@ export function DigestContent() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Content added"
-          value={digest.stats.contentAdded}
+          value={selectedDigest.stats.contentAdded}
           icon={FileText}
-          current={digest.stats.contentAdded}
-          previous={prev?.stats.contentAdded}
+          current={selectedDigest.stats.contentAdded}
+          previous={prevStats?.contentAdded}
         />
         <StatCard
           title="Concepts extracted"
-          value={digest.stats.conceptsExtracted}
+          value={selectedDigest.stats.conceptsExtracted}
           icon={TrendingUp}
-          current={digest.stats.conceptsExtracted}
-          previous={prev?.stats.conceptsExtracted}
+          current={selectedDigest.stats.conceptsExtracted}
+          previous={prevStats?.conceptsExtracted}
         />
         <StatCard
           title="Searches"
-          value={digest.stats.searches}
+          value={selectedDigest.stats.searches}
           icon={Search}
-          current={digest.stats.searches}
-          previous={prev?.stats.searches}
+          current={selectedDigest.stats.searches}
+          previous={prevStats?.searches}
         />
         <StatCard
           title="Agent actions"
-          value={digest.stats.agentActionsTotal}
+          value={selectedDigest.stats.agentActionsTotal}
           icon={Bot}
-          current={digest.stats.agentActionsTotal}
-          previous={prev?.stats.agentActionsTotal}
+          current={selectedDigest.stats.agentActionsTotal}
+          previous={prevStats?.agentActionsTotal}
         />
       </div>
 
       {/* Highlights */}
-      {digest.highlights.length > 0 && (
+      {selectedDigest.highlights.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -407,7 +416,7 @@ export function DigestContent() {
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
-              {digest.highlights.map((highlight, i) => (
+              {selectedDigest.highlights.map((highlight, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                   <span className="text-muted-foreground">{highlight}</span>
@@ -419,7 +428,7 @@ export function DigestContent() {
       )}
 
       {/* Knowledge Gaps */}
-      {digest.gaps.length > 0 && (
+      {selectedDigest.gaps.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -432,7 +441,7 @@ export function DigestContent() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {digest.gaps.map((gap, i) => (
+              {selectedDigest.gaps.map((gap, i) => (
                 <Badge key={i} variant="outline">
                   {gap}
                 </Badge>
@@ -454,31 +463,33 @@ export function DigestContent() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Total actions</p>
-              <p className="text-lg font-semibold">
-                {digest.stats.agentActionsTotal}
+              <p className="text-lg font-semibold tabular-nums">
+                {selectedDigest.stats.agentActionsTotal}
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Success rate</p>
-              <p className="text-lg font-semibold">
-                {digest.stats.agentSuccessRate}%
+              <p className="text-lg font-semibold tabular-nums">
+                {selectedDigest.stats.agentSuccessRate}%
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Duplicates found</p>
-              <p className="text-lg font-semibold">
-                {digest.stats.curatorDuplicatesFound}
+              <p className="text-lg font-semibold tabular-nums">
+                {selectedDigest.stats.curatorDuplicatesFound}
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Stale items detected</p>
-              <p className="text-lg font-semibold">
-                {digest.stats.curatorStaleDetected}
+              <p className="text-lg font-semibold tabular-nums">
+                {selectedDigest.stats.curatorStaleDetected}
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      </div>{/* end switching wrapper */}
     </div>
   );
 }

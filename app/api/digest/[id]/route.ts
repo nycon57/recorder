@@ -9,11 +9,17 @@ import { NextRequest } from 'next/server';
 
 import { apiHandler, errors, requireOrg, successResponse } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { toDigestEntry } from '@/lib/utils/digest';
 
-/** Safely extract the digest object from an agent_activity_log metadata column. */
-function extractDigest(metadata: unknown): Record<string, unknown> | null {
-  const meta = metadata as Record<string, unknown> | null;
-  return (meta?.digest as Record<string, unknown>) ?? null;
+const DIGEST_COLUMNS = 'id, metadata, created_at' as const;
+
+function digestBaseQuery(orgId: string) {
+  return supabaseAdmin
+    .from('agent_activity_log')
+    .select(DIGEST_COLUMNS)
+    .eq('org_id', orgId)
+    .eq('action_type', 'weekly_digest')
+    .eq('outcome', 'success');
 }
 
 export const GET = apiHandler(
@@ -24,13 +30,8 @@ export const GET = apiHandler(
     const { orgId } = await requireOrg();
     const { id } = await context.params;
 
-    const { data: entry, error } = await supabaseAdmin
-      .from('agent_activity_log')
-      .select('id, metadata, created_at')
+    const { data: entry, error } = await digestBaseQuery(orgId)
       .eq('id', id)
-      .eq('org_id', orgId)
-      .eq('action_type', 'weekly_digest')
-      .eq('outcome', 'success')
       .single();
 
     if (error || !entry) {
@@ -38,31 +39,19 @@ export const GET = apiHandler(
     }
 
     // Fetch previous digest for comparison
-    let previous = null;
-    const { data: prevData } = await supabaseAdmin
-      .from('agent_activity_log')
-      .select('id, metadata, created_at')
-      .eq('org_id', orgId)
-      .eq('action_type', 'weekly_digest')
-      .eq('outcome', 'success')
+    const { data: prevData } = await digestBaseQuery(orgId)
       .lt('created_at', entry.created_at)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (prevData) {
-      previous = {
-        id: prevData.id,
-        createdAt: prevData.created_at,
-        digest: extractDigest(prevData.metadata),
-      };
-    }
+    const entryResult = toDigestEntry(entry);
 
     return successResponse({
-      id: entry.id,
-      createdAt: entry.created_at,
-      digest: extractDigest(entry.metadata),
-      previous,
+      id: entryResult.id,
+      createdAt: entryResult.createdAt,
+      digest: entryResult.digest,
+      previous: prevData ? toDigestEntry(prevData) : null,
     });
   }
 );

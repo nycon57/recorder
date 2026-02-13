@@ -55,31 +55,30 @@ export default async function DashboardLayout({
       isSystemAdmin = true;
     }
 
-    // Check for active onboarding plan to conditionally show sidebar link
-    if (userData?.id && userData?.org_id) {
-      const { data: planData } = await supabaseAdmin
-        .from('agent_onboarding_plans')
-        .select('id')
-        .eq('org_id', userData.org_id)
-        .eq('user_id', userData.id)
-        .eq('plan_status', 'active')
-        .limit(1)
-        .maybeSingle();
-
-      hasOnboardingPlan = !!planData;
-    }
-
-    // Check if digest agent is enabled for this org
+    // Run independent sidebar queries in parallel
     if (userData?.org_id) {
-      const { data: agentSettings } = await supabaseAdmin
-        .from('org_agent_settings')
-        .select('digest_enabled, global_agent_enabled')
-        .eq('org_id', userData.org_id)
-        .maybeSingle();
+      const [planResult, settingsResult] = await Promise.all([
+        userData.id
+          ? supabaseAdmin
+              .from('agent_onboarding_plans')
+              .select('id')
+              .eq('org_id', userData.org_id)
+              .eq('user_id', userData.id)
+              .eq('plan_status', 'active')
+              .limit(1)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabaseAdmin
+          .from('org_agent_settings')
+          .select('digest_enabled, global_agent_enabled')
+          .eq('org_id', userData.org_id)
+          .maybeSingle(),
+      ]);
 
+      hasOnboardingPlan = !!planResult.data;
       hasDigestEnabled =
-        agentSettings?.digest_enabled === true &&
-        agentSettings?.global_agent_enabled !== false;
+        settingsResult.data?.digest_enabled === true &&
+        settingsResult.data?.global_agent_enabled !== false;
     }
   } catch (error) {
     console.error('[DashboardLayout] Error fetching user data:', error);
