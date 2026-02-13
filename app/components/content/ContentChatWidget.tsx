@@ -16,6 +16,8 @@ interface Message {
   done?: boolean;
   /** The user query that produced this assistant response */
   query?: string;
+  /** Stable unique ID for rating dedup */
+  ratingId?: string;
 }
 
 interface ContentChatWidgetProps {
@@ -88,12 +90,12 @@ export function ContentChatWidget({
     setInput('');
     setError(null);
     conversationIdRef.current = null;
-    messageCounterRef.current = 0;
     inputRef.current?.focus();
   }, [cancelStream]);
 
-  // Counter for generating unique response IDs
+  // Counter for generating unique response IDs (never reset)
   const messageCounterRef = useRef(0);
+  const sessionIdRef = useRef(crypto.randomUUID().slice(0, 8));
 
   const appendToken = useCallback((token: string) => {
     setMessages((prev) => {
@@ -172,12 +174,14 @@ export function ContentChatWidget({
                   conversationIdRef.current = event.conversationId;
                 }
                 messageCounterRef.current += 1;
-                // Mark the last assistant message as done for rating
-                setMessages((prev) => {
-                  const last = prev[prev.length - 1];
-                  if (last?.role !== 'assistant') return prev;
-                  return [...prev.slice(0, -1), { ...last, done: true }];
-                });
+                {
+                  const ratingId = `${sessionIdRef.current}-${messageCounterRef.current}`;
+                  setMessages((prev) => {
+                    const last = prev[prev.length - 1];
+                    if (last?.role !== 'assistant') return prev;
+                    return [...prev.slice(0, -1), { ...last, done: true, ratingId }];
+                  });
+                }
                 break;
               case 'error':
                 setError(DEFAULT_ERROR);
@@ -284,9 +288,9 @@ export function ContentChatWidget({
                     </>
                   )}
                 </div>
-                {msg.role === 'assistant' && msg.done && msg.content && (
+                {msg.role === 'assistant' && msg.done && msg.content && msg.ratingId && (
                   <ResponseRating
-                    responseId={`${contentId}-${i}`}
+                    responseId={msg.ratingId}
                     query={msg.query ?? ''}
                     responseSnippet={msg.content}
                     className="mt-1"

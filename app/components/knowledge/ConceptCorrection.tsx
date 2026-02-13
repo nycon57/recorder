@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Pencil, Merge, Trash2, Loader2, Check } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
@@ -88,10 +88,20 @@ export function ConceptCorrection({
     [resetState]
   );
 
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Cancel debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, []);
+
   const searchConcepts = useCallback(
     async (query: string) => {
       if (query.length < 2) {
         setMergeResults([]);
+        setIsSearching(false);
         return;
       }
 
@@ -118,7 +128,13 @@ export function ConceptCorrection({
     (value: string) => {
       setMergeSearch(value);
       setMergeTargetId('');
-      searchConcepts(value);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (value.length < 2) {
+        setMergeResults([]);
+        return;
+      }
+      setIsSearching(true);
+      debounceTimerRef.current = setTimeout(() => searchConcepts(value), 250);
     },
     [searchConcepts]
   );
@@ -192,7 +208,7 @@ export function ConceptCorrection({
           </DialogHeader>
 
           {/* Mode tabs */}
-          <div className="flex gap-1 rounded-lg bg-muted/50 p-1" role="tablist">
+          <div className="flex gap-1 rounded-lg bg-muted/50 p-1" role="tablist" aria-label="Correction mode">
             {(
               [
                 { key: 'edit', label: 'Edit', icon: Pencil },
@@ -204,6 +220,8 @@ export function ConceptCorrection({
                 key={key}
                 role="tab"
                 aria-selected={mode === key}
+                aria-controls={`correction-panel-${key}`}
+                id={`correction-tab-${key}`}
                 onClick={() => setMode(key)}
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors ${
                   mode === key
@@ -219,7 +237,7 @@ export function ConceptCorrection({
 
           {/* Edit mode */}
           {mode === 'edit' && (
-            <div className="space-y-4">
+            <div id="correction-panel-edit" role="tabpanel" aria-labelledby="correction-tab-edit" className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="concept-name">Name</Label>
                 <Input
@@ -249,7 +267,7 @@ export function ConceptCorrection({
 
           {/* Merge mode */}
           {mode === 'merge' && (
-            <div className="space-y-3">
+            <div id="correction-panel-merge" role="tabpanel" aria-labelledby="correction-tab-merge" className="space-y-3">
               <p className="text-sm text-muted-foreground">
                 Merge <strong>{conceptName}</strong> into another concept. All mentions
                 will be reassigned.
@@ -303,7 +321,7 @@ export function ConceptCorrection({
 
           {/* Incorrect mode */}
           {mode === 'incorrect' && (
-            <div className="space-y-2">
+            <div id="correction-panel-incorrect" role="tabpanel" aria-labelledby="correction-tab-incorrect" className="space-y-2">
               <p className="text-sm text-muted-foreground">
                 Mark <strong>{conceptName}</strong> as incorrect. This will remove the
                 concept and all its mentions from the knowledge graph.

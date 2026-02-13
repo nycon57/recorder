@@ -105,24 +105,40 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
     }
 
     // Update the target concept's mention_count
-    const { count } = await supabase
+    const { count, error: countError } = await supabase
       .from('concept_mentions')
       .select('id', { count: 'exact', head: true })
-      .eq('concept_id', body.merge_into_id);
+      .eq('concept_id', body.merge_into_id)
+      .eq('org_id', orgId);
+
+    if (countError) {
+      console.error('[PATCH /api/concepts] Mention count error:', countError);
+      return errors.internalError();
+    }
 
     if (count !== null) {
-      await supabase
+      const { error: updateCountError } = await supabase
         .from('knowledge_concepts')
         .update({ mention_count: count })
         .eq('id', body.merge_into_id);
+
+      if (updateCountError) {
+        console.error('[PATCH /api/concepts] Update mention count error:', updateCountError);
+        return errors.internalError();
+      }
     }
 
     // Delete the old concept
-    await supabase
+    const { error: deleteError } = await supabase
       .from('knowledge_concepts')
       .delete()
       .eq('id', id)
       .eq('org_id', orgId);
+
+    if (deleteError) {
+      console.error('[PATCH /api/concepts] Delete source concept error:', deleteError);
+      return errors.internalError();
+    }
 
     // Log merge correction
     await logCorrection(supabase, {
@@ -148,17 +164,27 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
   // --- Handle mark as incorrect ---
   if (body.marked_incorrect) {
     // Delete concept_mentions first (FK), then delete concept
-    await supabase
+    const { error: deleteMentionsError } = await supabase
       .from('concept_mentions')
       .delete()
       .eq('concept_id', id)
       .eq('org_id', orgId);
 
-    await supabase
+    if (deleteMentionsError) {
+      console.error('[PATCH /api/concepts] Delete mentions error:', deleteMentionsError);
+      return errors.internalError();
+    }
+
+    const { error: deleteConceptError } = await supabase
       .from('knowledge_concepts')
       .delete()
       .eq('id', id)
       .eq('org_id', orgId);
+
+    if (deleteConceptError) {
+      console.error('[PATCH /api/concepts] Delete concept error:', deleteConceptError);
+      return errors.internalError();
+    }
 
     await logCorrection(supabase, {
       orgId,
