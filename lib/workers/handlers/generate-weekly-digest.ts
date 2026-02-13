@@ -166,7 +166,6 @@ export async function handleGenerateWeeklyDigest(
 
       progressCallback?.(85, 'Storing digest...');
 
-      // Store in agent_activity_log
       await logAgentAction({
         orgId,
         agentType: AGENT_TYPE,
@@ -178,7 +177,7 @@ export async function handleGenerateWeeklyDigest(
 
       progressCallback?.(100, 'Weekly digest generated');
       console.log(
-        `[WeeklyDigest] Generated digest for org ${orgId}: ${stats.contentAdded} content, ${stats.conceptsExtracted} concepts, ${stats.searches} searches`
+        `[WeeklyDigest] Generated digest for org ${orgId}: ${stats.contentAdded} recordings, ${stats.conceptsExtracted} concepts, ${stats.searches} searches`
       );
     }
   );
@@ -260,12 +259,14 @@ interface KnowledgeGapsData {
 }
 
 /** Check whether an error indicates the knowledge_gaps table does not exist yet. */
-function isTableMissingError(error: { message?: string; code?: string } | Error | unknown): boolean {
+function isTableMissingError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error);
+  if (msg.includes('does not exist')) return true;
+
   const code = typeof error === 'object' && error !== null && 'code' in error
     ? (error as { code: string }).code
-    : '';
-  return msg.includes('does not exist') || code === '42P01';
+    : undefined;
+  return code === '42P01';
 }
 
 async function collectKnowledgeGaps(
@@ -340,11 +341,13 @@ async function collectCuratorActions(
     return { duplicates: 0, stale: 0 };
   }
 
-  const actions = data ?? [];
-  return {
-    duplicates: actions.filter(a => a.action_type === 'detect_duplicate').length,
-    stale: actions.filter(a => a.action_type === 'detect_staleness').length,
-  };
+  let duplicates = 0;
+  let stale = 0;
+  for (const a of data ?? []) {
+    if (a.action_type === 'detect_duplicate') duplicates++;
+    else if (a.action_type === 'detect_staleness') stale++;
+  }
+  return { duplicates, stale };
 }
 
 interface SearchActivityData {
@@ -516,28 +519,38 @@ Return ONLY valid JSON:
 function parseDigestResponse(
   responseText: string
 ): { summary: string; highlights: string[] } {
+  let cleaned = responseText.trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned
+      .replace(/^```(?:json)?\s*\n?/, '')
+      .replace(/\n?```\s*$/, '');
+  }
+
+  let parsed: unknown;
   try {
-    let cleaned = responseText.trim();
-    if (cleaned.startsWith('```')) {
-      cleaned = cleaned
-        .replace(/^```(?:json)?\s*\n?/, '')
-        .replace(/\n?```\s*$/, '');
-    }
-    const parsed = JSON.parse(cleaned);
-    if (typeof parsed.summary === 'string' && Array.isArray(parsed.highlights)) {
-      return {
-        summary: parsed.summary,
-        highlights: parsed.highlights.filter(
-          (h: unknown): h is string => typeof h === 'string'
-        ),
-      };
-    }
+    parsed = JSON.parse(cleaned);
   } catch (parseError) {
     console.warn('[WeeklyDigest] Failed to parse Gemini response:', {
       error: parseError instanceof Error ? parseError.message : String(parseError),
       responsePreview: responseText.slice(0, 200),
     });
+    throw new Error('Failed to parse Gemini digest response');
   }
+
+  const obj = parsed as Record<string, unknown>;
+  if (typeof obj.summary === 'string' && Array.isArray(obj.highlights)) {
+    return {
+      summary: obj.summary,
+      highlights: obj.highlights.filter(
+        (h: unknown): h is string => typeof h === 'string'
+      ),
+    };
+  }
+
+  console.warn('[WeeklyDigest] Gemini response has unexpected shape:', {
+    keys: Object.keys(obj),
+    responsePreview: responseText.slice(0, 200),
+  });
   throw new Error('Failed to parse Gemini digest response');
 }
 
@@ -556,7 +569,7 @@ function buildFallbackSummary(
         'No new content was added this week. Consider recording recent processes to keep your knowledge base current.',
       highlights: [
         'No new content recorded this week',
-        'Knowledge base may be going stale without fresh recordings',
+        'Consider recording recent processes to keep your knowledge base up to date',
       ],
     };
   }
