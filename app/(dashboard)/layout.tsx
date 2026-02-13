@@ -37,6 +37,7 @@ export default async function DashboardLayout({
   let userRole: 'owner' | 'admin' | 'contributor' | 'reader' = 'reader';
   let isSystemAdmin = false;
   let hasOnboardingPlan = false;
+  let hasDigestEnabled = false;
 
   try {
     const { data: userData } = await supabaseAdmin
@@ -67,6 +68,19 @@ export default async function DashboardLayout({
 
       hasOnboardingPlan = !!planData;
     }
+
+    // Check if digest agent is enabled for this org
+    if (userData?.org_id) {
+      const { data: agentSettings } = await supabaseAdmin
+        .from('org_agent_settings')
+        .select('digest_enabled, global_agent_enabled')
+        .eq('org_id', userData.org_id)
+        .maybeSingle();
+
+      hasDigestEnabled =
+        agentSettings?.digest_enabled === true &&
+        agentSettings?.global_agent_enabled !== false;
+    }
   } catch (error) {
     console.error('[DashboardLayout] Error fetching user data:', error);
     // Continue with defaults if fetch fails
@@ -74,7 +88,7 @@ export default async function DashboardLayout({
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <AuroraSidebar role={userRole} isSystemAdmin={isSystemAdmin} hasOnboardingPlan={hasOnboardingPlan} />
+      <AuroraSidebar role={userRole} isSystemAdmin={isSystemAdmin} hasOnboardingPlan={hasOnboardingPlan} hasDigestEnabled={hasDigestEnabled} />
       <SidebarInset>
         {/* Header with sidebar trigger and breadcrumbs */}
         <header className="flex h-16 shrink-0 items-center gap-2 px-4 sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-accent/10 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">

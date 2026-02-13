@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import * as motion from "motion/react-client"
+import { Newspaper } from "lucide-react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Analytics01Icon } from "@hugeicons/core-free-icons"
 
@@ -65,9 +66,10 @@ const labelVariants = {
   },
 }
 
-export function NavInsightsAurora() {
+export function NavInsightsAurora({ hasDigestEnabled = false }: { hasDigestEnabled?: boolean }) {
   const pathname = usePathname()
-  const isActive = pathname === "/analytics"
+  const isAnalyticsActive = pathname === "/analytics"
+  const isDigestActive = pathname === "/digest"
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
@@ -101,7 +103,7 @@ export function NavInsightsAurora() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={isActive}
+                  isActive={isAnalyticsActive}
                   tooltip="Personal analytics"
                 >
                   <Link href="/analytics" className="group/nav-item">
@@ -113,6 +115,24 @@ export function NavInsightsAurora() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </MotionDiv>
+            {hasDigestEnabled && (
+              <MotionDiv {...(mounted ? { variants: itemVariants } : {})}>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isDigestActive}
+                    tooltip="Weekly knowledge digest"
+                  >
+                    <Link href="/digest" className="group/nav-item">
+                      <span className="inline-flex transition-transform duration-200 group-hover/nav-item:scale-110">
+                        <Newspaper className="size-4" />
+                      </span>
+                      <span>Weekly Digest</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </MotionDiv>
+            )}
           </MotionDiv>
         </SidebarMenu>
       </SidebarGroupContent>

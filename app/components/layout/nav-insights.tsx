@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { BarChart3 } from "lucide-react"
+import { BarChart3, Newspaper } from "lucide-react"
 
 import {
   SidebarGroup,
@@ -17,9 +17,10 @@ import {
  * NavInsights Component
  * User-facing analytics and insights
  */
-export function NavInsights() {
+export function NavInsights({ hasDigestEnabled = false }: { hasDigestEnabled?: boolean }) {
   const pathname = usePathname()
-  const isActive = pathname === "/analytics"
+  const isAnalyticsActive = pathname === "/analytics"
+  const isDigestActive = pathname === "/digest"
 
   return (
     <SidebarGroup>
@@ -29,7 +30,7 @@ export function NavInsights() {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              isActive={isActive}
+              isActive={isAnalyticsActive}
               tooltip="Personal analytics"
             >
               <Link href="/analytics">
@@ -38,6 +39,20 @@ export function NavInsights() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {hasDigestEnabled && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={isDigestActive}
+                tooltip="Weekly knowledge digest"
+              >
+                <Link href="/digest">
+                  <Newspaper />
+                  <span>Weekly Digest</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
