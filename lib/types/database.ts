@@ -177,6 +177,22 @@ export type ImportedDocumentStatus =
 
 export type SearchMode = 'standard' | 'agentic' | 'hybrid' | 'hierarchical';
 
+export type WorkflowStatus = 'draft' | 'published' | 'outdated' | 'archived';
+
+/**
+ * Individual step in a workflow extracted from screen recordings.
+ */
+export interface WorkflowStep {
+  stepNumber: number;
+  title: string;
+  description: string;
+  screenshotPath: string | null;
+  timestamp: number;
+  duration: number;
+  uiElements: string[];
+  action: string;
+}
+
 /**
  * Storage tier classification for multi-tier storage strategy.
  * - 'hot': Recent files in Supabase Storage (< 30 days) - $0.021/GB/month
@@ -2198,6 +2214,50 @@ export interface Database {
           duration_ms?: number | null;
           next_retry_at?: string | null;
           metadata?: Json;
+        };
+      };
+      /** Extracted step-by-step workflows from screen recordings */
+      workflows: {
+        Row: {
+          id: string;
+          content_id: string;
+          org_id: string;
+          title: string;
+          description: string | null;
+          steps: WorkflowStep[];
+          step_count: number | null;
+          status: WorkflowStatus;
+          confidence: number | null;
+          superseded_by: string | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          content_id: string;
+          org_id: string;
+          title: string;
+          description?: string | null;
+          steps?: WorkflowStep[];
+          step_count?: number | null;
+          status?: WorkflowStatus;
+          confidence?: number | null;
+          superseded_by?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          title?: string;
+          description?: string | null;
+          steps?: WorkflowStep[];
+          step_count?: number | null;
+          status?: WorkflowStatus;
+          confidence?: number | null;
+          superseded_by?: string | null;
+          metadata?: Json;
+          updated_at?: string;
         };
       };
     };
