@@ -13,10 +13,6 @@ import {
   SidebarMenuButton,
 } from "@/app/components/ui/sidebar"
 
-/**
- * NavInsights Component
- * User-facing analytics and insights
- */
 export function NavInsights({ hasDigestEnabled = false }: { hasDigestEnabled?: boolean }) {
   const pathname = usePathname()
   const isAnalyticsActive = pathname === "/analytics"

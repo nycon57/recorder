@@ -17,17 +17,6 @@ import {
   SidebarMenuButton,
 } from "@/app/components/ui/sidebar"
 
-/**
- * NavInsightsAurora Component
- * Motion-enhanced insights navigation with aurora effects
- *
- * Features:
- * - Staggered entrance animation
- * - Icon scale on hover
- * - Aurora glow on active state
- */
-
-// Motion variants for entrance
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {

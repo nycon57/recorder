@@ -58,25 +58,22 @@ export const GET = apiHandler(async (request: NextRequest) => {
       .maybeSingle(),
   ]);
 
-  let history = null;
-  if (includeHistory && historyResult) {
-    if (historyResult.error) {
-      console.error('[Digest API] Failed to fetch history:', historyResult.error);
-    } else {
-      history = (historyResult.data ?? []).map((entry) => ({
+  if (historyResult?.error) {
+    console.error('[Digest API] Failed to fetch history:', historyResult.error);
+  }
+  if (prevResult.error) {
+    console.error('[Digest API] Failed to fetch previous digest:', prevResult.error);
+  }
+
+  const history = historyResult?.data
+    ? historyResult.data.map((entry) => ({
         id: entry.id,
         createdAt: entry.created_at,
         period: extractDigest(entry.metadata)?.period ?? null,
-      }));
-    }
-  }
+      }))
+    : null;
 
-  let previous = null;
-  if (prevResult.error) {
-    console.error('[Digest API] Failed to fetch previous digest:', prevResult.error);
-  } else if (prevResult.data) {
-    previous = toDigestEntry(prevResult.data);
-  }
+  const previous = prevResult.data ? toDigestEntry(prevResult.data) : null;
 
   return successResponse({
     latest: toDigestEntry(latest),

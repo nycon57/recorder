@@ -11,12 +11,10 @@ import { apiHandler, errors, requireOrg, successResponse } from '@/lib/utils/api
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { toDigestEntry } from '@/lib/utils/digest';
 
-const DIGEST_COLUMNS = 'id, metadata, created_at' as const;
-
 function digestBaseQuery(orgId: string) {
   return supabaseAdmin
     .from('agent_activity_log')
-    .select(DIGEST_COLUMNS)
+    .select('id, metadata, created_at')
     .eq('org_id', orgId)
     .eq('action_type', 'weekly_digest')
     .eq('outcome', 'success');
@@ -45,12 +43,8 @@ export const GET = apiHandler(
       .limit(1)
       .maybeSingle();
 
-    const entryResult = toDigestEntry(entry);
-
     return successResponse({
-      id: entryResult.id,
-      createdAt: entryResult.createdAt,
-      digest: entryResult.digest,
+      ...toDigestEntry(entry),
       previous: prevData ? toDigestEntry(prevData) : null,
     });
   }

@@ -91,66 +91,44 @@ function ChangeIndicator({ current, previous }: ChangeIndicatorProps) {
   const change = pctChange(current, previous);
   if (change === null) return null;
 
+  let Icon = Minus;
+  let colorClass = '';
   if (change > 0) {
-    return (
-      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-        <ArrowUp className="h-3 w-3 text-green-500" aria-hidden />
-        <span className="text-green-500">{change}%</span> vs last week
-      </span>
-    );
+    Icon = ArrowUp;
+    colorClass = 'text-green-500';
+  } else if (change < 0) {
+    Icon = ArrowDown;
+    colorClass = 'text-red-500';
   }
 
-  if (change < 0) {
-    return (
-      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-        <ArrowDown className="h-3 w-3 text-red-500" aria-hidden />
-        <span className="text-red-500">{Math.abs(change)}%</span> vs last week
-      </span>
-    );
-  }
+  const sign = change > 0 ? '+' : change < 0 ? '-' : '';
+  const direction = change > 0 ? 'Up' : change < 0 ? 'Down' : 'No change';
 
   return (
     <span className="flex items-center gap-1 text-xs text-muted-foreground">
-      <Minus className="h-3 w-3" aria-hidden />
-      <span>0%</span> vs last week
+      <span className="sr-only">{direction}</span>
+      <Icon className={`h-3 w-3 ${colorClass}`} aria-hidden />
+      <span className={colorClass}>{sign}{Math.abs(change)}%</span> vs last week
     </span>
   );
 }
 
 interface StatCardProps {
   title: string;
-  value: string | number;
+  value: number;
   icon: React.ComponentType<{ className?: string }>;
-  suffix?: string;
-  current?: number;
   previous?: number;
 }
 
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  suffix,
-  current,
-  previous,
-}: StatCardProps) {
+function StatCard({ title, value, icon: Icon, previous }: StatCardProps) {
   return (
     <Card>
       <CardContent className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold tabular-nums">
-              {value}
-              {suffix && (
-                <span className="text-sm font-normal text-muted-foreground">
-                  {suffix}
-                </span>
-              )}
-            </p>
-            {current !== undefined && (
-              <ChangeIndicator current={current} previous={previous} />
-            )}
+            <p className="text-2xl font-bold tabular-nums">{value}</p>
+            <ChangeIndicator current={value} previous={previous} />
           </div>
           <div className="rounded-lg bg-muted p-2">
             <Icon className="h-5 w-5 text-muted-foreground" aria-hidden />
@@ -174,7 +152,7 @@ function HealthScoreBadge({ score }: { score: number }) {
   const { variant, label } = getHealthLevel(score);
 
   return (
-    <Badge variant={variant}>
+    <Badge variant={variant} aria-label={`Health score: ${score} out of 100, ${label}`}>
       {score}/100 &middot; {label}
     </Badge>
   );
@@ -282,7 +260,7 @@ export function DigestContent() {
   if (loading) {
     return (
       <div className="space-y-6" aria-busy="true" aria-label="Loading digest">
-        <div className="h-8 w-48 bg-muted animate-pulse rounded" />
+        <h1 className="text-2xl font-bold">Weekly Digest</h1>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i}>
@@ -305,7 +283,7 @@ export function DigestContent() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Weekly Digest</h1>
-        <Card>
+        <Card role="alert">
           <CardContent className="flex items-center gap-3 px-6 py-8">
             <AlertCircle className="h-5 w-5 text-destructive shrink-0" aria-hidden />
             <p className="text-muted-foreground">{error}</p>
@@ -379,28 +357,24 @@ export function DigestContent() {
           title="Content added"
           value={selectedDigest.stats.contentAdded}
           icon={FileText}
-          current={selectedDigest.stats.contentAdded}
           previous={prevStats?.contentAdded}
         />
         <StatCard
           title="Concepts extracted"
           value={selectedDigest.stats.conceptsExtracted}
           icon={TrendingUp}
-          current={selectedDigest.stats.conceptsExtracted}
           previous={prevStats?.conceptsExtracted}
         />
         <StatCard
           title="Searches"
           value={selectedDigest.stats.searches}
           icon={Search}
-          current={selectedDigest.stats.searches}
           previous={prevStats?.searches}
         />
         <StatCard
           title="Agent actions"
           value={selectedDigest.stats.agentActionsTotal}
           icon={Bot}
-          current={selectedDigest.stats.agentActionsTotal}
           previous={prevStats?.agentActionsTotal}
         />
       </div>
@@ -418,7 +392,7 @@ export function DigestContent() {
             <ul className="space-y-2">
               {selectedDigest.highlights.map((highlight, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-hidden />
                   <span className="text-muted-foreground">{highlight}</span>
                 </li>
               ))}
@@ -461,30 +435,17 @@ export function DigestContent() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Total actions</p>
-              <p className="text-lg font-semibold tabular-nums">
-                {selectedDigest.stats.agentActionsTotal}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Success rate</p>
-              <p className="text-lg font-semibold tabular-nums">
-                {selectedDigest.stats.agentSuccessRate}%
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Duplicates found</p>
-              <p className="text-lg font-semibold tabular-nums">
-                {selectedDigest.stats.curatorDuplicatesFound}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Stale items detected</p>
-              <p className="text-lg font-semibold tabular-nums">
-                {selectedDigest.stats.curatorStaleDetected}
-              </p>
-            </div>
+            {([
+              ['Total actions', selectedDigest.stats.agentActionsTotal],
+              ['Success rate', `${selectedDigest.stats.agentSuccessRate}%`],
+              ['Duplicates found', selectedDigest.stats.curatorDuplicatesFound],
+              ['Stale items detected', selectedDigest.stats.curatorStaleDetected],
+            ] as const).map(([label, val]) => (
+              <div key={label} className="space-y-1">
+                <p className="text-sm text-muted-foreground">{label}</p>
+                <p className="text-lg font-semibold tabular-nums">{val}</p>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

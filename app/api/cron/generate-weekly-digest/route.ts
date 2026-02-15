@@ -59,7 +59,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   const weekString = getISOWeekString(new Date());
-  const jobsCreated: string[] = [];
+  let jobsCreated = 0;
 
   for (const orgId of orgIds) {
     const dedupeKey = `weekly_digest:${orgId}:${weekString}`;
@@ -81,19 +81,19 @@ export const GET = apiHandler(async (request: NextRequest) => {
       // Dedupe conflict is expected if job already exists this week
       if (error.code === '23505') {
         console.log(`[Cron] Digest job already exists for org ${orgId} week ${weekString}`);
-        continue;
+      } else {
+        console.error(`[Cron] Failed to create digest job for org ${orgId}:`, error);
       }
-      console.error(`[Cron] Failed to create digest job for org ${orgId}:`, error);
       continue;
     }
 
-    jobsCreated.push(data.id);
+    jobsCreated++;
     console.log(`[Cron] Created weekly digest job ${data.id} for org ${orgId}`);
   }
 
   return successResponse({
-    message: `Queued ${jobsCreated.length} weekly digest jobs`,
-    jobsCreated: jobsCreated.length,
+    message: `Queued ${jobsCreated} weekly digest jobs`,
+    jobsCreated,
     week: weekString,
   });
 });
