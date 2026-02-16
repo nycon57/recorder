@@ -5805,3 +5805,56 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 - **Learnings for future iterations:**
   - Finalize passes are fast when prior passes are thorough — just read, verify, log
 ---
+
+## 2026-02-15 22:40 - US-051: Implement MCP auth and configuration page
+Run: 20260215-223827-90540 (iteration 2)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification)
+Gates cleared (cumulative): G1, G2, G3
+Gates remaining: G4 (Code Review), G5 (Simplification), G6 (Audit), G7 (Acceptance), G-UI1 (Design Review), G-UI2 (Browser Verification)
+Run log: .ralph/runs/run-20260215-223827-90540-iter-2.log
+Run summary: .ralph/runs/run-20260215-223827-90540-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 140c751 [Build 1] feat(mcp-auth): add MCP API key management and configuration page
+- Post-commit status: clean (remaining files are pre-existing untracked)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [yes — skill not found, used Explore subagent instead]
+  - /code-review: [no — Pass 1, deferred to Pass 2]
+  - /code-simplifier: [no — Pass 1, deferred to Pass 3]
+  - /frontend-design: [no — Pass 1, deferred to Pass 2+]
+  - /web-design-guidelines: [no — Pass 1, deferred to Pass 2+]
+  - /agent-browser: [no — Pass 1, deferred to Pass 3]
+  - /supabase-postgres-best-practices: [yes]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: none
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check -> PASS (pre-existing Buffer type errors in worker files only)
+  - Command: npm run lint -> SKIP (pre-existing ESLint 9 config issue with .eslintrc format)
+- Files changed:
+  - app/(dashboard)/settings/organization/layout.tsx — added MCP Server nav item with Server icon
+  - app/(dashboard)/settings/organization/mcp/page.tsx — new MCP settings page with key management UI
+  - app/api/organizations/mcp-keys/route.ts — POST (generate key) and GET (list keys) endpoints
+  - app/api/organizations/mcp-keys/[id]/route.ts — DELETE (revoke key) endpoint
+  - lib/mcp/auth.ts — added trb_mcp_* key validation via SHA-256, rate limit check, McpRateLimitError
+  - lib/mcp/server.ts — integrated per-key rate limiting into wrapHandler, pass keyId to registerTools
+- What was implemented:
+  - mcp_api_keys table migration (via Supabase MCP) with org_id, key_hash, key_prefix, name, permissions, request_count, is_active, expires_at
+  - API routes: POST generates trb_mcp_ + 32-char hex key, hashes with SHA-256, returns full key once; GET lists active keys with prefix only; DELETE sets is_active=false for immediate revocation
+  - MCP server auth updated: trb_mcp_* keys validated via SHA-256 hash lookup in mcp_api_keys table; sk_live_* keys still use legacy api_keys table with bcrypt
+  - Per-key rate limiting: 100 req/min via Upstash Redis sliding window, integrated into wrapHandler so every tool call is rate-limited; returns structured error with retry_after on 429
+  - MCP settings page: key generation modal (name input → shows full key once with copy button and warning), active key list table (name, prefix, requests, last used), revoke with confirmation dialog
+  - Connection instructions: MCP server URL, JSON config snippet for Claude Desktop/Cursor, stdio mode env var instructions
+  - MCP Server nav link added to org settings sidebar (Server icon, admin-only)
+- **Learnings for future iterations:**
+  - SHA-256 is better than bcrypt for API keys: deterministic hashing allows direct DB lookup by hash instead of iterating candidates
+  - The existing lint command (npm run lint → next lint) has a pre-existing issue with ESLint 9 and .eslintrc format
+  - The Next.js 16 params are async (Promise<{ id: string }>) — must await them in route handlers
+  - Using supabaseAdmin (service role) for MCP key operations avoids RLS complexity since auth context comes from API key, not Clerk session
+---
