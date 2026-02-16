@@ -40,20 +40,31 @@ export async function getActiveGoals(
 
 /**
  * Update a goal's current_value. Called by agent handlers after measuring progress.
+ * Scoped by orgId for multi-tenant safety.
  */
 export async function updateGoalProgress(
   goalId: string,
+  orgId: string,
   currentValue: number
-): Promise<void> {
-  const { error } = await supabaseAdmin
+): Promise<boolean> {
+  const { error, count } = await supabaseAdmin
     .from('agent_goals')
     .update({
       current_value: currentValue,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', goalId);
+    .eq('id', goalId)
+    .eq('org_id', orgId);
 
   if (error) {
     console.error('[updateGoalProgress] Error:', error);
+    return false;
   }
+
+  if (count === 0) {
+    console.warn(`[updateGoalProgress] No goal found: ${goalId} for org ${orgId}`);
+    return false;
+  }
+
+  return true;
 }

@@ -46,7 +46,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
 
   const { searchParams } = new URL(request.url);
-  const status = searchParams.get('status');
+  const statusParam = searchParams.get('status');
+
+  // Validate status filter against allowed values
+  const validStatuses = ['active', 'paused', 'achieved', 'failed'] as const;
+  if (statusParam && !validStatuses.includes(statusParam as (typeof validStatuses)[number])) {
+    return errors.badRequest('Invalid status parameter');
+  }
 
   let query = supabaseAdmin
     .from('agent_goals')
@@ -55,8 +61,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .order('priority', { ascending: true })
     .order('created_at', { ascending: false });
 
-  if (status) {
-    query = query.eq('status', status);
+  if (statusParam) {
+    query = query.eq('status', statusParam);
   }
 
   const { data, error } = await query;

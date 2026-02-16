@@ -130,7 +130,9 @@ const GOAL_TYPE_LABELS: Record<AgentGoalType, string> = {
 
 function computeProgress(goal: AgentGoal): number {
   if (!goal.target_value || goal.target_value === 0) return 0;
-  const current = goal.current_value ?? 0;
+  if (goal.current_value == null) return 0; // No measurement yet
+
+  const current = goal.current_value;
 
   // For freshness goals, lower current is better (days old < target)
   if (goal.goal_type === 'freshness') {
@@ -188,7 +190,7 @@ export function GoalsTab() {
 
   // --- Queries ---
 
-  const { data: goals, isLoading } = useQuery<AgentGoal[]>({
+  const { data: goals, isLoading, isError } = useQuery<AgentGoal[]>({
     queryKey: ['agent-goals'],
     queryFn: async () => {
       const res = await fetch('/api/organizations/agent-goals');
@@ -309,6 +311,18 @@ export function GoalsTab() {
           <p className="mt-2 text-sm text-muted-foreground">Loading goals...</p>
         </div>
       </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-sm text-destructive">
+            Failed to load goals. Please refresh the page.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 
