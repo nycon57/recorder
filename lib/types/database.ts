@@ -2308,6 +2308,34 @@ export interface Database {
           updated_at?: string;
         };
       };
+      /** AI credit consumption per agent action for usage metering */
+      agent_usage: {
+        Row: {
+          id: string;
+          org_id: string;
+          agent_type: string;
+          action_type: string;
+          credits_consumed: number;
+          tokens_input: number | null;
+          tokens_output: number | null;
+          model_used: string | null;
+          content_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          agent_type: string;
+          action_type: string;
+          credits_consumed?: number;
+          tokens_input?: number | null;
+          tokens_output?: number | null;
+          model_used?: string | null;
+          content_id?: string | null;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+      };
     };
   };
 }

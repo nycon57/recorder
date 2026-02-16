@@ -7,6 +7,7 @@
 
 import type { Database, ActivityOutcome, Json } from '@/lib/types/database';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { recordUsage, calculateCredits } from '@/lib/services/agent-metering';
 
 /** Agent activity log record matching the agent_activity_log table columns */
 export type AgentActivityLog = Database['public']['Tables']['agent_activity_log']['Row'];
@@ -77,10 +78,21 @@ export async function logAgentAction(params: {
   return (data as { id: string }).id;
 }
 
+/** Mutable object for the wrapped function to report token/model info */
+export interface AgentUsageCollector {
+  tokensInput: number;
+  tokensOutput: number;
+  modelUsed: string;
+}
+
 /**
  * Higher-order wrapper that logs start time, executes fn, measures duration,
- * and records outcome as 'success' or 'failure'. On failure, captures the
- * error message and rethrows the original error.
+ * records outcome as 'success' or 'failure', and meters usage.
+ *
+ * Pass a `usage` collector to capture token counts from within `fn`.
+ * The wrapped function can mutate the collector during execution, and
+ * recordUsage will be called automatically with those values on success.
+ * If no collector is provided, usage is still recorded with 0 credits.
  */
 export async function withAgentLogging<T>(
   params: {
@@ -91,6 +103,7 @@ export async function withAgentLogging<T>(
     targetEntity?: string;
     targetId?: string;
     inputSummary?: string;
+    usage?: AgentUsageCollector;
   },
   fn: () => Promise<T>
 ): Promise<T> {
@@ -105,6 +118,24 @@ export async function withAgentLogging<T>(
       outcome: 'success',
       durationMs,
     });
+
+    // Record usage metering (never blocks the result)
+    const tokensIn = params.usage?.tokensInput ?? 0;
+    const tokensOut = params.usage?.tokensOutput ?? 0;
+    try {
+      await recordUsage({
+        orgId: params.orgId,
+        agentType: params.agentType,
+        actionType: params.actionType,
+        creditsConsumed: calculateCredits(tokensIn, tokensOut),
+        tokensInput: tokensIn,
+        tokensOutput: tokensOut,
+        modelUsed: params.usage?.modelUsed,
+        contentId: params.contentId,
+      });
+    } catch (meterError) {
+      console.error('[AgentLogger] Failed to record usage:', meterError);
+    }
 
     return result;
   } catch (error) {
