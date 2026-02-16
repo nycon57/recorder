@@ -13,6 +13,7 @@ import {
   CreditCard,
   BarChart3,
   Bot,
+  Server,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -73,6 +74,13 @@ const navItems: NavItem[] = [
     href: "/settings/organization/agents",
     icon: Bot,
     description: "AI agent permissions",
+    requiredRole: "admin",
+  },
+  {
+    title: "MCP Server",
+    href: "/settings/organization/mcp",
+    icon: Server,
+    description: "AI agent connections",
     requiredRole: "admin",
   },
   {

@@ -17,7 +17,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { authenticateMcpConnection, McpAuthError } from './auth';
+import {
+  authenticateMcpConnection,
+  checkMcpRateLimit,
+  McpAuthError,
+  McpRateLimitError,
+} from './auth';
 import {
   handleSearchRecordings,
   handleSearchConcepts,
@@ -44,7 +49,7 @@ export async function createMcpServer(apiKey: string): Promise<McpServer> {
     version: '1.0.0',
   });
 
-  registerTools(server, ctx);
+  registerTools(server, ctx, authContext.keyId);
 
   return server;
 }
@@ -55,19 +60,33 @@ function toTextContent(value: unknown): CallToolResult['content'] {
 }
 
 /**
- * Wrap a handler function with MCP result serialization and error handling.
- *
- * Converts the handler return value to MCP tool output, and catches
- * errors to produce structured MCP error results.
+ * Wrap a handler function with rate limiting, MCP result serialization,
+ * and error handling.
  */
 function wrapHandler<TArgs>(
   toolName: string,
-  handler: (args: TArgs) => Promise<unknown>
+  handler: (args: TArgs) => Promise<unknown>,
+  keyId?: string
 ): (args: TArgs) => Promise<CallToolResult> {
   return async (args: TArgs) => {
     try {
+      // Per-key rate limiting (100 req/min via Upstash Redis)
+      if (keyId) {
+        await checkMcpRateLimit(keyId);
+      }
+
       return { content: toTextContent(await handler(args)) };
     } catch (error) {
+      if (error instanceof McpRateLimitError) {
+        return {
+          content: toTextContent({
+            code: 'rate_limit_exceeded',
+            message: error.message,
+            retry_after: error.retryAfter,
+          }),
+          isError: true,
+        };
+      }
       if (error instanceof McpToolError) {
         return {
           content: toTextContent({ code: error.code, message: error.message }),
@@ -87,7 +106,11 @@ function wrapHandler<TArgs>(
 /**
  * Register all knowledge tools on the MCP server.
  */
-function registerTools(server: McpServer, ctx: McpToolContext): void {
+function registerTools(
+  server: McpServer,
+  ctx: McpToolContext,
+  keyId?: string
+): void {
   server.tool(
     'searchRecordings',
     'Semantic search across recordings, transcripts, and documents. Returns matching items with snippets and similarity scores.',
@@ -107,7 +130,7 @@ function registerTools(server: McpServer, ctx: McpToolContext): void {
           'Filter by content types (recording, video, audio, document, text)'
         ),
     },
-    wrapHandler('searchRecordings', (args) => handleSearchRecordings(args, ctx))
+    wrapHandler('searchRecordings', (args) => handleSearchRecordings(args, ctx), keyId)
   );
 
   server.tool(
@@ -133,7 +156,7 @@ function registerTools(server: McpServer, ctx: McpToolContext): void {
         .default(10)
         .describe('Max concepts to return'),
     },
-    wrapHandler('searchConcepts', (args) => handleSearchConcepts(args, ctx))
+    wrapHandler('searchConcepts', (args) => handleSearchConcepts(args, ctx), keyId)
   );
 
   server.tool(
@@ -153,7 +176,7 @@ function registerTools(server: McpServer, ctx: McpToolContext): void {
         .describe('How many relationship hops to traverse (1-3)'),
     },
     wrapHandler('exploreKnowledgeGraph', (args) =>
-      handleExploreKnowledgeGraph(args, ctx)
+      handleExploreKnowledgeGraph(args, ctx), keyId
     )
   );
 
@@ -166,7 +189,7 @@ function registerTools(server: McpServer, ctx: McpToolContext): void {
         .uuid()
         .describe('The UUID of the content item whose document to retrieve'),
     },
-    wrapHandler('getDocument', (args) => handleGetDocument(args, ctx))
+    wrapHandler('getDocument', (args) => handleGetDocument(args, ctx), keyId)
   );
 
   server.tool(
@@ -178,7 +201,7 @@ function registerTools(server: McpServer, ctx: McpToolContext): void {
         .uuid()
         .describe('The UUID of the content item whose transcript to retrieve'),
     },
-    wrapHandler('getTranscript', (args) => handleGetTranscript(args, ctx))
+    wrapHandler('getTranscript', (args) => handleGetTranscript(args, ctx), keyId)
   );
 }
 
