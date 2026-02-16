@@ -41,6 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/ta
 import { cn } from '@/lib/utils/cn';
 import type { AgentApproval } from '@/lib/services/agent-permissions';
 import type { ApprovalStatus, PermissionTier } from '@/lib/types/database';
+
 import { GoalsTab } from './goals-tab';
 
 // ---------------------------------------------------------------------------
