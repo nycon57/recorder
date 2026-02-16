@@ -128,11 +128,6 @@ export async function handleSearchRecordings(
       };
     });
 
-  // Apply contentTypes filter on the final results if specified
-  if (contentTypes && contentTypes.length > 0) {
-    return results.filter((r) => contentTypes.includes(r.contentType));
-  }
-
   return results;
 }
 
@@ -263,6 +258,8 @@ export async function handleExploreKnowledgeGraph(
 ): Promise<ExploreKnowledgeGraphResult> {
   const { conceptId, depth } = input;
 
+  const clampedDepth = Math.max(1, Math.min(3, depth));
+
   // Fetch the root concept, scoped by org_id
   const { data: rootConcept, error: rootError } = await supabaseAdmin
     .from('knowledge_concepts')
@@ -271,7 +268,14 @@ export async function handleExploreKnowledgeGraph(
     .eq('org_id', ctx.orgId)
     .single();
 
-  if (rootError || !rootConcept) {
+  if (rootError) {
+    if (rootError.code === 'PGRST116') {
+      throw new McpToolError('not_found', 'Content not found or not accessible');
+    }
+    throw new McpToolError('internal_error', `Database error: ${rootError.message}`);
+  }
+
+  if (!rootConcept) {
     throw new McpToolError('not_found', 'Content not found or not accessible');
   }
 
@@ -288,7 +292,7 @@ export async function handleExploreKnowledgeGraph(
   let frontier = [conceptId];
   const allEdges: RelatedConceptEdge[] = [];
 
-  for (let d = 0; d < depth && frontier.length > 0; d++) {
+  for (let d = 0; d < clampedDepth && frontier.length > 0; d++) {
     const { data: relationships } = await supabaseAdmin
       .from('concept_relationships')
       .select(
@@ -299,6 +303,7 @@ export async function handleExploreKnowledgeGraph(
       `
       )
       .in('concept_id', frontier)
+      .eq('org_id', ctx.orgId)
       .order('strength', { ascending: false });
 
     const nextFrontier: string[] = [];
@@ -371,7 +376,14 @@ export async function handleGetDocument(
     .eq('content_id', contentId)
     .single();
 
-  if (error || !doc) {
+  if (error) {
+    if (error.code === 'PGRST116') {
+      throw new McpToolError('not_found', 'Content not found or not accessible');
+    }
+    throw new McpToolError('internal_error', `Database error: ${error.message}`);
+  }
+
+  if (!doc) {
     throw new McpToolError('not_found', 'Content not found or not accessible');
   }
 
@@ -432,7 +444,14 @@ export async function handleGetTranscript(
     .eq('content_id', contentId)
     .single();
 
-  if (error || !transcript) {
+  if (error) {
+    if (error.code === 'PGRST116') {
+      throw new McpToolError('not_found', 'Content not found or not accessible');
+    }
+    throw new McpToolError('internal_error', `Database error: ${error.message}`);
+  }
+
+  if (!transcript) {
     throw new McpToolError('not_found', 'Content not found or not accessible');
   }
 
