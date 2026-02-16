@@ -172,6 +172,7 @@ export default function AgentActivityPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Filters
   const [agentType, setAgentType] = useState('');
@@ -200,11 +201,15 @@ export default function AgentActivityPage() {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
+    setError(null);
     setEntries([]);
     setExpandedId(null);
 
     fetch(fetchUrl, { signal: controller.signal })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then((json: ActivityResponse) => {
         setEntries(json.data.entries);
         setStats(json.data.stats);
@@ -216,6 +221,7 @@ export default function AgentActivityPage() {
       .catch(err => {
         if (err.name !== 'AbortError') {
           console.error('[AgentActivity] Fetch error:', err);
+          setError('Failed to load activity. Try refreshing the page.');
           setLoading(false);
         }
       });
@@ -266,25 +272,25 @@ export default function AgentActivityPage() {
         <StatCard
           label="Total Actions"
           value={stats?.totalActions.toLocaleString() ?? '--'}
-          icon={<Hash className="h-4 w-4 text-muted-foreground" />}
+          icon={<Hash className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
           loading={loading}
         />
         <StatCard
           label="Success Rate"
           value={stats ? `${stats.successRate}%` : '--'}
-          icon={<Zap className="h-4 w-4 text-muted-foreground" />}
+          icon={<Zap className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
           loading={loading}
         />
         <StatCard
           label="Most Active Agent"
           value={stats?.mostActiveAgent ? agentLabel(stats.mostActiveAgent) : '--'}
-          icon={<Cpu className="h-4 w-4 text-muted-foreground" />}
+          icon={<Cpu className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
           loading={loading}
         />
         <StatCard
           label="Tokens Used"
           value={stats ? formatTokens(stats.totalTokens) : '--'}
-          icon={<Activity className="h-4 w-4 text-muted-foreground" />}
+          icon={<Activity className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
           loading={loading}
         />
       </div>
@@ -343,6 +349,13 @@ export default function AgentActivityPage() {
           </SelectContent>
         </Select>
       </div>
+
+      {/* Error State */}
+      {error && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        </div>
+      )}
 
       {/* Activity Feed */}
       <div className="rounded-lg border border-border/50">
@@ -465,12 +478,13 @@ function ActivityRow({
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={expanded}
         className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-accent/5 transition-colors"
       >
         {expanded ? (
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         )}
 
         <span className="w-20 shrink-0 text-muted-foreground tabular-nums">

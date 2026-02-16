@@ -51,18 +51,20 @@ export const GET = apiHandler(async (request: NextRequest) => {
     )
       .limit(STATS_CAP),
 
-    // Distinct agent types for filter dropdown
+    // Distinct agent types for filter dropdown (capped to avoid full table scan)
     supabaseAdmin
       .from('agent_activity_log')
       .select('agent_type')
       .eq('org_id', orgId)
+      .limit(1000)
       .order('agent_type'),
 
-    // Distinct action types for filter dropdown
+    // Distinct action types for filter dropdown (capped to avoid full table scan)
     supabaseAdmin
       .from('agent_activity_log')
       .select('action_type')
       .eq('org_id', orgId)
+      .limit(1000)
       .order('action_type'),
   ]);
 
@@ -71,6 +73,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
   if (statsResult.error) {
     throw new Error(`Failed to fetch stats: ${statsResult.error.message}`);
+  }
+  if (agentTypesResult.error) {
+    console.error('[Agent Activity] Failed to fetch agent types:', agentTypesResult.error.message);
+  }
+  if (actionTypesResult.error) {
+    console.error('[Agent Activity] Failed to fetch action types:', actionTypesResult.error.message);
   }
 
   const entries = entriesResult.data ?? [];
