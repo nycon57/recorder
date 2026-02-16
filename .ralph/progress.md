@@ -5905,3 +5905,111 @@ Run summary: .ralph/runs/run-20260215-225830-77719-iter-1.md
   - CodeRabbit CLI requires TTY raw mode and fails in non-interactive environments; use code-reviewer subagent instead
   - All API route handlers should have consistent rate limiting — check sibling routes for parity
 ---
+## 2026-02-15 23:20 - US-051: Implement MCP auth and configuration page
+Run: 20260215-231334-97323 (iteration 1)
+Pass: 3 (Phase: Refine)
+Gates cleared this pass: G5 (Simplification), G-UI1 (Design Review), G7 (Acceptance)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7, G-UI1
+Gates remaining: G-UI2 (Browser Verification — blocked, dev server not responding)
+Run log: .ralph/runs/run-20260215-231334-97323-iter-1.log
+Run summary: .ralph/runs/run-20260215-231334-97323-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 443ee1e [Refine 3] refactor(mcp-auth): simplify code, fix accessibility, add key_hash index
+- Post-commit status: clean (remaining modified files are pre-existing: app/layout.tsx, yarn.lock, .agents/, .ralph/watchdog.pid)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — Refine pass, not needed]
+  - /code-review: [no — already cleared G4 in Pass 2]
+  - /code-simplifier: [yes — via code-simplifier:code-simplifier subagent]
+  - /frontend-design: [yes — via tailwind-ui-architect subagent for design audit]
+  - /web-design-guidelines: [no — covered by frontend-design audit]
+  - /agent-browser: [BLOCKED — dev server not responding on localhost:3000]
+  - /supabase-postgres-best-practices: [yes]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /dev-browser (attempted, blocked)
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check -> PASS (pre-existing Buffer type errors in worker files only)
+  - Database schema verification -> PASS (all columns match spec)
+  - Database RPC function verification -> PASS (increment_mcp_request_count exists)
+  - RLS enabled verification -> PASS
+  - Added unique index on key_hash -> PASS
+- Files changed:
+  - app/(dashboard)/settings/organization/layout.tsx — normalize quotes to single, remove redundant comments
+  - app/(dashboard)/settings/organization/mcp/page.tsx — add accessibility attrs (role, sr-only, aria-label, autoFocus, tabIndex), remove section comments
+  - app/api/organizations/mcp-keys/route.ts — remove redundant inline comments
+  - app/api/organizations/mcp-keys/[id]/route.ts — remove redundant inline comment
+  - lib/mcp/auth.ts — reorder mcpRateLimiter above usage, wrap fire-and-forget in Promise.resolve().catch(), remove redundant comment
+  - lib/mcp/server.ts — fix inconsistent line break in wrapHandler call
+  - Supabase migration: add_mcp_api_keys_key_hash_index — unique index for O(1) auth lookups
+- What was implemented:
+  - Code simplification via /code-simplifier: removed 11 redundant comments, normalized quotes, fixed formatting inconsistencies
+  - Accessibility improvements: role="status" + sr-only on loading spinner, role="alert" on error state, aria-label on copy button, autoFocus on name input, tabIndex + aria-label on pre block
+  - Performance fix: added unique index on key_hash column (was missing — auth lookups were doing sequential scan)
+  - Safety fix: fire-and-forget RPC call now properly catches promise rejections
+  - All 14 acceptance criteria verified against codebase and database
+- **Learnings for future iterations:**
+  - Always check for indexes on columns used in WHERE clauses, especially auth lookup paths
+  - Fire-and-forget promises need both .then() and .catch() to avoid unhandled rejections
+  - dev-browser requires a running dev server; cannot verify UI when localhost is down
+  - Accessibility audit checklist: role attributes on loading/error states, aria-labels on icon-only buttons, sr-only text for screen readers, autoFocus on dialog inputs
+---
+
+## 2026-02-16T04:55Z - US-052: Create agent_usage table and implement action metering
+Thread: N/A
+Run: 20260215-234837-64571 (iteration 1)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1, G2, G3
+Gates cleared (cumulative): G1, G2, G3
+Gates remaining: G4, G5, G6, G7
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-234837-64571-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-234837-64571-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 3cceee3 [Build 1] feat(agent-usage): add agent_usage table and metering service
+- Post-commit status: clean (unrelated unstaged changes in app/layout.tsx, yarn.lock remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY -- yes]
+  - /vercel-react-best-practices: [MANDATORY -- yes]
+  - /writing-clearly-and-concisely: [MANDATORY -- yes]
+  - /feature-dev: [yes -- architecture planning]
+  - /code-review: [no -- Pass 2]
+  - /code-simplifier: [no -- Pass 3]
+  - /frontend-design: [no -- no UI]
+  - /web-design-guidelines: [no -- no UI]
+  - /agent-browser: [no -- no UI]
+  - /supabase-postgres-best-practices: [yes -- DB migration]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: `npm run build` -> PASS
+  - Command: `npm run type:check` -> PASS (pre-existing errors in lib/workers/handlers/transcribe*.ts only)
+  - Command: INSERT test (org_test, curator, auto_categorize) -> PASS
+  - Command: Table structure verification (10 columns) -> PASS
+  - Command: Index verification (4 indexes including PK) -> PASS
+  - Command: RLS verification (2 policies: service_all + org_select) -> PASS
+- Files changed:
+  - lib/services/agent-metering.ts (new -- recordUsage, getUsageSummary, getUsageByAgent, calculateCredits)
+  - lib/services/agent-logger.ts (modified -- import recordUsage, add AgentUsageCollector, integrate into withAgentLogging)
+  - lib/types/database.ts (modified -- added agent_usage Row/Insert/Update types)
+- What was implemented:
+  - Created agent_usage table via Supabase MCP with all specified columns (id, org_id, agent_type, action_type, credits_consumed, tokens_input, tokens_output, model_used, content_id, created_at)
+  - 3 indexes: idx_agent_usage_org_created, idx_agent_usage_org_agent, idx_agent_usage_org_month (uses AT TIME ZONE 'UTC' for immutable date_trunc)
+  - RLS: service_role full access + org-scoped SELECT with cast pattern (u.org_id)::text
+  - agent-metering.ts service: recordUsage, getUsageSummary, getUsageByAgent, calculateCredits
+  - Credit calculation: configurable via CREDITS_PER_1K_TOKENS env var (defaults to 1.0)
+  - Integrated recordUsage into withAgentLogging -- automatically called on success with AgentUsageCollector for token/model info
+  - Edge case: getUsageSummary returns { totalCredits: 0, totalTokens: 0, actionCount: 0 } for zero-usage periods
+  - Edge case: CREDITS_PER_1K_TOKENS defaults to 1.0 when unset or invalid
+- **Learnings for future iterations:**
+  - date_trunc('month', timestamptz) is NOT immutable in Postgres -- must convert to UTC timestamp first via AT TIME ZONE 'UTC'
+  - users.org_id is uuid type in Postgres but agent tables use text org_id -- need (u.org_id)::text cast in RLS policies
+  - npm run lint has a known path resolution issue; eslint is ignored during builds via next.config.js
+---
