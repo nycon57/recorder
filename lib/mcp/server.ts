@@ -1,34 +1,32 @@
 /**
  * Tribora MCP Knowledge Server
  *
- * Exposes Tribora's knowledge capabilities to external AI agents via
- * the Model Context Protocol. Tools delegate to existing service functions
- * with org_id scoping enforced by API key authentication.
+ * Exposes Tribora's knowledge base to external AI agents via the
+ * Model Context Protocol. Each tool validates the API key, scopes
+ * queries to the owning org, and returns structured JSON.
  *
  * Tools:
- *   searchRecordings    — Semantic search across content
- *   searchConcepts      — Knowledge graph concept search
- *   getDocument         — Retrieve document by ID
- *   getTranscript       — Retrieve transcript by ID
- *   getRecordingMetadata — Content metadata
- *   exploreKnowledgeGraph — Graph traversal
+ *   searchRecordings      — Semantic search across content
+ *   searchConcepts        — Knowledge graph concept search
+ *   exploreKnowledgeGraph — Depth-based graph traversal
+ *   getDocument           — Retrieve document by content ID
+ *   getTranscript         — Retrieve transcript by content ID
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import {
-  executeSearchRecordings,
-  executeGetDocument,
-  executeGetTranscript,
-  executeGetRecordingMetadata,
-  executeSearchConcepts,
-  executeExploreKnowledgeGraph,
-  type ToolContext,
-} from '@/lib/services/chat-tools';
-
 import { authenticateMcpConnection, McpAuthError } from './auth';
+import {
+  handleSearchRecordings,
+  handleSearchConcepts,
+  handleExploreKnowledgeGraph,
+  handleGetDocument,
+  handleGetTranscript,
+  McpToolError,
+  type McpToolContext,
+} from './handlers';
 
 /**
  * Create and configure the Tribora MCP server.
@@ -39,42 +37,46 @@ import { authenticateMcpConnection, McpAuthError } from './auth';
 export async function createMcpServer(apiKey: string): Promise<McpServer> {
   const authContext = await authenticateMcpConnection(apiKey);
 
-  const toolContext: ToolContext = {
-    orgId: authContext.orgId,
-    userId: 'mcp-agent',
-  };
+  const ctx: McpToolContext = { orgId: authContext.orgId };
 
   const server = new McpServer({
     name: 'tribora-knowledge',
     version: '1.0.0',
   });
 
-  registerTools(server, toolContext);
+  registerTools(server, ctx);
 
   return server;
 }
 
-/**
- * Build an MCP-compatible tool result from a service function response.
- * Catches errors to prevent crashing the server process.
- */
+/** Serialize a handler result as MCP tool output. */
 function toToolResult(result: unknown): CallToolResult {
   return {
     content: [{ type: 'text', text: JSON.stringify(result) }],
   };
 }
 
+/** Serialize an error as an MCP tool error following MCP conventions. */
 function toErrorResult(toolName: string, error: unknown): CallToolResult {
+  if (error instanceof McpToolError) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ code: error.code, message: error.message }),
+        },
+      ],
+      isError: true,
+    };
+  }
+
   const message = error instanceof Error ? error.message : 'Unknown error';
-  console.error(`[MCP] ${toolName} handler error:`, error);
+  console.error(`[MCP] ${toolName} error:`, error);
   return {
     content: [
       {
         type: 'text',
-        text: JSON.stringify({
-          success: false,
-          error: `internal_error: ${message}`,
-        }),
+        text: JSON.stringify({ code: 'internal_error', message }),
       },
     ],
     isError: true,
@@ -82,15 +84,15 @@ function toErrorResult(toolName: string, error: unknown): CallToolResult {
 }
 
 /**
- * Register all 6 knowledge tools on the MCP server.
+ * Register all knowledge tools on the MCP server.
  */
-function registerTools(server: McpServer, ctx: ToolContext): void {
-  // 1. searchRecordings — semantic search across content
+function registerTools(server: McpServer, ctx: McpToolContext): void {
+  // searchRecordings — semantic search across content
   server.tool(
     'searchRecordings',
-    'Semantic search across recordings, transcripts, and documents. Returns relevant excerpts with source citations.',
+    'Semantic search across recordings, transcripts, and documents. Returns matching items with snippets and similarity scores.',
     {
-      query: z.string().min(1).max(500).describe('The search query'),
+      query: z.string().min(1).max(500).describe('Search query'),
       limit: z
         .number()
         .int()
@@ -98,184 +100,115 @@ function registerTools(server: McpServer, ctx: ToolContext): void {
         .max(20)
         .default(5)
         .describe('Max results to return'),
-      contentIds: z
-        .array(z.string().uuid())
+      contentTypes: z
+        .array(z.string())
         .optional()
-        .describe('Limit search to specific content IDs'),
-      includeTranscripts: z
-        .boolean()
-        .default(true)
-        .describe('Include transcript chunks'),
-      includeDocuments: z
-        .boolean()
-        .default(true)
-        .describe('Include document chunks'),
-      minRelevance: z
-        .number()
-        .min(0)
-        .max(1)
-        .default(0.7)
-        .describe('Minimum relevance score (0-1)'),
+        .describe(
+          'Filter by content types (recording, video, audio, document, text)'
+        ),
     },
     async (args) => {
       try {
-        return toToolResult(await executeSearchRecordings(args, ctx));
+        return toToolResult(await handleSearchRecordings(args, ctx));
       } catch (error) {
         return toErrorResult('searchRecordings', error);
       }
     }
   );
 
-  // 2. searchConcepts — knowledge graph concept search
+  // searchConcepts — knowledge graph concept search
   server.tool(
     'searchConcepts',
-    'Search the knowledge graph for concepts and topics mentioned across recordings. Returns matching concepts with types and mention counts.',
+    'Search the knowledge graph for concepts and topics. Returns matching concepts with types, descriptions, and mention counts.',
     {
       query: z
         .string()
         .min(1)
         .max(500)
         .describe('Concept name or topic to search for'),
+      conceptType: z
+        .string()
+        .optional()
+        .describe(
+          'Filter by concept type (tool, process, person, organization, technical_term, general)'
+        ),
       limit: z
         .number()
         .int()
         .min(1)
-        .max(20)
+        .max(50)
         .default(10)
         .describe('Max concepts to return'),
-      types: z
-        .array(
-          z.enum([
-            'tool',
-            'process',
-            'person',
-            'organization',
-            'technical_term',
-            'general',
-          ])
-        )
-        .optional()
-        .describe('Filter by concept types'),
-      minMentions: z
-        .number()
-        .int()
-        .min(1)
-        .default(1)
-        .optional()
-        .describe('Minimum mention count'),
     },
     async (args) => {
       try {
-        return toToolResult(await executeSearchConcepts(args, ctx));
+        return toToolResult(await handleSearchConcepts(args, ctx));
       } catch (error) {
         return toErrorResult('searchConcepts', error);
       }
     }
   );
 
-  // 3. getDocument — retrieve document by ID
+  // exploreKnowledgeGraph — depth-based graph traversal
   server.tool(
-    'getDocument',
-    'Retrieve the full content of a document by its UUID. Returns markdown content and metadata.',
+    'exploreKnowledgeGraph',
+    'Explore the knowledge graph from a concept. Traverses relationships up to the given depth and returns connected concepts.',
     {
-      documentId: z
+      conceptId: z
         .string()
         .uuid()
-        .describe('The UUID of the document to retrieve'),
-      includeMetadata: z
-        .boolean()
-        .default(true)
-        .describe('Include document metadata'),
+        .describe('The concept ID to start exploration from'),
+      depth: z
+        .number()
+        .int()
+        .min(1)
+        .max(3)
+        .default(1)
+        .describe('How many relationship hops to traverse (1-3)'),
     },
     async (args) => {
       try {
-        return toToolResult(await executeGetDocument(args, ctx));
+        return toToolResult(await handleExploreKnowledgeGraph(args, ctx));
+      } catch (error) {
+        return toErrorResult('exploreKnowledgeGraph', error);
+      }
+    }
+  );
+
+  // getDocument — retrieve document by content ID
+  server.tool(
+    'getDocument',
+    'Retrieve the full document content for a content item. Returns the document body, format, and metadata.',
+    {
+      contentId: z
+        .string()
+        .uuid()
+        .describe('The UUID of the content item whose document to retrieve'),
+    },
+    async (args) => {
+      try {
+        return toToolResult(await handleGetDocument(args, ctx));
       } catch (error) {
         return toErrorResult('getDocument', error);
       }
     }
   );
 
-  // 4. getTranscript — retrieve transcript by content ID
+  // getTranscript — retrieve transcript by content ID
   server.tool(
     'getTranscript',
-    'Get the full transcript with timestamps for a recording. Returns formatted text with timing information.',
+    'Retrieve the full transcript text for a content item. Returns the text, language, and duration.',
     {
-      contentId: z.string().uuid().describe('The UUID of the content item'),
-      includeTimestamps: z
-        .boolean()
-        .default(true)
-        .describe('Include word-level timestamps'),
-      formatTimestamps: z
-        .boolean()
-        .default(true)
-        .describe('Format timestamps as MM:SS'),
-    },
-    async (args) => {
-      try {
-        return toToolResult(await executeGetTranscript(args, ctx));
-      } catch (error) {
-        return toErrorResult('getTranscript', error);
-      }
-    }
-  );
-
-  // 5. getRecordingMetadata — content metadata
-  server.tool(
-    'getRecordingMetadata',
-    'Get metadata about a content item: title, duration, status, creation date, and processing stats.',
-    {
-      contentId: z.string().uuid().describe('The UUID of the content item'),
-      includeStats: z
-        .boolean()
-        .default(true)
-        .describe('Include stats (word count, chunks, document status)'),
-    },
-    async (args) => {
-      try {
-        return toToolResult(await executeGetRecordingMetadata(args, ctx));
-      } catch (error) {
-        return toErrorResult('getRecordingMetadata', error);
-      }
-    }
-  );
-
-  // 6. exploreKnowledgeGraph — graph traversal
-  server.tool(
-    'exploreKnowledgeGraph',
-    'Explore the knowledge graph structure. Returns top concepts and their relationships to discover how topics connect.',
-    {
-      focusConceptId: z
+      contentId: z
         .string()
         .uuid()
-        .optional()
-        .describe('Optional concept ID to center exploration around'),
-      maxNodes: z
-        .number()
-        .int()
-        .min(5)
-        .max(50)
-        .default(20)
-        .describe('Maximum concepts to return'),
-      types: z
-        .array(
-          z.enum([
-            'tool',
-            'process',
-            'person',
-            'organization',
-            'technical_term',
-            'general',
-          ])
-        )
-        .optional()
-        .describe('Filter by concept types'),
+        .describe('The UUID of the content item whose transcript to retrieve'),
     },
     async (args) => {
       try {
-        return toToolResult(await executeExploreKnowledgeGraph(args, ctx));
+        return toToolResult(await handleGetTranscript(args, ctx));
       } catch (error) {
-        return toErrorResult('exploreKnowledgeGraph', error);
+        return toErrorResult('getTranscript', error);
       }
     }
   );
