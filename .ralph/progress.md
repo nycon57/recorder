@@ -6013,3 +6013,53 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - users.org_id is uuid type in Postgres but agent tables use text org_id -- need (u.org_id)::text cast in RLS policies
   - npm run lint has a known path resolution issue; eslint is ignored during builds via next.config.js
 ---
+
+## 2026-02-16T05:50Z - US-052: Create agent_usage table and implement action metering
+Thread: N/A
+Run: 20260215-234837-64571 (iteration 2)
+Pass: 2 (Phase: Harden)
+Gates cleared this pass: G4, G6
+Gates cleared (cumulative): G1, G2, G3, G4, G6
+Gates remaining: G5, G7
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-234837-64571-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-234837-64571-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: b365c3b [Harden 2] fix(agent-usage): use DB-side aggregation and improve error handling
+- Post-commit status: clean (unrelated unstaged changes in app/layout.tsx, yarn.lock remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY -- yes]
+  - /vercel-react-best-practices: [MANDATORY -- yes]
+  - /writing-clearly-and-concisely: [MANDATORY -- yes]
+  - /feature-dev: [no -- harden phase, not needed]
+  - /code-review: [yes -- CodeRabbit CLI failed (TTY), used feature-dev:code-reviewer subagent]
+  - /code-simplifier: [no -- Pass 3]
+  - /frontend-design: [no -- no UI]
+  - /web-design-guidelines: [no -- no UI]
+  - /agent-browser: [no -- no UI]
+  - /supabase-postgres-best-practices: [yes -- DB aggregation audit]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: `npm run build` -> PASS
+  - Command: `npm run type:check` -> PASS (pre-existing errors in lib/workers/handlers/transcribe*.ts only)
+  - Command: RPC get_agent_usage_summary('org_nonexistent', ...) -> PASS (returns zeroed data)
+  - Command: RPC get_agent_usage_by_agent('org_nonexistent', ...) -> PASS (returns empty array)
+  - Command: RPC aggregation with test data (3 rows, 2 agents) -> PASS (correct sums)
+  - Command: Index verification (4 indexes including PK) -> PASS
+  - Command: RLS policy verification (2 policies) -> PASS
+- Files changed:
+  - lib/services/agent-metering.ts (modified -- replaced client-side aggregation with DB-side RPC calls, improved error handling and logging)
+  - Supabase migration: add_agent_usage_aggregation_functions (new RPC functions: get_agent_usage_summary, get_agent_usage_by_agent)
+- What was implemented:
+  - Created two Postgres RPC functions for server-side aggregation (get_agent_usage_summary, get_agent_usage_by_agent)
+  - Replaced unbounded client-side row fetching in getUsageSummary/getUsageByAgent with RPC calls
+  - Changed error handling in read queries from throwing to graceful degradation (return zeroed/empty data + log)
+  - Added orgId and agentType context to recordUsage error logs for production debugging
+- **Learnings for future iterations:**
+  - CodeRabbit CLI v0.3.0 fails in non-TTY environments (raw mode not supported); use feature-dev:code-reviewer subagent as fallback
+  - Client-side aggregation of usage data is an anti-pattern; always use DB-side aggregation for analytics queries
+  - Read-only metering queries should degrade gracefully (return zero data) rather than throw, since usage dashboards shouldn't crash when Supabase is temporarily unavailable
+---
