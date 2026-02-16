@@ -5615,3 +5615,56 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - ESM import ordering matters for eslint — builtins first, then external, then internal
   - The api_keys table was pre-existing with comprehensive schema (bcrypt hashes, IP whitelist, rate limits)
 ---
+
+## [2026-02-15] - US-050: Expose search and knowledge graph as MCP tools
+Thread: N/A
+Run: 20260215-213820-36588 (iteration 3)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1, G2, G3
+Gates cleared (cumulative): G1, G2, G3
+Gates remaining: G4, G5, G6, G7
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-213820-36588-iter-3.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-213820-36588-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: e44906c [Build 1] feat(mcp): implement MCP tool handlers matching AC signatures
+- Post-commit status: clean (MCP files only; pre-existing untracked/modified files remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [yes — architecture planning]
+  - /code-review: [no — Pass 1, scheduled for Pass 2]
+  - /code-simplifier: [no — Pass 1, scheduled for Pass 3]
+  - /frontend-design: [no — not a UI story]
+  - /web-design-guidelines: [no — not a UI story]
+  - /agent-browser: [no — not a UI story]
+  - /supabase-postgres-best-practices: [N/A — queries are simple selects, no schema changes]
+  - /ai-sdk: [N/A — no AI/embedding changes]
+  - /next-cache-components: [N/A — no app routes touched]
+  - /vercel-composition-patterns: [N/A — no components]
+  - Other skills: none
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check -> PASS (pre-existing Buffer errors in worker handlers only)
+  - Command: eslint lib/mcp/ -> PASS
+- Files changed:
+  - lib/mcp/handlers.ts (new — dedicated MCP handler functions)
+  - lib/mcp/server.ts (modified — rewired tool registrations to new handlers)
+- What was implemented:
+  - Created lib/mcp/handlers.ts with 5 handler functions matching AC signatures exactly
+  - searchRecordings: uses RAG integration, maps contentTypes filter, returns flat result array
+  - searchConcepts: queries knowledge_concepts with scoring, includes description field
+  - exploreKnowledgeGraph: BFS traversal from conceptId up to depth 1-3, org_id scoped
+  - getDocument: queries by content_id, joins content for org verification, returns format
+  - getTranscript: queries by content_id, joins content for org/duration, returns simple shape
+  - Rewrote server.ts to use new handlers instead of chat-tools wrappers
+  - All errors use structured {code, message} JSON with isError flag
+  - McpToolError class for not_found and other typed errors
+  - Empty results return [] (not error or null) per AC edge cases
+  - Removed getRecordingMetadata tool (not in AC, was US-049 extra)
+- **Learnings for future iterations:**
+  - Supabase join results need `as unknown as Type` casts since generated types don't cover joins
+  - The `next lint` command is broken in this repo (tries to use "lint" as directory); use eslint directly
+  - Pre-existing type errors in worker handlers (Buffer type) should be ignored
+---
