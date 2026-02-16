@@ -5668,3 +5668,51 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - The `next lint` command is broken in this repo (tries to use "lint" as directory); use eslint directly
   - Pre-existing type errors in worker handlers (Buffer type) should be ignored
 ---
+
+## [2026-02-15] - US-050: Expose search and knowledge graph as MCP tools
+Thread: N/A
+Run: 20260215-221324-51038 (iteration 1)
+Pass: 2 (Phase: Harden)
+Gates cleared this pass: G4, G6
+Gates cleared (cumulative): G1, G2, G3, G4, G6
+Gates remaining: G5, G7
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-221324-51038-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-221324-51038-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: eb54847 [Harden 2] fix(mcp): add org_id scope to BFS traversal and improve error handling
+- Post-commit status: clean (MCP files only; pre-existing untracked/modified files remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — not needed for hardening pass]
+  - /code-review: [yes — full review via feature-dev:code-reviewer subagent]
+  - /code-simplifier: [no — scheduled for Pass 3]
+  - /frontend-design: [no — not a UI story]
+  - /web-design-guidelines: [no — not a UI story]
+  - /agent-browser: [no — not a UI story]
+  - /supabase-postgres-best-practices: [N/A — no schema changes]
+  - /ai-sdk: [N/A — no AI/embedding changes]
+  - /next-cache-components: [N/A — no app routes touched]
+  - /vercel-composition-patterns: [N/A — no components]
+  - Other skills: none
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check -> PASS (pre-existing Buffer errors in worker handlers only)
+  - Command: npx eslint lib/mcp/ -> FAIL (eslint.config.js not found — pre-existing config issue)
+- Files changed:
+  - lib/mcp/handlers.ts (5 fixes applied)
+- What was implemented:
+  - Fixed critical security issue: added .eq('org_id', ctx.orgId) to concept_relationships BFS query in exploreKnowledgeGraph
+  - Removed duplicate contentTypes filter in searchRecordings (was filtering twice with inconsistent logic)
+  - Distinguished database errors from not_found in exploreKnowledgeGraph, getDocument, getTranscript (PGRST116 = not_found, others = internal_error)
+  - Added depth clamping (1-3) in handler for defense-in-depth beyond Zod validation
+  - Security audit: all queries verified org_id scoped, no SQL injection vectors, auth validated upfront
+  - Performance audit: query patterns reasonable, bounded by limits
+  - Regression audit: changes are all bug fixes, no behavioral regression for correct inputs
+- **Learnings for future iterations:**
+  - concept_relationships table has org_id column — always scope BFS queries by it
+  - PGRST116 is the Supabase/PostgREST error code for "no rows returned" from .single()
+  - eslint config in this repo uses next lint which has a known bug; npx eslint directly fails due to missing config
+---
