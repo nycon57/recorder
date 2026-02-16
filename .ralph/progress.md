@@ -5716,3 +5716,50 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - PGRST116 is the Supabase/PostgREST error code for "no rows returned" from .single()
   - eslint config in this repo uses next lint which has a known bug; npx eslint directly fails due to missing config
 ---
+
+## [2026-02-15] - US-050: Expose search and knowledge graph as MCP tools
+Thread: N/A
+Run: 20260215-221324-51038 (iteration 2)
+Pass: 3 (Phase: Refine)
+Gates cleared this pass: G5, G7
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-221324-51038-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-221324-51038-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 82eb94a [Refine 3] refactor(mcp): simplify handlers with shared helpers and wrapHandler pattern
+- Post-commit status: clean (MCP files only; pre-existing untracked/modified files remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — not needed for refinement pass]
+  - /code-review: [no — completed in Pass 2]
+  - /code-simplifier: [yes — extracted helpers, wrapHandler HOF, removed redundancy]
+  - /frontend-design: [no — not a UI story]
+  - /web-design-guidelines: [no — not a UI story]
+  - /agent-browser: [no — not a UI story]
+  - /supabase-postgres-best-practices: [N/A — no schema changes]
+  - /ai-sdk: [N/A — no AI/embedding changes]
+  - /next-cache-components: [N/A — no app routes touched]
+  - /vercel-composition-patterns: [N/A — no components]
+  - Other skills: none
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check -> PASS (pre-existing Buffer errors in worker handlers only)
+  - Security audit: all queries org_id scoped, no injection vectors, auth validated upfront
+  - Performance audit: bounded queries, no N+1, depth clamped
+  - Regression audit: all changes are mechanical extractions, no behavioral change
+- Files changed:
+  - lib/mcp/handlers.ts (extracted unwrapSingleRow + verifyOrgAccess helpers, removed redundancy)
+  - lib/mcp/server.ts (extracted wrapHandler HOF, removed 5 duplicate try/catch blocks)
+  - lib/mcp/auth.ts (removed redundant type annotation and JSDoc)
+- What was implemented:
+  - Code simplification pass (Gate G5): net -50 lines via helper extraction
+  - Full acceptance criteria verification (Gate G7): all 13 criteria verified
+  - All 7 gates now satisfied: G1-G7
+- **Learnings for future iterations:**
+  - wrapHandler pattern works well for MCP servers — all tools share identical error handling
+  - unwrapSingleRow is a reusable pattern for any Supabase .single() call with McpToolError
+---
