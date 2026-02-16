@@ -104,32 +104,32 @@ async function runExtractionPipeline(
 
   const isLongRecording = (recording.duration_sec ?? 0) > LONG_RECORDING_THRESHOLD_SEC;
 
-  progressCallback?.(10, 'Fetching extracted frames...');
+  progressCallback?.(10, 'Fetching frames and transcript...');
 
-  // Step 1: Get extracted frames and OCR data
-  const { data: frameRows, error: framesError } = await supabase
-    .from('video_frames')
-    .select('id, frame_time_sec, frame_url, visual_description, ocr_text, metadata')
-    .eq('content_id', recordingId)
-    .eq('org_id', orgId)
-    .order('frame_time_sec', { ascending: true });
+  // Step 1+2: Fetch frames and transcript in parallel (independent queries)
+  const [framesResult, transcriptResult] = await Promise.all([
+    supabase
+      .from('video_frames')
+      .select('id, frame_time_sec, frame_url, visual_description, ocr_text, metadata')
+      .eq('content_id', recordingId)
+      .eq('org_id', orgId)
+      .order('frame_time_sec', { ascending: true }),
+    supabase
+      .from('transcripts')
+      .select('text, words_json')
+      .eq('content_id', recordingId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single(),
+  ]);
 
+  const { data: frameRows, error: framesError } = framesResult;
   if (framesError) {
     throw new Error(`Failed to fetch frames: ${framesError.message}`);
   }
 
   const hasFrames = frameRows && frameRows.length > 0;
-
-  // Step 2: Get transcript
-  progressCallback?.(15, 'Loading transcript...');
-
-  const { data: transcript } = await supabase
-    .from('transcripts')
-    .select('text, words_json')
-    .eq('content_id', recordingId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single();
+  const transcript = transcriptResult.data;
 
   const hasTranscript = transcript && transcript.text && transcript.text.trim().length > 0;
 
@@ -199,6 +199,10 @@ async function runExtractionPipeline(
     hasTranscript ? transcript!.text : '',
     isLongRecording
   );
+
+  if (steps.length === 0) {
+    console.warn(`[WorkflowExtraction] Gemini returned no valid steps for ${recordingId}`);
+  }
 
   // Step 6: Assign screenshot paths from nearest frames
   for (const step of steps) {
