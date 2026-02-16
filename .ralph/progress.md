@@ -5763,3 +5763,45 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - wrapHandler pattern works well for MCP servers — all tools share identical error handling
   - unwrapSingleRow is a reusable pattern for any Supabase .single() call with McpToolError
 ---
+
+## [2026-02-15] - US-050: Expose search and knowledge graph as MCP tools
+Thread: N/A
+Run: 20260215-223827-90540 (iteration 1)
+Pass: 4 (Phase: Finalize)
+Gates cleared this pass: G7 (re-verified)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-223827-90540-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-223827-90540-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none — verification-only pass, no code changes
+- Post-commit status: clean (MCP files unchanged from Pass 3)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — finalize pass, no architecture work]
+  - /code-review: [no — completed in Pass 2]
+  - /code-simplifier: [no — completed in Pass 3]
+  - /frontend-design: [no — not a UI story]
+  - /web-design-guidelines: [no — not a UI story]
+  - /agent-browser: [no — not a UI story]
+  - /supabase-postgres-best-practices: [N/A — no schema changes]
+  - /ai-sdk: [N/A — no AI/embedding changes]
+  - /next-cache-components: [N/A — no app routes touched]
+  - /vercel-composition-patterns: [N/A — no components]
+  - Other skills: none
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check -> PASS (pre-existing Buffer errors in worker handlers only)
+  - Command: npx tsc --noEmit | grep lib/mcp -> no MCP type errors
+- Files changed:
+  - none (verification-only pass)
+- What was implemented:
+  - Final acceptance verification (Gate G7): all 13 acceptance criteria re-verified against code
+  - All 7 gates confirmed satisfied: G1-G7
+  - No code changes needed — implementation is complete
+- **Learnings for future iterations:**
+  - Finalize passes are fast when prior passes are thorough — just read, verify, log
+---
