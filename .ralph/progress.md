@@ -63,8 +63,8 @@ Run summary: .ralph/runs/run-20260211-182943-71374-iter-1.md
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 2)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-2.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-2.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 5493174 [Pass 2/3] fix(types): align agent_memory embedding type with codebase convention
@@ -109,8 +109,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 3)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-3.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-3.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: c697def [Pass 3/3] refactor(types): remove identity fields from agent_memory Update type
@@ -157,8 +157,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 4)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-4.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-4.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-4.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: d443fcf [Pass 1/3] feat(db): create agent_sessions table migration
@@ -207,8 +207,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 5)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-5.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-5.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-5.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-5.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 4d57d98 [Pass 2/3] fix(types): add SessionStatus union type for agent_sessions
@@ -255,8 +255,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 6)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-6.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-6.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-6.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-6.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none (no code changes needed — Pass 2 already addressed all issues)
@@ -303,8 +303,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 7)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-7.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-7.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-7.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-7.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: c016810 [Pass 1/3] feat(db): create agent_activity_log table migration
@@ -355,8 +355,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 8)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-8.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-8.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-8.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-8.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none (no code changes needed — Pass 1 implementation was correct)
@@ -406,8 +406,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 9)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-9.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-9.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-9.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-9.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 7d21809 [Pass 3/3] refactor(types): simplify agent_activity_log JSDoc comment
@@ -453,8 +453,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 10)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-10.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-10.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-10.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-10.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 529e696 [Pass 1/3] feat(services): implement agent memory service
@@ -506,8 +506,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 11)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-11.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-11.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-11.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-11.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none (security fix applied via Supabase MCP migration, no code file changes)
@@ -559,8 +559,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 12)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-12.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-12.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-12.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-12.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 5274964 [Pass 3/3] refactor(services): clarify agent memory service comments
@@ -612,8 +612,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 13)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-13.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-13.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-13.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-13.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: ec3147a [Pass 1/3] feat(services): implement agent activity logger service
@@ -670,8 +670,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 14)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-14.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-14.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-14.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-14.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 0f6767a [Pass 2/3] fix(services): use error_message column in agent activity logger
@@ -716,8 +716,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 15)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-15.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-15.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-15.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-15.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 7137077 [Pass 3/3] refactor(services): clarify agent activity logger comments
@@ -763,8 +763,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 16)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-16.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-16.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-16.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-16.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 4bc8806 [Pass 1/3] feat(services): implement agent configuration in org settings
@@ -818,8 +818,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 17)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-17.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-17.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-17.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-17.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none (no code changes needed — Pass 1 implementation was correct)
@@ -870,8 +870,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-082133-27727 (iteration 2)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-082133-27727-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-082133-27727-iter-2.md
+Run log: .ralph/runs/run-20260212-082133-27727-iter-2.log
+Run summary: .ralph/runs/run-20260212-082133-27727-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: ac98e99 [Pass 1/3] feat(approvals): implement approval queue for Tier 3 agent actions
@@ -916,8 +916,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 18)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-18.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-18.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-18.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-18.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 6a30b9b [Pass 1/3] feat(workers): implement generate_metadata job handler
@@ -968,8 +968,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 19)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-19.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-19.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-19.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-19.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: c12e1f6 [Pass 2/3] fix(workers): register generate_metadata handler and fix outcome logging
@@ -1011,8 +1011,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 20)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-20.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-20.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-20.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-20.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: f0907c9 [Pass 3/3] refactor(workers): polish generate_metadata handler comments and readability
@@ -1069,8 +1069,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 21)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-21.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-21.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-21.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-21.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: d506002 [Pass 1/3] feat(workers): wire generate_metadata into transcription pipeline
@@ -1123,8 +1123,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 22)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-22.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-22.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-22.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-22.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 5cf02e1 [Pass 2/3] fix(workers): add generate_metadata to idempotency recovery path
@@ -1167,8 +1167,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 23)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-23.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-23.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-23.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-23.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 4a1fcdc [Pass 3/3] refactor(workers): tighten types and add completion message for generate_metadata
@@ -1222,8 +1222,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 24)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-24.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-24.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-24.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-24.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 268806b [Pass 1/3] feat(components): implement related content suggestions component
@@ -1271,8 +1271,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 25)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-25.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-25.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-25.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-25.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 41dde81 [Pass 2/3] fix(components): add error logging, type guard, and query limit to RelatedContent
@@ -1315,8 +1315,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 26)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-26.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-26.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-26.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-26.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 2dbb941 [Pass 3/3] refactor(components): simplify RelatedContent and improve accessibility
@@ -1359,8 +1359,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-212520-36682 (iteration 1)
 Pass: Recovery - Previous run crashed after Pass 3/3 completion
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-212520-36682-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-212520-36682-iter-1.md
+Run log: .ralph/runs/run-20260211-212520-36682-iter-1.log
+Run summary: .ralph/runs/run-20260211-212520-36682-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none (all 3 passes already committed: 268806b, 41dde81, 2dbb941)
@@ -1381,8 +1381,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-213022-53339 (iteration 1)
 Pass: Recovery - Previous runs crashed after Pass 3/3 completion (crash count 2/3)
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-213022-53339-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-213022-53339-iter-1.md
+Run log: .ralph/runs/run-20260211-213022-53339-iter-1.log
+Run summary: .ralph/runs/run-20260211-213022-53339-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none (all 3 passes already committed: 268806b, 41dde81, 2dbb941)
@@ -1412,8 +1412,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-11] - US-010: Add related content suggestions to content detail page
 Run: 20260211-213022-53339 (iteration 2)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-213022-53339-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-213022-53339-iter-2.md
+Run log: .ralph/runs/run-20260211-213022-53339-iter-2.log
+Run summary: .ralph/runs/run-20260211-213022-53339-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: b27c457 [Pass 1/3] feat(pages): integrate RelatedContent into library detail page
@@ -1451,8 +1451,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-12] - US-010: Add related content suggestions to content detail page
 Run: 20260211-213525-71817 (iteration 1)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-213525-71817-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-213525-71817-iter-1.md
+Run log: .ralph/runs/run-20260211-213525-71817-iter-1.log
+Run summary: .ralph/runs/run-20260211-213525-71817-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 3f1718e [Pass 2/3] docs(pages): update JSDoc to document RelatedContent section
@@ -1493,8 +1493,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-11] - US-010: Add related content suggestions to content detail page
 Run: 20260211-214027-93793 (iteration 1)
 Pass: 2/3 - Quality Review (continued)
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-214027-93793-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-214027-93793-iter-1.md
+Run log: .ralph/runs/run-20260211-214027-93793-iter-1.log
+Run summary: .ralph/runs/run-20260211-214027-93793-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 1870ef3 [Pass 2/3] fix(components): add accessibility and error logging to RelatedContent
@@ -1534,8 +1534,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-220531-73631 (iteration 1)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-220531-73631-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-220531-73631-iter-1.md
+Run log: .ralph/runs/run-20260211-220531-73631-iter-1.log
+Run summary: .ralph/runs/run-20260211-220531-73631-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: a9b5283 [Pass 1/3] feat(workers): add smart description generation for all content types
@@ -1580,8 +1580,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-220531-73631 (iteration 2)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-220531-73631-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-220531-73631-iter-2.md
+Run log: .ralph/runs/run-20260211-220531-73631-iter-2.log
+Run summary: .ralph/runs/run-20260211-220531-73631-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: c238bd8 [Pass 2/3] fix(workers): tighten filename detection and add transcriptId to metadata jobs
@@ -1620,8 +1620,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-220531-73631 (iteration 3)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-220531-73631-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-220531-73631-iter-3.md
+Run log: .ralph/runs/run-20260211-220531-73631-iter-3.log
+Run summary: .ralph/runs/run-20260211-220531-73631-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 74ef8b4 [Pass 3/3] refactor(workers): simplify title guard in generate-metadata
@@ -1658,8 +1658,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-220531-73631 (iteration 4)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-220531-73631-iter-4.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-220531-73631-iter-4.md
+Run log: .ralph/runs/run-20260211-220531-73631-iter-4.log
+Run summary: .ralph/runs/run-20260211-220531-73631-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: bd62c68 [Pass 1/3] feat(components): add ContentChatWidget for content-scoped chat
@@ -1708,8 +1708,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-225535-26285 (iteration 1)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-225535-26285-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-225535-26285-iter-1.md
+Run log: .ralph/runs/run-20260211-225535-26285-iter-1.log
+Run summary: .ralph/runs/run-20260211-225535-26285-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 0dc2f8d [Pass 2/3] fix(components): improve accessibility, error handling, and race condition in ContentChatWidget
@@ -1752,8 +1752,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260211-225535-26285 (iteration 2)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-225535-26285-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-225535-26285-iter-2.md
+Run log: .ralph/runs/run-20260211-225535-26285-iter-2.log
+Run summary: .ralph/runs/run-20260211-225535-26285-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 7007d6b [Pass 3/3] refactor(components): simplify ContentChatWidget for clarity and consistency
@@ -1793,8 +1793,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-11] - US-013: Integrate ContentChatWidget into recording and library detail pages
 Run: 20260211-225535-26285 (iteration 3)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-225535-26285-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-225535-26285-iter-3.md
+Run log: .ralph/runs/run-20260211-225535-26285-iter-3.log
+Run summary: .ralph/runs/run-20260211-225535-26285-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: e74e35f [Pass 1/3] feat(pages): integrate ContentChatWidget into library detail page
@@ -1830,8 +1830,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-11] - US-013: Integrate ContentChatWidget into recording and library detail pages
 Run: 20260211-225535-26285 (iteration 4)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-225535-26285-iter-4.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-225535-26285-iter-4.md
+Run log: .ralph/runs/run-20260211-225535-26285-iter-4.log
+Run summary: .ralph/runs/run-20260211-225535-26285-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: d43e2fc [Pass 2/3] fix(components): improve accessibility and focus management in ContentChatWidget
@@ -1872,8 +1872,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-11] - US-013: Integrate ContentChatWidget into recording and library detail pages
 Run: 20260211-234038-89477 (iteration 1)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-234038-89477-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-234038-89477-iter-1.md
+Run log: .ralph/runs/run-20260211-234038-89477-iter-1.log
+Run summary: .ralph/runs/run-20260211-234038-89477-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 472e434 [Pass 3/3] refactor(pages): polish ContentChatWidget integration and simplify library detail page
@@ -1919,8 +1919,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-11] - US-014: Verify and document content-scoped chat API filtering
 Run: 20260211-234038-89477 (iteration 2)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-234038-89477-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-234038-89477-iter-2.md
+Run log: .ralph/runs/run-20260211-234038-89477-iter-2.log
+Run summary: .ralph/runs/run-20260211-234038-89477-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 62c0798 [Pass 1/3] docs(api): document and fix content-scoped chat filtering
@@ -1959,8 +1959,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-11] - US-014: Verify and document content-scoped chat API filtering
 Run: 20260211-234038-89477 (iteration 3)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-234038-89477-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-234038-89477-iter-3.md
+Run log: .ralph/runs/run-20260211-234038-89477-iter-3.log
+Run summary: .ralph/runs/run-20260211-234038-89477-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none (no code changes needed; Pass 1 implementation passed all quality checks)
@@ -2002,8 +2002,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-12] - US-014: Verify and document content-scoped chat API filtering
 Run: 20260212-001541-37824 (iteration 1)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-001541-37824-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-001541-37824-iter-1.md
+Run log: .ralph/runs/run-20260212-001541-37824-iter-1.log
+Run summary: .ralph/runs/run-20260212-001541-37824-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: cfed1aa [Pass 3/3] refactor(api): simplify chat stream route and fix auth error handling
@@ -2046,8 +2046,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-001541-37824 (iteration 2)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-001541-37824-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-001541-37824-iter-2.md
+Run log: .ralph/runs/run-20260212-001541-37824-iter-2.log
+Run summary: .ralph/runs/run-20260212-001541-37824-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 5f12a52 [Pass 1/3] feat(workers): add curate_knowledge job handler skeleton
@@ -2090,8 +2090,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-004545-49087 (iteration 1)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-004545-49087-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-004545-49087-iter-1.md
+Run log: .ralph/runs/run-20260212-004545-49087-iter-1.log
+Run summary: .ralph/runs/run-20260212-004545-49087-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 7a6e2f9 [Pass 2/3] fix(workers): improve idempotency and error handling in curate_knowledge handler
@@ -2128,8 +2128,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-004545-49087 (iteration 2)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-004545-49087-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-004545-49087-iter-2.md
+Run log: .ralph/runs/run-20260212-004545-49087-iter-2.log
+Run summary: .ralph/runs/run-20260212-004545-49087-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 9a2c18e [Pass 3/3] refactor(workers): simplify curate_knowledge handler
@@ -2180,8 +2180,8 @@ Run: 20260212-011548-61305 (iteration 1)
 Thread: N/A
 Run: 20260212-011548-61305 (iteration 2)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-011548-61305-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-011548-61305-iter-2.md
+Run log: .ralph/runs/run-20260212-011548-61305-iter-2.log
+Run summary: .ralph/runs/run-20260212-011548-61305-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 1447757 [Pass 1/3] feat(workers): implement auto-categorization logic for Knowledge Curator
@@ -2224,8 +2224,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-011548-61305 (iteration 3)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-011548-61305-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-011548-61305-iter-3.md
+Run log: .ralph/runs/run-20260212-011548-61305-iter-3.log
+Run summary: .ralph/runs/run-20260212-011548-61305-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: b935f28 [Pass 2/3] fix(workers): improve error resilience in auto-categorization
@@ -2262,8 +2262,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-015051-87987 (iteration 1)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-015051-87987-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-015051-87987-iter-1.md
+Run log: .ralph/runs/run-20260212-015051-87987-iter-1.log
+Run summary: .ralph/runs/run-20260212-015051-87987-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: da5714b [Pass 3/3] refactor(workers): simplify auto-categorization code and improve prose
@@ -2307,8 +2307,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-023556-48876 (iteration 1)
 Pass: Recovery - All 3 passes previously completed
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-023556-48876-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-023556-48876-iter-1.md
+Run log: .ralph/runs/run-20260212-023556-48876-iter-1.log
+Run summary: .ralph/runs/run-20260212-023556-48876-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none (all 3 passes already committed: 1447757, b935f28, da5714b)
@@ -2342,8 +2342,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-025559-23553 (iteration 1)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-025559-23553-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-025559-23553-iter-1.md
+Run log: .ralph/runs/run-20260212-025559-23553-iter-1.log
+Run summary: .ralph/runs/run-20260212-025559-23553-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 925a2f0 [Pass 1/3] feat(workers): implement duplicate and near-duplicate detection for Knowledge Curator
@@ -2391,8 +2391,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-025559-23553 (iteration 2)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-025559-23553-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-025559-23553-iter-2.md
+Run log: .ralph/runs/run-20260212-025559-23553-iter-2.log
+Run summary: .ralph/runs/run-20260212-025559-23553-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: eb2a20c [Pass 2/3] fix(workers): exclude deleted content from duplicate detection queries
@@ -2429,8 +2429,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-025559-23553 (iteration 3)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-025559-23553-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-025559-23553-iter-3.md
+Run log: .ralph/runs/run-20260212-025559-23553-iter-3.log
+Run summary: .ralph/runs/run-20260212-025559-23553-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 78ba009 [Pass 3/3] refactor(workers): simplify duplicate detection code and tighten prose
@@ -2467,8 +2467,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-033603-70365 (iteration 1)
 Pass: Recovery — all 3 passes already completed in prior run (20260212-025559-23553)
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-033603-70365-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-033603-70365-iter-1.md
+Run log: .ralph/runs/run-20260212-033603-70365-iter-1.log
+Run summary: .ralph/runs/run-20260212-033603-70365-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none (all 3 passes already committed: 925a2f0, eb2a20c, 78ba009)
@@ -2504,8 +2504,8 @@ Pass: Recovery 2 — all 3 passes already completed in prior run (20260212-02555
 Thread: N/A
 Run: 20260212-041609-15239 (iteration 1)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-041609-15239-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-041609-15239-iter-1.md
+Run log: .ralph/runs/run-20260212-041609-15239-iter-1.log
+Run summary: .ralph/runs/run-20260212-041609-15239-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 0e11b9e [Pass 1/3] feat(workers): implement staleness detection for Knowledge Curator
@@ -2548,8 +2548,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-044112-7404 (iteration 1)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-044112-7404-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-044112-7404-iter-1.md
+Run log: .ralph/runs/run-20260212-044112-7404-iter-1.log
+Run summary: .ralph/runs/run-20260212-044112-7404-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 0ab66c4 [Pass 2/3] fix(workers): correct concept overlap direction and add status filter in staleness detection
@@ -2586,8 +2586,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-044112-7404 (iteration 2)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-044112-7404-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-044112-7404-iter-2.md
+Run log: .ralph/runs/run-20260212-044112-7404-iter-2.log
+Run summary: .ralph/runs/run-20260212-044112-7404-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 57cac17 [Pass 3/3] refactor(workers): simplify staleness detection code and tighten patterns
@@ -2629,8 +2629,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-044112-7404 (iteration 3)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-044112-7404-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-044112-7404-iter-3.md
+Run log: .ralph/runs/run-20260212-044112-7404-iter-3.log
+Run summary: .ralph/runs/run-20260212-044112-7404-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 73aed79 [Pass 1/3] feat(db): create knowledge_gaps table migration
@@ -2676,8 +2676,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-051615-35829 (iteration 1)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-051615-35829-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-051615-35829-iter-1.md
+Run log: .ralph/runs/run-20260212-051615-35829-iter-1.log
+Run summary: .ralph/runs/run-20260212-051615-35829-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: f764dd7 [Pass 2/3] fix(db): optimize knowledge_gaps RLS policies and tighten Update type
@@ -2719,8 +2719,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-054118-25497 (iteration 1)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-054118-25497-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-054118-25497-iter-1.md
+Run log: .ralph/runs/run-20260212-054118-25497-iter-1.log
+Run summary: .ralph/runs/run-20260212-054118-25497-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 6056273 [Pass 3/3] refactor(types): align knowledge_gaps timestamp nullability with project conventions
@@ -2763,8 +2763,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-054118-25497 (iteration 2)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-054118-25497-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-054118-25497-iter-2.md
+Run log: .ralph/runs/run-20260212-054118-25497-iter-2.log
+Run summary: .ralph/runs/run-20260212-054118-25497-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: c733104 [Pass 1/3] feat(workers): implement analyze_knowledge_gaps job handler
@@ -2818,8 +2818,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-061621-52784 (iteration 1)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-061621-52784-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-061621-52784-iter-1.md
+Run log: .ralph/runs/run-20260212-061621-52784-iter-1.log
+Run summary: .ralph/runs/run-20260212-061621-52784-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 420aa1d [Pass 2/3] fix(workers): add error handling, batch inserts, and stable clustering in analyze_knowledge_gaps
@@ -2857,8 +2857,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-064124-47302 (iteration 1)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-064124-47302-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-064124-47302-iter-1.md
+Run log: .ralph/runs/run-20260212-064124-47302-iter-1.log
+Run summary: .ralph/runs/run-20260212-064124-47302-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: cfe4c11 [Pass 3/3] refactor(workers): simplify analyze_knowledge_gaps handler and tighten prose
@@ -2904,8 +2904,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-070627-45493 (iteration 1)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-070627-45493-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-070627-45493-iter-1.md
+Run log: .ralph/runs/run-20260212-070627-45493-iter-1.log
+Run summary: .ralph/runs/run-20260212-070627-45493-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 8eaa3ae [Pass 1/3] feat(db): create agent_permissions table and permission checking service
@@ -2949,8 +2949,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-070627-45493 (iteration 2)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-070627-45493-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-070627-45493-iter-2.md
+Run log: .ralph/runs/run-20260212-070627-45493-iter-2.log
+Run summary: .ralph/runs/run-20260212-070627-45493-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none (DB-only migration via Supabase MCP, no local file changes)
@@ -2991,8 +2991,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-070627-45493 (iteration 3)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-070627-45493-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-070627-45493-iter-3.md
+Run log: .ralph/runs/run-20260212-070627-45493-iter-3.log
+Run summary: .ralph/runs/run-20260212-070627-45493-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 182d075 [Pass 3/3] refactor(permissions): use maybeSingle() for cleaner no-row handling
@@ -3044,8 +3044,8 @@ Pass: Recovery — all 3 passes previously completed
 Thread: N/A
 Run: 20260212-074630-92538 (iteration 2)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-074630-92538-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-074630-92538-iter-2.md
+Run log: .ralph/runs/run-20260212-074630-92538-iter-2.log
+Run summary: .ralph/runs/run-20260212-074630-92538-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: ffb265c [Pass 1/3] feat(settings): create agent permissions settings UI
@@ -3087,8 +3087,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-074630-92538 (iteration 3)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-074630-92538-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-074630-92538-iter-3.md
+Run log: .ralph/runs/run-20260212-074630-92538-iter-3.log
+Run summary: .ralph/runs/run-20260212-074630-92538-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: cd183d1 [Pass 2/3] fix(settings): harden agent permissions with auth + accessibility
@@ -3124,8 +3124,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-082133-27727 (iteration 1)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-082133-27727-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-082133-27727-iter-1.md
+Run log: .ralph/runs/run-20260212-082133-27727-iter-1.log
+Run summary: .ralph/runs/run-20260212-082133-27727-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 6af4ac5 [Pass 3/3] refactor(settings): simplify agent permissions UI and improve consistency
@@ -3181,8 +3181,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: n/a
 Run: 20260212-092639-36983 (iteration 1)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-092639-36983-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-092639-36983-iter-1.md
+Run log: .ralph/runs/run-20260212-092639-36983-iter-1.log
+Run summary: .ralph/runs/run-20260212-092639-36983-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 61e6723 [Pass 3/3] refactor(approvals): simplify approval queue code and remove redundant types
@@ -3223,8 +3223,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: n/a
 Run: 20260212-095642-48350 (iteration 1)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-095642-48350-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-095642-48350-iter-1.md
+Run log: .ralph/runs/run-20260212-095642-48350-iter-1.log
+Run summary: .ralph/runs/run-20260212-095642-48350-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 1e86ae3 [Pass 1/3] feat(agents): add agent action cost estimation
@@ -3267,8 +3267,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: n/a
 Run: 20260212-095642-48350 (iteration 2)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-095642-48350-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-095642-48350-iter-2.md
+Run log: .ralph/runs/run-20260212-095642-48350-iter-2.log
+Run summary: .ralph/runs/run-20260212-095642-48350-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: f6179d2 [Pass 2/3] fix(agents): harden cost estimation with error handling + type safety
@@ -3306,8 +3306,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: n/a
 Run: 20260212-095642-48350 (iteration 3)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-095642-48350-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-095642-48350-iter-3.md
+Run log: .ralph/runs/run-20260212-095642-48350-iter-3.log
+Run summary: .ralph/runs/run-20260212-095642-48350-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 46a728d [Pass 3/3] refactor(agents): simplify cost estimation code and extract approval helper
@@ -3350,8 +3350,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: n/a
 Run: 20260212-095642-48350 (iteration 4)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-095642-48350-iter-4.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-095642-48350-iter-4.md
+Run log: .ralph/runs/run-20260212-095642-48350-iter-4.log
+Run summary: .ralph/runs/run-20260212-095642-48350-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: b19720e [Pass 1/3] feat(schema): create agent_onboarding_plans table migration
@@ -3393,8 +3393,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: n/a
 Run: 20260212-104646-25413 (iteration 1)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-104646-25413-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-104646-25413-iter-1.md
+Run log: .ralph/runs/run-20260212-104646-25413-iter-1.log
+Run summary: .ralph/runs/run-20260212-104646-25413-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 02ee6c4 [Pass 2/3] fix(types): strengthen learning_path typing from Json to LearningPathItem[]
@@ -3431,8 +3431,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: n/a
 Run: 20260212-104646-25413 (iteration 2)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-104646-25413-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-104646-25413-iter-2.md
+Run log: .ralph/runs/run-20260212-104646-25413-iter-2.log
+Run summary: .ralph/runs/run-20260212-104646-25413-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: c8c1a49 [Pass 3/3] refactor(types): tighten LearningPathItem.contentType from string to ContentType
@@ -3467,8 +3467,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-12] - US-031: Implement generate-onboarding-plan job handler
 Run: 20260212-104646-25413 (iteration 3)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-104646-25413-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-104646-25413-iter-3.md
+Run log: .ralph/runs/run-20260212-104646-25413-iter-3.log
+Run summary: .ralph/runs/run-20260212-104646-25413-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 4c9d826 [Pass 1/3] feat(workers): implement generate_onboarding_plan job handler
@@ -3517,8 +3517,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-12] - US-031: Implement generate-onboarding-plan job handler
 Run: 20260212-111149-10113 (iteration 2)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-2.md
+Run log: .ralph/runs/run-20260212-111149-10113-iter-2.log
+Run summary: .ralph/runs/run-20260212-111149-10113-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 48ca758 [Pass 2/3] fix(workers): harden onboarding plan handler with query batching and input validation
@@ -3555,8 +3555,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-12] - US-031: Implement generate-onboarding-plan job handler
 Run: 20260212-111149-10113 (iteration 3)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-3.md
+Run log: .ralph/runs/run-20260212-111149-10113-iter-3.log
+Run summary: .ralph/runs/run-20260212-111149-10113-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 5cb482a [Pass 3/3] refactor(workers): simplify onboarding plan handler for clarity and consistency
@@ -3600,8 +3600,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-111149-10113 (iteration 4)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-4.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-4.md
+Run log: .ralph/runs/run-20260212-111149-10113-iter-4.log
+Run summary: .ralph/runs/run-20260212-111149-10113-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: e90fd31 [Pass 1/3] feat(onboarding): create onboarding dashboard for new members
@@ -3647,8 +3647,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-111149-10113 (iteration 5)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-5.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-5.md
+Run log: .ralph/runs/run-20260212-111149-10113-iter-5.log
+Run summary: .ralph/runs/run-20260212-111149-10113-iter-5.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 2749e7c [Pass 2/3] fix(onboarding): harden security, accessibility, and Next.js patterns
@@ -3695,8 +3695,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-111149-10113 (iteration 6)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-6.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-6.md
+Run log: .ralph/runs/run-20260212-111149-10113-iter-6.log
+Run summary: .ralph/runs/run-20260212-111149-10113-iter-6.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 1f3dcca [Pass 3/3] refactor(onboarding): simplify code and tighten prose
@@ -3739,8 +3739,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-111149-10113 (iteration 7)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-7.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-7.md
+Run log: .ralph/runs/run-20260212-111149-10113-iter-7.log
+Run summary: .ralph/runs/run-20260212-111149-10113-iter-7.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 65aaa59 [Pass 1/3] feat(webhooks): add Clerk webhook handler for auto-triggering onboarding plans
@@ -3784,8 +3784,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-111149-10113 (iteration 8)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-8.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-8.md
+Run log: .ralph/runs/run-20260212-111149-10113-iter-8.log
+Run summary: .ralph/runs/run-20260212-111149-10113-iter-8.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 8af08d7 [Pass 2/3] fix(webhooks): harden Clerk webhook handler error handling and type safety
@@ -3824,8 +3824,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-111149-10113 (iteration 9)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-9.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-9.md
+Run log: .ralph/runs/run-20260212-111149-10113-iter-9.log
+Run summary: .ralph/runs/run-20260212-111149-10113-iter-9.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 9acba96 [Pass 3/3] refactor(webhooks): simplify Clerk webhook handler
@@ -3861,8 +3861,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-111149-10113 (iteration 10)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-10.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-111149-10113-iter-10.md
+Run log: .ralph/runs/run-20260212-111149-10113-iter-10.log
+Run summary: .ralph/runs/run-20260212-111149-10113-iter-10.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 71b9a95 [Pass 1/3] feat(onboarding): implement engagement tracking and adaptive path refinement
@@ -3914,8 +3914,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 1)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-1.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-1.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: effeb74 [Pass 2/3] fix(onboarding): harden engagement tracking security and error handling
@@ -3956,8 +3956,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 2)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-2.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-2.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 065d6ec [Pass 3/3] refactor(onboarding): simplify engagement tracking code
@@ -4013,8 +4013,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 3)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-3.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-3.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: b8473ca [Pass 1/3] feat(agents): create agent_feedback table and feedback UI components
@@ -4053,8 +4053,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 4)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-4.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-4.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-4.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: b43d334 [Pass 2/3] fix(agents): harden feedback API error handling and improve accessibility
@@ -4090,8 +4090,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 5)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-5.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-5.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-5.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-5.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 1dcbdc2 [Pass 3/3] refactor(agents): simplify feedback API and UI component code
@@ -4127,8 +4127,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 6)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-6.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-6.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-6.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-6.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 395f31f [Pass 1/3] feat(knowledge): add concept correction UI and RAG response rating
@@ -4172,8 +4172,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 7)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-7.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-7.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-7.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-7.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: d0a58e5 [Pass 2/3] fix(knowledge): harden concept correction API and improve UI accessibility
@@ -4213,8 +4213,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 8)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-8.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-8.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-8.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-8.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: d177ba7 [Pass 3/3] refactor(knowledge): simplify concept correction API and rating components
@@ -4258,8 +4258,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 9)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-9.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-9.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-9.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-9.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: ed90f1f [Pass 1/3] feat(agents): integrate feedback into agent memory for behavior refinement
@@ -4303,8 +4303,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 10)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-10.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-10.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-10.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-10.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 907c5e7 [Pass 2/3] fix(agents): harden feedback processor security and error handling
@@ -4343,8 +4343,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 11)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-11.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-11.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-11.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-11.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 5e5eb16 [Pass 3/3] refactor(agents): simplify feedback processor and improve naming
@@ -4384,8 +4384,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-12 18:45] - US-038: Implement generate_weekly_digest job handler
 Run: 20260212-184011-96026 (iteration 12)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-12.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-12.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-12.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-12.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 5f416c0 [Pass 1/3] feat(agents): implement generate_weekly_digest job handler
@@ -4427,8 +4427,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-12 18:55] - US-038: Implement generate_weekly_digest job handler
 Run: 20260212-184011-96026 (iteration 13)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-13.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-13.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-13.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-13.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 5c3e240 [Pass 2/3] fix(agents): harden weekly digest handler — accurate counts, safer Gemini inputs
@@ -4470,8 +4470,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 ## [2026-02-12 19:10] - US-038: Implement generate_weekly_digest job handler
 Run: 20260212-184011-96026 (iteration 14)
 Pass: 3/3 - Polish & Finalize
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-14.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-14.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-14.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-14.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: d6bd632 [Pass 3/3] refactor(agents): polish weekly digest handler — cleaner parsing, better diagnostics
@@ -4513,8 +4513,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 15)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-15.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-15.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-15.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-15.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 2674cc4 [Pass 1/3] feat(digest): create in-app digest view and schedule weekly generation
@@ -4563,8 +4563,8 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 16)
 Pass: 2/3 - Quality Review
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-16.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260212-184011-96026-iter-16.md
+Run log: .ralph/runs/run-20260212-184011-96026-iter-16.log
+Run summary: .ralph/runs/run-20260212-184011-96026-iter-16.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 8ed40e6 [Pass 2/3] fix(digest): harden digest view — parallel queries, accessibility, error handling
@@ -4615,8 +4615,8 @@ Pass: 3 (Phase: Refine)
 Gates cleared this pass: G5 (Simplification), G6 (Audit), G-UI1 (Design Review)
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G-UI1
 Gates remaining: G7 (Acceptance — next pass)
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-174747-15083-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-174747-15083-iter-1.md
+Run log: .ralph/runs/run-20260215-174747-15083-iter-1.log
+Run summary: .ralph/runs/run-20260215-174747-15083-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 54126f8 [Refine 3] refactor(digest): simplify components, improve accessibility
@@ -4667,8 +4667,8 @@ Pass: 4 (Phase: Finalize)
 Gates cleared this pass: G7 (Acceptance)
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7, G-UI1, G-UI2
 Gates remaining: none — all clear
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-174747-15083-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-174747-15083-iter-2.md
+Run log: .ralph/runs/run-20260215-174747-15083-iter-2.log
+Run summary: .ralph/runs/run-20260215-174747-15083-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none — Finalize pass with no code changes; all changes committed in prior passes (54126f8)
@@ -4715,8 +4715,8 @@ Pass: 1 (Phase: Foundation)
 Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification)
 Gates cleared (cumulative): G1, G2, G3
 Gates remaining: G4 (Code Review), G5 (Simplification), G6 (Audit), G7 (Acceptance)
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-182751-44991-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-182751-44991-iter-1.md
+Run log: .ralph/runs/run-20260215-182751-44991-iter-1.log
+Run summary: .ralph/runs/run-20260215-182751-44991-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 1eebf35 [Build 1] feat(db): create workflows table migration
@@ -4769,8 +4769,8 @@ Pass: 2 (Phase: Harden)
 Gates cleared this pass: G4 (Code Review), G5 (Simplification), G6 (Audit)
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6
 Gates remaining: G7 (Acceptance)
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-182751-44991-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-182751-44991-iter-2.md
+Run log: .ralph/runs/run-20260215-182751-44991-iter-2.log
+Run summary: .ralph/runs/run-20260215-182751-44991-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none — no code changes needed; review/audit pass only
@@ -4819,8 +4819,8 @@ Pass: 3 (Phase: Finalize)
 Gates cleared this pass: G7 (Acceptance)
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
 Gates remaining: none — all clear
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-182751-44991-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-182751-44991-iter-3.md
+Run log: .ralph/runs/run-20260215-182751-44991-iter-3.log
+Run summary: .ralph/runs/run-20260215-182751-44991-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none — verification-only pass, no code changes
@@ -4871,8 +4871,8 @@ Pass: 1 (Phase: Foundation)
 Gates cleared this pass: G1, G2, G3
 Gates cleared (cumulative): G1, G2, G3
 Gates remaining: G4, G5, G6, G7
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-182751-44991-iter-4.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-182751-44991-iter-4.md
+Run log: .ralph/runs/run-20260215-182751-44991-iter-4.log
+Run summary: .ralph/runs/run-20260215-182751-44991-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 7a04b43 [Build 1] feat(vision): add UI state transition detector
@@ -4923,8 +4923,8 @@ Pass: 1 (Phase: Foundation + Harden)
 Gates cleared this pass: G1, G2, G3, G4 (partial), G6 (partial)
 Gates cleared (cumulative): G1, G2, G3, G4 (partial), G6 (partial)
 Gates remaining: G4 (full code-simplifier pass), G5, G6 (completion), G7
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-190755-68141-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-190755-68141-iter-1.md
+Run log: .ralph/runs/run-20260215-190755-68141-iter-1.log
+Run summary: .ralph/runs/run-20260215-190755-68141-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 7ac4491 [Harden 1] fix(vision): add PII sanitization and rate limiting to UI state detector
@@ -4969,8 +4969,8 @@ Pass: 3 (Phase: Refine)
 Gates cleared this pass: G4, G5, G6, G7
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
 Gates remaining: none — all clear
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-190755-68141-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-190755-68141-iter-2.md
+Run log: .ralph/runs/run-20260215-190755-68141-iter-2.log
+Run summary: .ralph/runs/run-20260215-190755-68141-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 0b86a7f [Refine 3] refactor(vision): simplify UI state detector with cached model and clearer PII flow
@@ -5019,8 +5019,8 @@ Pass: 4 (Phase: Finalize)
 Gates cleared this pass: G7 (final verification)
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
 Gates remaining: none — all clear
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-190755-68141-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-190755-68141-iter-3.md
+Run log: .ralph/runs/run-20260215-190755-68141-iter-3.log
+Run summary: .ralph/runs/run-20260215-190755-68141-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none — no code changes needed; prior commit 0b86a7f already satisfies all gates
@@ -5067,8 +5067,8 @@ Pass: 1 (Phase: Foundation)
 Gates cleared this pass: G1, G2, G3
 Gates cleared (cumulative): G1, G2, G3
 Gates remaining: G4, G5, G6, G7
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-190755-68141-iter-4.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-190755-68141-iter-4.md
+Run log: .ralph/runs/run-20260215-190755-68141-iter-4.log
+Run summary: .ralph/runs/run-20260215-190755-68141-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: b335d4d [Build 1] feat(worker): add workflow_extraction job handler
@@ -5117,8 +5117,8 @@ Pass: 2 (Phase: Harden)
 Gates cleared this pass: G4, G6
 Gates cleared (cumulative): G1, G2, G3, G4, G6
 Gates remaining: G5, G7
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-195258-14407-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-195258-14407-iter-1.md
+Run log: .ralph/runs/run-20260215-195258-14407-iter-1.log
+Run summary: .ralph/runs/run-20260215-195258-14407-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 9c09235 [Harden 2] fix(worker): parallelize frame/transcript queries and add synthesis warning
@@ -5164,8 +5164,8 @@ Pass: 1 (Phase: Foundation + Harden)
 Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification), G4 (Code Review), G5 (Simplification), G6 (Audit)
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6
 Gates remaining: G7 (Acceptance — final verification on next pass)
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-200802-96022-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-200802-96022-iter-1.md
+Run log: .ralph/runs/run-20260215-200802-96022-iter-1.log
+Run summary: .ralph/runs/run-20260215-200802-96022-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: be6f686 [Harden 3] fix(worker): add PII sanitization, Gemini error handling, and memory limits to workflow extraction
@@ -5231,8 +5231,8 @@ Pass: 1 (Phase: Foundation)
 Gates cleared this pass: G1, G2, G3
 Gates cleared (cumulative): G1, G2, G3
 Gates remaining: G4, G5, G6, G7
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-202305-37402-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-202305-37402-iter-1.md
+Run log: .ralph/runs/run-20260215-202305-37402-iter-1.log
+Run summary: .ralph/runs/run-20260215-202305-37402-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 2a9201c [Build 1] feat(dashboard): add agent activity feed page
@@ -5284,8 +5284,8 @@ Pass: 2 (Phase: Harden)
 Gates cleared this pass: G4, G6
 Gates cleared (cumulative): G1, G2, G3, G4, G6
 Gates remaining: G5, G7
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-202807-53341-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-202807-53341-iter-1.md
+Run log: .ralph/runs/run-20260215-202807-53341-iter-1.log
+Run summary: .ralph/runs/run-20260215-202807-53341-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: af53c0e [Harden 2] fix(agent-activity): add ARIA attrs, error UI, and query limits
@@ -5329,8 +5329,8 @@ Pass: 3 (Phase: Refine)
 Gates cleared this pass: G5, G-UI1, G7
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G-UI1, G7
 Gates remaining: G-UI2 (partial — browser verification requires Clerk auth; verified via build + code review + design audit)
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-204311-47531-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-204311-47531-iter-1.md
+Run log: .ralph/runs/run-20260215-204311-47531-iter-1.log
+Run summary: .ralph/runs/run-20260215-204311-47531-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: c930adf [Refine 3] refactor(agent-activity): simplify date range, stabilize load-more callback
@@ -5377,8 +5377,8 @@ Pass: 1 (Phase: Foundation)
 Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification)
 Gates cleared (cumulative): G1, G2, G3
 Gates remaining: G4 (Code Review), G5 (Simplification), G6 (Audit), G7 (Acceptance), G-UI1 (Design Review), G-UI2 (Browser Verification)
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-205814-295-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-205814-295-iter-1.md
+Run log: .ralph/runs/run-20260215-205814-295-iter-1.log
+Run summary: .ralph/runs/run-20260215-205814-295-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: efae2e2 [Build 1] feat(agents): add agent goal-setting UI and API
@@ -5426,8 +5426,8 @@ Pass: 2 (Phase: Harden)
 Gates cleared this pass: G4 (Code Review)
 Gates cleared (cumulative): G1, G2, G3, G4
 Gates remaining: G5 (Simplification), G6 (Audit), G7 (Acceptance), G-UI1 (Design Review), G-UI2 (Browser Verification)
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-211317-56627-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-211317-56627-iter-1.md
+Run log: .ralph/runs/run-20260215-211317-56627-iter-1.log
+Run summary: .ralph/runs/run-20260215-211317-56627-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: d344ae0 [Harden 2] fix(agent-goals): validate status param, scope updates by org, handle null progress
@@ -5474,8 +5474,8 @@ Pass: 3 (Phase: Refine)
 Gates cleared this pass: G5 (Simplification), G6 (Audit), G7 (Acceptance), G-UI1 (Design Review), G-UI2 (Browser Verification — build-verified, auth blocks live test)
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7, G-UI1, G-UI2
 Gates remaining: none — all clear
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-211317-56627-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-211317-56627-iter-2.md
+Run log: .ralph/runs/run-20260215-211317-56627-iter-2.log
+Run summary: .ralph/runs/run-20260215-211317-56627-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 7d18a4d [Refine 3] refactor(agent-goals): simplify code, fix updateGoalProgress bug, improve a11y
@@ -5523,8 +5523,8 @@ Pass: 4 (Phase: Finalize)
 Gates cleared this pass: G7 (Acceptance — re-verified)
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7, G-UI1, G-UI2
 Gates remaining: none — all clear
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-213820-36588-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-213820-36588-iter-1.md
+Run log: .ralph/runs/run-20260215-213820-36588-iter-1.log
+Run summary: .ralph/runs/run-20260215-213820-36588-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 839f955 [Finalize 4] fix(agent-goals): fix import ordering lint error
@@ -5565,8 +5565,8 @@ Pass: 1 (Phase: Foundation)
 Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification)
 Gates cleared (cumulative): G1, G2, G3
 Gates remaining: G4 (Code Review), G5 (Simplification), G6 (Audit), G7 (Acceptance)
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-213820-36588-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-213820-36588-iter-2.md
+Run log: .ralph/runs/run-20260215-213820-36588-iter-2.log
+Run summary: .ralph/runs/run-20260215-213820-36588-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 0e5aecd [Build 1] feat(mcp): implement MCP Knowledge Server skeleton with tool definitions
@@ -5623,8 +5623,8 @@ Pass: 1 (Phase: Foundation)
 Gates cleared this pass: G1, G2, G3
 Gates cleared (cumulative): G1, G2, G3
 Gates remaining: G4, G5, G6, G7
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-213820-36588-iter-3.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-213820-36588-iter-3.md
+Run log: .ralph/runs/run-20260215-213820-36588-iter-3.log
+Run summary: .ralph/runs/run-20260215-213820-36588-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: e44906c [Build 1] feat(mcp): implement MCP tool handlers matching AC signatures
@@ -5676,8 +5676,8 @@ Pass: 2 (Phase: Harden)
 Gates cleared this pass: G4, G6
 Gates cleared (cumulative): G1, G2, G3, G4, G6
 Gates remaining: G5, G7
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-221324-51038-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-221324-51038-iter-1.md
+Run log: .ralph/runs/run-20260215-221324-51038-iter-1.log
+Run summary: .ralph/runs/run-20260215-221324-51038-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: eb54847 [Harden 2] fix(mcp): add org_id scope to BFS traversal and improve error handling
@@ -5724,8 +5724,8 @@ Pass: 3 (Phase: Refine)
 Gates cleared this pass: G5, G7
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
 Gates remaining: none — all clear
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-221324-51038-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-221324-51038-iter-2.md
+Run log: .ralph/runs/run-20260215-221324-51038-iter-2.log
+Run summary: .ralph/runs/run-20260215-221324-51038-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 82eb94a [Refine 3] refactor(mcp): simplify handlers with shared helpers and wrapHandler pattern
@@ -5771,8 +5771,8 @@ Pass: 4 (Phase: Finalize)
 Gates cleared this pass: G7 (re-verified)
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
 Gates remaining: none — all clear
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-223827-90540-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-223827-90540-iter-1.md
+Run log: .ralph/runs/run-20260215-223827-90540-iter-1.log
+Run summary: .ralph/runs/run-20260215-223827-90540-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: none — verification-only pass, no code changes
@@ -5967,8 +5967,8 @@ Pass: 1 (Phase: Foundation)
 Gates cleared this pass: G1, G2, G3
 Gates cleared (cumulative): G1, G2, G3
 Gates remaining: G4, G5, G6, G7
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-234837-64571-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-234837-64571-iter-1.md
+Run log: .ralph/runs/run-20260215-234837-64571-iter-1.log
+Run summary: .ralph/runs/run-20260215-234837-64571-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 3cceee3 [Build 1] feat(agent-usage): add agent_usage table and metering service
@@ -6021,8 +6021,8 @@ Pass: 2 (Phase: Harden)
 Gates cleared this pass: G4, G6
 Gates cleared (cumulative): G1, G2, G3, G4, G6
 Gates remaining: G5, G7
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-234837-64571-iter-2.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-234837-64571-iter-2.md
+Run log: .ralph/runs/run-20260215-234837-64571-iter-2.log
+Run summary: .ralph/runs/run-20260215-234837-64571-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: b365c3b [Harden 2] fix(agent-usage): use DB-side aggregation and improve error handling
@@ -6071,8 +6071,8 @@ Pass: 3 (Phase: Refine)
 Gates cleared this pass: G5, G7
 Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
 Gates remaining: none -- all clear
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260216-002342-60082-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260216-002342-60082-iter-1.md
+Run log: .ralph/runs/run-20260216-002342-60082-iter-1.log
+Run summary: .ralph/runs/run-20260216-002342-60082-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: bf00bd1 [Refine 3] refactor(agent-usage): simplify metering code
@@ -6115,4 +6115,52 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 - **Learnings for future iterations:**
   - When a function handles its own errors internally (log + swallow), wrapping callers don't need try/catch around it -- the redundancy adds noise
   - JSDoc comments should match actual function signatures; required params should not be described as optional
+---
+
+## 2026-02-16T08:40Z - US-052: Create agent_usage table and implement action metering
+Thread: N/A
+Run: 20260216-003845-50713 (iteration 1)
+Pass: 4 (Phase: Finalize)
+Gates cleared this pass: G7 (re-verified)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none -- all clear
+Run log: .ralph/runs/run-20260216-003845-50713-iter-1.log
+Run summary: .ralph/runs/run-20260216-003845-50713-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: (progress entry only -- no code changes this pass)
+- Post-commit status: clean (unrelated unstaged changes in app/layout.tsx, yarn.lock, etc. remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY -- yes]
+  - /vercel-react-best-practices: [MANDATORY -- yes]
+  - /writing-clearly-and-concisely: [MANDATORY -- yes]
+  - /feature-dev: [no -- finalize phase]
+  - /code-review: [no -- already done in Pass 2]
+  - /code-simplifier: [no -- already done in Pass 3]
+  - /frontend-design: [no -- no UI]
+  - /web-design-guidelines: [no -- no UI]
+  - /agent-browser: [no -- no UI]
+  - /supabase-postgres-best-practices: [yes -- final DB verification]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: `npm run build` -> PASS
+  - Command: `npm run type:check` -> PASS (pre-existing errors in lib/workers/handlers/transcribe*.ts only)
+  - Command: SQL column verification (10 columns) -> PASS
+  - Command: SQL index verification (4 indexes including PK) -> PASS
+  - Command: SQL RLS policies (service_all + org_select) -> PASS
+  - Command: SQL RPC functions (get_agent_usage_summary, get_agent_usage_by_agent) -> PASS
+  - Command: SQL FK constraint (content_id -> content ON DELETE SET NULL, confdeltype='n') -> PASS
+  - Command: SQL zero-usage summary -> PASS (returns {totalCredits: 0, totalTokens: 0, actionCount: 0})
+  - Command: SQL zero-usage by-agent -> PASS (returns empty array)
+- Files changed:
+  - .ralph/progress.md (appended finalize entry)
+- What was implemented:
+  - Final verification of all 9 acceptance criteria -- all passing
+  - No code changes needed; implementation from Passes 1-3 is complete and correct
+  - Security audit: RLS correct, no SQL injection, server-only imports enforced
+  - Performance audit: DB-side aggregation via RPC, proper indexes, non-blocking error handling
+  - Regression audit: no changes to pre-existing functions or behavior
 ---
