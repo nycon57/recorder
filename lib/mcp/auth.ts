@@ -77,16 +77,9 @@ async function validateMcpKey(apiKey: string): Promise<McpAuthContext> {
     throw new McpAuthError('API key has expired');
   }
 
-  // Update last_used_at and request_count (fire-and-forget)
+  // Atomic increment of request_count + update last_used_at (fire-and-forget)
   supabaseAdmin
-    .from('mcp_api_keys')
-    .update({
-      last_used_at: new Date().toISOString(),
-      request_count: (key as any).request_count
-        ? (key as any).request_count + 1
-        : 1,
-    })
-    .eq('id', key.id)
+    .rpc('increment_mcp_request_count', { p_key_id: key.id })
     .then(({ error: updateErr }) => {
       if (updateErr) {
         console.error('[MCP Auth] Failed to update usage stats:', updateErr);

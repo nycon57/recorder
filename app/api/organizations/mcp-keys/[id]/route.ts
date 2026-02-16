@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 
 import { apiHandler, requireAdmin, successResponse, errors } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { rateLimit, RateLimitTier, extractUserIdFromAuth } from '@/lib/middleware/rate-limit';
 
 /**
  * DELETE /api/organizations/mcp-keys/[id] — Revoke an MCP API key
@@ -9,7 +10,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
  * Sets is_active to false so any connection using the key
  * receives "unauthorized" on the next request.
  */
-export const DELETE = apiHandler(async (
+export const DELETE = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(apiHandler(async (
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) => {
@@ -37,4 +38,4 @@ export const DELETE = apiHandler(async (
   if (updateError) throw updateError;
 
   return successResponse({ message: 'MCP API key revoked' });
-});
+}));
