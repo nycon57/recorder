@@ -66,13 +66,20 @@ export async function recordUsage(params: {
 
   if (error) {
     // Log but don't throw — metering should never block agent operations
-    console.error('[AgentMetering] Failed to record usage:', error.message);
+    console.error('[AgentMetering] Failed to record usage:', {
+      orgId: params.orgId,
+      agentType: params.agentType,
+      error: error.message,
+    });
   }
 }
 
+const ZERO_SUMMARY: UsageSummary = { totalCredits: 0, totalTokens: 0, actionCount: 0 };
+
 /**
  * Get aggregated usage summary for an org over a time period.
- * Returns zeroed summary when no usage exists.
+ * Uses database-side aggregation to avoid fetching unbounded rows.
+ * Returns zeroed summary on error or when no usage exists.
  */
 export async function getUsageSummary(
   orgId: string,
@@ -80,33 +87,36 @@ export async function getUsageSummary(
 ): Promise<UsageSummary> {
   const since = getPeriodStart(period);
 
-  const { data, error } = await supabaseAdmin
-    .from('agent_usage')
-    .select('credits_consumed, tokens_input, tokens_output')
-    .eq('org_id', orgId)
-    .gte('created_at', since);
+  const { data, error } = await supabaseAdmin.rpc('get_agent_usage_summary', {
+    p_org_id: orgId,
+    p_since: since,
+  } as Record<string, unknown>);
 
   if (error) {
-    throw new Error(`Failed to get usage summary: ${error.message}`);
+    console.error('[AgentMetering] Failed to get usage summary:', {
+      orgId,
+      period,
+      error: error.message,
+    });
+    return ZERO_SUMMARY;
   }
 
-  if (!data || data.length === 0) {
-    return { totalCredits: 0, totalTokens: 0, actionCount: 0 };
+  if (!data || (Array.isArray(data) && data.length === 0)) {
+    return ZERO_SUMMARY;
   }
 
-  let totalCredits = 0;
-  let totalTokens = 0;
-  for (const row of data) {
-    totalCredits += row.credits_consumed ?? 0;
-    totalTokens += (row.tokens_input ?? 0) + (row.tokens_output ?? 0);
-  }
-
-  return { totalCredits, totalTokens, actionCount: data.length };
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    totalCredits: row.total_credits ?? 0,
+    totalTokens: Number(row.total_tokens ?? 0),
+    actionCount: Number(row.action_count ?? 0),
+  };
 }
 
 /**
  * Get usage broken down by agent type for an org over a time period.
- * Returns an empty array when no usage exists.
+ * Uses database-side aggregation with GROUP BY to avoid fetching unbounded rows.
+ * Returns an empty array on error or when no usage exists.
  */
 export async function getUsageByAgent(
   orgId: string,
@@ -114,42 +124,31 @@ export async function getUsageByAgent(
 ): Promise<AgentUsageBreakdown[]> {
   const since = getPeriodStart(period);
 
-  const { data, error } = await supabaseAdmin
-    .from('agent_usage')
-    .select('agent_type, credits_consumed, tokens_input, tokens_output')
-    .eq('org_id', orgId)
-    .gte('created_at', since);
+  const { data, error } = await supabaseAdmin.rpc('get_agent_usage_by_agent', {
+    p_org_id: orgId,
+    p_since: since,
+  } as Record<string, unknown>);
 
   if (error) {
-    throw new Error(`Failed to get usage by agent: ${error.message}`);
-  }
-
-  if (!data || data.length === 0) {
+    console.error('[AgentMetering] Failed to get usage by agent:', {
+      orgId,
+      period,
+      error: error.message,
+    });
     return [];
   }
 
-  const byAgent = new Map<string, AgentUsageBreakdown>();
-
-  for (const row of data) {
-    const existing = byAgent.get(row.agent_type);
-    const tokens = (row.tokens_input ?? 0) + (row.tokens_output ?? 0);
-    const credits = row.credits_consumed ?? 0;
-
-    if (existing) {
-      existing.totalCredits += credits;
-      existing.totalTokens += tokens;
-      existing.actionCount += 1;
-    } else {
-      byAgent.set(row.agent_type, {
-        agentType: row.agent_type,
-        totalCredits: credits,
-        totalTokens: tokens,
-        actionCount: 1,
-      });
-    }
+  if (!data || (Array.isArray(data) && data.length === 0)) {
+    return [];
   }
 
-  return Array.from(byAgent.values());
+  const rows = Array.isArray(data) ? data : [data];
+  return rows.map((row: Record<string, unknown>) => ({
+    agentType: String(row.agent_type ?? ''),
+    totalCredits: Number(row.total_credits ?? 0),
+    totalTokens: Number(row.total_tokens ?? 0),
+    actionCount: Number(row.action_count ?? 0),
+  }));
 }
 
 /** Compute the ISO timestamp for the start of a period relative to now */
