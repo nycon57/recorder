@@ -14,6 +14,7 @@ import {
 } from "@/app/components/ui/sidebar"
 import { NavMainAurora } from "@/app/components/layout/nav-main-aurora"
 import { NavInsightsAurora } from "@/app/components/layout/nav-insights-aurora"
+import { NavIntelligenceAurora } from "@/app/components/layout/nav-intelligence-aurora"
 import { NavSettingsAurora } from "@/app/components/layout/nav-settings-aurora"
 import { NavAdminAurora } from "@/app/components/layout/nav-admin-aurora"
 import { NavUserAurora } from "@/app/components/layout/nav-user-aurora"
@@ -122,6 +123,11 @@ export function AuroraSidebar({ role, isSystemAdmin = false, hasOnboardingPlan =
 
         {/* Insights */}
         <NavInsightsAurora hasDigestEnabled={hasDigestEnabled} />
+
+        <SidebarSeparator className="mx-0" />
+
+        {/* Intelligence */}
+        <NavIntelligenceAurora />
 
         <SidebarSeparator className="mx-0" />
 
