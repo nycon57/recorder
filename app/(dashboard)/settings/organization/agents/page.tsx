@@ -41,6 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/ta
 import { cn } from '@/lib/utils/cn';
 import type { AgentApproval } from '@/lib/services/agent-permissions';
 import type { ApprovalStatus, PermissionTier } from '@/lib/types/database';
+import { GoalsTab } from './goals-tab';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -451,6 +452,7 @@ export default function AgentsSettingsPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="goals">Goals</TabsTrigger>
         </TabsList>
 
         {/* Permissions Tab */}
@@ -715,6 +717,11 @@ export default function AgentsSettingsPage() {
               })
             )}
           </div>
+        </TabsContent>
+
+        {/* Goals Tab */}
+        <TabsContent value="goals">
+          <GoalsTab />
         </TabsContent>
       </Tabs>
     </div>

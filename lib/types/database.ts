@@ -181,6 +181,10 @@ export type SearchMode = 'standard' | 'agentic' | 'hybrid' | 'hierarchical';
 
 export type WorkflowStatus = 'draft' | 'published' | 'outdated' | 'archived';
 
+export type AgentGoalType = 'freshness' | 'coverage' | 'quality' | 'custom';
+
+export type AgentGoalStatus = 'active' | 'paused' | 'achieved' | 'failed';
+
 /**
  * Individual step in a workflow extracted from screen recordings.
  */
@@ -2259,6 +2263,48 @@ export interface Database {
           confidence?: number | null;
           superseded_by?: string | null;
           metadata?: Json;
+          updated_at?: string;
+        };
+      };
+      /** Org-level goals that direct agent priorities */
+      agent_goals: {
+        Row: {
+          id: string;
+          org_id: string;
+          agent_type: string;
+          goal_description: string;
+          goal_type: 'freshness' | 'coverage' | 'quality' | 'custom';
+          target_metric: string | null;
+          target_value: number | null;
+          current_value: number | null;
+          status: 'active' | 'paused' | 'achieved' | 'failed';
+          priority: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          agent_type: string;
+          goal_description: string;
+          goal_type: 'freshness' | 'coverage' | 'quality' | 'custom';
+          target_metric?: string | null;
+          target_value?: number | null;
+          current_value?: number | null;
+          status?: 'active' | 'paused' | 'achieved' | 'failed';
+          priority?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          agent_type?: string;
+          goal_description?: string;
+          goal_type?: 'freshness' | 'coverage' | 'quality' | 'custom';
+          target_metric?: string | null;
+          target_value?: number | null;
+          current_value?: number | null;
+          status?: 'active' | 'paused' | 'achieved' | 'failed';
+          priority?: number | null;
           updated_at?: string;
         };
       };
