@@ -140,15 +140,16 @@ export default function McpSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex items-center justify-center py-12" role="status">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="sr-only">Loading MCP keys...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-12" role="alert">
         <Server className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
         <h3 className="text-lg font-semibold mb-2">Failed to load MCP keys</h3>
         <p className="text-muted-foreground mb-4">
@@ -173,7 +174,6 @@ export default function McpSettingsPage() {
         </p>
       </div>
 
-      {/* Connection instructions */}
       <div className="rounded-lg border p-4 space-y-3">
         <h3 className="text-sm font-medium">Connection Setup</h3>
         <div className="text-sm text-muted-foreground space-y-2">
@@ -187,7 +187,7 @@ export default function McpSettingsPage() {
             Generate an API key below, then add this to your MCP client configuration:
           </p>
         </div>
-        <pre className="bg-muted p-3 rounded-md text-xs overflow-x-auto">
+        <pre className="bg-muted p-3 rounded-md text-xs overflow-x-auto" tabIndex={0} aria-label="MCP client configuration example">
 {`{
   "mcpServers": {
     "tribora": {
@@ -205,7 +205,6 @@ export default function McpSettingsPage() {
         </p>
       </div>
 
-      {/* Key management */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium">API Keys</h3>
@@ -273,7 +272,6 @@ export default function McpSettingsPage() {
         )}
       </div>
 
-      {/* Generate key modal */}
       <Dialog open={isGenerateOpen} onOpenChange={handleCloseGenerate}>
         <DialogContent>
           {!generatedKey ? (
@@ -288,6 +286,7 @@ export default function McpSettingsPage() {
                 <Label htmlFor="key-name">Name</Label>
                 <Input
                   id="key-name"
+                  autoFocus
                   placeholder="e.g., Cursor Integration"
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
@@ -332,7 +331,7 @@ export default function McpSettingsPage() {
                     <code className="flex-1 p-3 bg-muted rounded-md text-sm break-all select-all">
                       {generatedKey}
                     </code>
-                    <Button size="icon" variant="outline" onClick={handleCopy}>
+                    <Button size="icon" variant="outline" onClick={handleCopy} aria-label="Copy API key to clipboard">
                       <Copy className="h-4 w-4" />
                     </Button>
                   </div>
@@ -349,7 +348,6 @@ export default function McpSettingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Revoke confirmation */}
       <ConfirmationDialog
         open={!!keyToRevoke}
         onOpenChange={(open) => !open && setKeyToRevoke(null)}

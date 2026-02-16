@@ -175,9 +175,7 @@ function registerTools(
         .default(1)
         .describe('How many relationship hops to traverse (1-3)'),
     },
-    wrapHandler('exploreKnowledgeGraph', (args) =>
-      handleExploreKnowledgeGraph(args, ctx), keyId
-    )
+    wrapHandler('exploreKnowledgeGraph', (args) => handleExploreKnowledgeGraph(args, ctx), keyId)
   );
 
   server.tool(

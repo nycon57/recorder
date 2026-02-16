@@ -42,10 +42,9 @@ export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
       return errors.badRequest('Name is required (max 255 characters)');
     }
 
-    // Generate key: trb_mcp_ + 32-char hex
-    const keyHex = randomBytes(16).toString('hex'); // 32 hex chars
+    const keyHex = randomBytes(16).toString('hex');
     const fullKey = `trb_mcp_${keyHex}`;
-    const keyPrefix = fullKey.substring(0, 12); // "trb_mcp_a1b2"
+    const keyPrefix = fullKey.substring(0, 12);
     const keyHash = createHash('sha256').update(fullKey).digest('hex');
 
     const { data: newKey, error } = await supabaseAdmin

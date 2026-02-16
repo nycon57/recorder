@@ -17,7 +17,6 @@ export const DELETE = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(apiHan
   const { orgId } = await requireAdmin();
   const { id } = await params;
 
-  // Verify the key belongs to this org
   const { data: key, error: fetchError } = await supabaseAdmin
     .from('mcp_api_keys')
     .select('id')

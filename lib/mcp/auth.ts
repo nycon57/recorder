@@ -77,14 +77,16 @@ async function validateMcpKey(apiKey: string): Promise<McpAuthContext> {
     throw new McpAuthError('API key has expired');
   }
 
-  // Atomic increment of request_count + update last_used_at (fire-and-forget)
-  supabaseAdmin
-    .rpc('increment_mcp_request_count', { p_key_id: key.id })
-    .then(({ error: updateErr }) => {
-      if (updateErr) {
-        console.error('[MCP Auth] Failed to update usage stats:', updateErr);
-      }
-    });
+  // Fire-and-forget: atomically increment request_count + update last_used_at
+  void Promise.resolve(
+    supabaseAdmin.rpc('increment_mcp_request_count', { p_key_id: key.id })
+  ).then(({ error: rpcError }) => {
+    if (rpcError) {
+      console.error('[MCP Auth] Failed to update usage stats:', rpcError);
+    }
+  }).catch((err: unknown) => {
+    console.error('[MCP Auth] Failed to update usage stats:', err);
+  });
 
   return {
     orgId: key.org_id,
@@ -93,6 +95,9 @@ async function validateMcpKey(apiKey: string): Promise<McpAuthContext> {
     keyId: key.id,
   };
 }
+
+// Lazy-initialized rate limiter
+let mcpRateLimiter: import('@upstash/ratelimit').Ratelimit | null = null;
 
 /**
  * Check MCP rate limit for a key (100 req/min via Upstash Redis).
@@ -106,7 +111,7 @@ export async function checkMcpRateLimit(keyId: string): Promise<void> {
     const { getRedis } = await import('@/lib/rate-limit/redis');
 
     const redis = getRedis();
-    if (!redis) return; // fail open if Redis unavailable
+    if (!redis) return;
 
     if (!mcpRateLimiter) {
       mcpRateLimiter = new Ratelimit({
@@ -124,13 +129,9 @@ export async function checkMcpRateLimit(keyId: string): Promise<void> {
     }
   } catch (error) {
     if (error instanceof McpRateLimitError) throw error;
-    // Fail open on unexpected errors
     console.error('[MCP Rate Limit] Error:', error);
   }
 }
-
-// Lazy-initialized rate limiter
-let mcpRateLimiter: import('@upstash/ratelimit').Ratelimit | null = null;
 
 export class McpAuthError extends Error {
   constructor(message: string) {

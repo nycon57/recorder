@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { usePathname } from "next/navigation";
-import Link from "next/link";
-import { useAuth } from "@clerk/nextjs";
+import * as React from 'react';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
+import { useAuth } from '@clerk/nextjs';
 import {
   Building2,
   Users,
@@ -14,80 +14,80 @@ import {
   BarChart3,
   Bot,
   Server,
-} from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
-import { cn } from "@/lib/utils/cn";
+import { cn } from '@/lib/utils/cn';
 
 interface NavItem {
   title: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   description: string;
-  requiredRole?: "owner" | "admin";
+  requiredRole?: 'owner' | 'admin';
 }
 
 const navItems: NavItem[] = [
   {
-    title: "General",
-    href: "/settings/organization/general",
+    title: 'General',
+    href: '/settings/organization/general',
     icon: Building2,
-    description: "Profile and branding",
+    description: 'Profile and branding',
   },
   {
-    title: "Members",
-    href: "/settings/organization/members",
+    title: 'Members',
+    href: '/settings/organization/members',
     icon: Users,
-    description: "Manage team members",
-    requiredRole: "admin",
+    description: 'Manage team members',
+    requiredRole: 'admin',
   },
   {
-    title: "Departments",
-    href: "/settings/organization/departments",
+    title: 'Departments',
+    href: '/settings/organization/departments',
     icon: Briefcase,
-    description: "Organize teams",
-    requiredRole: "admin",
+    description: 'Organize teams',
+    requiredRole: 'admin',
   },
   {
-    title: "Security",
-    href: "/settings/organization/security",
+    title: 'Security',
+    href: '/settings/organization/security',
     icon: Shield,
-    description: "Security settings",
-    requiredRole: "admin",
+    description: 'Security settings',
+    requiredRole: 'admin',
   },
   {
-    title: "Integrations",
-    href: "/settings/organization/integrations",
+    title: 'Integrations',
+    href: '/settings/organization/integrations',
     icon: Plug,
-    description: "External sources & APIs",
-    requiredRole: "admin",
+    description: 'External sources & APIs',
+    requiredRole: 'admin',
   },
   {
-    title: "Billing",
-    href: "/settings/organization/billing",
+    title: 'Billing',
+    href: '/settings/organization/billing',
     icon: CreditCard,
-    description: "Subscription & usage",
-    requiredRole: "admin",
+    description: 'Subscription & usage',
+    requiredRole: 'admin',
   },
   {
-    title: "Agents",
-    href: "/settings/organization/agents",
+    title: 'Agents',
+    href: '/settings/organization/agents',
     icon: Bot,
-    description: "AI agent permissions",
-    requiredRole: "admin",
+    description: 'AI agent permissions',
+    requiredRole: 'admin',
   },
   {
-    title: "MCP Server",
-    href: "/settings/organization/mcp",
+    title: 'MCP Server',
+    href: '/settings/organization/mcp',
     icon: Server,
-    description: "AI agent connections",
-    requiredRole: "admin",
+    description: 'AI agent connections',
+    requiredRole: 'admin',
   },
   {
-    title: "Stats",
-    href: "/settings/organization/stats",
+    title: 'Stats',
+    href: '/settings/organization/stats',
     icon: BarChart3,
-    description: "Usage analytics",
+    description: 'Usage analytics',
   },
 ];
 
@@ -99,19 +99,17 @@ export default function OrganizationSettingsLayout({
   const pathname = usePathname();
   const { userId } = useAuth();
 
-  // Fetch user role to determine access
   const { data: userRole, isLoading } = useQuery({
-    queryKey: ["user-role", userId],
+    queryKey: ['user-role', userId],
     queryFn: async () => {
-      const response = await fetch("/api/profile");
-      if (!response.ok) throw new Error("Failed to fetch user role");
+      const response = await fetch('/api/profile');
+      if (!response.ok) throw new Error('Failed to fetch user role');
       const data = await response.json();
       return data.data?.role;
     },
     enabled: !!userId,
   });
 
-  // Show loading state
   if (isLoading) {
     return (
       <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
@@ -123,8 +121,7 @@ export default function OrganizationSettingsLayout({
     );
   }
 
-  // Check if user has admin access
-  const hasAdminAccess = userRole === "owner" || userRole === "admin";
+  const hasAdminAccess = userRole === 'owner' || userRole === 'admin';
 
   if (!hasAdminAccess) {
     return (
@@ -156,15 +153,13 @@ export default function OrganizationSettingsLayout({
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8">
-        {/* Sidebar Navigation */}
         <aside className="lg:w-64 flex-shrink-0">
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href ||
-                (item.href === "/settings/organization/general" && pathname === "/settings/organization");
+                (item.href === '/settings/organization/general' && pathname === '/settings/organization');
 
-              // Filter out items based on role
               if (item.requiredRole && !hasAdminAccess) {
                 return null;
               }
@@ -174,16 +169,16 @@ export default function OrganizationSettingsLayout({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors group",
+                    'flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors group',
                     isActive
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
                 >
                   <Icon
                     className={cn(
-                      "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isActive ? "text-primary" : "text-muted-foreground/70"
+                      'w-5 h-5 mt-0.5 flex-shrink-0',
+                      isActive ? 'text-primary' : 'text-muted-foreground/70'
                     )}
                   />
                   <div className="flex-1 min-w-0">
@@ -200,7 +195,6 @@ export default function OrganizationSettingsLayout({
           </nav>
         </aside>
 
-        {/* Main Content */}
         <main className="flex-1 min-w-0">
           {children}
         </main>
