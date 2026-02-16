@@ -13,6 +13,7 @@ import sharp from 'sharp';
 import { getGoogleAI } from '@/lib/google/client';
 import type { ExtractedFrame } from '@/lib/services/frame-extraction';
 import type { OCRResult } from '@/lib/services/ocr-service';
+import { sanitizeVisualDescription, detectPII, logPIIDetection } from '@/lib/utils/security';
 
 export interface UITransition {
   frameIndex: number;
@@ -258,6 +259,11 @@ async function classifyTransitions(
     );
 
     transitions.push(...batchResults);
+
+    // Delay between batches to avoid Gemini API rate limits
+    if (i + CLASSIFICATION_BATCH_SIZE < candidates.length) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
   }
 
   return transitions;
@@ -330,18 +336,29 @@ Respond in JSON:
       'modal_close', 'page_load', 'scroll',
     ]);
 
+    // Sanitize Gemini output to redact any PII visible in screenshots
+    const fromState = sanitizeVisualDescription(parsed.fromState || 'unknown state', 500);
+    const toState = sanitizeVisualDescription(parsed.toState || 'unknown state', 500);
+    const uiElements = Array.isArray(parsed.uiElements)
+      ? parsed.uiElements.map((el: string) => sanitizeVisualDescription(String(el), 200)).slice(0, 20)
+      : [];
+
+    const combinedText = `${parsed.fromState ?? ''} ${parsed.toState ?? ''} ${(parsed.uiElements ?? []).join(' ')}`;
+    const piiCheck = detectPII(combinedText);
+    if (piiCheck.hasPII) {
+      logPIIDetection('ui-state-transition', piiCheck.types);
+    }
+
     return {
       frameIndex: index,
       timestamp: frameBefore.timeSec,
       transitionType: validTypes.has(parsed.transitionType)
         ? parsed.transitionType
         : 'unknown',
-      fromState: parsed.fromState || 'unknown state',
-      toState: parsed.toState || 'unknown state',
+      fromState: fromState || 'unknown state',
+      toState: toState || 'unknown state',
       confidence: Math.min(1, Math.max(0, parsed.confidence ?? 0.7)),
-      uiElements: Array.isArray(parsed.uiElements)
-        ? parsed.uiElements.slice(0, 20)
-        : [],
+      uiElements,
     };
   } catch (error) {
     console.error(
@@ -354,8 +371,8 @@ Respond in JSON:
       frameIndex: index,
       timestamp: frameBefore.timeSec,
       transitionType: 'unknown',
-      fromState: ocrBefore?.text?.slice(0, 100) || 'unknown state',
-      toState: ocrAfter?.text?.slice(0, 100) || 'unknown state',
+      fromState: sanitizeVisualDescription(ocrBefore?.text?.slice(0, 100) || 'unknown state', 200),
+      toState: sanitizeVisualDescription(ocrAfter?.text?.slice(0, 100) || 'unknown state', 200),
       confidence: 0.3,
       uiElements: [],
     };
