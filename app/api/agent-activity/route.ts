@@ -32,7 +32,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Run queries in parallel: entries, stats, and filter options
   const [entriesResult, statsResult, agentTypesResult, actionTypesResult] = await Promise.all([
-    // Paginated entries (fetch PAGE_SIZE + 1 to detect hasMore)
+    // Paginated entries (range is inclusive, so PAGE_SIZE+1 rows detect hasMore)
     applyFilters(
       supabaseAdmin
         .from('agent_activity_log')
@@ -85,33 +85,31 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const hasMore = entries.length > PAGE_SIZE;
   const pageEntries = hasMore ? entries.slice(0, PAGE_SIZE) : entries;
 
-  // Batch-fetch content titles for entries with content_ids
+  // Batch-fetch content titles for entries that reference content
   const contentIds = [...new Set(
     pageEntries.filter(e => e.content_id).map(e => e.content_id as string)
   )];
-  let contentTitles: Record<string, string> = {};
 
+  const contentTitles: Record<string, string> = {};
   if (contentIds.length > 0) {
     const { data: contentData } = await supabaseAdmin
       .from('content')
       .select('id, title')
       .in('id', contentIds);
 
-    if (contentData) {
-      contentTitles = Object.fromEntries(
-        contentData.map(c => [c.id, c.title || 'Untitled'])
-      );
+    for (const c of contentData ?? []) {
+      contentTitles[c.id] = c.title || 'Untitled';
     }
   }
 
-  // Compute stats from aggregation data
+  // Compute stats from the capped sample
   const statsData = statsResult.data ?? [];
   const totalCount = statsResult.count ?? statsData.length;
-  const cappedCount = statsData.length;
+  const sampleSize = statsData.length;
   const successCount = statsData.filter(r => r.outcome === 'success').length;
-  const totalTokens = statsData.reduce((sum: number, r: { tokens_used: number | null }) => sum + (r.tokens_used || 0), 0);
+  const totalTokens = statsData.reduce((sum, r) => sum + (r.tokens_used || 0), 0);
 
-  // Most active agent by frequency in filtered set
+  // Most active agent by frequency
   const agentCounts: Record<string, number> = {};
   for (const row of statsData) {
     agentCounts[row.agent_type] = (agentCounts[row.agent_type] || 0) + 1;
@@ -130,8 +128,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
     })),
     stats: {
       totalActions: totalCount,
-      successRate: cappedCount > 0
-        ? Math.round((successCount / cappedCount) * 100)
+      successRate: sampleSize > 0
+        ? Math.round((successCount / sampleSize) * 100)
         : 0,
       mostActiveAgent,
       totalTokens,

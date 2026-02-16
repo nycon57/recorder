@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Activity,
@@ -131,27 +131,23 @@ function formatTokens(tokens: number): string {
   return String(tokens);
 }
 
-function getDateRange(range: string): { startDate?: string; endDate?: string } {
-  const now = new Date();
-  switch (range) {
-    case 'today': {
-      const start = new Date(now);
-      start.setHours(0, 0, 0, 0);
-      return { startDate: start.toISOString() };
-    }
-    case '7d': {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 7);
-      return { startDate: start.toISOString() };
-    }
-    case '30d': {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 30);
-      return { startDate: start.toISOString() };
-    }
-    default:
-      return {};
+const DATE_RANGE_DAYS: Record<string, number | undefined> = {
+  today: 0,
+  '7d': 7,
+  '30d': 30,
+};
+
+function getStartDate(range: string): string | undefined {
+  const days = DATE_RANGE_DAYS[range];
+  if (days == null) return undefined;
+
+  const start = new Date();
+  if (days === 0) {
+    start.setHours(0, 0, 0, 0);
+  } else {
+    start.setDate(start.getDate() - days);
   }
+  return start.toISOString();
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +176,10 @@ export default function AgentActivityPage() {
   const [outcome, setOutcome] = useState('');
   const [dateRange, setDateRange] = useState('today');
 
+  // Track entry count in a ref so handleLoadMore stays stable
+  const entryCountRef = useRef(0);
+  entryCountRef.current = entries.length;
+
   useEffect(() => {
     document.title = 'Agent Activity - Tribora';
   }, []);
@@ -190,9 +190,8 @@ export default function AgentActivityPage() {
     if (agentType) params.set('agentType', agentType);
     if (actionType) params.set('actionType', actionType);
     if (outcome) params.set('outcome', outcome);
-    const { startDate, endDate } = getDateRange(dateRange);
+    const startDate = getStartDate(dateRange);
     if (startDate) params.set('startDate', startDate);
-    if (endDate) params.set('endDate', endDate);
     const qs = params.toString();
     return `/api/agent-activity${qs ? `?${qs}` : ''}`;
   }, [agentType, actionType, outcome, dateRange]);
@@ -229,11 +228,11 @@ export default function AgentActivityPage() {
     return () => controller.abort();
   }, [fetchUrl]);
 
-  // Load more handler
+  // Load more handler (uses ref to avoid re-creating on every entries change)
   const handleLoadMore = useCallback(async () => {
     setLoadingMore(true);
     const sep = fetchUrl.includes('?') ? '&' : '?';
-    const url = `${fetchUrl}${sep}offset=${entries.length}`;
+    const url = `${fetchUrl}${sep}offset=${entryCountRef.current}`;
 
     try {
       const res = await fetch(url);
@@ -245,7 +244,7 @@ export default function AgentActivityPage() {
     } finally {
       setLoadingMore(false);
     }
-  }, [fetchUrl, entries.length]);
+  }, [fetchUrl]);
 
   // Toggle row expansion
   const toggleExpand = useCallback((id: string) => {
