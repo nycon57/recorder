@@ -41,26 +41,8 @@ import {
 } from '@/app/components/ui/select';
 import { Textarea } from '@/app/components/ui/textarea';
 import { cn } from '@/lib/utils/cn';
+import type { AgentGoal } from '@/lib/services/agent-goals';
 import type { AgentGoalType, AgentGoalStatus } from '@/lib/types/database';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface AgentGoal {
-  id: string;
-  org_id: string;
-  agent_type: string;
-  goal_description: string;
-  goal_type: AgentGoalType;
-  target_metric: string | null;
-  target_value: number | null;
-  current_value: number | null;
-  status: AgentGoalStatus;
-  priority: number | null;
-  created_at: string;
-  updated_at: string;
-}
 
 // ---------------------------------------------------------------------------
 // Config
@@ -130,7 +112,7 @@ const GOAL_TYPE_LABELS: Record<AgentGoalType, string> = {
 
 function computeProgress(goal: AgentGoal): number {
   if (!goal.target_value || goal.target_value === 0) return 0;
-  if (goal.current_value == null) return 0; // No measurement yet
+  if (goal.current_value == null) return 0;
 
   const current = goal.current_value;
 
@@ -149,19 +131,17 @@ function progressLabel(goal: AgentGoal): string {
   const current = goal.current_value ?? 0;
   const target = goal.target_value;
 
-  if (goal.goal_type === 'freshness') {
-    return `Oldest content: ${Math.round(current)} days (target: < ${target} days)`;
+  switch (goal.goal_type) {
+    case 'freshness':
+      return `Oldest content: ${Math.round(current)} days (target: < ${target} days)`;
+    case 'coverage':
+      return `Coverage: ${Math.round(current)}% (target: ${target}%)`;
+    case 'quality':
+      return `Health score: ${Math.round(current)} (target: ${target})`;
+    default:
+      if (target) return `${Math.round(current)} / ${target}`;
+      return `Current: ${Math.round(current)}`;
   }
-  if (goal.goal_type === 'coverage') {
-    return `Coverage: ${Math.round(current)}% (target: ${target}%)`;
-  }
-  if (goal.goal_type === 'quality') {
-    return `Health score: ${Math.round(current)} (target: ${target})`;
-  }
-  if (target) {
-    return `${Math.round(current)} / ${target}`;
-  }
-  return `Current: ${Math.round(current)}`;
 }
 
 function templateDescription(template: GoalTemplate, value: number): string {
@@ -169,7 +149,79 @@ function templateDescription(template: GoalTemplate, value: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// GoalCard (shared between active and inactive lists)
+// ---------------------------------------------------------------------------
+
+interface GoalCardProps {
+  goal: AgentGoal;
+  inactive?: boolean;
+  onEdit: (goal: AgentGoal) => void;
+  onToggleStatus: (goal: AgentGoal) => void;
+  isUpdating: boolean;
+}
+
+function GoalCard({ goal, inactive, onEdit, onToggleStatus, isUpdating }: GoalCardProps) {
+  const pct = computeProgress(goal);
+  const statusCfg = STATUS_CONFIG[goal.status];
+  const canResume = goal.status === 'active' || goal.status === 'paused' || goal.status === 'failed';
+
+  return (
+    <Card className={cn(inactive && 'opacity-60')}>
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant={statusCfg.variant as 'default'}>{statusCfg.label}</Badge>
+              <Badge variant="outline">{GOAL_TYPE_LABELS[goal.goal_type]}</Badge>
+            </div>
+            <p className="text-sm mt-1.5">{goal.goal_description}</p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {!inactive && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onEdit(goal)}
+                aria-label="Edit goal"
+              >
+                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              </Button>
+            )}
+            {canResume && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onToggleStatus(goal)}
+                disabled={isUpdating}
+                aria-label={goal.status === 'active' ? 'Pause goal' : 'Resume goal'}
+              >
+                {goal.status === 'active' ? (
+                  <Pause className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {goal.target_value != null && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{progressLabel(goal)}</span>
+              <span>{pct}%</span>
+            </div>
+            <Progress value={pct} aria-label={`Goal progress: ${pct}%`} />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// GoalsTab
 // ---------------------------------------------------------------------------
 
 export function GoalsTab() {
@@ -177,14 +229,14 @@ export function GoalsTab() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingGoal, setEditingGoal] = useState<AgentGoal | null>(null);
 
-  // Form state
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+  // Add form state
+  const [selectedTemplate, setSelectedTemplate] = useState('');
   const [targetValue, setTargetValue] = useState('');
   const [customDescription, setCustomDescription] = useState('');
   const [customAgentType, setCustomAgentType] = useState('curator');
   const [customMetric, setCustomMetric] = useState('');
 
-  // Edit form
+  // Edit form state
   const [editTargetValue, setEditTargetValue] = useState('');
   const [editDescription, setEditDescription] = useState('');
 
@@ -301,7 +353,7 @@ export function GoalsTab() {
     });
   }
 
-  // --- Loading ---
+  // --- Loading / Error ---
 
   if (isLoading) {
     return (
@@ -327,24 +379,24 @@ export function GoalsTab() {
   }
 
   const activeGoals = goals?.filter((g) => g.status === 'active') ?? [];
-  const otherGoals = goals?.filter((g) => g.status !== 'active') ?? [];
+  const inactiveGoals = goals?.filter((g) => g.status !== 'active') ?? [];
 
   // --- Render ---
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Set goals to direct what agents prioritize. Agents query active goals and adjust behavior accordingly.
         </p>
-        <Button size="sm" onClick={() => setShowAddDialog(true)}>
+        <Button size="sm" onClick={() => setShowAddDialog(true)} className="self-start sm:self-auto shrink-0">
           <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
           Add Goal
         </Button>
       </div>
 
-      {/* Active Goals */}
-      {activeGoals.length === 0 && otherGoals.length === 0 && (
+      {/* Empty state */}
+      {activeGoals.length === 0 && inactiveGoals.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
             <Target className="mx-auto h-8 w-8 text-muted-foreground/50" aria-hidden="true" />
@@ -355,111 +407,35 @@ export function GoalsTab() {
         </Card>
       )}
 
+      {/* Active Goals */}
       {activeGoals.length > 0 && (
         <div className="space-y-3">
-          {activeGoals.map((goal) => {
-            const pct = computeProgress(goal);
-            const statusCfg = STATUS_CONFIG[goal.status];
-            return (
-              <Card key={goal.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant={statusCfg.variant as 'default'}>{statusCfg.label}</Badge>
-                        <Badge variant="outline">{GOAL_TYPE_LABELS[goal.goal_type]}</Badge>
-                      </div>
-                      <p className="text-sm mt-1.5">{goal.goal_description}</p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => openEditDialog(goal)}
-                        aria-label="Edit goal"
-                      >
-                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleToggleStatus(goal)}
-                        disabled={updateMutation.isPending}
-                        aria-label={goal.status === 'active' ? 'Pause goal' : 'Resume goal'}
-                      >
-                        {goal.status === 'active' ? (
-                          <Pause className="h-3.5 w-3.5" aria-hidden="true" />
-                        ) : (
-                          <Play className="h-3.5 w-3.5" aria-hidden="true" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  {goal.target_value != null && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{progressLabel(goal)}</span>
-                        <span>{pct}%</span>
-                      </div>
-                      <Progress value={pct} aria-label={`Goal progress: ${pct}%`} />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+          {activeGoals.map((goal) => (
+            <GoalCard
+              key={goal.id}
+              goal={goal}
+              onEdit={openEditDialog}
+              onToggleStatus={handleToggleStatus}
+              isUpdating={updateMutation.isPending}
+            />
+          ))}
         </div>
       )}
 
-      {/* Paused / Achieved / Failed Goals */}
-      {otherGoals.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-muted-foreground mt-4">Inactive goals</h3>
-          {otherGoals.map((goal) => {
-            const pct = computeProgress(goal);
-            const statusCfg = STATUS_CONFIG[goal.status];
-            return (
-              <Card key={goal.id} className="opacity-60">
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant={statusCfg.variant as 'default'}>{statusCfg.label}</Badge>
-                        <Badge variant="outline">{GOAL_TYPE_LABELS[goal.goal_type]}</Badge>
-                      </div>
-                      <p className="text-sm mt-1.5">{goal.goal_description}</p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {(goal.status === 'paused' || goal.status === 'failed') && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleToggleStatus(goal)}
-                          disabled={updateMutation.isPending}
-                          aria-label="Resume goal"
-                        >
-                          <Play className="h-3.5 w-3.5" aria-hidden="true" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  {goal.target_value != null && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{progressLabel(goal)}</span>
-                        <span>{pct}%</span>
-                      </div>
-                      <Progress value={pct} aria-label={`Goal progress: ${pct}%`} />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+      {/* Inactive Goals */}
+      {inactiveGoals.length > 0 && (
+        <div className="space-y-3 border-t border-border/50 pt-5 mt-5">
+          <h3 className="text-sm font-medium text-muted-foreground">Inactive goals</h3>
+          {inactiveGoals.map((goal) => (
+            <GoalCard
+              key={goal.id}
+              goal={goal}
+              inactive
+              onEdit={openEditDialog}
+              onToggleStatus={handleToggleStatus}
+              isUpdating={updateMutation.isPending}
+            />
+          ))}
         </div>
       )}
 
@@ -475,7 +451,7 @@ export function GoalsTab() {
 
           <div className="space-y-4 py-2">
             {/* Template Selection */}
-            <div className="space-y-2">
+            <div className="space-y-2" role="radiogroup" aria-label="Goal template">
               {GOAL_TEMPLATES.map((template) => {
                 const Icon = template.icon;
                 const isSelected = selectedTemplate === template.id;
@@ -483,8 +459,11 @@ export function GoalsTab() {
                   <button
                     key={template.id}
                     type="button"
+                    role="radio"
+                    aria-checked={isSelected}
                     className={cn(
                       'flex items-start gap-3 w-full rounded-lg border p-3 text-left transition-colors',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                       isSelected
                         ? 'border-primary bg-primary/5'
                         : 'border-border hover:border-primary/50'
@@ -508,8 +487,11 @@ export function GoalsTab() {
               {/* Custom option */}
               <button
                 type="button"
+                role="radio"
+                aria-checked={selectedTemplate === 'custom'}
                 className={cn(
                   'flex items-start gap-3 w-full rounded-lg border p-3 text-left transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                   selectedTemplate === 'custom'
                     ? 'border-primary bg-primary/5'
                     : 'border-border hover:border-primary/50'

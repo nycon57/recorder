@@ -2273,11 +2273,11 @@ export interface Database {
           org_id: string;
           agent_type: string;
           goal_description: string;
-          goal_type: 'freshness' | 'coverage' | 'quality' | 'custom';
+          goal_type: AgentGoalType;
           target_metric: string | null;
           target_value: number | null;
           current_value: number | null;
-          status: 'active' | 'paused' | 'achieved' | 'failed';
+          status: AgentGoalStatus;
           priority: number | null;
           created_at: string;
           updated_at: string;
@@ -2287,11 +2287,11 @@ export interface Database {
           org_id: string;
           agent_type: string;
           goal_description: string;
-          goal_type: 'freshness' | 'coverage' | 'quality' | 'custom';
+          goal_type: AgentGoalType;
           target_metric?: string | null;
           target_value?: number | null;
           current_value?: number | null;
-          status?: 'active' | 'paused' | 'achieved' | 'failed';
+          status?: AgentGoalStatus;
           priority?: number | null;
           created_at?: string;
           updated_at?: string;
@@ -2299,11 +2299,11 @@ export interface Database {
         Update: {
           agent_type?: string;
           goal_description?: string;
-          goal_type?: 'freshness' | 'coverage' | 'quality' | 'custom';
+          goal_type?: AgentGoalType;
           target_metric?: string | null;
           target_value?: number | null;
           current_value?: number | null;
-          status?: 'active' | 'paused' | 'achieved' | 'failed';
+          status?: AgentGoalStatus;
           priority?: number | null;
           updated_at?: string;
         };

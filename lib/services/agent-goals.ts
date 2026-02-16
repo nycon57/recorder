@@ -47,22 +47,23 @@ export async function updateGoalProgress(
   orgId: string,
   currentValue: number
 ): Promise<boolean> {
-  const { error, count } = await supabaseAdmin
+  const { error } = await supabaseAdmin
     .from('agent_goals')
     .update({
       current_value: currentValue,
       updated_at: new Date().toISOString(),
     })
     .eq('id', goalId)
-    .eq('org_id', orgId);
+    .eq('org_id', orgId)
+    .select()
+    .single();
 
   if (error) {
+    if (error.code === 'PGRST116') {
+      console.warn(`[updateGoalProgress] No goal found: ${goalId} for org ${orgId}`);
+      return false;
+    }
     console.error('[updateGoalProgress] Error:', error);
-    return false;
-  }
-
-  if (count === 0) {
-    console.warn(`[updateGoalProgress] No goal found: ${goalId} for org ${orgId}`);
     return false;
   }
 

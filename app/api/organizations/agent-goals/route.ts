@@ -45,12 +45,9 @@ const updateGoalSchema = z.object({
 export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
 
-  const { searchParams } = new URL(request.url);
-  const statusParam = searchParams.get('status');
+  const statusParam = request.nextUrl.searchParams.get('status');
 
-  // Validate status filter against allowed values
-  const validStatuses = ['active', 'paused', 'achieved', 'failed'] as const;
-  if (statusParam && !validStatuses.includes(statusParam as (typeof validStatuses)[number])) {
+  if (statusParam && !goalStatusEnum.safeParse(statusParam).success) {
     return errors.badRequest('Invalid status parameter');
   }
 
@@ -116,12 +113,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
 export const PATCH = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireAdmin();
 
-  const body = await parseBody<z.infer<typeof updateGoalSchema>>(
+  const { id, ...updates } = await parseBody<z.infer<typeof updateGoalSchema>>(
     request,
     updateGoalSchema
   );
-
-  const { id, ...updates } = body;
 
   const { data, error } = await supabaseAdmin
     .from('agent_goals')
