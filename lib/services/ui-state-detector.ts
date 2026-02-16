@@ -15,18 +15,20 @@ import type { ExtractedFrame } from '@/lib/services/frame-extraction';
 import type { OCRResult } from '@/lib/services/ocr-service';
 import { sanitizeVisualDescription, detectPII, logPIIDetection } from '@/lib/utils/security';
 
+export type TransitionType =
+  | 'navigation'
+  | 'click'
+  | 'form_fill'
+  | 'modal_open'
+  | 'modal_close'
+  | 'page_load'
+  | 'scroll'
+  | 'unknown';
+
 export interface UITransition {
   frameIndex: number;
   timestamp: number;
-  transitionType:
-    | 'navigation'
-    | 'click'
-    | 'form_fill'
-    | 'modal_open'
-    | 'modal_close'
-    | 'page_load'
-    | 'scroll'
-    | 'unknown';
+  transitionType: TransitionType;
   fromState: string;
   toState: string;
   confidence: number;
@@ -38,6 +40,22 @@ const PIXEL_DIFF_THRESHOLD = 0.15;
 
 /** Batch size for Gemini Vision classification requests */
 const CLASSIFICATION_BATCH_SIZE = 3;
+
+/** Valid transition types returned by Gemini (excludes 'unknown', which is the fallback) */
+const VALID_TRANSITION_TYPES: Set<string> = new Set<TransitionType>([
+  'navigation', 'click', 'form_fill', 'modal_open',
+  'modal_close', 'page_load', 'scroll',
+]);
+
+/** Lazily initialized Gemini model for vision classification */
+let _visionModel: ReturnType<ReturnType<typeof getGoogleAI>['getGenerativeModel']> | null = null;
+
+function getVisionModel() {
+  if (!_visionModel) {
+    _visionModel = getGoogleAI().getGenerativeModel({ model: 'gemini-2.5-flash' });
+  }
+  return _visionModel;
+}
 
 /**
  * Detect UI state transitions across a sequence of extracted frames.
@@ -290,8 +308,7 @@ async function classifySingleTransition(
       fs.readFile(frameAfter.localPath),
     ]);
 
-    const genAI = getGoogleAI();
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = getVisionModel();
 
     const ocrContext = buildOcrContext(ocrBefore, ocrAfter);
 
@@ -331,32 +348,32 @@ Respond in JSON:
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    const validTypes = new Set([
-      'navigation', 'click', 'form_fill', 'modal_open',
-      'modal_close', 'page_load', 'scroll',
-    ]);
 
-    // Sanitize Gemini output to redact any PII visible in screenshots
-    const fromState = sanitizeVisualDescription(parsed.fromState || 'unknown state', 500);
-    const toState = sanitizeVisualDescription(parsed.toState || 'unknown state', 500);
-    const uiElements = Array.isArray(parsed.uiElements)
-      ? parsed.uiElements.map((el: string) => sanitizeVisualDescription(String(el), 200)).slice(0, 20)
-      : [];
+    // Check raw Gemini output for PII before sanitization
+    const rawFromState = parsed.fromState ?? '';
+    const rawToState = parsed.toState ?? '';
+    const rawElements: string[] = Array.isArray(parsed.uiElements) ? parsed.uiElements : [];
 
-    const combinedText = `${parsed.fromState ?? ''} ${parsed.toState ?? ''} ${(parsed.uiElements ?? []).join(' ')}`;
-    const piiCheck = detectPII(combinedText);
+    const piiCheck = detectPII(`${rawFromState} ${rawToState} ${rawElements.join(' ')}`);
     if (piiCheck.hasPII) {
       logPIIDetection('ui-state-transition', piiCheck.types);
     }
 
+    // Sanitize Gemini output to redact any PII visible in screenshots
+    const fromState = sanitizeVisualDescription(rawFromState || 'unknown state', 500);
+    const toState = sanitizeVisualDescription(rawToState || 'unknown state', 500);
+    const uiElements = rawElements
+      .slice(0, 20)
+      .map((el) => sanitizeVisualDescription(String(el), 200));
+
     return {
       frameIndex: index,
       timestamp: frameBefore.timeSec,
-      transitionType: validTypes.has(parsed.transitionType)
-        ? parsed.transitionType
+      transitionType: VALID_TRANSITION_TYPES.has(parsed.transitionType)
+        ? (parsed.transitionType as TransitionType)
         : 'unknown',
-      fromState: fromState || 'unknown state',
-      toState: toState || 'unknown state',
+      fromState,
+      toState,
       confidence: Math.min(1, Math.max(0, parsed.confidence ?? 0.7)),
       uiElements,
     };
@@ -384,14 +401,10 @@ function buildOcrContext(
   ocrBefore?: OCRResult,
   ocrAfter?: OCRResult
 ): string {
-  const parts: string[] = [];
-
-  if (ocrBefore?.text) {
-    parts.push(`Text visible in "before" frame: ${ocrBefore.text.slice(0, 500)}`);
-  }
-  if (ocrAfter?.text) {
-    parts.push(`Text visible in "after" frame: ${ocrAfter.text.slice(0, 500)}`);
-  }
-
-  return parts.length > 0 ? parts.join('\n') : '';
+  return [
+    ocrBefore?.text && `Text visible in "before" frame: ${ocrBefore.text.slice(0, 500)}`,
+    ocrAfter?.text && `Text visible in "after" frame: ${ocrAfter.text.slice(0, 500)}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
