@@ -5,7 +5,7 @@
  * Reuses the existing api-key-validation utility for consistency.
  */
 
-import { validateApiKey, type ValidatedApiKey } from '@/lib/utils/api-key-validation';
+import { validateApiKey } from '@/lib/utils/api-key-validation';
 
 export interface McpAuthContext {
   orgId: string;
@@ -27,7 +27,7 @@ export async function authenticateMcpConnection(
     throw new McpAuthError('Invalid or missing API key');
   }
 
-  const result: ValidatedApiKey = await validateApiKey(apiKey);
+  const result = await validateApiKey(apiKey);
 
   if (!result.valid || !result.orgId) {
     throw new McpAuthError(result.error || 'Invalid or missing API key');
@@ -40,9 +40,6 @@ export async function authenticateMcpConnection(
   };
 }
 
-/**
- * Authentication error for MCP connections.
- */
 export class McpAuthError extends Error {
   constructor(message: string) {
     super(message);

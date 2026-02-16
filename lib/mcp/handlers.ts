@@ -44,6 +44,34 @@ interface RelatedConceptJoinRow {
   org_id: string;
 }
 
+/** Unwrap a Supabase `.single()` result, throwing McpToolError on failure. */
+function unwrapSingleRow<T>(
+  data: T | null,
+  error: { code: string; message: string } | null
+): T {
+  if (error) {
+    if (error.code === 'PGRST116') {
+      throw new McpToolError('not_found', 'Content not found or not accessible');
+    }
+    throw new McpToolError('internal_error', `Database error: ${error.message}`);
+  }
+  if (!data) {
+    throw new McpToolError('not_found', 'Content not found or not accessible');
+  }
+  return data;
+}
+
+/** Extract the joined content row and verify org ownership. */
+function verifyOrgAccess(joinedContent: unknown, orgId: string): ContentJoinRow {
+  const joined = (
+    Array.isArray(joinedContent) ? joinedContent[0] : joinedContent
+  ) as ContentJoinRow;
+  if (joined?.org_id !== orgId) {
+    throw new McpToolError('not_found', 'Content not found or not accessible');
+  }
+  return joined;
+}
+
 // ---------------------------------------------------------------------------
 // searchRecordings
 // ---------------------------------------------------------------------------
@@ -114,7 +142,7 @@ export async function handleSearchRecordings(
     }
   }
 
-  const results: SearchRecordingResult[] = ragContext.sources
+  return ragContext.sources
     .filter((s) => s.contentId)
     .map((source) => {
       const meta = contentMap.get(source.contentId!);
@@ -127,8 +155,6 @@ export async function handleSearchRecordings(
         createdAt: meta?.created_at ?? '',
       };
     });
-
-  return results;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +181,6 @@ export async function handleSearchConcepts(
 ): Promise<SearchConceptResult[]> {
   const { query, conceptType, limit } = input;
 
-  // Build query with description included
   let dbQuery = supabaseAdmin
     .from('knowledge_concepts')
     .select('id, name, normalized_name, concept_type, mention_count, description')
@@ -261,23 +286,14 @@ export async function handleExploreKnowledgeGraph(
   const clampedDepth = Math.max(1, Math.min(3, depth));
 
   // Fetch the root concept, scoped by org_id
-  const { data: rootConcept, error: rootError } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('knowledge_concepts')
     .select('id, name, concept_type, mention_count, description')
     .eq('id', conceptId)
     .eq('org_id', ctx.orgId)
     .single();
 
-  if (rootError) {
-    if (rootError.code === 'PGRST116') {
-      throw new McpToolError('not_found', 'Content not found or not accessible');
-    }
-    throw new McpToolError('internal_error', `Database error: ${rootError.message}`);
-  }
-
-  if (!rootConcept) {
-    throw new McpToolError('not_found', 'Content not found or not accessible');
-  }
+  const rootConcept = unwrapSingleRow(data, error);
 
   const concept: ConceptNode = {
     id: rootConcept.id,
@@ -358,7 +374,7 @@ export async function handleGetDocument(
 ): Promise<GetDocumentResult> {
   const { contentId } = input;
 
-  const { data: doc, error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('documents')
     .select(
       `
@@ -376,30 +392,15 @@ export async function handleGetDocument(
     .eq('content_id', contentId)
     .single();
 
-  if (error) {
-    if (error.code === 'PGRST116') {
-      throw new McpToolError('not_found', 'Content not found or not accessible');
-    }
-    throw new McpToolError('internal_error', `Database error: ${error.message}`);
-  }
+  const doc = unwrapSingleRow(data, error);
+  const joined = verifyOrgAccess(doc.content, ctx.orgId);
 
-  if (!doc) {
-    throw new McpToolError('not_found', 'Content not found or not accessible');
-  }
-
-  // Verify org access via the joined content row
-  const joined = (Array.isArray(doc.content) ? doc.content[0] : doc.content) as unknown as ContentJoinRow;
-  if (joined?.org_id !== ctx.orgId) {
-    throw new McpToolError('not_found', 'Content not found or not accessible');
-  }
-
-  // Determine format based on available content
-  const format = doc.markdown ? 'markdown' : doc.html ? 'html' : 'markdown';
+  const format = doc.markdown ? 'markdown' : 'html';
   const body = doc.markdown || doc.html || '';
 
   return {
     id: doc.id,
-    title: joined?.title ?? 'Untitled',
+    title: joined.title ?? 'Untitled',
     content: body,
     format,
     createdAt: doc.created_at,
@@ -427,7 +428,7 @@ export async function handleGetTranscript(
 ): Promise<GetTranscriptResult> {
   const { contentId } = input;
 
-  const { data: transcript, error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('transcripts')
     .select(
       `
@@ -444,29 +445,13 @@ export async function handleGetTranscript(
     .eq('content_id', contentId)
     .single();
 
-  if (error) {
-    if (error.code === 'PGRST116') {
-      throw new McpToolError('not_found', 'Content not found or not accessible');
-    }
-    throw new McpToolError('internal_error', `Database error: ${error.message}`);
-  }
-
-  if (!transcript) {
-    throw new McpToolError('not_found', 'Content not found or not accessible');
-  }
-
-  // Verify org access via the joined content row
-  const joined = (Array.isArray(transcript.content)
-    ? transcript.content[0]
-    : transcript.content) as unknown as ContentJoinRow;
-  if (joined?.org_id !== ctx.orgId) {
-    throw new McpToolError('not_found', 'Content not found or not accessible');
-  }
+  const transcript = unwrapSingleRow(data, error);
+  const joined = verifyOrgAccess(transcript.content, ctx.orgId);
 
   return {
     id: transcript.id,
     text: transcript.text,
     language: transcript.language ?? 'en',
-    duration: joined?.duration_sec ?? null,
+    duration: joined.duration_sec ?? null,
   };
 }

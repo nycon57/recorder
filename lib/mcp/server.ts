@@ -49,37 +49,38 @@ export async function createMcpServer(apiKey: string): Promise<McpServer> {
   return server;
 }
 
-/** Serialize a handler result as MCP tool output. */
-function toToolResult(result: unknown): CallToolResult {
-  return {
-    content: [{ type: 'text', text: JSON.stringify(result) }],
-  };
+/** Serialize a value as MCP JSON text content. */
+function toTextContent(value: unknown): CallToolResult['content'] {
+  return [{ type: 'text', text: JSON.stringify(value) }];
 }
 
-/** Serialize an error as an MCP tool error following MCP conventions. */
-function toErrorResult(toolName: string, error: unknown): CallToolResult {
-  if (error instanceof McpToolError) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({ code: error.code, message: error.message }),
-        },
-      ],
-      isError: true,
-    };
-  }
-
-  const message = error instanceof Error ? error.message : 'Unknown error';
-  console.error(`[MCP] ${toolName} error:`, error);
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify({ code: 'internal_error', message }),
-      },
-    ],
-    isError: true,
+/**
+ * Wrap a handler function with MCP result serialization and error handling.
+ *
+ * Converts the handler return value to MCP tool output, and catches
+ * errors to produce structured MCP error results.
+ */
+function wrapHandler<TArgs>(
+  toolName: string,
+  handler: (args: TArgs) => Promise<unknown>
+): (args: TArgs) => Promise<CallToolResult> {
+  return async (args: TArgs) => {
+    try {
+      return { content: toTextContent(await handler(args)) };
+    } catch (error) {
+      if (error instanceof McpToolError) {
+        return {
+          content: toTextContent({ code: error.code, message: error.message }),
+          isError: true,
+        };
+      }
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[MCP] ${toolName} error:`, error);
+      return {
+        content: toTextContent({ code: 'internal_error', message }),
+        isError: true,
+      };
+    }
   };
 }
 
@@ -87,7 +88,6 @@ function toErrorResult(toolName: string, error: unknown): CallToolResult {
  * Register all knowledge tools on the MCP server.
  */
 function registerTools(server: McpServer, ctx: McpToolContext): void {
-  // searchRecordings — semantic search across content
   server.tool(
     'searchRecordings',
     'Semantic search across recordings, transcripts, and documents. Returns matching items with snippets and similarity scores.',
@@ -107,16 +107,9 @@ function registerTools(server: McpServer, ctx: McpToolContext): void {
           'Filter by content types (recording, video, audio, document, text)'
         ),
     },
-    async (args) => {
-      try {
-        return toToolResult(await handleSearchRecordings(args, ctx));
-      } catch (error) {
-        return toErrorResult('searchRecordings', error);
-      }
-    }
+    wrapHandler('searchRecordings', (args) => handleSearchRecordings(args, ctx))
   );
 
-  // searchConcepts — knowledge graph concept search
   server.tool(
     'searchConcepts',
     'Search the knowledge graph for concepts and topics. Returns matching concepts with types, descriptions, and mention counts.',
@@ -140,16 +133,9 @@ function registerTools(server: McpServer, ctx: McpToolContext): void {
         .default(10)
         .describe('Max concepts to return'),
     },
-    async (args) => {
-      try {
-        return toToolResult(await handleSearchConcepts(args, ctx));
-      } catch (error) {
-        return toErrorResult('searchConcepts', error);
-      }
-    }
+    wrapHandler('searchConcepts', (args) => handleSearchConcepts(args, ctx))
   );
 
-  // exploreKnowledgeGraph — depth-based graph traversal
   server.tool(
     'exploreKnowledgeGraph',
     'Explore the knowledge graph from a concept. Traverses relationships up to the given depth and returns connected concepts.',
@@ -166,16 +152,11 @@ function registerTools(server: McpServer, ctx: McpToolContext): void {
         .default(1)
         .describe('How many relationship hops to traverse (1-3)'),
     },
-    async (args) => {
-      try {
-        return toToolResult(await handleExploreKnowledgeGraph(args, ctx));
-      } catch (error) {
-        return toErrorResult('exploreKnowledgeGraph', error);
-      }
-    }
+    wrapHandler('exploreKnowledgeGraph', (args) =>
+      handleExploreKnowledgeGraph(args, ctx)
+    )
   );
 
-  // getDocument — retrieve document by content ID
   server.tool(
     'getDocument',
     'Retrieve the full document content for a content item. Returns the document body, format, and metadata.',
@@ -185,16 +166,9 @@ function registerTools(server: McpServer, ctx: McpToolContext): void {
         .uuid()
         .describe('The UUID of the content item whose document to retrieve'),
     },
-    async (args) => {
-      try {
-        return toToolResult(await handleGetDocument(args, ctx));
-      } catch (error) {
-        return toErrorResult('getDocument', error);
-      }
-    }
+    wrapHandler('getDocument', (args) => handleGetDocument(args, ctx))
   );
 
-  // getTranscript — retrieve transcript by content ID
   server.tool(
     'getTranscript',
     'Retrieve the full transcript text for a content item. Returns the text, language, and duration.',
@@ -204,13 +178,7 @@ function registerTools(server: McpServer, ctx: McpToolContext): void {
         .uuid()
         .describe('The UUID of the content item whose transcript to retrieve'),
     },
-    async (args) => {
-      try {
-        return toToolResult(await handleGetTranscript(args, ctx));
-      } catch (error) {
-        return toErrorResult('getTranscript', error);
-      }
-    }
+    wrapHandler('getTranscript', (args) => handleGetTranscript(args, ctx))
   );
 }
 
