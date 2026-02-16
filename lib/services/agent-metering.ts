@@ -37,10 +37,7 @@ export interface AgentUsageBreakdown {
   actionCount: number;
 }
 
-/**
- * Record a single agent action's usage.
- * If creditsConsumed is not provided, it is calculated from token counts.
- */
+/** Record a single agent action's usage */
 export async function recordUsage(params: {
   orgId: string;
   agentType: string;

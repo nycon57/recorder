@@ -119,23 +119,19 @@ export async function withAgentLogging<T>(
       durationMs,
     });
 
-    // Record usage metering (never blocks the result)
+    // Record usage metering (recordUsage handles its own errors internally)
     const tokensIn = params.usage?.tokensInput ?? 0;
     const tokensOut = params.usage?.tokensOutput ?? 0;
-    try {
-      await recordUsage({
-        orgId: params.orgId,
-        agentType: params.agentType,
-        actionType: params.actionType,
-        creditsConsumed: calculateCredits(tokensIn, tokensOut),
-        tokensInput: tokensIn,
-        tokensOutput: tokensOut,
-        modelUsed: params.usage?.modelUsed,
-        contentId: params.contentId,
-      });
-    } catch (meterError) {
-      console.error('[AgentLogger] Failed to record usage:', meterError);
-    }
+    await recordUsage({
+      orgId: params.orgId,
+      agentType: params.agentType,
+      actionType: params.actionType,
+      creditsConsumed: calculateCredits(tokensIn, tokensOut),
+      tokensInput: tokensIn,
+      tokensOutput: tokensOut,
+      modelUsed: params.usage?.modelUsed,
+      contentId: params.contentId,
+    });
 
     return result;
   } catch (error) {
