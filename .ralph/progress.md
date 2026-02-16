@@ -5858,3 +5858,50 @@ Run summary: .ralph/runs/run-20260215-223827-90540-iter-2.md
   - The Next.js 16 params are async (Promise<{ id: string }>) — must await them in route handlers
   - Using supabaseAdmin (service role) for MCP key operations avoids RLS complexity since auth context comes from API key, not Clerk session
 ---
+
+## 2026-02-15 23:05 - US-051: Implement MCP auth and configuration page
+Run: 20260215-225830-77719 (iteration 1)
+Pass: 2 (Phase: Harden)
+Gates cleared this pass: G4 (Code Review), G6 (Audit)
+Gates cleared (cumulative): G1, G2, G3, G4, G6
+Gates remaining: G5 (Simplification), G7 (Acceptance), G-UI1 (Design Review), G-UI2 (Browser Verification)
+Run log: .ralph/runs/run-20260215-225830-77719-iter-1.log
+Run summary: .ralph/runs/run-20260215-225830-77719-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 68e891d [Harden 2] fix(mcp-auth): fix request counting race condition and add rate limiting to DELETE
+- Post-commit status: clean (remaining modified files are pre-existing untracked: app/layout.tsx, yarn.lock, .agents/, .ralph/watchdog.pid)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — Harden pass, not needed]
+  - /code-review: [yes — CodeRabbit CLI failed (raw mode), used code-reviewer subagent]
+  - /code-simplifier: [no — deferred to Pass 3 (Refine)]
+  - /frontend-design: [no — deferred to Pass 3 (Refine)]
+  - /web-design-guidelines: [no — deferred to Pass 3]
+  - /agent-browser: [no — deferred to Pass 3]
+  - /supabase-postgres-best-practices: [yes]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: none
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check -> PASS (pre-existing Buffer type errors in worker files only)
+- Files changed:
+  - lib/mcp/auth.ts — replaced broken read-modify-write request_count with atomic Postgres RPC function
+  - app/api/organizations/mcp-keys/[id]/route.ts — added rate limiting wrapper to DELETE endpoint
+  - Supabase migration: add_increment_mcp_request_count_function — atomic SQL function for request counting
+- What was implemented:
+  - Fixed critical bug: request_count was never incremented because the field was not in the SELECT query, and `(key as any).request_count` always evaluated to undefined
+  - Fixed race condition: concurrent MCP requests could overwrite each other's counts. Now uses Postgres `UPDATE SET request_count = request_count + 1` via RPC function
+  - Fixed security gap: DELETE endpoint now has rate limiting (RateLimitTier.API) matching GET and POST
+  - Security audit completed: IDOR protection verified, XSS safe (React escaping), auth bypass not possible, input validation correct
+  - Theoretical timing attack on SHA-256 hash lookup noted but not actionable — 128-bit entropy + rate limiting make it impractical
+- **Learnings for future iterations:**
+  - Always include all needed columns in SELECT when using the result (especially for increment logic)
+  - Prefer atomic SQL operations (SET col = col + 1) over read-modify-write in application code for counters
+  - CodeRabbit CLI requires TTY raw mode and fails in non-interactive environments; use code-reviewer subagent instead
+  - All API route handlers should have consistent rate limiting — check sibling routes for parity
+---
