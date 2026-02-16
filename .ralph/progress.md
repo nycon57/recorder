@@ -14,8 +14,8 @@ Started: 2026-02-11
 Thread: N/A
 Run: 20260211-182943-71374 (iteration 1)
 Pass: 1/3 - Implementation
-Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-1.log
-Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260211-182943-71374-iter-1.md
+Run log: .ralph/runs/run-20260211-182943-71374-iter-1.log
+Run summary: .ralph/runs/run-20260211-182943-71374-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: 0eff046 [Pass 1/3] feat(db): create agent_memory table migration
@@ -6062,4 +6062,57 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - CodeRabbit CLI v0.3.0 fails in non-TTY environments (raw mode not supported); use feature-dev:code-reviewer subagent as fallback
   - Client-side aggregation of usage data is an anti-pattern; always use DB-side aggregation for analytics queries
   - Read-only metering queries should degrade gracefully (return zero data) rather than throw, since usage dashboards shouldn't crash when Supabase is temporarily unavailable
+---
+
+## 2026-02-16T06:30Z - US-052: Create agent_usage table and implement action metering
+Thread: N/A
+Run: 20260216-002342-60082 (iteration 1)
+Pass: 3 (Phase: Refine)
+Gates cleared this pass: G5, G7
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none -- all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260216-002342-60082-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260216-002342-60082-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: bf00bd1 [Refine 3] refactor(agent-usage): simplify metering code
+- Post-commit status: clean (unrelated unstaged changes in app/layout.tsx, yarn.lock, etc. remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY -- yes]
+  - /vercel-react-best-practices: [MANDATORY -- yes]
+  - /writing-clearly-and-concisely: [MANDATORY -- yes]
+  - /feature-dev: [no -- refine phase]
+  - /code-review: [no -- already done in Pass 2]
+  - /code-simplifier: [yes -- code-simplifier subagent]
+  - /frontend-design: [no -- no UI]
+  - /web-design-guidelines: [no -- no UI]
+  - /agent-browser: [no -- no UI]
+  - /supabase-postgres-best-practices: [yes -- DB verification]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: `npm run build` -> PASS
+  - Command: `npm run type:check` -> PASS (pre-existing errors only)
+  - Command: SQL column verification (10 columns) -> PASS
+  - Command: SQL index verification (4 indexes including PK) -> PASS
+  - Command: SQL FK constraint (content_id -> content ON DELETE SET NULL) -> PASS
+  - Command: SQL RPC functions (get_agent_usage_summary, get_agent_usage_by_agent) -> PASS
+  - Command: SQL RLS policies (service_all + org_select) -> PASS
+  - Command: SQL zero-usage summary -> PASS (returns {totalCredits: 0, totalTokens: 0, actionCount: 0})
+  - Command: SQL zero-usage by-agent -> PASS (returns empty array)
+- Files changed:
+  - lib/services/agent-metering.ts (simplified -- removed stale JSDoc)
+  - lib/services/agent-logger.ts (simplified -- removed redundant try/catch around recordUsage)
+- What was implemented:
+  - Removed stale JSDoc on recordUsage that incorrectly claimed auto-calculation of credits
+  - Removed redundant try/catch in withAgentLogging around recordUsage call (recordUsage handles its own errors)
+  - All 9 acceptance criteria verified and passing
+  - Security audit: RLS correct, no SQL injection, server-only imports
+  - Performance audit: DB-side aggregation, proper indexes, non-blocking error handling
+  - Regression audit: no behavior changes to pre-existing functions
+- **Learnings for future iterations:**
+  - When a function handles its own errors internally (log + swallow), wrapping callers don't need try/catch around it -- the redundancy adds noise
+  - JSDoc comments should match actual function signatures; required params should not be described as optional
 ---
