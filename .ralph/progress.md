@@ -5557,3 +5557,61 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 - **Learnings for future iterations:**
   - Import ordering lint rules require empty lines between import groups (external, aliased @/, relative ./). Prior passes missed this because eslint was only run on specific files.
 ---
+
+## [2026-02-15 21:45] - US-049: Implement MCP Knowledge Server skeleton with tool definitions
+Thread: N/A
+Run: 20260215-213820-36588 (iteration 2)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification)
+Gates cleared (cumulative): G1, G2, G3
+Gates remaining: G4 (Code Review), G5 (Simplification), G6 (Audit), G7 (Acceptance)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-213820-36588-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260215-213820-36588-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 0e5aecd [Build 1] feat(mcp): implement MCP Knowledge Server skeleton with tool definitions
+- Post-commit status: clean (US-049 files committed; pre-existing app/layout.tsx and yarn.lock changes remain unstaged)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [yes — used for architecture planning]
+  - /code-review: [no — Pass 1, deferred to Pass 2]
+  - /code-simplifier: [no — Pass 1, deferred to Pass 3]
+  - /frontend-design: [N/A — not a UI story]
+  - /web-design-guidelines: [N/A — not a UI story]
+  - /agent-browser: [N/A — not a UI story]
+  - /supabase-postgres-best-practices: [yes — reviewed api_keys table schema]
+  - /ai-sdk: [N/A — MCP server, not AI SDK integration]
+  - /next-cache-components: [N/A — standalone script, no app routes]
+  - /vercel-composition-patterns: [N/A — no components]
+  - Other skills: context7 (MCP SDK docs)
+- Verification:
+  - Command: npx tsc --noEmit (our files) -> PASS (0 errors in lib/mcp/ and scripts/mcp-server.ts)
+  - Command: ESLINT_USE_FLAT_CONFIG=false npx eslint lib/mcp/server.ts lib/mcp/auth.ts scripts/mcp-server.ts -> PASS
+  - Command: npm run build -> PASS
+- Files changed:
+  - lib/mcp/auth.ts (new) — API key validation for MCP connections
+  - lib/mcp/server.ts (new) — MCP server with 6 tool definitions and handlers
+  - scripts/mcp-server.ts (new) — Entry point with stdio and HTTP transport modes
+  - package.json — Added mcp:dev script and @modelcontextprotocol/sdk dependency
+  - package-lock.json — Updated lock file
+- What was implemented:
+  - MCP server skeleton using @modelcontextprotocol/sdk v1.26.0
+  - 6 tool definitions: searchRecordings, searchConcepts, getDocument, getTranscript, getRecordingMetadata, exploreKnowledgeGraph
+  - Each tool has name, description, inputSchema (Zod), and handler function
+  - Handlers delegate to existing chat-tools service functions with org_id scoping
+  - API key authentication using existing validateApiKey utility (bcrypt, constant-time comparison)
+  - API key scopes requests to the org that owns the key
+  - Server supports stdio transport (default) and HTTP/SSE transport via CLI arg
+  - Entry point: scripts/mcp-server.ts
+  - package.json script: mcp:dev
+  - Error handling wraps all tool handlers to return MCP errors rather than crashing
+  - api_keys table already existed with key_hash, org_id, status, scopes, rate_limit
+- **Learnings for future iterations:**
+  - MCP SDK v1.26.0 uses `@modelcontextprotocol/sdk/server/mcp.js` for McpServer import
+  - Tool callback must return `CallToolResult` type (with `[x: string]: unknown` index signature)
+  - Inline async handlers work better than wrapper functions for type compatibility
+  - ESM import ordering matters for eslint — builtins first, then external, then internal
+  - The api_keys table was pre-existing with comprehensive schema (bcrypt hashes, IP whitelist, rate limits)
+---
