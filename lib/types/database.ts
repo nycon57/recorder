@@ -102,6 +102,7 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'wai
  * - 'analyze_knowledge_gaps': Gap Intelligence Agent — detect knowledge gaps from search/chat signals
  * - 'generate_onboarding_plan': Onboarding Agent — generate personalized learning paths for new team members
  * - 'generate_weekly_digest': Digest Agent — generate weekly knowledge digest for an org
+ * - 'workflow_extraction': Workflow Extraction Agent — extract step-by-step workflows from screen recordings
  */
 export type JobType =
   | 'transcribe'
@@ -135,7 +136,8 @@ export type JobType =
   | 'curate_knowledge'
   | 'analyze_knowledge_gaps'
   | 'generate_onboarding_plan'
-  | 'generate_weekly_digest';
+  | 'generate_weekly_digest'
+  | 'workflow_extraction';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 

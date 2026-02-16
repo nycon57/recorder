@@ -69,6 +69,9 @@ import { handleGenerateOnboardingPlan } from './handlers/generate-onboarding-pla
 // Weekly digest generation handler
 import { handleGenerateWeeklyDigest } from './handlers/generate-weekly-digest';
 
+// Workflow extraction handler
+import { handleWorkflowExtraction } from './handlers/workflow-extraction';
+
 const logger = createLogger({ service: 'streaming-job-executor' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
@@ -171,6 +174,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Weekly digest generation handler
   generate_weekly_digest: handleGenerateWeeklyDigest,
+
+  // Workflow extraction handler
+  workflow_extraction: handleWorkflowExtraction,
 };
 
 /**

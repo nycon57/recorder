@@ -68,6 +68,9 @@ import { handleGenerateOnboardingPlan } from './handlers/generate-onboarding-pla
 // Weekly digest generation handler
 import { handleGenerateWeeklyDigest } from './handlers/generate-weekly-digest';
 
+// Workflow extraction handler
+import { handleWorkflowExtraction } from './handlers/workflow-extraction';
+
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
 // import { generateDocument } from './handlers/docify-google';
@@ -262,6 +265,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Weekly digest generation handler
   generate_weekly_digest: handleGenerateWeeklyDigest, // Digest Agent
+
+  // Workflow extraction handler
+  workflow_extraction: handleWorkflowExtraction, // Workflow Extraction Agent
 };
 
 // PERF-WK-001: Job priority levels (0 = highest, 3 = lowest)
