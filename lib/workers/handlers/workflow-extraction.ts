@@ -16,6 +16,8 @@ import type { ExtractedFrame } from '@/lib/services/frame-extraction';
 import type { OCRResult } from '@/lib/services/ocr-service';
 import type { UITransition } from '@/lib/services/ui-state-detector';
 import type { Database, WorkflowStep } from '@/lib/types/database';
+import { detectPII, logPIIDetection, sanitizeVisualDescription } from '@/lib/utils/security';
+
 import type { ProgressCallback } from '../job-processor';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
@@ -25,8 +27,13 @@ interface WorkflowPayload {
   orgId: string;
 }
 
+interface TransitionWithNarration extends UITransition {
+  narration: string;
+}
+
 const AGENT_TYPE = 'workflow_extraction';
 const MAX_STEPS = 50;
+const MAX_FRAMES_IN_MEMORY = 1000;
 const LONG_RECORDING_THRESHOLD_SEC = 30 * 60; // 30 minutes
 
 let _genaiClient: GoogleGenAI | null = null;
@@ -40,6 +47,48 @@ function getGenAIClient(): GoogleGenAI {
     _genaiClient = new GoogleGenAI({ apiKey });
   }
   return _genaiClient;
+}
+
+/** Send a prompt to Gemini and return the response text. */
+async function callGemini(prompt: string): Promise<string> {
+  const genai = getGenAIClient();
+  const result = await genai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: { temperature: 0.3, maxOutputTokens: 8192 },
+  });
+  return result.text ?? '';
+}
+
+/** Detect PII in text and log if found. */
+function checkAndLogPII(text: string, source: string): void {
+  const piiCheck = detectPII(text);
+  if (piiCheck.hasPII) {
+    logPIIDetection(source, piiCheck.types);
+  }
+}
+
+/** Truncate to MAX_STEPS and renumber starting from 1. */
+function limitAndRenumberSteps(steps: WorkflowStep[]): WorkflowStep[] {
+  const limited = steps.slice(0, MAX_STEPS);
+  for (let i = 0; i < limited.length; i++) {
+    limited[i].stepNumber = i + 1;
+  }
+  return limited;
+}
+
+/** Return a consolidation hint for long recordings, or empty string. */
+function getConsolidateHint(isLongRecording: boolean): string {
+  return isLongRecording
+    ? '\nThis is a long recording (>30 min). Group rapid micro-actions into consolidated steps. Limit to 50 steps maximum.'
+    : '';
+}
+
+/** Format seconds as M:SS. */
+function formatTimestamp(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
 /**
@@ -90,7 +139,6 @@ async function runExtractionPipeline(
 
   progressCallback?.(5, 'Loading recording metadata...');
 
-  // Fetch recording metadata for duration check
   const { data: recording, error: recordingError } = await supabase
     .from('content')
     .select('id, title, duration_sec')
@@ -106,14 +154,14 @@ async function runExtractionPipeline(
 
   progressCallback?.(10, 'Fetching frames and transcript...');
 
-  // Step 1+2: Fetch frames and transcript in parallel (independent queries)
   const [framesResult, transcriptResult] = await Promise.all([
     supabase
       .from('video_frames')
       .select('id, frame_time_sec, frame_url, visual_description, ocr_text, metadata')
       .eq('content_id', recordingId)
       .eq('org_id', orgId)
-      .order('frame_time_sec', { ascending: true }),
+      .order('frame_time_sec', { ascending: true })
+      .limit(MAX_FRAMES_IN_MEMORY),
     supabase
       .from('transcripts')
       .select('text, words_json')
@@ -128,21 +176,26 @@ async function runExtractionPipeline(
     throw new Error(`Failed to fetch frames: ${framesError.message}`);
   }
 
-  const hasFrames = frameRows && frameRows.length > 0;
+  if (frameRows.length >= MAX_FRAMES_IN_MEMORY) {
+    console.warn(
+      `[WorkflowExtraction] Recording ${recordingId} has ${MAX_FRAMES_IN_MEMORY}+ frames, using first ${MAX_FRAMES_IN_MEMORY}`
+    );
+  }
+
   const transcript = transcriptResult.data;
+  const transcriptText = transcript?.text?.trim() ? transcript.text : '';
+  const hasFrames = frameRows.length > 0;
 
-  const hasTranscript = transcript && transcript.text && transcript.text.trim().length > 0;
-
-  if (!hasFrames && !hasTranscript) {
+  if (!hasFrames && !transcriptText) {
     console.warn(`[WorkflowExtraction] No frames or transcript for ${recordingId}, skipping`);
     return;
   }
 
-  // Edge case: No frames — text-only workflow from transcript
+  // No frames -- fall back to text-only workflow from transcript
   if (!hasFrames) {
     console.warn(`[WorkflowExtraction] No frames for ${recordingId}, falling back to text-only workflow`);
     progressCallback?.(30, 'Generating text-only workflow from transcript...');
-    const steps = await synthesizeFromTranscriptOnly(transcript!.text, isLongRecording);
+    const steps = await synthesizeFromTranscriptOnly(transcriptText, isLongRecording);
     await storeWorkflow(supabase, recordingId, orgId, recording.title, steps, 0.5);
     progressCallback?.(100, 'Text-only workflow extraction complete');
     return;
@@ -165,27 +218,22 @@ async function runExtractionPipeline(
     blocks: [],
   }));
 
-  // Step 3: Detect UI transitions
   progressCallback?.(25, 'Detecting UI state transitions...');
   let transitions: UITransition[] = [];
   try {
     transitions = await detectUITransitions(frames, ocrResults);
   } catch (error) {
     console.error(`[WorkflowExtraction] UI transition detection failed for ${recordingId}:`, error);
-    // Continue with empty transitions — Gemini will rely on frame descriptions + transcript
+    // Continue with empty transitions -- Gemini will rely on frame descriptions + transcript
   }
 
   console.log(`[WorkflowExtraction] Detected ${transitions.length} transitions for ${recordingId}`);
 
-  // Step 4: Correlate transitions with transcript timestamps
   progressCallback?.(40, 'Correlating transitions with transcript...');
-
   const wordsJson = transcript?.words_json as Array<{ word: string; startTime: number; endTime: number }> | null;
   const transitionsWithNarration = correlateWithTranscript(transitions, wordsJson);
 
-  // Step 5: Synthesize into workflow steps via Gemini
   progressCallback?.(55, 'Synthesizing workflow steps...');
-
   const frameDescriptions = frameRows.map((row) => ({
     timeSec: row.frame_time_sec,
     description: row.visual_description ?? '',
@@ -196,7 +244,7 @@ async function runExtractionPipeline(
   const steps = await synthesizeWorkflowSteps(
     transitionsWithNarration,
     frameDescriptions,
-    hasTranscript ? transcript!.text : '',
+    transcriptText,
     isLongRecording
   );
 
@@ -204,7 +252,7 @@ async function runExtractionPipeline(
     console.warn(`[WorkflowExtraction] Gemini returned no valid steps for ${recordingId}`);
   }
 
-  // Step 6: Assign screenshot paths from nearest frames
+  // Assign screenshot paths from nearest frames
   for (const step of steps) {
     const nearest = findNearestFrame(step.timestamp, frameRows);
     if (nearest?.frame_url) {
@@ -212,10 +260,8 @@ async function runExtractionPipeline(
     }
   }
 
-  // Calculate confidence from transition confidences
-  const avgConfidence = calculateConfidence(transitions, hasTranscript);
+  const avgConfidence = calculateConfidence(transitions, !!transcriptText);
 
-  // Step 7: Store workflow
   progressCallback?.(85, 'Storing workflow...');
   await storeWorkflow(supabase, recordingId, orgId, recording.title, steps, avgConfidence);
   progressCallback?.(100, 'Workflow extraction complete');
@@ -223,10 +269,6 @@ async function runExtractionPipeline(
   console.log(
     `[WorkflowExtraction] Extracted ${steps.length} steps for ${recordingId} (confidence: ${avgConfidence.toFixed(2)})`
   );
-}
-
-interface TransitionWithNarration extends UITransition {
-  narration: string;
 }
 
 /**
@@ -242,7 +284,7 @@ function correlateWithTranscript(
     return transitions.map((t) => ({ ...t, narration: '' }));
   }
 
-  const WINDOW_SEC = 5; // Look 5 seconds around each transition
+  const WINDOW_SEC = 5;
 
   return transitions.map((transition) => {
     const start = transition.timestamp - WINDOW_SEC;
@@ -261,7 +303,7 @@ function correlateWithTranscript(
 
 /**
  * Use Gemini to synthesize transitions, frame descriptions, and transcript
- * into coherent workflow steps.
+ * into coherent workflow steps. Falls back to raw transition data on API failure.
  */
 async function synthesizeWorkflowSteps(
   transitions: TransitionWithNarration[],
@@ -274,31 +316,40 @@ async function synthesizeWorkflowSteps(
   transcript: string,
   isLongRecording: boolean
 ): Promise<WorkflowStep[]> {
-  const genai = getGenAIClient();
-  const consolidateHint = isLongRecording
-    ? '\nThis is a long recording (>30 min). Group rapid micro-actions into consolidated steps. Limit to 50 steps maximum.'
-    : '';
+  const allUserData = [
+    ...transitions.map((t) => `${t.fromState} ${t.toState} ${t.narration}`),
+    ...frameDescriptions.map((f) => `${f.description} ${f.ocrText}`),
+    transcript,
+  ].join(' ');
+
+  checkAndLogPII(allUserData, 'workflow-extraction');
 
   const transitionSummary = transitions
-    .slice(0, 100) // Cap input to avoid token limits
-    .map(
-      (t) =>
-        `[${formatTimestamp(t.timestamp)}] ${t.transitionType}: ${t.fromState} → ${t.toState}` +
-        (t.narration ? ` | Narration: "${t.narration}"` : '') +
-        (t.uiElements.length > 0 ? ` | UI: ${t.uiElements.join(', ')}` : '')
-    )
+    .slice(0, 100)
+    .map((t) => {
+      const fromState = sanitizeVisualDescription(t.fromState, 500);
+      const toState = sanitizeVisualDescription(t.toState, 500);
+      const narration = sanitizeVisualDescription(t.narration || '', 500);
+      const uiEls = t.uiElements.map((el) => sanitizeVisualDescription(el, 200));
+
+      return (
+        `[${formatTimestamp(t.timestamp)}] ${t.transitionType}: ${fromState} → ${toState}` +
+        (narration ? ` | Narration: "${narration}"` : '') +
+        (uiEls.length > 0 ? ` | UI: ${uiEls.join(', ')}` : '')
+      );
+    })
     .join('\n');
 
   const frameContext = frameDescriptions
-    .slice(0, 60) // Cap frames to avoid token limits
-    .map(
-      (f) =>
-        `[${formatTimestamp(f.timeSec)}] ${f.description}` +
-        (f.ocrText ? ` | Text on screen: ${f.ocrText.slice(0, 200)}` : '')
-    )
+    .slice(0, 60)
+    .map((f) => {
+      const desc = sanitizeVisualDescription(f.description, 500);
+      const ocr = sanitizeVisualDescription(f.ocrText || '', 200);
+      return `[${formatTimestamp(f.timeSec)}] ${desc}` + (ocr ? ` | Text on screen: ${ocr}` : '');
+    })
     .join('\n');
 
-  const transcriptExcerpt = transcript.slice(0, 8000);
+  const transcriptExcerpt = sanitizeVisualDescription(transcript, 8000);
 
   const prompt = `You are a workflow documentation specialist. Analyze this screen recording data and extract a clear, step-by-step workflow.
 
@@ -310,7 +361,7 @@ ${frameContext || 'No frame descriptions available.'}
 
 ## Transcript
 ${transcriptExcerpt || 'No audio transcript available.'}
-${consolidateHint}
+${getConsolidateHint(isLongRecording)}
 
 Extract a workflow as a JSON array of steps. Each step should represent a distinct user action or milestone.
 
@@ -336,24 +387,26 @@ Return ONLY a JSON array:
   }
 ]`;
 
-  const result = await genai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-    config: { temperature: 0.3, maxOutputTokens: 8192 },
-  });
+  try {
+    const responseText = await callGemini(prompt);
+    const steps = parseWorkflowSteps(responseText);
+    return limitAndRenumberSteps(steps);
+  } catch (error) {
+    console.error('[WorkflowExtraction] Gemini synthesis failed:', error);
 
-  const responseText = result.text ?? '';
-  const steps = parseWorkflowSteps(responseText);
+    if (transitions.length === 0) return [];
 
-  // Enforce step limit
-  const limited = steps.slice(0, MAX_STEPS);
-
-  // Renumber steps
-  for (let i = 0; i < limited.length; i++) {
-    limited[i].stepNumber = i + 1;
+    return transitions.slice(0, MAX_STEPS).map((t, i) => ({
+      stepNumber: i + 1,
+      title: `${t.transitionType}: ${t.toState}`,
+      description: t.narration || `Transition from ${t.fromState}`,
+      action: t.transitionType,
+      screenshotPath: null,
+      timestamp: t.timestamp,
+      duration: 0,
+      uiElements: t.uiElements,
+    }));
   }
-
-  return limited;
 }
 
 /**
@@ -363,16 +416,15 @@ async function synthesizeFromTranscriptOnly(
   transcriptText: string,
   isLongRecording: boolean
 ): Promise<WorkflowStep[]> {
-  const genai = getGenAIClient();
-  const consolidateHint = isLongRecording
-    ? '\nThis is a long recording (>30 min). Group related actions and limit to 50 steps.'
-    : '';
+  checkAndLogPII(transcriptText, 'workflow-extraction-transcript-only');
+
+  const sanitizedTranscript = sanitizeVisualDescription(transcriptText, 12000);
 
   const prompt = `You are a workflow documentation specialist. Extract a step-by-step workflow from this transcript of a screen recording. No visual data is available, so infer steps from what the speaker describes.
 
 ## Transcript
-${transcriptText.slice(0, 12000)}
-${consolidateHint}
+${sanitizedTranscript}
+${getConsolidateHint(isLongRecording)}
 
 Extract a workflow as a JSON array:
 [
@@ -389,21 +441,18 @@ Extract a workflow as a JSON array:
 
 Return ONLY the JSON array.`;
 
-  const result = await genai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-    config: { temperature: 0.3, maxOutputTokens: 8192 },
-  });
-
-  const steps = parseWorkflowSteps(result.text ?? '');
-  const limited = steps.slice(0, MAX_STEPS);
-
-  for (let i = 0; i < limited.length; i++) {
-    limited[i].stepNumber = i + 1;
-    limited[i].screenshotPath = null; // No frames available
+  try {
+    const responseText = await callGemini(prompt);
+    const steps = parseWorkflowSteps(responseText);
+    const limited = limitAndRenumberSteps(steps);
+    for (const step of limited) {
+      step.screenshotPath = null;
+    }
+    return limited;
+  } catch (error) {
+    console.error('[WorkflowExtraction] Gemini transcript-only synthesis failed:', error);
+    return [];
   }
-
-  return limited;
 }
 
 /** Parse Gemini JSON response into WorkflowStep array. */
@@ -421,12 +470,12 @@ function parseWorkflowSteps(responseText: string): WorkflowStep[] {
     if (!Array.isArray(parsed)) return [];
 
     return parsed
-      .filter(
-        (s: any): boolean =>
-          typeof s?.title === 'string' && s.title.length > 0
-      )
-      .map((s: any, i: number): WorkflowStep => ({
-        stepNumber: s.stepNumber ?? i + 1,
+      .filter((s: unknown): s is Record<string, unknown> => {
+        const item = s as Record<string, unknown>;
+        return typeof item?.title === 'string' && (item.title as string).length > 0;
+      })
+      .map((s, i): WorkflowStep => ({
+        stepNumber: typeof s.stepNumber === 'number' ? s.stepNumber : i + 1,
         title: String(s.title).slice(0, 200),
         description: String(s.description ?? '').slice(0, 500),
         action: String(s.action ?? 'unknown').slice(0, 50),
@@ -434,7 +483,7 @@ function parseWorkflowSteps(responseText: string): WorkflowStep[] {
         timestamp: typeof s.timestamp === 'number' ? s.timestamp : 0,
         duration: typeof s.duration === 'number' ? s.duration : 0,
         uiElements: Array.isArray(s.uiElements)
-          ? s.uiElements.slice(0, 20).map((el: any) => String(el).slice(0, 100))
+          ? (s.uiElements as unknown[]).slice(0, 20).map((el) => String(el).slice(0, 100))
           : [],
       }));
   } catch {
@@ -444,10 +493,10 @@ function parseWorkflowSteps(responseText: string): WorkflowStep[] {
 }
 
 /** Find the nearest frame row to a given timestamp. */
-function findNearestFrame(
+function findNearestFrame<T extends { frame_time_sec: number }>(
   timestamp: number,
-  frameRows: Array<{ frame_time_sec: number; frame_url: string | null }>
-): { frame_url: string | null } | null {
+  frameRows: T[]
+): T | null {
   if (frameRows.length === 0) return null;
 
   let closest = frameRows[0];
@@ -467,24 +516,15 @@ function findNearestFrame(
 /** Calculate overall workflow confidence. */
 function calculateConfidence(transitions: UITransition[], hasTranscript: boolean): number {
   if (transitions.length === 0) {
-    // No transitions detected — lower confidence
     return hasTranscript ? 0.5 : 0.3;
   }
 
   const avgTransitionConfidence =
     transitions.reduce((sum, t) => sum + t.confidence, 0) / transitions.length;
 
-  // Boost confidence when transcript is available
   const transcriptBonus = hasTranscript ? 0.1 : -0.1;
 
   return Math.min(1, Math.max(0, avgTransitionConfidence + transcriptBonus));
-}
-
-/** Format seconds as M:SS. */
-function formatTimestamp(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
 /** Store the extracted workflow in the workflows table. */
@@ -501,7 +541,6 @@ async function storeWorkflow(
     return;
   }
 
-  // Mark any existing workflows for this recording as outdated
   await supabase
     .from('workflows')
     .update({ status: 'outdated' as const })
