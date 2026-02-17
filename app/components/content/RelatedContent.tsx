@@ -1,8 +1,3 @@
-/**
- * Related content suggestions based on shared concepts or vector similarity.
- * Server Component — fetches data at render time, no client-side state.
- */
-
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -87,14 +82,12 @@ async function findRelatedByConceptOverlap(
 
   if (!relatedMentions?.length) return [];
 
-  // Count concept overlap per content
   const overlapCounts = new Map<string, number>();
   for (const mention of relatedMentions) {
     const id = (mention as { content_id: string }).content_id;
     overlapCounts.set(id, (overlapCounts.get(id) ?? 0) + 1);
   }
 
-  // Sort by overlap count descending, take top N
   const topContentIds = [...overlapCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
@@ -114,24 +107,22 @@ async function findRelatedByConceptOverlap(
 
   if (!contentItems) return [];
 
-  // Preserve sort order from overlapCounts ranking
   const contentById = new Map(
     contentItems.map((item) => [item.id, item])
   );
 
-  return topContentIds.flatMap((id) => {
-    const item = contentById.get(id);
-    if (!item) return [];
-    return {
+  return topContentIds
+    .map((id) => contentById.get(id))
+    .filter((item): item is NonNullable<typeof item> => item != null)
+    .map((item) => ({
       id: item.id,
       title: item.title,
       content_type: item.content_type as ContentType | null,
       thumbnail_url: item.thumbnail_url,
       created_at: item.created_at,
-      relevanceScore: overlapCounts.get(id) ?? 0,
+      relevanceScore: overlapCounts.get(item.id) ?? 0,
       scoreType: 'concepts' as const,
-    };
-  });
+    }));
 }
 
 async function findRelatedByVectorSimilarity(
@@ -189,7 +180,6 @@ export async function RelatedContent({
   orgId,
   limit = 5,
 }: RelatedContentProps) {
-  // Concept-based first, fall back to vector similarity
   let items = await findRelatedByConceptOverlap(contentId, orgId, limit);
 
   if (items.length === 0) {

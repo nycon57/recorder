@@ -14,7 +14,6 @@ import { ContentChatWidget } from '@/app/components/content/ContentChatWidget';
 import { OnboardingViewTracker } from '@/app/components/onboarding/OnboardingViewTracker';
 
 async function getContentItem(id: string, clerkOrgId: string) {
-  // Look up internal organization ID
   const { data: org } = await supabaseAdmin
     .from('organizations')
     .select('id')
@@ -25,7 +24,6 @@ async function getContentItem(id: string, clerkOrgId: string) {
     return null;
   }
 
-  // Fetch content item (from content table - unified content storage)
   const { data: item, error } = await supabaseAdmin
     .from('content')
     .select(
@@ -43,11 +41,9 @@ async function getContentItem(id: string, clerkOrgId: string) {
     return null;
   }
 
-  // Generate signed URLs based on content type
   let videoUrl = null;
   let downloadUrl = null;
 
-  // For recordings and videos - generate video URLs
   if (item.content_type === 'recording' || item.content_type === 'video') {
     // Prefer processed (MP4) over raw (WEBM)
     if (item.storage_path_processed) {
@@ -59,7 +55,6 @@ async function getContentItem(id: string, clerkOrgId: string) {
       downloadUrl = videoUrl;
     }
 
-    // Fallback to raw version
     if (!videoUrl && item.storage_path_raw) {
       const { data: urlData } = await supabaseAdmin.storage
         .from('recordings')
@@ -70,7 +65,6 @@ async function getContentItem(id: string, clerkOrgId: string) {
     }
   }
 
-  // For audio files
   if (item.content_type === 'audio' && item.storage_path_raw) {
     const { data: urlData } = await supabaseAdmin.storage
       .from('recordings')
@@ -80,7 +74,6 @@ async function getContentItem(id: string, clerkOrgId: string) {
     downloadUrl = videoUrl;
   }
 
-  // For documents
   if (item.content_type === 'document' && item.storage_path_raw) {
     const { data: urlData } = await supabaseAdmin.storage
       .from('recordings')
@@ -97,17 +90,7 @@ async function getContentItem(id: string, clerkOrgId: string) {
 }
 
 /**
- * Library Item Detail Page
- * Displays detailed view of content item with type-specific renderers
- * Routes to appropriate component based on content_type:
- * - recording/video -> VideoDetailView
- * - audio -> AudioDetailView
- * - document -> DocumentDetailView
- * - text -> TextNoteDetailView
- *
- * Shows related content suggestions for completed/transcribed items.
- *
- * Supports URL parameters:
+ * URL parameters:
  * - ?sourceKey={key} - Retrieves all cited chunks
  * - &highlight={chunkId} - Specifies which chunk to scroll to
  * - &t={seconds} - Seek to specific timestamp (video/audio only)
@@ -128,7 +111,6 @@ export default async function LibraryItemDetailPage({
   const { id } = await params;
   const { sourceKey, highlight, t } = await searchParams;
 
-  // Parse timestamp parameter (in seconds)
   const initialTimestamp = t ? parseInt(t, 10) : undefined;
 
   const item = await getContentItem(id, orgId);
@@ -137,7 +119,7 @@ export default async function LibraryItemDetailPage({
     notFound();
   }
 
-  // Handle both object and array responses from Supabase
+  // Supabase may return a single object or an array for joined relations
   const transcript = Array.isArray(item.transcripts)
     ? item.transcripts[0]
     : item.transcripts || null;
@@ -145,7 +127,6 @@ export default async function LibraryItemDetailPage({
     ? item.documents[0]
     : item.documents || null;
 
-  // Fetch tags
   const { data: itemTags } = await supabaseAdmin
     .from('content_tags')
     .select(`
@@ -164,7 +145,6 @@ export default async function LibraryItemDetailPage({
     ?.map((rt: any) => rt.tags)
     .filter(Boolean) || [];
 
-  // Route to appropriate view based on content type
   const sharedProps = {
     recording: item,
     transcript,
