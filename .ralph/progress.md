@@ -7741,8 +7741,8 @@ Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-2026021
 Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-121216-83630-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: (see below)
-- Post-commit status: clean
+- Commit: a6bd15d chore(progress): add US-025 Pass 2 (Harden) entry
+- Post-commit status: clean (US-025 files committed; pre-existing modifications from other stories remain unstaged)
 - Skills invoked:
   - /next-best-practices: [MANDATORY — yes]
   - /vercel-react-best-practices: [MANDATORY — yes]
