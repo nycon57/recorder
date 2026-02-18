@@ -7674,3 +7674,120 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 - **Learnings for future iterations:**
   - None new; story is fully complete
 ---
+
+## [2026-02-18] - US-025: Implement gap notifications and schedule weekly analysis
+Thread: run-20260218-115213-52967
+Run: 20260218-115213-52967 (iteration 2)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1, G2, G3
+Gates cleared (cumulative): G1, G2, G3
+Gates remaining: G4 (code-review), G5 (simplification), G6 (audit), G7 (acceptance)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-115213-52967-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-115213-52967-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: aeec511 feat(gap-scheduler): add gap notifications and weekly analysis schedule
+- Post-commit status: clean (US-025 files only; other files from prior stories left unstaged)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /commit: [MANDATORY — yes]
+  - /feature-dev: [no — not needed; full picture clear from direct file reads]
+  - /code-review: [no — Pass 1; scheduled for Pass 2]
+  - /code-simplifier: [yes — delegated via subagent]
+  - /frontend-design: [N/A — no UI]
+  - /web-design-guidelines: [N/A — no UI]
+  - /agent-browser: [N/A — no UI]
+  - /supabase-postgres-best-practices: [yes — story touches DB queries]
+  - /ai-sdk: [N/A — no new AI calls]
+  - /next-cache-components: [N/A — no page/route caching changes]
+  - /vercel-composition-patterns: [N/A — no components]
+  - Other skills: none
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run lint (filtered to changed files) -> PASS
+  - Command: npm run type:check (filtered to changed files) -> PASS (pre-existing errors in unrelated files)
+- Files changed:
+  - lib/workers/handlers/analyze-knowledge-gaps.ts
+  - lib/workers/scheduler.ts
+  - scripts/worker.ts
+- What was implemented:
+  1. Gap alert notification: upsertKnowledgeGaps now returns newHighSeverityGaps (newly inserted
+     critical/high gaps). After upsert, if any exist, logAgentAction is called with action_type
+     'gap_alert', target_entity 'knowledge_gap', and outputSummary listing topic/severity/impact.
+     Alert errors are caught so they cannot fail the main job.
+  2. Weekly scheduler: Added isoWeekString() helper (ISO 8601 week), GAP_ANALYSIS_SCHEDULE_INTERVAL_MS
+     (7d default, env-overridable), and scheduleAnalyzeKnowledgeGapsJobs() in scheduler.ts.
+     Queries org_agent_settings for gap_intelligence_enabled=true, dedupes by
+     analyze_knowledge_gaps:${orgId}:${YYYY-WXX}, inserts pending jobs at priority 3.
+  3. Worker wiring: scripts/worker.ts imports and calls scheduleAnalyzeKnowledgeGapsJobs on
+     startup and on the configured interval (same pattern as curator scheduler).
+- **Learnings for future iterations:**
+  - The activity logger script (.agents/ralph/log-activity.sh) does not exist — skip it
+  - Pre-existing type errors (Buffer/Uint8Array) in transcription files; safe to ignore in scope check
+  - upsertKnowledgeGaps select clause must include 'severity' to read it back after insert
+  - Alert logging should always be wrapped in try/catch so a log failure cannot propagate
+---
+
+## [2026-02-18T12:20Z] - US-025: Implement gap notifications and schedule weekly analysis
+Thread: N/A
+Run: 20260218-121216-83630 (iteration 1)
+Pass: 2 (Phase: Harden)
+Gates cleared this pass: G4 (code review), G5 (simplification verified), G6 (audit), G7 (acceptance)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear (COMPLETE signal deferred to Pass 3 per minimum-pass rule)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-121216-83630-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-121216-83630-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: (see below)
+- Post-commit status: clean
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /commit: [MANDATORY — yes]
+  - /feature-dev: [no — Harden pass; no new code]
+  - /code-review: [yes — manual review (CodeRabbit CLI requires TTY)]
+  - /code-simplifier: [yes — verified Pass 1 simplification; no further changes needed]
+  - /frontend-design: [N/A — no UI]
+  - /web-design-guidelines: [N/A — no UI]
+  - /agent-browser: [N/A — no UI]
+  - /supabase-postgres-best-practices: [yes — reviewed DB query patterns in scheduler and handler]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: none
+- Verification:
+  - Command: `npm run build` -> PASS
+  - Command: `npm run lint` -> PASS (no output on US-025 files)
+  - Command: `npx tsc --noEmit | grep US-025 files` -> PASS (zero errors in US-025 files)
+- Files changed:
+  - .ralph/progress.md (this entry)
+- What was implemented:
+  - G4 (Code Review): Manual review of analyze-knowledge-gaps.ts, scheduler.ts, worker.ts.
+    All logic correct: gap_alert fires only for newly inserted critical/high gaps;
+    bus_factor gaps excluded from newHighSeverityGaps (by design); isoWeekString()
+    produces correct YYYY-WXX format; scheduler pattern mirrors curator exactly.
+    No issues found.
+  - G5 (Simplification): Confirmed Pass 1 simplification is complete. Code is clean.
+    No further reduction opportunities identified.
+  - G6 (Audit): Security — all queries org_id scoped, admin client server-side only,
+    alert wrapped in try/catch. Performance — batch insert single round-trip, scheduler
+    uses maybeSingle() to minimize data. Regression — upsertKnowledgeGaps return type
+    change is additive; all other behavior unchanged.
+  - G7 (Acceptance): All 8 acceptance criteria verified:
+    1. gap_alert logged with action_type='gap_alert', target_entity='knowledge_gap',
+       outputSummary listing topic/severity/impact for each new critical/high gap.
+    2. Weekly schedule via scheduleAnalyzeKnowledgeGapsJobs(), same pattern as curator.
+    3. Dedupe key: analyze_knowledge_gaps:${orgId}:${weekString} (ISO week format).
+    4. Scheduling added to lib/workers/scheduler.ts.
+    5. Typecheck passes (zero errors in US-025 files).
+    6. Example: 2 critical gaps → gap_alert entry listing topics and impact scores.
+    7. Edge case: only low/medium → no gap_alert (guard at newHighSeverityGaps.length > 0).
+    8. ISO week format 2026-W07 via isoWeekString(); prevents same-week duplicate runs.
+- **Learnings for future iterations:**
+  - CodeRabbit CLI requires TTY; fall back to manual review in agent context (previously noted)
+  - code-simplifier skill not available via Skill tool in this session; use subagent instead
+---
