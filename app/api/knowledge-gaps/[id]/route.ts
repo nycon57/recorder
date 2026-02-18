@@ -10,7 +10,7 @@ import {
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
-const patchSchema = z.union([
+const patchSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('acknowledged') }),
   z.object({
     status: z.literal('dismissed'),
@@ -32,10 +32,10 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
   const { id } = await params;
   const body = await parseBody<z.infer<typeof patchSchema>>(request, patchSchema);
 
-  // Verify the gap exists and belongs to this org.
+  // Verify the gap exists and belongs to this org. Also fetch metadata for merge on dismiss.
   const { data: gap, error: fetchError } = await supabaseAdmin
     .from('knowledge_gaps')
-    .select('id, org_id')
+    .select('id, org_id, metadata')
     .eq('id', id)
     .maybeSingle();
 
@@ -50,7 +50,9 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
   const updates: Record<string, unknown> = { status: body.status };
 
   if (body.status === 'dismissed') {
-    updates.metadata = { rejection_reason: body.rejection_reason ?? null };
+    // Merge into existing metadata so bus_factor and other fields are preserved.
+    const existingMetadata = (gap.metadata as Record<string, unknown>) ?? {};
+    updates.metadata = { ...existingMetadata, rejection_reason: body.rejection_reason ?? null };
   }
 
   if (body.status === 'resolved') {

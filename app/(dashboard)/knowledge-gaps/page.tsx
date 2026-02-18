@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
@@ -76,6 +76,9 @@ interface ResolveState {
   contentId: string;
 }
 
+const DISMISS_INITIAL: DismissState = { open: false, gapId: null, reason: '' };
+const RESOLVE_INITIAL: ResolveState = { open: false, gapId: null, contentId: '' };
+
 function formatDate(dateString: string | null): string {
   if (!dateString) return '—';
   const date = new Date(dateString);
@@ -101,8 +104,8 @@ export default function KnowledgeGapsPage() {
   const [gaps, setGaps] = useState<KnowledgeGap[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [dismiss, setDismiss] = useState<DismissState>({ open: false, gapId: null, reason: '' });
-  const [resolve, setResolve] = useState<ResolveState>({ open: false, gapId: null, contentId: '' });
+  const [dismiss, setDismiss] = useState<DismissState>(DISMISS_INITIAL);
+  const [resolve, setResolve] = useState<ResolveState>(RESOLVE_INITIAL);
 
   useEffect(() => {
     document.title = 'Knowledge Gaps - Tribora';
@@ -150,7 +153,7 @@ export default function KnowledgeGapsPage() {
         rejection_reason: dismiss.reason.trim() || null,
       });
       toast.success('Gap dismissed');
-      setDismiss({ open: false, gapId: null, reason: '' });
+      setDismiss(DISMISS_INITIAL);
       refetch();
     } catch {
       toast.error('Failed to dismiss gap');
@@ -168,7 +171,7 @@ export default function KnowledgeGapsPage() {
       if (trimmedContentId) body.resolved_by_content_id = trimmedContentId;
 
       const result = await patchGap(resolve.gapId, body);
-      const linkedTitle = result?.data?.resolvedContentTitle;
+      const linkedTitle = result.data.resolvedContentTitle;
 
       if (linkedTitle) {
         toast.success(`Gap resolved — linked to "${linkedTitle}"`);
@@ -176,7 +179,7 @@ export default function KnowledgeGapsPage() {
         toast.success('Gap marked as resolved');
       }
 
-      setResolve({ open: false, gapId: null, contentId: '' });
+      setResolve(RESOLVE_INITIAL);
       refetch();
     } catch {
       toast.error('Failed to resolve gap');
@@ -187,7 +190,6 @@ export default function KnowledgeGapsPage() {
 
   return (
     <div className="flex flex-col gap-8 p-4 md:p-8">
-      {/* Page header */}
       <div className="flex items-center gap-3">
         <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-destructive/20 to-destructive/10 flex items-center justify-center">
           <AlertTriangle className="h-6 w-6 text-destructive" />
@@ -200,7 +202,6 @@ export default function KnowledgeGapsPage() {
         </div>
       </div>
 
-      {/* Gaps table */}
       <Card>
         <CardHeader>
           <CardTitle>Open Gaps</CardTitle>
@@ -210,7 +211,7 @@ export default function KnowledgeGapsPage() {
           {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-14 bg-muted animate-pulse rounded" />
+                <div key={i} className="h-14 bg-muted motion-safe:animate-pulse rounded" />
               ))}
             </div>
           ) : gaps.length === 0 ? (
@@ -239,11 +240,20 @@ export default function KnowledgeGapsPage() {
               </TableHeader>
               <TableBody>
                 {gaps.map((gap) => (
-                  <React.Fragment key={gap.id}>
-                    {/* Main row */}
+                  <Fragment key={gap.id}>
                     <TableRow
-                      className="cursor-pointer hover:bg-muted/50"
+                      className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      tabIndex={0}
+                      role="button"
+                      aria-expanded={expandedRows.has(gap.id)}
+                      aria-label={`${gap.topic} — click to ${expandedRows.has(gap.id) ? 'collapse' : 'expand'} details`}
                       onClick={() => toggleRow(gap.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleRow(gap.id);
+                        }
+                      }}
                     >
                       <TableCell className="w-8 pr-0">
                         {expandedRows.has(gap.id) ? (
@@ -291,32 +301,32 @@ export default function KnowledgeGapsPage() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              aria-label="Acknowledge this knowledge gap"
                               onClick={() => handleAcknowledge(gap.id)}
                               disabled={actionLoading === gap.id}
-                              title="Acknowledge"
                             >
-                              <CheckCircle className="h-4 w-4" />
+                              <CheckCircle className="h-4 w-4" aria-hidden="true" />
                               <span className="hidden lg:inline">Acknowledge</span>
                             </Button>
                           )}
                           <Button
                             variant="ghost"
                             size="sm"
+                            aria-label="Dismiss this knowledge gap"
                             onClick={() => setDismiss({ open: true, gapId: gap.id, reason: '' })}
                             disabled={actionLoading === gap.id}
-                            title="Dismiss"
                           >
-                            <X className="h-4 w-4" />
+                            <X className="h-4 w-4" aria-hidden="true" />
                             <span className="hidden lg:inline">Dismiss</span>
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
+                            aria-label="Mark this knowledge gap as resolved"
                             onClick={() => setResolve({ open: true, gapId: gap.id, contentId: '' })}
                             disabled={actionLoading === gap.id}
-                            title="Mark as resolved"
                           >
-                            <CheckCheck className="h-4 w-4" />
+                            <CheckCheck className="h-4 w-4" aria-hidden="true" />
                             <span className="hidden lg:inline">Resolved</span>
                           </Button>
                         </div>
@@ -358,9 +368,7 @@ export default function KnowledgeGapsPage() {
                               </div>
                             )}
 
-                            {gap.metadata &&
-                              typeof gap.metadata === 'object' &&
-                              'bus_factor' in gap.metadata && (
+                            {gap.metadata && 'bus_factor' in gap.metadata && (
                                 <div>
                                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
                                     Bus Factor Details
@@ -374,7 +382,7 @@ export default function KnowledgeGapsPage() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </React.Fragment>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -382,11 +390,10 @@ export default function KnowledgeGapsPage() {
         </CardContent>
       </Card>
 
-      {/* Dismiss dialog */}
       <Dialog
         open={dismiss.open}
         onOpenChange={(open) => {
-          if (!open) setDismiss({ open: false, gapId: null, reason: '' });
+          if (!open) setDismiss(DISMISS_INITIAL);
         }}
       >
         <DialogContent>
@@ -408,7 +415,7 @@ export default function KnowledgeGapsPage() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setDismiss({ open: false, gapId: null, reason: '' })}
+              onClick={() => setDismiss(DISMISS_INITIAL)}
             >
               Cancel
             </Button>
@@ -423,11 +430,10 @@ export default function KnowledgeGapsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Resolve dialog */}
       <Dialog
         open={resolve.open}
         onOpenChange={(open) => {
-          if (!open) setResolve({ open: false, gapId: null, contentId: '' });
+          if (!open) setResolve(RESOLVE_INITIAL);
         }}
       >
         <DialogContent>
@@ -449,7 +455,7 @@ export default function KnowledgeGapsPage() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setResolve({ open: false, gapId: null, contentId: '' })}
+              onClick={() => setResolve(RESOLVE_INITIAL)}
             >
               Cancel
             </Button>

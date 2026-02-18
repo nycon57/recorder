@@ -1,10 +1,8 @@
-import { NextRequest } from 'next/server';
-
 import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 /** GET /api/knowledge-gaps - List open and acknowledged knowledge gaps for the org, ranked by impact. */
-export const GET = apiHandler(async (_request: NextRequest) => {
+export const GET = apiHandler(async () => {
   const { orgId } = await requireOrg();
 
   const { data, error } = await supabaseAdmin
