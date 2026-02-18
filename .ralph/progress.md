@@ -7836,3 +7836,56 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - `npm run lint` maps to `next lint` which requires no file arguments; use `npx eslint` to lint specific files
   - `npx tsc --noEmit` pre-existing Buffer/Uint8Array errors are in transcription files; safe to ignore in scope check (noted across all US-025 passes)
 ---
+
+## [2026-02-18T13:00Z] - US-025: Implement gap notifications and schedule weekly analysis
+Thread: N/A
+Run: 20260218-123719-23343 (iteration 1)
+Pass: 4 (Phase: Finalize)
+Gates cleared this pass: G7 (final acceptance re-verification)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7 — all clear
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-123719-23343-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-123719-23343-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: see below
+- Post-commit status: clean
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /commit: [MANDATORY — yes]
+  - /feature-dev: [no — Finalize pass; no new code]
+  - /code-review: [no — completed Pass 2]
+  - /code-simplifier: [no — completed Pass 3]
+  - /frontend-design: [N/A — no UI]
+  - /web-design-guidelines: [N/A — no UI]
+  - /agent-browser: [N/A — no UI]
+  - /supabase-postgres-best-practices: [yes — reviewed DB patterns]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: none
+- Verification:
+  - Command: `npx tsc --noEmit` (filtered to US-025 files) -> PASS (zero errors in US-025 files; pre-existing errors in unrelated test files)
+  - Command: `npm run lint` -> PASS (uses next lint; no issues)
+  - Key markers confirmed: gap_alert, newHighSeverityGaps, isoWeekString, analyze_knowledge_gaps dedupe key, GAP_ANALYSIS_SCHEDULE_INTERVAL_MS all present
+- Files changed:
+  - .ralph/progress.md (this entry)
+- What was implemented:
+  - Final acceptance pass. No code changes required — all implementation from Pass 1 (commit aeec511)
+    is confirmed intact and correct.
+  - All 8 acceptance criteria verified:
+    1. gap_alert logged with action_type='gap_alert', target_entity='knowledge_gap',
+       outputSummary listing topic/severity/impact for each new critical/high gap.
+    2. Weekly schedule via scheduleAnalyzeKnowledgeGapsJobs(), same pattern as curator.
+    3. Dedupe key: analyze_knowledge_gaps:${orgId}:${YYYY-WXX} (ISO week format).
+    4. Scheduling added to lib/workers/scheduler.ts.
+    5. Typecheck passes (zero errors in US-025 files).
+    6. Example: 2 critical gaps → gap_alert entry listing topics and impact scores.
+    7. Edge case: only low/medium → no gap_alert (guard at newHighSeverityGaps.length > 0).
+    8. ISO week format 2026-W07 via isoWeekString(); prevents same-week duplicate runs.
+- **Learnings for future iterations:**
+  - npx eslint does not work in this project (no eslint.config file); use npm run lint instead
+  - All US-025 gates cleared in Pass 3; Pass 4 is purely a final-verification + COMPLETE pass
+---
