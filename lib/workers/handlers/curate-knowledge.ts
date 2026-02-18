@@ -552,9 +552,17 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
   }
 
   // Generate a structured merge suggestion for every NEAR_DUPLICATE pair.
+  // Non-fatal: a logging failure here should not abort duplicate detection.
   const nearDuplicates = actionableMatches.filter(m => m.level === 'NEAR_DUPLICATE');
   if (nearDuplicates.length > 0) {
-    await suggestMerges(contentId, orgId, nearDuplicates);
+    try {
+      await suggestMerges(contentId, orgId, nearDuplicates);
+    } catch (mergeError) {
+      console.error(
+        `[CurateKnowledge] Merge suggestion logging failed for ${contentId} (non-critical):`,
+        mergeError,
+      );
+    }
   }
 
   try {
