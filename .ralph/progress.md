@@ -6553,3 +6553,99 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 - **Learnings for future iterations:**
   - When all gates are clear and no code changes are needed, a final build + type:check verification confirms completion
 ---
+
+## [2026-02-17T22:07Z] - US-052: Create agent_usage table and implement action metering
+Thread: N/A
+Run: 20260217-220707-72539 (iteration 4)
+Pass: 5 (Phase: Finalize)
+Gates cleared this pass: G7 (final acceptance re-verification)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-220707-72539-iter-4.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-220707-72539-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none — no code changes; all implementation committed in passes 1–3
+- Post-commit status: clean (remaining pre-existing unrelated modified files from other stories)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — finalize phase, no new implementation]
+  - /code-review: [no — completed in Pass 2]
+  - /code-simplifier: [no — completed in Pass 3]
+  - /frontend-design: [no — no UI]
+  - /web-design-guidelines: [no — no UI]
+  - /agent-browser: [no — no UI]
+  - /supabase-postgres-best-practices: [N/A — DB already verified in Pass 4]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: `npm run build` -> PASS (compiled successfully)
+  - Command: `npm run type:check` -> PASS (0 errors in agent-metering.ts/agent-logger.ts; pre-existing errors in transcribe*.ts only)
+  - agent-metering.ts exports: recordUsage, getUsageSummary, getUsageByAgent, calculateCredits — all present -> PASS
+  - withAgentLogging calls recordUsage in agent-logger.ts:125 -> PASS
+  - CREDITS_PER_1K_TOKENS defaults to 1.0 — confirmed in agent-metering.ts:14 -> PASS
+  - Zero-usage edge case: ZERO_SUMMARY constant returns {totalCredits:0, totalTokens:0, actionCount:0} -> PASS
+- Files changed:
+  - .ralph/progress.md (appended finalize entry)
+- What was implemented:
+  - Final pass 5 verification — confirmed all 9 acceptance criteria still satisfied
+  - No code changes needed; implementation from Passes 1–3 remains correct
+  - Build PASS, type check PASS for all US-052 files
+---
+
+## [2026-02-17T22:10Z] - US-053: Create usage dashboard and plan tier gates
+Thread: N/A
+Run: 20260217-220707-72539 (iteration 5)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification)
+Gates cleared (cumulative): G1, G2, G3
+Gates remaining: G4 (Code Review), G5 (Simplification), G6 (Audit), G7 (Acceptance), G-UI1, G-UI2
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-220707-72539-iter-5.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-220707-72539-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 0e4719f [Build 1] feat(usage): add AI credit dashboard and plan tier agent gates
+- Post-commit status: clean (US-053 files only; pre-existing unrelated modified files remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — skill not found, applied principles manually]
+  - /code-review: [no — Pass 1, will run in Pass 2]
+  - /code-simplifier: [no — Pass 1, will run in Pass 2+]
+  - /frontend-design: [no — will run in Pass 2]
+  - /web-design-guidelines: [no — will run in Pass 2]
+  - /agent-browser: [no — will run in Pass 3]
+  - /supabase-postgres-best-practices: [yes — applied during RPC design]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [yes — applied RSC boundaries, parallel fetching in API route]
+  - /vercel-composition-patterns: [yes — applied to UsagePage component structure]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS (/settings/organization/usage compiled)
+  - Command: npm run lint -> PASS (0 errors)
+  - Command: npm run type:check -> PASS (0 errors in US-053 files; pre-existing transcribe*.ts errors unrelated)
+- Files changed:
+  - lib/services/agent-metering.ts — added getUsageByDay, getTopContentByUsage, DailyUsage, TopContentUsage
+  - lib/services/agent-config.ts — added plan tier gating: PlanTier, TIER_ALLOWED_AGENTS, getOrgPlanTier, planTierAllowsAgent, checkAgentPlanAccess, upgradePlanError; updated isAgentEnabled to check plan tier
+  - app/api/organizations/usage/route.ts — new GET endpoint with parallel fetch and weekday/weekend projection
+  - app/(dashboard)/settings/organization/usage/page.tsx — new usage dashboard with recharts bar + line charts, top content table, plan progress
+  - app/(dashboard)/settings/organization/layout.tsx — added Usage nav link
+  - app/api/organizations/agent-settings/route.ts — added 403 plan tier gate on PATCH
+  - Supabase DB: get_agent_usage_by_day and get_top_content_by_usage RPCs created
+- What was implemented:
+  - Full usage dashboard at /settings/organization/usage showing: monthly summary cards, credits-by-agent bar chart, daily-trend line chart, top content table, projected usage with weekday/weekend extrapolation, plan limit progress bar
+  - Plan tier gates in isAgentEnabled: free=no agents, starter=onboarding+digest, professional=+curator, enterprise=all
+  - PATCH /api/organizations/agent-settings returns 403 { error, upgradeUrl } when enabling agent on wrong plan
+  - GET /api/organizations/usage aggregates all usage data in parallel (no waterfall)
+  - Layout: Usage link added between MCP Server and Stats nav items
+- **Learnings for future iterations:**
+  - recharts is available (^3.2.1) and already used in stats/page.tsx — good reference pattern
+  - org_quotas.plan_tier is the authoritative plan source; quota-manager uses 'free'|'starter'|'professional'|'enterprise'
+  - isAgentEnabled callers are background workers (skip, don't 403) and webhook (skip) — only HTTP routes need 403
+  - The log-activity.sh script does not exist at expected path; skip or handle gracefully
+---
