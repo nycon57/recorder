@@ -6311,3 +6311,56 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - When a story has already passed all gates, subsequent passes should verify and emit COMPLETE quickly
   - Dev server unavailability is a recurring issue; build compilation remains a valid fallback
 ---
+
+## [2026-02-17T21:40Z] - US-042: Create workflow_extraction job handler
+Thread: N/A
+Run: 20260217-213700-9017 (iteration 15)
+Pass: 4 (Phase: Finalize)
+Gates cleared this pass: G7
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-213700-9017-iter-15.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-213700-9017-iter-15.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 88f28e3 [Finalize 4] fix(worker): handle outdateError in workflow storage
+- Post-commit status: clean (only pre-existing untracked .agents/ and modified files from other stories)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — finalize pass, no architecture work needed]
+  - /code-review: [no — finalize pass, code reviewed in prior passes]
+  - /code-simplifier: [no — finalize pass, code simplified in prior passes]
+  - /frontend-design: [N/A — no UI]
+  - /web-design-guidelines: [N/A — no UI]
+  - /agent-browser: [N/A — no UI]
+  - /supabase-postgres-best-practices: [N/A — no schema changes]
+  - /ai-sdk: [N/A — verified in prior passes]
+  - /next-cache-components: [N/A — worker handler, no pages/routes]
+  - /vercel-composition-patterns: [N/A — no components]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run type:check -> PASS (0 errors in workflow-extraction.ts; pre-existing Buffer errors in unrelated files)
+  - Command: npm run build -> PASS (clean build)
+- Files changed:
+  - lib/workers/handlers/workflow-extraction.ts (added error handling for outdateError on workflow update)
+- What was implemented:
+  - Final acceptance verification (G7) of all criteria:
+    - [x] lib/workers/handlers/workflow-extraction.ts exists with export async function handleWorkflowExtraction(job: Job, progressCallback?: ProgressCallback): Promise<void>
+    - [x] Job payload: { recordingId, orgId }
+    - [x] Handler checks isAgentEnabled(orgId, 'workflow_extraction')
+    - [x] Full extraction pipeline: frames/OCR → detectUITransitions → correlate with transcript → Gemini synthesis → store workflow
+    - [x] Each step: title, description, action, screenshotPath, timestamp, uiElements
+    - [x] Confidence from average transition confidence with transcript bonus
+    - [x] withAgentLogging with agentType: 'workflow_extraction', actionType: 'extract_workflow'
+    - [x] 'workflow_extraction' in JobType and registered in JOB_HANDLERS (job-processor.ts + streaming-job-executor.ts)
+    - [x] Typecheck passes (0 errors in story files)
+    - [x] Edge case: No frames → text-only fallback (0.5 confidence)
+    - [x] Edge case: No transcript → visual transitions only with lower confidence (-0.1 penalty)
+    - [x] Edge case: Long recordings (>30 min) → MAX_STEPS=50, consolidation hint
+  - Committed one pending improvement: error handling for outdateError in storeWorkflow
+- **Learnings for future iterations:**
+  - Prior passes already covered G1-G6; finalize pass focused purely on acceptance verification
+  - The outdateError handling was an uncommitted fix from a stalled prior pass — always verify pending diffs
+---
