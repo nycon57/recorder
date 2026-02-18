@@ -41,13 +41,21 @@ function todayUTCStart(): string {
   return new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z';
 }
 
+const VALID_OUTCOMES = new Set(['success', 'failure'] as const);
+
+/** Log Supabase query errors with a consistent prefix. */
+function logQueryError(label: string, error: { message: string } | null): void {
+  if (error) {
+    console.error(`[AgentStatus] Failed to fetch ${label}:`, error.message);
+  }
+}
+
 /** Determine which agent types are enabled for the org. */
 function resolveEnabledAgents(
   settings: OrgAgentSettings | null,
   planTier: PlanTier,
 ): string[] {
-  const globalEnabled = settings?.global_agent_enabled ?? true;
-  if (!globalEnabled || !settings) return [];
+  if (!settings || !settings.global_agent_enabled) return [];
 
   return ALL_AGENT_TYPES.filter((agentType) => {
     const column = AGENT_COLUMN_MAP[agentType];
@@ -59,13 +67,16 @@ function resolveEnabledAgents(
 function computeTodayStats(
   rows: Array<{ outcome: string }>,
 ): { actionsToday: number; successRate: number | null } {
-  const actionsToday = rows.length;
-  const successCount = rows.filter((r) => r.outcome === 'success').length;
-  const failureCount = rows.filter((r) => r.outcome === 'failure').length;
+  let successCount = 0;
+  let failureCount = 0;
+  for (const row of rows) {
+    if (row.outcome === 'success') successCount++;
+    else if (row.outcome === 'failure') failureCount++;
+  }
   const rateBase = successCount + failureCount;
 
   return {
-    actionsToday,
+    actionsToday: rows.length,
     successRate: rateBase > 0 ? Math.round((successCount / rateBase) * 100) : null,
   };
 }
@@ -103,15 +114,9 @@ export async function fetchAgentStatusSummary(
         .eq('session_status', 'active'),
     ]);
 
-  if (settingsResult.error) {
-    console.error('[AgentStatus] Failed to fetch agent settings:', settingsResult.error.message);
-  }
-  if (todayResult.error) {
-    console.error('[AgentStatus] Failed to fetch today activity:', todayResult.error.message);
-  }
-  if (sessionsResult.error) {
-    console.error('[AgentStatus] Failed to fetch active sessions:', sessionsResult.error.message);
-  }
+  logQueryError('agent settings', settingsResult.error);
+  logQueryError('today activity', todayResult.error);
+  logQueryError('active sessions', sessionsResult.error);
 
   const settings = settingsResult.data as OrgAgentSettings | null;
   const planTier = (quotaResult.data?.plan_tier ?? 'free') as PlanTier;
@@ -140,15 +145,12 @@ export async function fetchAgentStatusSummary(
 
   const enabledAgents: EnabledAgent[] = enabledAgentTypes.map((type, i) => {
     const result = lastOutcomeResults[i];
-    if (result.error) {
-      console.error(`[AgentStatus] Failed to fetch last outcome for ${type}:`, result.error.message);
-    }
+    logQueryError(`last outcome for ${type}`, result.error);
     const outcome = result.data?.outcome;
     return {
       type,
       name: AGENT_DISPLAY_NAMES[type] ?? type,
-      lastOutcome:
-        outcome === 'success' || outcome === 'failure' ? outcome : null,
+      lastOutcome: VALID_OUTCOMES.has(outcome) ? (outcome as EnabledAgent['lastOutcome']) : null,
     };
   });
 

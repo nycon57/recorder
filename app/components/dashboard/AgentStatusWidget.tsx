@@ -83,7 +83,7 @@ const DEFAULT_OUTCOME_STYLE = {
 };
 
 function OutcomeDot({ outcome }: { outcome: 'success' | 'failure' | null }) {
-  const { color, label } = OUTCOME_STYLES[outcome ?? ''] ?? DEFAULT_OUTCOME_STYLE;
+  const { color, label } = (outcome && OUTCOME_STYLES[outcome]) ?? DEFAULT_OUTCOME_STYLE;
   return (
     <span
       className={`inline-block size-2 rounded-full flex-shrink-0 ${color}`}
@@ -144,7 +144,7 @@ export async function AgentStatusWidget() {
               </p>
               <Link
                 href="/settings/organization/agents"
-                className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
               >
                 <Settings className="size-3.5" aria-hidden="true" />
                 Enable AI Agents
@@ -159,10 +159,10 @@ export async function AgentStatusWidget() {
   const { enabledAgents, actionsToday, successRate, activeSessions } = data;
 
   const stats: StatItem[] = [
-    { value: String(enabledAgents.length), label: 'agents active' },
+    { value: enabledAgents.length.toLocaleString(), label: 'agents active' },
     { value: actionsToday.toLocaleString(), label: 'actions today' },
     { value: successRate !== null ? `${successRate}%` : '\u2014', label: 'success rate' },
-    { value: String(activeSessions), label: 'sessions running' },
+    { value: activeSessions.toLocaleString(), label: 'sessions running' },
   ];
 
   return (
@@ -172,7 +172,7 @@ export async function AgentStatusWidget() {
           <CardTitle className="text-body-md">Agent Status</CardTitle>
           <Link
             href="/agent-activity"
-            className="text-body-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="text-body-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
           >
             View all &rarr;
           </Link>
