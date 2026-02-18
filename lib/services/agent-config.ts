@@ -18,7 +18,7 @@ export type OrgAgentSettings = Database['public']['Tables']['org_agent_settings'
 
 export type PlanTier = 'free' | 'starter' | 'professional' | 'enterprise';
 
-const AGENT_COLUMN_MAP: Record<string, keyof OrgAgentSettings> = {
+export const AGENT_COLUMN_MAP: Record<string, keyof OrgAgentSettings> = {
   curator: 'curator_enabled',
   gap_intelligence: 'gap_intelligence_enabled',
   onboarding: 'onboarding_enabled',

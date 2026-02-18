@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 
 import {
+  AgentStatusWidget,
   DashboardContent,
   KnowledgeHealthWidget,
 } from '@/app/components/dashboard';
@@ -53,6 +54,9 @@ export default async function DashboardPage() {
       <DashboardContent />
       <Suspense fallback={null}>
         <KnowledgeHealthWidget />
+      </Suspense>
+      <Suspense fallback={null}>
+        <AgentStatusWidget />
       </Suspense>
     </div>
   );
