@@ -1,7 +1,11 @@
+import { Suspense } from 'react';
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 
-import { DashboardContent } from '@/app/components/dashboard';
+import {
+  DashboardContent,
+  KnowledgeHealthWidget,
+} from '@/app/components/dashboard';
 
 export const metadata = {
   title: 'Dashboard - Tribora',
@@ -45,8 +49,11 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4">
+    <div className="container mx-auto py-8 px-4 space-y-8">
       <DashboardContent />
+      <Suspense fallback={null}>
+        <KnowledgeHealthWidget />
+      </Suspense>
     </div>
   );
 }
