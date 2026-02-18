@@ -185,7 +185,7 @@ export default function UsagePage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-semibold">AI Credit Usage</h2>
+        <h2 className="text-2xl font-semibold text-balance">AI Credit Usage</h2>
         <p className="text-muted-foreground mt-1">
           Credit consumption for {month} on the{' '}
           <Badge variant="secondary" className="text-xs">{planName}</Badge>{' '}
@@ -237,7 +237,7 @@ export default function UsagePage() {
       {creditLimit > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Monthly limit</CardTitle>
+            <CardTitle className="text-sm font-medium">Monthly Limit</CardTitle>
             <CardDescription>
               {formatCredits(summary.totalCredits)} of {formatCredits(creditLimit)} credits used
             </CardDescription>
@@ -252,7 +252,7 @@ export default function UsagePage() {
       {/* Credits by agent (bar chart) */}
       <Card>
         <CardHeader>
-          <CardTitle>Credits by agent</CardTitle>
+          <CardTitle>Credits by Agent</CardTitle>
           <CardDescription>Consumption breakdown across agent types this month</CardDescription>
         </CardHeader>
         <CardContent>
@@ -277,7 +277,7 @@ export default function UsagePage() {
       {/* Daily trend (line chart) */}
       <Card>
         <CardHeader>
-          <CardTitle>Daily credit trend</CardTitle>
+          <CardTitle>Daily Credit Trend</CardTitle>
           <CardDescription>Credits consumed per day this month</CardDescription>
         </CardHeader>
         <CardContent>
@@ -310,7 +310,7 @@ export default function UsagePage() {
       {topContent.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Top content by credit usage</CardTitle>
+            <CardTitle>Top Content by Credit Usage</CardTitle>
             <CardDescription>Content items that consumed the most credits this month</CardDescription>
           </CardHeader>
           <CardContent>
@@ -326,7 +326,7 @@ export default function UsagePage() {
                       {item.contentId}
                     </span>
                   </div>
-                  <div className="text-right shrink-0 ml-4">
+                  <div className="text-right shrink-0 ml-4 tabular-nums">
                     <div className="text-sm font-medium">{formatCredits(item.totalCredits)} credits</div>
                     <div className="text-xs text-muted-foreground">{item.actionCount} action{item.actionCount !== 1 ? 's' : ''}</div>
                   </div>
