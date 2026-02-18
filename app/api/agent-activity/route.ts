@@ -1,11 +1,13 @@
 import { NextRequest } from 'next/server';
 
-import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
+import { apiHandler, requireOrg, successResponse, errors } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { ActivityOutcome } from '@/lib/types/database';
 
 const PAGE_SIZE = 50;
 const STATS_CAP = 5000;
+
+const VALID_OUTCOMES = new Set<string>(['success', 'failure', 'skipped', 'pending_approval']);
 
 /** GET /api/agent-activity - Paginated agent activity feed with stats and filters. */
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -14,7 +16,14 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   const agentType = searchParams.get('agentType') || undefined;
   const actionType = searchParams.get('actionType') || undefined;
-  const outcome = (searchParams.get('outcome') as ActivityOutcome) || undefined;
+  const rawOutcome = searchParams.get('outcome') || undefined;
+  let outcome: ActivityOutcome | undefined;
+  if (rawOutcome) {
+    if (!VALID_OUTCOMES.has(rawOutcome)) {
+      return errors.badRequest(`Invalid outcome value: ${rawOutcome}`);
+    }
+    outcome = rawOutcome as ActivityOutcome;
+  }
   const startDate = searchParams.get('startDate') || undefined;
   const endDate = searchParams.get('endDate') || undefined;
   const offset = parseInt(searchParams.get('offset') || '0', 10);
@@ -108,6 +117,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const sampleSize = statsData.length;
   const successCount = statsData.filter(r => r.outcome === 'success').length;
   const totalTokens = statsData.reduce((sum, r) => sum + (r.tokens_used || 0), 0);
+  const successRateIsSampled = totalCount !== sampleSize;
 
   // Most active agent by frequency
   const agentCounts: Record<string, number> = {};
@@ -131,6 +141,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       successRate: sampleSize > 0
         ? Math.round((successCount / sampleSize) * 100)
         : 0,
+      successRateIsSampled,
       mostActiveAgent,
       totalTokens,
     },

@@ -236,6 +236,9 @@ export default function AgentActivityPage() {
 
     try {
       const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      }
       const json: ActivityResponse = await res.json();
       setEntries(prev => [...prev, ...json.data.entries]);
       setHasMore(json.data.hasMore);
