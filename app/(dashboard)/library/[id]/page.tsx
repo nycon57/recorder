@@ -233,10 +233,10 @@ export default async function LibraryItemDetailPage({
         <section className="mt-8 px-4 container mx-auto" aria-labelledby="workflow-heading">
           <h2 id="workflow-heading" className="text-lg font-light mb-4">Workflow</h2>
           <WorkflowViewer
-                  workflowId={workflow.id}
-                  workflow={workflow}
-                  supersededByContentId={supersededByContentId}
-                />
+            workflowId={workflow.id}
+            workflow={workflow}
+            supersededByContentId={supersededByContentId}
+          />
         </section>
       )}
       {showRelated && (

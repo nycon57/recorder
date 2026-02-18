@@ -165,7 +165,7 @@ export default function WorkflowViewer({
                   type="button"
                   onClick={() => setActiveStep(isActive ? null : step.stepNumber)}
                   className={cn(
-                    'relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-all duration-200',
+                    'relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-[border-color,background-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 motion-reduce:transition-none',
                     isActive
                       ? 'border-accent bg-accent/20 text-accent shadow-[0_0_12px_rgba(0,223,130,0.3)]'
                       : 'border-border/50 bg-card text-muted-foreground hover:border-accent/40 hover:text-accent'
@@ -179,7 +179,7 @@ export default function WorkflowViewer({
                 {/* Step card — mouse-accessible click target, not a separate tab stop */}
                 <div
                   className={cn(
-                    'card-interactive flex-1 cursor-pointer rounded-xl border bg-card p-4 transition-all duration-200',
+                    'card-interactive flex-1 cursor-pointer rounded-xl border bg-card p-4 transition-[border-color,box-shadow] duration-200 motion-reduce:transition-none',
                     isActive && 'border-accent/30 shadow-[0_0_15px_rgba(0,223,130,0.12)]'
                   )}
                   onClick={() => setActiveStep(isActive ? null : step.stepNumber)}
@@ -215,7 +215,7 @@ export default function WorkflowViewer({
                           e.stopPropagation();
                           setExpandedImage(step.screenshotPath);
                         }}
-                        className="group relative block overflow-hidden rounded-lg border border-border/40 transition-all duration-200 hover:border-accent/30"
+                        className="group relative block overflow-hidden rounded-lg border border-border/40 transition-colors duration-200 hover:border-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 motion-reduce:transition-none"
                         aria-label={`Expand screenshot for step ${step.stepNumber}`}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -225,7 +225,7 @@ export default function WorkflowViewer({
                           className="block h-auto w-full max-w-[600px] object-contain"
                           loading="lazy"
                         />
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-all duration-200 group-hover:bg-black/30">
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-[background-color] duration-200 group-hover:bg-black/30 motion-reduce:transition-none">
                           <Maximize2
                             className="size-5 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                             aria-hidden="true"
