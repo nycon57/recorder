@@ -7938,3 +7938,55 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - When body is typed as Record<string, unknown>, always narrow field types before passing to typed functions
   - Conditional spreads on nullable DB columns can always be simplified to field: value ?? null
 ---
+
+## [2026-02-18T12:45Z] - US-042: Create workflow_extraction job handler
+Thread: N/A
+Run: 20260218-123719-23343 (iteration 3)
+Pass: 5 (Phase: Finalize)
+Gates cleared this pass: G7 (re-verified)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-123719-23343-iter-3.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-123719-23343-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (no story-specific changes; all US-042 work committed in prior passes)
+- Post-commit status: clean (only pre-existing untracked .agents/ and modified files from other stories)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /ai-sdk: [yes — story touches Gemini AI]
+  - /feature-dev: [no — finalize pass, no architecture work needed]
+  - /code-review: [no — completed in prior passes]
+  - /code-simplifier: [no — completed in prior passes]
+  - /frontend-design: [N/A — no UI]
+  - /web-design-guidelines: [N/A — no UI]
+  - /agent-browser: [N/A — no UI]
+  - /supabase-postgres-best-practices: [N/A — no schema changes]
+  - /next-cache-components: [N/A — worker handler, no pages/routes]
+  - /vercel-composition-patterns: [N/A — no components]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run type:check -> PASS (0 errors in workflow-extraction.ts; pre-existing Buffer errors in unrelated files)
+  - Command: npm run build -> PASS (clean build)
+- Files changed:
+  - none (all US-042 files committed in prior passes: b335d4d, 9c09235, be6f686, 88f28e3)
+- What was implemented:
+  - Final acceptance re-verification of all criteria:
+    - [x] lib/workers/handlers/workflow-extraction.ts exists with export async function handleWorkflowExtraction(job: Job, progressCallback?: ProgressCallback): Promise<void>
+    - [x] Job payload: { recordingId, orgId }
+    - [x] Handler checks isAgentEnabled(orgId, 'workflow_extraction')
+    - [x] Full extraction pipeline: frames/OCR → detectUITransitions → correlate with transcript → Gemini synthesis → store workflow
+    - [x] Each step: title, description, action, screenshotPath, timestamp, uiElements
+    - [x] Confidence from average transition confidence with transcript bonus/penalty
+    - [x] withAgentLogging with agentType: 'workflow_extraction', actionType: 'extract_workflow'
+    - [x] 'workflow_extraction' in JobType and registered in JOB_HANDLERS (job-processor.ts line 270, streaming-job-executor.ts line 179)
+    - [x] Typecheck passes (0 errors in story file)
+    - [x] Edge case: No frames → text-only fallback (0.5 confidence)
+    - [x] Edge case: No transcript → visual transitions only with -0.1 confidence penalty
+    - [x] Edge case: Long recordings (>30 min) → MAX_STEPS=50, consolidation hint
+- **Learnings for future iterations:**
+  - Story was fully implemented and verified in prior passes; this pass confirms the COMPLETE state persists
+  - Activity logger script moved/missing at .agents/ralph/log-activity.sh — skip gracefully
+---
