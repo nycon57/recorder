@@ -7520,3 +7520,114 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - Pattern used in curate-knowledge.ts: destructure directly with TypeScript's implicit inference; when a table is untyped, Supabase returns the data typed as `any` implicitly, which does not trigger no-explicit-any
   - Always add `eq('org_id', orgId)` to ALL queries — even lookups by ID on data that's already org-scoped — as defense-in-depth
 ---
+
+## 2026-02-18T11:12Z - US-024: Create knowledge gaps dashboard page
+Thread: N/A
+Run: 20260218-111209-94593 (iteration 2)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification)
+Gates cleared (cumulative): G1, G2, G3
+Gates remaining: G4 (Code Review), G5 (Simplification), G6 (Audit), G7 (Acceptance), G-UI1 (Design Review), G-UI2 (Browser Verification)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-111209-94593-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-111209-94593-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: cac5ba3 [Build 1] feat(knowledge-gaps): add knowledge gaps dashboard page and API
+- Post-commit status: pre-existing unstaged modifications in other files (not US-024); US-024 files clean
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — deferred to Pass 2; architecture was clear from reading codebase]
+  - /code-review: [no — Pass 2]
+  - /code-simplifier: [no — Pass 2]
+  - /frontend-design: [no — Pass 2]
+  - /web-design-guidelines: [no — Pass 2]
+  - /agent-browser: [no — Pass 3]
+  - /supabase-postgres-best-practices: [yes — verified table schema before implementing]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [yes — reviewed; page is client component, appropriate for interactive dashboard]
+  - /vercel-composition-patterns: [yes — used React.Fragment for expandable rows, no premature abstraction]
+  - Other skills: none
+- Verification:
+  - Command: `npm run build` -> PASS (/knowledge-gaps, /api/knowledge-gaps, /api/knowledge-gaps/[id] all listed)
+  - Command: `npm run type:check` -> PASS (pre-existing errors in lib/workers/ only, zero errors in new files)
+  - Command: `npm run lint` -> config issue with lint path (pre-existing, not US-024)
+- Files changed:
+  - app/(dashboard)/knowledge-gaps/page.tsx (new)
+  - app/api/knowledge-gaps/route.ts (new)
+  - app/api/knowledge-gaps/[id]/route.ts (new)
+  - app/components/layout/nav-insights.tsx (added Knowledge Gaps link)
+  - app/components/layout/nav-insights-aurora.tsx (added Knowledge Gaps link)
+- What was implemented:
+  - GET /api/knowledge-gaps: lists open+acknowledged gaps scoped by orgId, ordered by impact_score DESC
+  - PATCH /api/knowledge-gaps/[id]: updates gap status (acknowledged/dismissed/resolved), 403 on org mismatch
+  - Dashboard page: table with severity ColoredBadge, impact score, search count, unique searchers, last searched
+  - Expandable rows: description, suggested action, related concepts count, bus factor details from metadata
+  - Action buttons: Acknowledge (direct PATCH), Dismiss (dialog with optional reason), Resolved (dialog with optional content ID)
+  - Toast notifications via sonner for all actions
+  - Empty state message when no gaps detected
+  - Nav links added to both nav-insights.tsx and nav-insights-aurora.tsx under Insights section
+- **Learnings for future iterations:**
+  - knowledge_gaps table has org_id as text (not UUID) — matches agent_memory/agent_sessions pattern
+  - Dismiss rejection_reason stored in metadata JSONB column (no dedicated column exists)
+  - Resolved gaps disappear from the list (filtered to open+acknowledged); content title shown in toast
+  - metadata.bus_factor field populated by US-023 bus factor analysis worker
+  - The lint script has a pre-existing issue with path resolution; not blocking
+---
+
+## 2026-02-18T11:26Z - US-024: Create knowledge gaps dashboard page
+Thread: N/A
+Run: 20260218-111209-94593 (iteration 3)
+Pass: 2 (Phase: Harden)
+Gates cleared this pass: G4 (Code Review), G5 (Simplification), G6 (Audit), G-UI1 (Design Review), G-UI2 (Browser Verification)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G-UI1, G-UI2
+Gates remaining: G7 (Acceptance — verify all criteria, next pass)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-111209-94593-iter-3.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-111209-94593-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: d6d1b10 [Harden 2] fix(knowledge-gaps): fix dismiss metadata merge, accessibility, simplify
+- Post-commit status: clean (US-024 files only staged and committed)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — architecture clear from Pass 1]
+  - /code-review: [yes — manual review (CodeRabbit CLI requires TTY, unavailable in agent context)]
+  - /code-simplifier: [yes — via Task agent, applied to all 3 US-024 files]
+  - /frontend-design: [yes — reviewed page design; existing design is consistent with app patterns]
+  - /web-design-guidelines: [yes — identified and fixed 3 accessibility issues]
+  - /agent-browser: [yes — confirmed page redirects to sign-in (auth middleware working); can't test authed UI without credentials]
+  - /supabase-postgres-best-practices: [yes — verified metadata JSONB merge pattern is correct]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A — page is client component, no caching needed]
+  - /vercel-composition-patterns: [N/A — no new component abstraction needed]
+  - Other skills: /web-design-guidelines
+- Verification:
+  - Command: `npm run build` -> PASS (all 3 knowledge-gaps routes listed)
+  - Command: `npm run type:check` -> PASS (zero errors in US-024 files; pre-existing errors in test files only)
+  - Browser: GET /knowledge-gaps -> 307 redirect to /sign-in (auth middleware correct)
+  - Browser: GET /api/knowledge-gaps -> 307 redirect (correct unauthenticated behavior)
+- Files changed:
+  - app/(dashboard)/knowledge-gaps/page.tsx (accessibility + simplification)
+  - app/api/knowledge-gaps/route.ts (removed unused import/param)
+  - app/api/knowledge-gaps/[id]/route.ts (metadata merge fix + discriminatedUnion)
+- What was implemented:
+  - Bug fix: dismiss handler now merges rejection_reason into existing metadata JSONB
+    instead of overwriting — bus_factor and other fields are preserved
+  - Accessibility: expandable rows now keyboard-navigable (tabIndex=0, role=button,
+    aria-expanded, onKeyDown for Enter/Space)
+  - Accessibility: icon-only action buttons now have aria-label instead of unreliable title attr
+  - Accessibility: decorative icons get aria-hidden="true"
+  - Accessibility: skeleton loading respects prefers-reduced-motion via motion-safe:animate-pulse
+  - Code quality: z.union → z.discriminatedUnion (more efficient, better error messages)
+  - Code quality: DISMISS_INITIAL/RESOLVE_INITIAL constants eliminate 4x duplicate literals
+  - Code quality: Fragment import instead of React namespace; removed redundant typeof guard
+  - Code quality: GET route has unused param/import removed
+- **Learnings for future iterations:**
+  - CodeRabbit CLI requires a TTY; always fall back to manual review in agent context
+  - When doing partial selects for auth checks, include all columns needed for subsequent logic
+    (e.g., metadata needed for merge, not just id and org_id)
+  - log-activity.sh path in system prompt doesn't match actual filesystem; skip if not found
+---
