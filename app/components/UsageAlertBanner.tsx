@@ -13,7 +13,7 @@ interface UsageAlertResponse {
 }
 
 /**
- * Fetches the current usage alert and renders a dismissible banner.
+ * Fetches the current usage alert and renders a banner.
  * Returns null (no DOM output) when usage is below the warning threshold.
  */
 export function UsageAlertBanner() {
@@ -49,14 +49,14 @@ export function UsageAlertBanner() {
         {alert.message}{' '}
         <Link
           href="/settings/organization/usage"
-          className="font-medium underline underline-offset-2"
+          className="font-medium underline underline-offset-2 transition-opacity hover:opacity-75"
         >
           View usage
         </Link>{' '}
         or{' '}
         <Link
           href="/settings/billing"
-          className="font-medium underline underline-offset-2"
+          className="font-medium underline underline-offset-2 transition-opacity hover:opacity-75"
         >
           upgrade your plan
         </Link>
