@@ -106,19 +106,8 @@ export async function GET(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Rate limit: 1 export per minute per org
-  const retryAfter = await checkExportRateLimit(orgId);
-  if (retryAfter > 0) {
-    return NextResponse.json(
-      { error: 'Too Many Requests', message: `Export rate limit exceeded. Try again in ${retryAfter} seconds.` },
-      {
-        status: 429,
-        headers: { 'Retry-After': String(retryAfter) },
-      }
-    );
-  }
-
-  // Parse query params
+  // Validate query params before consuming the rate-limit slot so malformed
+  // requests don't burn a rate-limit window.
   const { searchParams } = new URL(request.url);
 
   const format = searchParams.get('format') ?? 'csv';
@@ -140,6 +129,18 @@ export async function GET(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: 'Invalid startDate or endDate' }, { status: 400 });
   }
 
+  // Rate limit: 1 export per minute per org
+  const retryAfter = await checkExportRateLimit(orgId);
+  if (retryAfter > 0) {
+    return NextResponse.json(
+      { error: 'Too Many Requests', message: `Export rate limit exceeded. Try again in ${retryAfter} seconds.` },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(retryAfter) },
+      }
+    );
+  }
+
   const filters: QueryFilters = {
     orgId,
     startDate: parsedStart.toISOString(),
@@ -152,31 +153,51 @@ export async function GET(request: NextRequest): Promise<Response> {
   const endLabel = parsedEnd.toISOString().slice(0, 10);
   const filename = `agent-audit-org_${orgId}-${startLabel}-to-${endLabel}.${format}`;
 
+  const encoder = new TextEncoder();
+
   // ---------------------------------------------------------------------------
-  // JSON export — fetch all rows then serialize
+  // JSON streaming export — streams a JSON array in batches to avoid buffering
+  // all rows in memory at once (satisfies the 10,000+ row edge case).
   // ---------------------------------------------------------------------------
   if (format === 'json') {
-    const rows: Record<string, unknown>[] = [];
-    let offset = 0;
+    const jsonStream = new ReadableStream({
+      async start(controller) {
+        controller.enqueue(encoder.encode('['));
+        let offset = 0;
+        let first = true;
 
-    while (true) {
-      const { data, error } = await buildActivityQuery(filters, offset);
+        while (true) {
+          const { data, error } = await buildActivityQuery(filters, offset);
 
-      if (error) {
-        return NextResponse.json({ error: 'Failed to fetch activity' }, { status: 500 });
-      }
+          if (error) {
+            console.error('[agent-audit-export] Supabase query error:', error);
+            controller.close();
+            return;
+          }
 
-      if (!data || data.length === 0) break;
-      rows.push(...(data as Record<string, unknown>[]));
-      if (data.length < BATCH_SIZE) break;
-      offset += BATCH_SIZE;
-    }
+          if (!data || data.length === 0) break;
 
-    return new Response(JSON.stringify(rows), {
+          for (const row of data as Record<string, unknown>[]) {
+            const prefix = first ? '\n' : ',\n';
+            controller.enqueue(encoder.encode(prefix + JSON.stringify(row)));
+            first = false;
+          }
+
+          if (data.length < BATCH_SIZE) break;
+          offset += BATCH_SIZE;
+        }
+
+        controller.enqueue(encoder.encode('\n]'));
+        controller.close();
+      },
+    });
+
+    return new Response(jsonStream, {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
         'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store',
       },
     });
   }
@@ -184,9 +205,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   // ---------------------------------------------------------------------------
   // CSV streaming export
   // ---------------------------------------------------------------------------
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream({
+  const csvStream = new ReadableStream({
     async start(controller) {
       controller.enqueue(encoder.encode(CSV_COLUMNS.join(',') + '\n'));
 
@@ -217,12 +236,11 @@ export async function GET(request: NextRequest): Promise<Response> {
     },
   });
 
-  return new Response(stream, {
+  return new Response(csvStream, {
     status: 200,
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="${filename}"`,
-      'Transfer-Encoding': 'chunked',
       'Cache-Control': 'no-store',
     },
   });
