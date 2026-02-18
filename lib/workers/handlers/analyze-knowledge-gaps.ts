@@ -604,6 +604,7 @@ async function upsertKnowledgeGaps(
           topic: row.topic,
           searchCount: row.search_count ?? 0,
           impactScore: row.impact_score ?? 0,
+          uniqueSearchers: 0,
           embedding: extractEmbeddingFromMetadata(row.metadata),
         });
       }
@@ -657,6 +658,7 @@ function findBestMatch(
     topic: string;
     searchCount: number;
     impactScore: number;
+    uniqueSearchers: number;
     embedding: number[] | null;
   }>
 ): (typeof existing)[number] | null {
