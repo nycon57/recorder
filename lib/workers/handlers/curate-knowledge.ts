@@ -66,6 +66,13 @@ interface SubTask {
   run: (contentId: string, orgId: string) => Promise<void>;
 }
 
+/** Payload stored in output_summary for suggest_merge log entries. */
+interface MergeSuggestion {
+  sourceIds: string[];
+  reason: string;
+  suggestedAction: 'merge' | 'archive_older' | 'review';
+}
+
 function curatorState(lastProcessedAt: string | null): SessionState {
   return { lastProcessedAt } as unknown as SessionState;
 }
@@ -544,6 +551,12 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
     });
   }
 
+  // Generate a structured merge suggestion for every NEAR_DUPLICATE pair.
+  const nearDuplicates = actionableMatches.filter(m => m.level === 'NEAR_DUPLICATE');
+  if (nearDuplicates.length > 0) {
+    await suggestMerges(contentId, orgId, nearDuplicates);
+  }
+
   try {
     await storeMemory({
       orgId,
@@ -880,6 +893,107 @@ function areSimilarTags(a: string, b: string): boolean {
   const longer = a.length >= b.length ? a : b;
   const shorter = a.length >= b.length ? b : a;
   return longer.startsWith(shorter) && longer.length - shorter.length <= 5;
+}
+
+// ---------------------------------------------------------------------------
+// Merge suggestion
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a merge suggestion for a NEAR_DUPLICATE pair.
+ *
+ * Determines the suggested action from the similarity metrics:
+ * - conceptOverlap ≥ 80 %  → archive_older (one clearly supersedes the other)
+ * - otherwise              → review
+ *
+ * The reason includes the overlap percentages and identifies which item is newer.
+ */
+function buildMergeSuggestion(
+  contentId: string,
+  contentTitle: string,
+  contentCreatedAt: string | null,
+  match: DuplicateMatch,
+  matchedCreatedAt: string | null,
+): MergeSuggestion {
+  const overlapPct = match.conceptOverlap !== null ? Math.round(match.conceptOverlap) : null;
+  const embPct = match.embeddingSimilarity !== null
+    ? Math.round(match.embeddingSimilarity * 100)
+    : null;
+
+  // Identify which item is older so the reason can name it explicitly.
+  const currentDate = contentCreatedAt ? new Date(contentCreatedAt) : null;
+  const matchedDate = matchedCreatedAt ? new Date(matchedCreatedAt) : null;
+  const currentIsOlder =
+    currentDate && matchedDate ? currentDate < matchedDate : null;
+  const newerTitle = currentIsOlder === true ? match.matchedTitle : contentTitle;
+
+  const overlapDesc = overlapPct !== null ? `${overlapPct}% concept overlap` : 'high content similarity';
+  const embeddingDesc = embPct !== null ? ` and ${embPct}% embedding similarity` : '';
+  const reason =
+    `Both "${contentTitle}" and "${match.matchedTitle}" cover similar content with ` +
+    `${overlapDesc}${embeddingDesc}. "${newerTitle}" is newer and may be more comprehensive.`;
+
+  const suggestedAction: MergeSuggestion['suggestedAction'] =
+    overlapPct !== null && overlapPct >= 80 ? 'archive_older' : 'review';
+
+  return { sourceIds: [contentId, match.matchedContentId], reason, suggestedAction };
+}
+
+/**
+ * Log merge suggestions for all NEAR_DUPLICATE matches of a content item.
+ *
+ * Each suggestion is recorded in agent_activity_log with action_type 'suggest_merge'
+ * and an output_summary containing { sourceIds, reason, suggestedAction }.
+ */
+async function suggestMerges(
+  contentId: string,
+  orgId: string,
+  nearDuplicates: DuplicateMatch[],
+): Promise<void> {
+  if (nearDuplicates.length === 0) return;
+
+  const supabase = createAdminClient();
+
+  const allIds = [contentId, ...nearDuplicates.map(m => m.matchedContentId)];
+  const { data: contentRows } = await supabase
+    .from('content')
+    .select('id, title, created_at')
+    .in('id', allIds);
+
+  const contentMap = new Map((contentRows ?? []).map(r => [r.id, r]));
+  const currentContent = contentMap.get(contentId);
+
+  for (const match of nearDuplicates) {
+    const matchedContent = contentMap.get(match.matchedContentId);
+    const suggestion = buildMergeSuggestion(
+      contentId,
+      currentContent?.title ?? 'Untitled',
+      currentContent?.created_at ?? null,
+      match,
+      matchedContent?.created_at ?? null,
+    );
+
+    await logAgentAction({
+      orgId,
+      agentType: AGENT_TYPE,
+      actionType: 'suggest_merge',
+      contentId,
+      targetEntity: 'content',
+      targetId: match.matchedContentId,
+      outcome: 'success',
+      outputSummary: JSON.stringify(suggestion),
+      metadata: {
+        level: match.level,
+        embeddingSimilarity: match.embeddingSimilarity,
+        conceptOverlap: match.conceptOverlap,
+        perceptualSimilarity: match.perceptualSimilarity,
+      },
+    });
+
+    console.log(
+      `[CurateKnowledge] Merge suggestion: ${contentId} ↔ ${match.matchedContentId} → ${suggestion.suggestedAction}`
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

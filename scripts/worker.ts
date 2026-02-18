@@ -19,6 +19,10 @@ config({ path: resolve(process.cwd(), '.env.local') });
 
 import { processJobs, processJobById } from '@/lib/workers/job-processor';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import {
+  scheduleCurateKnowledgeJobs,
+  CURATOR_SCHEDULE_INTERVAL_MS,
+} from '@/lib/workers/scheduler';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -92,6 +96,16 @@ async function startScheduler(): Promise<void> {
       await createScheduledJob(jobConfig);
     }, jobConfig.interval);
   }
+
+  // Schedule daily curate_knowledge jobs for all enabled orgs.
+  // Runs immediately on startup, then at the configured interval (default: daily).
+  console.log(
+    `[Scheduler] Curator scheduler: curate_knowledge per enabled org (every ${CURATOR_SCHEDULE_INTERVAL_MS / 1000 / 60} min)`
+  );
+  await scheduleCurateKnowledgeJobs();
+  setInterval(async () => {
+    await scheduleCurateKnowledgeJobs();
+  }, CURATOR_SCHEDULE_INTERVAL_MS);
 }
 
 async function main() {
