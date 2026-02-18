@@ -541,12 +541,16 @@ async function storeWorkflow(
     return;
   }
 
-  await supabase
+  const { error: outdateError } = await supabase
     .from('workflows')
     .update({ status: 'outdated' as const })
     .eq('content_id', recordingId)
     .eq('org_id', orgId)
     .in('status', ['draft', 'published']);
+
+  if (outdateError) {
+    throw new Error(`Failed to mark existing workflows as outdated for ${recordingId} (org ${orgId}): ${outdateError.message}`);
+  }
 
   const workflowTitle = title
     ? `Workflow: ${title}`
