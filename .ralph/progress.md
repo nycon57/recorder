@@ -7180,3 +7180,98 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - Finalize pass is verification-only when prior passes covered all implementation and hardening
   - Pre-existing type errors in lib/workers/ are a known issue — check only new files for errors
 ---
+
+## [2026-02-18 09:52] - US-020: Implement merge suggestion logic and schedule Curator periodic runs
+Thread: [session 20260218-095155-77221]
+Run: 20260218-095155-77221 (iteration 2)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification)
+Gates cleared (cumulative): G1, G2, G3
+Gates remaining: G4 (Code Review), G5 (Simplification), G6 (Audit), G7 (Acceptance)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-095155-77221-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-095155-77221-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 9efb8b0 feat(curator): add suggestMerges and daily scheduling for curate_knowledge
+- Post-commit status: remaining files are pre-existing from other stories (not US-020)
+- Skills invoked:
+  - /next-best-practices: MANDATORY — yes
+  - /vercel-react-best-practices: MANDATORY — yes
+  - /writing-clearly-and-concisely: MANDATORY — yes
+  - /feature-dev: no — pure worker logic, no Next.js architecture needed
+  - /code-review: no — Pass 1
+  - /code-simplifier: no — Pass 1
+  - /frontend-design: N/A — no UI changes
+  - /web-design-guidelines: N/A — no UI changes
+  - /agent-browser: N/A — no UI changes
+  - /supabase-postgres-best-practices: N/A — only reads from DB, no schema changes
+  - /ai-sdk: N/A — no AI SDK calls added
+  - /next-cache-components: N/A — worker code, no pages
+  - /vercel-composition-patterns: N/A — no component changes
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check (our files only) -> PASS (pre-existing errors in other files)
+  - Command: npm run lint -> pre-existing project issue (next lint path error, eslint ignoreDuringBuilds:true)
+- Files changed:
+  - lib/workers/handlers/curate-knowledge.ts (added MergeSuggestion interface, suggestMerges(), buildMergeSuggestion(), integration in detectDuplicates())
+  - lib/workers/scheduler.ts (new: scheduleCurateKnowledgeJobs() with per-org daily dedupe_key)
+  - scripts/worker.ts (integrated curator scheduler into startScheduler())
+- What was implemented:
+  1. suggestMerges(): logs a suggest_merge action to agent_activity_log for each NEAR_DUPLICATE pair detected by the curator. output_summary contains JSON { sourceIds, reason, suggestedAction } where suggestedAction is 'archive_older' for ≥80% concept overlap, 'review' otherwise.
+  2. buildMergeSuggestion(): pure function that constructs the suggestion payload, identifying which item is newer and building a human-readable reason.
+  3. lib/workers/scheduler.ts: new module that queries org_agent_settings for curator-enabled orgs and creates curate_knowledge jobs with dedupe_key curate_knowledge:{orgId}:{YYYY-MM-DD}. Checks for existing pending/processing/completed jobs to prevent same-day duplicates. Handler's isAgentEnabled() check skips jobs when curator is disabled between runs.
+  4. scripts/worker.ts: startScheduler() now calls scheduleCurateKnowledgeJobs() immediately on startup and then on a configurable interval (CURATOR_SCHEDULE_INTERVAL_MS, default daily).
+- **Learnings for future iterations:**
+  - When using Edit tool with old_string containing code near the end of a function, be careful not to accidentally include/exclude throw statements or returns. Always verify with `git diff` before committing.
+  - The `npm run lint` command has a pre-existing issue in this project (next lint path resolution); use build + type:check as primary verification gates.
+---
+
+## [2026-02-18 10:20] - US-020: Implement merge suggestion logic and schedule Curator periodic runs
+Thread: [session 20260218-101159-5656]
+Run: 20260218-101159-5656 (iteration 1)
+Pass: 2 (Phase: Harden)
+Gates cleared this pass: G4 (Code Review), G5 (Simplification), G6 (Audit)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6
+Gates remaining: G7 (Acceptance — requires Pass 3+)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-101159-5656-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-101159-5656-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: bc05694 [Harden 2] fix(curator): make suggestMerges non-fatal in detectDuplicates
+- Post-commit status: remaining files are pre-existing from other stories (not US-020)
+- Skills invoked:
+  - /next-best-practices: MANDATORY — yes
+  - /vercel-react-best-practices: MANDATORY — yes
+  - /writing-clearly-and-concisely: MANDATORY — yes
+  - /feature-dev: no — harden pass, no architecture changes needed
+  - /code-review: yes — manual review (CodeRabbit CLI requires TTY, unavailable in this env)
+  - /code-simplifier: no — skill not available; manual simplification review performed
+  - /frontend-design: N/A — no UI changes
+  - /web-design-guidelines: N/A — no UI changes
+  - /agent-browser: N/A — no UI changes
+  - /supabase-postgres-best-practices: N/A — no schema changes
+  - /ai-sdk: N/A — no AI SDK changes
+  - /next-cache-components: N/A — worker code, no pages
+  - /vercel-composition-patterns: N/A — no component changes
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npx tsc --noEmit (US-020 files only) -> PASS (no errors in our files)
+- Files changed:
+  - lib/workers/handlers/curate-knowledge.ts (wrapped suggestMerges in try/catch)
+- What was implemented:
+  Code review finding: suggestMerges() could throw and propagate through detectDuplicates()
+  up to the outer try/catch in handleCurateKnowledge, failing the entire content item
+  for a non-critical logging operation. Fixed by wrapping with try/catch + error log,
+  consistent with how memory stores and approval requests are handled elsewhere.
+  
+  Security audit: no vulnerabilities — org IDs come from DB, dedupe keys are safe.
+  Performance audit: no regressions — scheduler runs daily, suggestMerges adds one
+  batch query only when NEAR_DUPLICATE pairs are found.
+  Regression audit: change is purely defensive; correctness unchanged.
+- **Learnings for future iterations:**
+  - CodeRabbit CLI requires a TTY and cannot run in non-interactive shell; fall back to manual review.
+  - Check that non-critical operations (suggestion logging, memory writes) are wrapped in try/catch
+    so a transient DB failure doesn't cascade to fail the entire job.
+---
