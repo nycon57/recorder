@@ -8199,8 +8199,8 @@ Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-2026021
 Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-134726-25773-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: (pending — see below)
-- Post-commit status: (pending)
+- Commit: fb3e000 [Harden 2] fix(workflow): check update error in markSupersededWorkflowsAsOutdated
+- Post-commit status: clean (story files only; pre-existing unstaged changes from other stories remain)
 - Skills invoked:
   - /next-best-practices: [MANDATORY — yes]
   - /vercel-react-best-practices: [MANDATORY — yes]
