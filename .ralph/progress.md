@@ -8587,3 +8587,60 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
     close with '\n]'. Simple and avoids accumulating all rows in memory.
   - Always validate request params before consuming rate-limit slots to avoid burning limits on bad inputs.
 ---
+
+## [2026-02-18 15:39] - US-048: Implement agent audit trail export
+Thread: N/A
+Run: 20260218-153737-96883 (iteration 1)
+Pass: 3 (Phase: Finalize)
+Gates cleared this pass: (verification pass — no new code)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-153737-96883-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-153737-96883-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: see below
+- Post-commit status: clean
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — Finalize pass; architecture established in prior passes]
+  - /code-review: [no — completed in Pass 2]
+  - /code-simplifier: [no — completed in Pass 1]
+  - /frontend-design: [no — UI verified in prior passes]
+  - /web-design-guidelines: [no — completed in Pass 2]
+  - /agent-browser: [no — auth-gated; infrastructure-blocked as in prior stories]
+  - /supabase-postgres-best-practices: [N/A — no new DB changes]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A — export is always dynamic]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS (✓ Compiled successfully; route ƒ /api/organizations/agent-audit/export present)
+  - Command: npx tsc --noEmit --skipLibCheck (US-048 files) -> PASS (no errors)
+- Files changed:
+  - .ralph/progress.md (this entry)
+  - .ralph/activity.log (activity logged)
+- What was implemented:
+  - Finalize pass: no code changes. Confirmed both US-048 files (export route + agent-activity page) still
+    build and typecheck cleanly. All 13 acceptance criteria verified passing per Pass 2 audit.
+- G7 Acceptance criteria final audit:
+  - [x] app/api/organizations/agent-audit/export/route.ts exists with GET handler
+  - [x] Query params: format (csv|json), startDate, endDate, agentType, actionType — all present
+  - [x] CSV columns: timestamp, agent_type, action_type, content_id, target_entity, target_id, outcome,
+        confidence, duration_ms, tokens_used, cost_estimate, input_summary, output_summary — match CSV_COLUMNS
+  - [x] JSON returns full agent_activity_log entries as streaming array
+  - [x] ReadableStream used for both CSV and JSON (1,000-row batches)
+  - [x] Rate limit: 1/min/org via Redis NX+TTL; returns 429 + Retry-After header
+  - [x] 'Export Audit Trail' button on agent-activity page (opens Dialog)
+  - [x] Date range defaults to last 30 days in export dialog
+  - [x] Typecheck passes
+  - [x] Filename format: agent-audit-org_{id}-YYYY-MM-DD-to-YYYY-MM-DD.{ext}
+  - [x] Zero-row export: CSV header row always written before loop
+  - [x] 429 + Retry-After edge case: implemented and UI handles it
+  - [x] 10,000+ row streaming: ReadableStream + batch pagination prevents memory accumulation
+- **Learnings for future iterations:**
+  - activity-log.sh does not exist; append directly with bash redirect
+  - All gates can clear in Pass 2; Pass 3 is a lightweight verification + COMPLETE signal
+---
