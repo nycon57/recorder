@@ -6649,3 +6649,53 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - isAgentEnabled callers are background workers (skip, don't 403) and webhook (skip) — only HTTP routes need 403
   - The log-activity.sh script does not exist at expected path; skip or handle gracefully
 ---
+
+## [2026-02-17T22:40Z] - US-053: Create usage dashboard and plan tier gates
+Thread: N/A
+Run: 20260217-223736-91626 (iteration 1)
+Pass: 2 (Phase: Harden)
+Gates cleared this pass: G4 (Code Review), G5 (Simplification), G6 (Audit)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6
+Gates remaining: G7 (Acceptance), G-UI1 (Design Review), G-UI2 (Browser Verification)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-223736-91626-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-223736-91626-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 2f2206a [Harden 2] refactor(usage): fix timezone bug, parallelize tier checks, eliminate duplicate data
+- Post-commit status: clean (US-053 files only; pre-existing unrelated modified files remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — Pass 2 Harden focus, not needed]
+  - /code-review: [yes — manual review (CodeRabbit CLI requires TTY, unavailable in this env)]
+  - /code-simplifier: [yes — subagent applied to all 5 US-053 files]
+  - /frontend-design: [no — Pass 3 emphasis]
+  - /web-design-guidelines: [no — Pass 3 emphasis]
+  - /agent-browser: [no — Pass 3 emphasis]
+  - /supabase-postgres-best-practices: [N/A — no schema changes this pass]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A — no new caching patterns]
+  - /vercel-composition-patterns: [N/A — no new components]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS (/settings/organization/usage compiled)
+  - Command: npm run lint -> PASS (0 errors)
+  - Command: npm run type:check -> PASS (0 errors in US-053 files; pre-existing errors in unrelated files)
+- Files changed:
+  - lib/services/agent-config.ts — eliminated AGENT_REQUIRED_TIER; derive min tier from TIER_ALLOWED_AGENTS; cleaner comments
+  - lib/services/agent-metering.ts — extracted normalizeRpcRows helper; inlined `since` vars; removed obvious comments
+  - app/api/organizations/usage/route.ts — merged split import; removed daysElapsed alias; trimmed comments
+  - app/(dashboard)/settings/organization/usage/page.tsx — fix formatDay UTC bug; remove section banners
+  - app/api/organizations/agent-settings/route.ts — parallelize plan tier checks with Promise.all; improved comment
+- What was implemented:
+  - Fixed formatDay() timezone bug: ISO date-only strings parsed as UTC midnight could show wrong date in UTC-negative timezones
+  - Parallelize plan-tier DB checks in PATCH /agent-settings (was sequential loop)
+  - Eliminated AGENT_REQUIRED_TIER map (redundant with TIER_ALLOWED_AGENTS); single source of truth prevents data drift
+  - Extracted normalizeRpcRows() helper in agent-metering to remove repeated null-check + array-normalize pattern
+  - Code simplifier reduced line count and removed section-divider banners while preserving all behavior
+- **Learnings for future iterations:**
+  - CodeRabbit CLI requires TTY — not usable in automated Claude Code sessions; fall back to manual review
+  - When two data structures encode the same information, derive one from the other to prevent silent drift
+  - ISO date-only strings ("2026-02-17") parse as UTC midnight; always use UTC accessors when displaying
+---
