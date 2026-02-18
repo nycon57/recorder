@@ -22,20 +22,19 @@ import {
 const RADIUS = 54;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
-function scoreStrokeColor(score: number): string {
-  if (score >= 80) return 'rgb(0, 223, 130)';   // accent — caribbean green
-  if (score >= 50) return 'rgb(245, 158, 11)';   // amber-500
-  return 'rgb(239, 68, 68)';                      // red-500
+interface ScoreStyle {
+  stroke: string;
+  textClass: string;
 }
 
-function scoreTextClass(score: number): string {
-  if (score >= 80) return 'text-accent';
-  if (score >= 50) return 'text-amber-500';
-  return 'text-destructive';
+function scoreStyle(score: number): ScoreStyle {
+  if (score >= 80) return { stroke: 'rgb(0, 223, 130)', textClass: 'text-accent' };
+  if (score >= 50) return { stroke: 'rgb(245, 158, 11)', textClass: 'text-amber-500' };
+  return { stroke: 'rgb(239, 68, 68)', textClass: 'text-destructive' };
 }
 
 function CircularProgress({ score }: { score: number }) {
-  const color = scoreStrokeColor(score);
+  const { stroke } = scoreStyle(score);
   const arc = (score / 100) * CIRCUMFERENCE;
 
   return (
@@ -62,13 +61,50 @@ function CircularProgress({ score }: { score: number }) {
         cy="60"
         r={RADIUS}
         fill="none"
-        stroke={color}
+        stroke={stroke}
         strokeWidth="8"
         strokeLinecap="round"
         strokeDasharray={`${arc} ${CIRCUMFERENCE}`}
         transform="rotate(-90 60 60)"
       />
     </svg>
+  );
+}
+
+interface EmptyStateProps {
+  icon: React.ReactNode;
+  heading: string;
+  description: string;
+  linkHref: string;
+  linkIcon: React.ReactNode;
+  linkLabel: string;
+}
+
+function EmptyState({ icon, heading, description, linkHref, linkIcon, linkLabel }: EmptyStateProps) {
+  return (
+    <Card className="card-interactive">
+      <CardHeader>
+        <CardTitle className="text-body-md">Knowledge Health</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-start gap-4">
+          <div className="flex-shrink-0 rounded-xl bg-muted/50 p-3">
+            {icon}
+          </div>
+          <div>
+            <p className="text-sm font-medium">{heading}</p>
+            <p className="mt-1 text-body-sm text-muted-foreground">{description}</p>
+            <Link
+              href={linkHref}
+              className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+            >
+              {linkIcon}
+              {linkLabel}
+            </Link>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -85,7 +121,7 @@ function MetricRow({ icon, label, value, href }: MetricRowProps) {
       href={href}
       className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <span className="text-muted-foreground">{icon}</span>
+      <span className="text-muted-foreground" aria-hidden="true">{icon}</span>
       <span className="flex-1 text-muted-foreground">{label}</span>
       <span className="font-medium tabular-nums">{value.toLocaleString()}</span>
     </Link>
@@ -111,69 +147,34 @@ export async function KnowledgeHealthWidget() {
 
   const data = await fetchKnowledgeHealth(orgId);
 
-  // State: curator not enabled
   if (!data.curatorEnabled) {
     return (
-      <Card className="card-interactive">
-        <CardHeader>
-          <CardTitle className="text-body-md">Knowledge Health</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0 rounded-xl bg-muted/50 p-3">
-              <Lock className="size-6 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-medium">Enable Knowledge Agents to see health metrics</p>
-              <p className="mt-1 text-body-sm text-muted-foreground">
-                Turn on the Knowledge Curator to track duplicates, stale content, and concept coverage.
-              </p>
-              <Link
-                href="/settings/agents"
-                className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-              >
-                <Settings className="size-3.5" />
-                Go to Agent Settings
-              </Link>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <EmptyState
+        icon={<Lock className="size-6 text-muted-foreground" aria-hidden="true" />}
+        heading="Enable Knowledge Agents to see health metrics"
+        description="Turn on the Knowledge Curator to track duplicates, stale content, and concept coverage."
+        linkHref="/settings/organization/agents"
+        linkIcon={<Settings className="size-3.5" aria-hidden="true" />}
+        linkLabel="Go to Agent Settings"
+      />
     );
   }
 
-  // State: no content yet
   if (!data.hasContent) {
     return (
-      <Card className="card-interactive">
-        <CardHeader>
-          <CardTitle className="text-body-md">Knowledge Health</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0 rounded-xl bg-muted/50 p-3">
-              <BookOpen className="size-6 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-medium">Add content to see knowledge health metrics</p>
-              <p className="mt-1 text-body-sm text-muted-foreground">
-                Upload recordings, documents, or notes to start tracking your knowledge health.
-              </p>
-              <Link
-                href="/library"
-                className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-              >
-                <Files className="size-3.5" />
-                Go to Library
-              </Link>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <EmptyState
+        icon={<BookOpen className="size-6 text-muted-foreground" aria-hidden="true" />}
+        heading="Add content to see knowledge health metrics"
+        description="Upload recordings, documents, or notes to start tracking your knowledge health."
+        linkHref="/library"
+        linkIcon={<Files className="size-3.5" aria-hidden="true" />}
+        linkLabel="Go to Library"
+      />
     );
   }
 
   const { healthScore } = data;
+  const { textClass } = scoreStyle(healthScore);
 
   return (
     <Card className="card-interactive">
@@ -195,7 +196,7 @@ export async function KnowledgeHealthWidget() {
             <div className="relative">
               <CircularProgress score={healthScore} />
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className={`text-xl font-bold font-outfit ${scoreTextClass(healthScore)}`}>
+                <span className={`text-xl font-bold font-outfit ${textClass}`}>
                   {healthScore}
                 </span>
                 <span className="text-xs text-muted-foreground">/100</span>
