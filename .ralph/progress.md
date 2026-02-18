@@ -6460,3 +6460,52 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - When dev server is unavailable, build verification plus code review is a valid substitute for G-UI2
   - The `npm run lint` command has a pre-existing Next.js config issue ("no such directory: lint") — not related to story code
 ---
+
+## [2026-02-17] - US-051: Implement MCP auth and configuration page
+Thread: run-20260217-220707-72539
+Run: 20260217-220707-72539 (iteration 2)
+Pass: 5 (Phase: Finalize)
+Gates cleared this pass: none (all gates were already clear; committed previously-missed improvements)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7, G-UI1, G-UI2
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-220707-72539-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-220707-72539-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: fccbf00 [Finalize 5] fix(mcp-auth): require keyId in McpAuthContext, fix key prefix format, improve revoke UX
+- Post-commit status: clean (remaining modified files are pre-existing untracked, unrelated to US-051)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /commit: [MANDATORY — yes]
+  - /feature-dev: [no — finalize pass, no new implementation]
+  - /code-review: [no — already cleared G4 in Pass 2]
+  - /code-simplifier: [no — already cleared G5 in Pass 3]
+  - /frontend-design: [no — already cleared G-UI1 in Pass 3]
+  - /web-design-guidelines: [no — already cleared in Pass 2]
+  - /agent-browser: [no — G-UI2 cleared in Pass 4]
+  - /supabase-postgres-best-practices: [N/A — no schema changes this pass]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: none
+- Verification:
+  - Command: npm run type:check -> PASS (pre-existing Buffer type errors in worker files only, no MCP errors)
+  - Command: npm run build -> PASS (/settings/organization/mcp compiled successfully)
+  - Command: git status --porcelain -> PASS (only pre-existing unrelated modifications remain)
+- Files changed:
+  - app/(dashboard)/settings/organization/mcp/page.tsx — close revoke dialog in onSettled (not before mutate)
+  - app/api/organizations/mcp-keys/route.ts — fix key prefix to show 8 hex chars (trb_mcp_XXXXXXXX)
+  - lib/mcp/auth.ts — require keyId in McpAuthContext; derive stable keyId for legacy sk_live_ keys
+  - lib/mcp/server.ts — remove optional guard on checkMcpRateLimit; make keyId required in wrapHandler/registerTools
+- What was implemented:
+  - Committed four improvements that were present as uncommitted working-tree changes from prior runs
+  - keyId is now required across McpAuthContext, wrapHandler, and registerTools — eliminates optional type branching
+  - Legacy sk_live_* keys now get rate-limited via a derived SHA-256 keyId — no bypass of rate limiting via legacy auth path
+  - Key prefix format fixed: trb_mcp_a1b2c3d4 (8 hex chars) instead of trb_mcp_a1b2 (4 hex chars)
+  - Revoke dialog UX corrected: stays open until mutation settles, preventing premature close on API failure
+- **Learnings for future iterations:**
+  - Always diff git status at start of each pass — uncommitted working-tree changes from prior sessions may need committing
+  - Making required fields non-optional (removing '?') eliminates defensive `if (field)` guards throughout callers
+---
