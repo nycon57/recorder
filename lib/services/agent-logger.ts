@@ -8,6 +8,7 @@
 import type { Database, ActivityOutcome, Json } from '@/lib/types/database';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { recordUsage, calculateCredits } from '@/lib/services/agent-metering';
+import { checkUsageLimits } from '@/lib/services/usage-alerts';
 
 /** Agent activity log record matching the agent_activity_log table columns */
 export type AgentActivityLog = Database['public']['Tables']['agent_activity_log']['Row'];
@@ -107,6 +108,25 @@ export async function withAgentLogging<T>(
   },
   fn: () => Promise<T>
 ): Promise<T> {
+  // Guard against executing agent operations when the org has hit its credit cap.
+  // checkUsageLimits uses a Redis cache (60s TTL) to keep this check cheap (<5ms).
+  // On any error inside checkUsageLimits it returns null so operations are never
+  // blocked by a credit-check failure.
+  const alert = await checkUsageLimits(params.orgId);
+  if (alert?.level === 'hard_stop') {
+    try {
+      await logAgentAction({
+        ...params,
+        outcome: 'skipped',
+        outputSummary: 'credit limit exceeded',
+        durationMs: 0,
+      });
+    } catch (logError) {
+      console.error('[AgentLogger] Failed to log hard-stop skip:', logError);
+    }
+    throw new Error('credit limit exceeded');
+  }
+
   const startTime = Date.now();
 
   try {

@@ -43,6 +43,7 @@ import type { AgentApproval } from '@/lib/services/agent-permissions';
 import type { ApprovalStatus, PermissionTier } from '@/lib/types/database';
 
 import { GoalsTab } from './goals-tab';
+import { UsageAlertBanner } from '@/app/components/UsageAlertBanner';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -397,6 +398,8 @@ export default function AgentsSettingsPage() {
           Control what AI agents do automatically, what they notify about, and what requires your approval.
         </p>
       </div>
+
+      <UsageAlertBanner />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

@@ -23,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/app/components/ui/card';
+import { UsageAlertBanner } from '@/app/components/UsageAlertBanner';
 import { Badge } from '@/app/components/ui/badge';
 import { Progress } from '@/app/components/ui/progress';
 import { Skeleton } from '@/app/components/ui/skeleton';
@@ -192,6 +193,8 @@ export default function UsagePage() {
           plan.
         </p>
       </div>
+
+      <UsageAlertBanner />
 
       {/* Free plan upgrade prompt */}
       {isFreePlan && (
