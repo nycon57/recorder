@@ -12,6 +12,7 @@ import {
 import { RelatedContent } from '@/app/components/content/RelatedContent';
 import { ContentChatWidget } from '@/app/components/content/ContentChatWidget';
 import { OnboardingViewTracker } from '@/app/components/onboarding/OnboardingViewTracker';
+import WorkflowViewer from '@/app/components/workflow/WorkflowViewer';
 
 async function getContentItem(id: string, clerkOrgId: string) {
   const { data: org } = await supabaseAdmin
@@ -145,6 +146,17 @@ export default async function LibraryItemDetailPage({
     ?.map((rt: any) => rt.tags)
     .filter(Boolean) || [];
 
+  // Fetch the most recent non-archived workflow for this content
+  const { data: workflow } = await supabaseAdmin
+    .from('workflows')
+    .select('*')
+    .eq('content_id', id)
+    .eq('org_id', item.org_id)
+    .not('status', 'eq', 'archived')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const sharedProps = {
     recording: item,
     transcript,
@@ -185,6 +197,12 @@ export default async function LibraryItemDetailPage({
     <>
       <OnboardingViewTracker contentId={id} />
       {detailView}
+      {workflow && (
+        <section className="mt-8 px-4 container mx-auto" aria-labelledby="workflow-heading">
+          <h2 id="workflow-heading" className="text-lg font-light mb-4">Workflow</h2>
+          <WorkflowViewer workflowId={workflow.id} workflow={workflow} />
+        </section>
+      )}
       {showRelated && (
         <>
           <section className="mt-8" aria-labelledby="related-content-heading">
