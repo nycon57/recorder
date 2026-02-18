@@ -550,12 +550,14 @@ async function upsertKnowledgeGaps(
     topic: string;
     searchCount: number;
     impactScore: number;
+    uniqueSearchers: number;
     embedding: number[] | null;
   }> = (existingGaps ?? []).map((g) => ({
     id: g.id,
     topic: g.topic,
     searchCount: g.search_count ?? 0,
     impactScore: g.impact_score ?? 0,
+    uniqueSearchers: 0,
     embedding: extractEmbeddingFromMetadata(g.metadata),
   }));
 
@@ -611,12 +613,13 @@ async function upsertKnowledgeGaps(
   for (const { match, gap } of toUpdate) {
     const combinedSearchCount = match.searchCount + gap.searchCount;
     const newImpactScore = Math.max(gap.impactScore, match.impactScore);
+    const combinedUniqueSearchers = Math.max(match.uniqueSearchers ?? 0, gap.uniqueSearchers ?? 0);
 
     const { error: updateError } = await supabase
       .from('knowledge_gaps')
       .update({
         search_count: combinedSearchCount,
-        unique_searchers: gap.uniqueSearchers,
+        unique_searchers: combinedUniqueSearchers,
         impact_score: newImpactScore,
         severity: calculateSeverity(newImpactScore),
         last_searched_at: gap.lastSearchedAt,
@@ -631,6 +634,7 @@ async function upsertKnowledgeGaps(
 
     match.searchCount = combinedSearchCount;
     match.impactScore = newImpactScore;
+    match.uniqueSearchers = combinedUniqueSearchers;
     match.embedding = gap.embedding;
     updated++;
   }
