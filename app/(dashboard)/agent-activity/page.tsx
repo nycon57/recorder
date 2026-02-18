@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Clock,
   Cpu,
+  Download,
   Filter,
   Hash,
   Loader2,
@@ -18,6 +19,13 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/app/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -176,6 +184,18 @@ export default function AgentActivityPage() {
   const [outcome, setOutcome] = useState('');
   const [dateRange, setDateRange] = useState('today');
 
+  // Export dialog state
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
+  const [exportStartDate, setExportStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [exportEndDate, setExportEndDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   // Track entry count in a ref so handleLoadMore stays stable
   const entryCountRef = useRef(0);
   entryCountRef.current = entries.length;
@@ -254,6 +274,51 @@ export default function AgentActivityPage() {
     setExpandedId(prev => (prev === id ? null : id));
   }, []);
 
+  // Trigger CSV/JSON export download
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const params = new URLSearchParams({ format: exportFormat });
+      params.set('startDate', new Date(exportStartDate).toISOString());
+      params.set('endDate', new Date(exportEndDate + 'T23:59:59').toISOString());
+      if (agentType) params.set('agentType', agentType);
+      if (actionType) params.set('actionType', actionType);
+
+      const res = await fetch(`/api/organizations/agent-audit/export?${params}`);
+
+      if (res.status === 429) {
+        const retryAfter = res.headers.get('Retry-After') ?? '60';
+        setExportError(`Export rate limit reached. Try again in ${retryAfter} seconds.`);
+        return;
+      }
+      if (!res.ok) {
+        setExportError('Export failed. Please try again.');
+        return;
+      }
+
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get('Content-Disposition') ?? '';
+      const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+      const filename = filenameMatch?.[1] ?? `agent-audit.${exportFormat}`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      setExportOpen(false);
+    } catch {
+      setExportError('Export failed. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }, [exportFormat, exportStartDate, exportEndDate, agentType, actionType]);
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -261,13 +326,90 @@ export default function AgentActivityPage() {
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-accent/20 to-accent/10">
           <Activity className="h-5 w-5 text-accent" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-heading-3 font-outfit tracking-tight">Agent Activity</h1>
           <p className="text-sm text-muted-foreground">
             Chronological feed of agent actions in your organization
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => { setExportOpen(true); setExportError(null); }}
+        >
+          <Download className="h-4 w-4" />
+          Export Audit Trail
+        </Button>
       </div>
+
+      {/* Export Dialog */}
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Export Audit Trail</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium" htmlFor="export-format">Format</label>
+              <Select value={exportFormat} onValueChange={v => setExportFormat(v as 'csv' | 'json')}>
+                <SelectTrigger id="export-format">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="csv">CSV</SelectItem>
+                  <SelectItem value="json">JSON</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium" htmlFor="export-start">Start date</label>
+              <input
+                id="export-start"
+                type="date"
+                value={exportStartDate}
+                onChange={e => setExportStartDate(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium" htmlFor="export-end">End date</label>
+              <input
+                id="export-end"
+                type="date"
+                value={exportEndDate}
+                onChange={e => setExportEndDate(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+
+            {exportError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{exportError}</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportOpen(false)} disabled={exporting}>
+              Cancel
+            </Button>
+            <Button onClick={handleExport} disabled={exporting}>
+              {exporting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Exporting…
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  Export
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Summary Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -432,17 +574,14 @@ export default function AgentActivityPage() {
 // Subcomponents
 // ---------------------------------------------------------------------------
 
-function StatCard({
-  label,
-  value,
-  icon,
-  loading,
-}: {
+interface StatCardProps {
   label: string;
   value: string;
   icon: React.ReactNode;
   loading: boolean;
-}) {
+}
+
+function StatCard({ label, value, icon, loading }: StatCardProps) {
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -462,17 +601,17 @@ function StatCard({
   );
 }
 
-function ActivityRow({
-  entry,
-  expanded,
-  onToggle,
-}: {
+interface ActivityRowProps {
   entry: AgentActivityEntry;
   expanded: boolean;
   onToggle: () => void;
-}) {
-  const agentColor = AGENT_COLORS[entry.agent_type] || 'bg-gray-500/20 text-gray-500';
-  const outcomeColor = OUTCOME_STYLES[entry.outcome] || 'bg-gray-500/20 text-gray-500';
+}
+
+const DEFAULT_BADGE_STYLE = 'bg-gray-500/20 text-gray-500';
+
+function ActivityRow({ entry, expanded, onToggle }: ActivityRowProps) {
+  const agentColor = AGENT_COLORS[entry.agent_type] || DEFAULT_BADGE_STYLE;
+  const outcomeColor = OUTCOME_STYLES[entry.outcome] || DEFAULT_BADGE_STYLE;
   const outcomeLabel = OUTCOME_LABELS[entry.outcome] || entry.outcome;
 
   return (
@@ -572,15 +711,13 @@ function ActivityRow({
   );
 }
 
-function DetailRow({
-  label,
-  value,
-  className,
-}: {
+interface DetailRowProps {
   label: string;
   value: string;
   className?: string;
-}) {
+}
+
+function DetailRow({ label, value, className }: DetailRowProps) {
   return (
     <div>
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
