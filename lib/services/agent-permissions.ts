@@ -221,7 +221,7 @@ export async function reviewApproval(
       status: action,
       reviewed_by: reviewedBy,
       reviewed_at: now,
-      ...(action === 'rejected' && rejectionReason ? { rejection_reason: rejectionReason } : {}),
+      rejection_reason: rejectionReason ?? null,
     })
     .eq('id', approvalId)
     .eq('org_id', orgId)

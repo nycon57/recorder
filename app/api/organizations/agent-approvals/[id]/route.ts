@@ -35,7 +35,13 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
     return errors.badRequest('action must be "approved" or "rejected"');
   }
 
-  const result = await reviewApproval(id, orgId, userId, action, rejection_reason);
+  const result = await reviewApproval(
+    id,
+    orgId,
+    userId,
+    action,
+    typeof rejection_reason === 'string' ? rejection_reason : undefined,
+  );
 
   if (!result) {
     return errors.notFound('Approval');
