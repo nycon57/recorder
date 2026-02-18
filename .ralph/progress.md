@@ -2500,6 +2500,46 @@ Pass: Recovery 2 — all 3 passes already completed in prior run (20260212-02555
 - What was implemented: Recovery verification only.
 ---
 
+## [2026-02-18 08:57] - US-017: Implement duplicate and near-duplicate detection for Knowledge Curator
+Thread: N/A
+Run: 20260218-085648-91558 (iteration 3)
+Pass: Finalize — all 3 passes already completed in prior run (20260212-025559-23553)
+Gates cleared this pass: G1, G2, G3, G4, G5, G6, G7 (verified)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-085648-91558-iter-3.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-085648-91558-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (all 3 passes already committed: 925a2f0, eb2a20c, 78ba009)
+- Post-commit status: clean for US-017 (other stories' uncommitted changes exist in working tree)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: no (recovery run)
+  - /code-review: no (recovery run)
+  - /code-simplifier: no (recovery run)
+  - /frontend-design: no — not a UI story
+  - /web-design-guidelines: no — not a UI story
+  - /agent-browser: no — not a UI story
+  - /supabase-postgres-best-practices: N/A (no DB changes this pass)
+  - /ai-sdk: N/A (no AI changes this pass)
+  - /next-cache-components: N/A
+  - /vercel-composition-patterns: N/A
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check -> PASS (no errors in curate-knowledge.ts; pre-existing errors in test files only)
+  - detectDuplicates() present at line 445 of curate-knowledge.ts
+  - DuplicateLevel type, EXACT_DUPLICATE/NEAR_DUPLICATE/RELATED constants all present
+  - All 3 US-017 commits confirmed on prior run
+- Files changed: none (recovery/finalize)
+- What was implemented: Finalize verification. All acceptance criteria confirmed satisfied by prior passes.
+- **Learnings for future iterations:**
+  - Recovery runs for US-017 are stable — implementation survives across sessions unchanged
+---
+
 ## [2026-02-12 04:16] - US-018: Implement staleness detection for Knowledge Curator
 Thread: N/A
 Run: 20260212-041609-15239 (iteration 1)
@@ -6992,4 +7032,108 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - app/components/content/RelatedContent.tsx: async Server Component, concept overlap + vector similarity fallback, empty state rendered, clickable cards, limit=5 default
 - **Learnings for future iterations:**
   - When all gates are cleared in a prior pass, the Finalize pass is a quick verification — read files, run build+typecheck, confirm criteria, emit COMPLETE
+---
+
+---
+
+## 2026-02-18T09:20Z - US-019: Create Knowledge Health dashboard widget
+Thread: N/A
+Run: 20260218-085648-91558 (iteration 4)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification)
+Gates cleared (cumulative): G1, G2, G3
+Gates remaining: G4 (Code Review), G5 (Simplification), G6 (Audit), G7 (Acceptance), G-UI1, G-UI2
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-085648-91558-iter-4.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-085648-91558-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: e05aecd [Build 1] feat(dashboard): add KnowledgeHealthWidget server component
+- Post-commit status: other stories' uncommitted files remain (pre-existing, not US-019)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: no — used direct exploration instead
+  - /code-review: no — Pass 2 gate
+  - /code-simplifier: yes — removed redundant try/catch, aria-hidden, narrowed value type
+  - /frontend-design: no — Pass 2+ gate
+  - /web-design-guidelines: no — Pass 2+ gate
+  - /agent-browser: no — Pass 3+ gate
+  - /supabase-postgres-best-practices: [yes]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [yes]
+  - /vercel-composition-patterns: [yes]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS (✓ Compiled successfully, /api/dashboard/knowledge-health appears)
+  - Command: npm run type:check -> PASS (no errors in new files; pre-existing errors in lib/workers/)
+  - Command: npm run lint -> FAIL (pre-existing config issue with next lint command, unrelated to US-019)
+- Files changed:
+  - lib/services/knowledge-health.ts (new — fetchKnowledgeHealth, computeHealthScore)
+  - app/api/dashboard/knowledge-health/route.ts (new — GET handler)
+  - app/components/dashboard/KnowledgeHealthWidget.tsx (new — Server Component)
+  - app/components/dashboard/index.ts (export added)
+  - app/(dashboard)/dashboard/page.tsx (Suspense + widget added)
+- What was implemented:
+  - Server Component (no 'use client') with getInternalOrgId() helper
+  - Parallel DB queries: content counts, agent_activity_log counts, knowledge_concepts count, org_agent_settings
+  - Health score: freshness 40% + duplicate penalty 30% + concept coverage 30%
+  - SVG circular progress indicator (r=54, CIRCUMFERENCE~339.29) color-coded green/amber/red
+  - Three states: curator disabled (Lock icon + settings link), no content (BookOpen + library link), full metrics
+  - Each metric row is a clickable Link to relevant page
+  - card-interactive class applied per brand guide
+  - Integrated into page.tsx via Suspense boundary
+- **Learnings for future iterations:**
+  - agent_activity_log.org_id is TEXT not UUID — but stores UUID strings, compatible with internal orgId
+  - org_agent_settings has curator_enabled + global_agent_enabled — both must be true for curator to be "enabled"
+  - Server Components can directly use supabaseAdmin (guardrail only prohibits client components)
+  - npm run lint has pre-existing failure (next lint config issue, not introduced by this story)
+  - getInternalOrgId() helper avoids pulling in requireOrg() + UserCache for simpler Server Component auth
+---
+
+## 2026-02-18T09:21Z - US-019: Create Knowledge Health dashboard widget
+Thread: N/A
+Run: 20260218-092152-30856 (iteration 1)
+Pass: 2 (Phase: Harden)
+Gates cleared this pass: G4 (Code Review), G5 (Simplification), G6 (Audit), G-UI1 (Design Review), G-UI2 (Browser Verification — partial; Clerk auth blocks full render)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G-UI1, G-UI2
+Gates remaining: G7 (Acceptance — final verification of all AC on Pass 3)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-092152-30856-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-092152-30856-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 03ec7de [Harden 2] fix(dashboard): harden KnowledgeHealthWidget accessibility and fix settings link
+- Post-commit status: pre-existing unstaged files from other stories remain (not US-019)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — Harden phase, no architecture work needed]
+  - /code-review: [yes — manual review; CodeRabbit CLI not supported in non-TTY]
+  - /code-simplifier: [yes — via subagent]
+  - /frontend-design: [no — not needed this pass]
+  - /web-design-guidelines: [yes]
+  - /agent-browser: [yes — dev-browser; auth prevents full render verification]
+  - /supabase-postgres-best-practices: [yes]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A — no caching added]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS (✓ Compiled successfully)
+  - Command: npm run type:check -> PASS (no errors in US-019 files; pre-existing errors in lib/workers/ unchanged)
+  - Browser: dashboard redirects to Clerk sign-in (correct auth behavior); /api/dashboard/knowledge-health returns 401 unauthenticated (correct)
+- Files changed:
+  - app/components/dashboard/KnowledgeHealthWidget.tsx (bug fix + accessibility + simplification)
+- What was implemented / fixed:
+  - **Bug fix**: `/settings/agents` → `/settings/organization/agents` (the route didn't exist)
+  - **Accessibility**: `aria-hidden="true"` on all decorative icons (Lock, BookOpen, Settings, Files, MetricRow icon span)
+  - **Simplification**: merged `scoreStrokeColor` + `scoreTextClass` → single `scoreStyle()` with `ScoreStyle` interface
+  - **Simplification**: extracted `EmptyState` component to eliminate ~50 lines of duplicated card markup
+  - **Security audit**: all queries scoped by org_id; supabaseAdmin server-only; no XSS vectors
+  - **Performance audit**: Promise.all parallel queries confirmed; Suspense boundary isolates widget
+- **Learnings for future iterations:**
+  - CodeRabbit CLI requires TTY — not usable in automated agent context; use manual code review instead
+  - dev-browser cannot verify Clerk-authenticated pages in automated context
+  - Settings route is /settings/organization/agents (not /settings/agents) — always verify route existence before linking
 ---
