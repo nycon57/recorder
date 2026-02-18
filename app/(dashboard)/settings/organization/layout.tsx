@@ -14,6 +14,7 @@ import {
   BarChart3,
   Bot,
   Server,
+  Zap,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -81,6 +82,13 @@ const navItems: NavItem[] = [
     href: '/settings/organization/mcp',
     icon: Server,
     description: 'AI agent connections',
+    requiredRole: 'admin',
+  },
+  {
+    title: 'Usage',
+    href: '/settings/organization/usage',
+    icon: Zap,
+    description: 'AI credit consumption',
     requiredRole: 'admin',
   },
   {

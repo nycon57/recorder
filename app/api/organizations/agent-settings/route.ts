@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 import {
   apiHandler,
@@ -8,7 +8,11 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { getAgentSettings } from '@/lib/services/agent-config';
+import {
+  getAgentSettings,
+  checkAgentPlanAccess,
+  upgradePlanError,
+} from '@/lib/services/agent-config';
 
 /** Boolean setting columns that PATCH may update */
 const BOOLEAN_FIELDS = [
@@ -19,6 +23,15 @@ const BOOLEAN_FIELDS = [
   'workflow_extraction_enabled',
   'global_agent_enabled',
 ] as const;
+
+/** Maps a settings column name back to the agent type string */
+const COLUMN_TO_AGENT: Partial<Record<(typeof BOOLEAN_FIELDS)[number], string>> = {
+  curator_enabled: 'curator',
+  gap_intelligence_enabled: 'gap_intelligence',
+  onboarding_enabled: 'onboarding',
+  digest_enabled: 'digest',
+  workflow_extraction_enabled: 'workflow_extraction',
+};
 
 /**
  * GET /api/organizations/agent-settings
@@ -34,11 +47,19 @@ export const GET = apiHandler(async () => {
 /**
  * PATCH /api/organizations/agent-settings
  * Partial update of boolean agent toggles (admin only).
+ *
+ * Returns 403 when attempting to enable an agent that the org's plan tier
+ * does not include: { error, upgradeUrl }.
  */
 export const PATCH = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireAdmin();
 
-  const body = await request.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return errors.badRequest('Invalid JSON in request body');
+  }
 
   // Validate: only allow known boolean fields
   const updates: Record<string, boolean> = {};
@@ -47,12 +68,23 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       if (typeof body[field] !== 'boolean') {
         return errors.badRequest(`Field "${field}" must be a boolean`);
       }
-      updates[field] = body[field];
+      updates[field] = body[field] as boolean;
     }
   }
 
   if (Object.keys(updates).length === 0) {
     return errors.badRequest('No valid fields to update');
+  }
+
+  // Plan tier check: reject if enabling an agent that the plan does not allow
+  for (const [field, value] of Object.entries(updates)) {
+    if (!value) continue; // Disabling is always permitted
+    const agentType = COLUMN_TO_AGENT[field as (typeof BOOLEAN_FIELDS)[number]];
+    if (!agentType) continue; // global_agent_enabled has no tier restriction
+    const access = await checkAgentPlanAccess(orgId, agentType);
+    if (!access.allowed) {
+      return NextResponse.json(upgradePlanError(), { status: 403 });
+    }
   }
 
   // Upsert: create row with defaults if missing, then apply updates

@@ -148,6 +148,99 @@ export async function getUsageByAgent(
   }));
 }
 
+/** Daily credit usage for a single day */
+export interface DailyUsage {
+  /** ISO date string, e.g. "2026-02-17" */
+  day: string;
+  totalCredits: number;
+  totalTokens: number;
+  actionCount: number;
+}
+
+/** Usage attributed to a specific content item */
+export interface TopContentUsage {
+  contentId: string;
+  totalCredits: number;
+  actionCount: number;
+}
+
+/**
+ * Get daily credit usage for the current calendar month.
+ * Returns one row per day with activity, sorted ascending by date.
+ * Returns an empty array on error or when no usage exists.
+ */
+export async function getUsageByDay(orgId: string): Promise<DailyUsage[]> {
+  const since = getMonthStart();
+
+  const { data, error } = await supabaseAdmin.rpc('get_agent_usage_by_day', {
+    p_org_id: orgId,
+    p_since: since,
+  } as Record<string, unknown>);
+
+  if (error) {
+    console.error('[AgentMetering] Failed to get usage by day:', {
+      orgId,
+      error: error.message,
+    });
+    return [];
+  }
+
+  if (!data || (Array.isArray(data) && data.length === 0)) {
+    return [];
+  }
+
+  const rows = Array.isArray(data) ? data : [data];
+  return rows.map((row: Record<string, unknown>) => ({
+    day: String(row.day ?? ''),
+    totalCredits: Number(row.total_credits ?? 0),
+    totalTokens: Number(row.total_tokens ?? 0),
+    actionCount: Number(row.action_count ?? 0),
+  }));
+}
+
+/**
+ * Get top content items by credit consumption for the current month.
+ * Returns up to `limit` items sorted by total credits descending.
+ * Returns an empty array on error or when no usage exists.
+ */
+export async function getTopContentByUsage(
+  orgId: string,
+  limit = 10
+): Promise<TopContentUsage[]> {
+  const since = getMonthStart();
+
+  const { data, error } = await supabaseAdmin.rpc('get_top_content_by_usage', {
+    p_org_id: orgId,
+    p_since: since,
+    p_limit: limit,
+  } as Record<string, unknown>);
+
+  if (error) {
+    console.error('[AgentMetering] Failed to get top content by usage:', {
+      orgId,
+      error: error.message,
+    });
+    return [];
+  }
+
+  if (!data || (Array.isArray(data) && data.length === 0)) {
+    return [];
+  }
+
+  const rows = Array.isArray(data) ? data : [data];
+  return rows.map((row: Record<string, unknown>) => ({
+    contentId: String(row.content_id ?? ''),
+    totalCredits: Number(row.total_credits ?? 0),
+    actionCount: Number(row.action_count ?? 0),
+  }));
+}
+
+/** ISO timestamp for the first moment of the current calendar month */
+function getMonthStart(): string {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+}
+
 /** Compute the ISO timestamp for the start of a period relative to now */
 function getPeriodStart(period: 'day' | 'week' | 'month'): string {
   const now = new Date();
