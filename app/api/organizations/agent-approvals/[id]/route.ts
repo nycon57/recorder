@@ -23,7 +23,12 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
   const { orgId, userId } = await requireAdmin();
   const { id } = await params;
 
-  const body = await request.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return errors.badRequest('Invalid JSON in request body');
+  }
   const { action, rejection_reason } = body;
 
   if (action !== 'approved' && action !== 'rejected') {

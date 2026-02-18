@@ -192,6 +192,7 @@ export async function getPendingApprovals(
     .from('agent_approval_queue')
     .select()
     .eq('org_id', orgId)
+    .eq('status', 'pending')
     .order('created_at', { ascending: false });
 
   if (error) {
