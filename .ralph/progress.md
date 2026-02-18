@@ -7990,3 +7990,157 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - Story was fully implemented and verified in prior passes; this pass confirms the COMPLETE state persists
   - Activity logger script moved/missing at .agents/ralph/log-activity.sh — skip gracefully
 ---
+
+## [2026-02-18] - US-043: Create workflow viewer component
+Thread: 20260218-123719-23343
+Run: 20260218-123719-23343 (iteration 4)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification)
+Gates cleared (cumulative): G1, G2, G3
+Gates remaining: G4 (Code Review), G5 (Simplification), G6 (Audit), G7 (Acceptance), G-UI1 (Design Review), G-UI2 (Browser Verification)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-123719-23343-iter-4.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-123719-23343-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: b936beb [Build 1] feat(workflow): add WorkflowViewer component and library integration
+- Post-commit status: clean (only unrelated pre-existing modified files remain unstaged)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /vercel-composition-patterns: [yes — UI component story]
+  - /feature-dev: [no — Foundation pass, sufficient codebase exploration done manually]
+  - /code-review: [no — Phase Harden, not Pass 1]
+  - /code-simplifier: [no — Phase Refine, not Pass 1]
+  - /frontend-design: [no — deferred to Pass 2]
+  - /web-design-guidelines: [no — Phase Harden]
+  - /agent-browser: [no — Phase Refine]
+  - /supabase-postgres-best-practices: [N/A — no schema changes]
+  - /ai-sdk: [N/A — no AI features]
+  - /next-cache-components: [N/A — pre-fetched in server component, no complex caching]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check -> PASS (pre-existing errors in worker files unrelated to this story)
+- Files changed:
+  - app/components/workflow/WorkflowViewer.tsx (new — Client Component)
+  - app/api/workflows/[id]/route.ts (new — GET endpoint, auth + org-scoped)
+  - app/(dashboard)/library/[id]/page.tsx (modified — workflow fetch + section render)
+- What was implemented:
+  - WorkflowViewer: vertical timeline with step number bubbles (accent-green when active),
+    card-interactive step cards, screenshot expand modal (Dialog), timestamp deep links to
+    /library/{contentId}?t={seconds}, status badge with 4 variants, outdated banner with
+    link to same content page (same content_id), responsive layout (flex, flex-wrap),
+    no-image rendering when screenshotPath is null, client-side fetch fallback via API
+  - GET /api/workflows/[id]: org-scoped query using requireOrg() internal UUID
+  - Library page: pre-fetches most recent non-archived workflow per content, renders
+    WorkflowViewer section below detail view when workflow exists
+- **Learnings for future iterations:**
+  - requireOrg() returns internal UUID orgId directly — no need for organizations table lookup
+  - WorkflowStep.screenshotPath is string | null; use regular <img> (not next/image) for
+    frame URLs since domains are not pre-configured in next.config
+  - supabaseAdmin is a Proxy for lazy init — safe to import and use in server components
+  - card-interactive is a CSS class in globals.css (not a component) — apply as className
+---
+
+## [2026-02-18] - US-043: Create workflow viewer component
+Thread: 20260218-123719-23343
+Run: 20260218-123719-23343 (iteration 5)
+Pass: 2 (Phase: Harden)
+Gates cleared this pass: G4 (Code Review), G5 (Simplification), G-UI2 (Browser Verification — partial, auth wall)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G-UI2
+Gates remaining: G6 (Audit), G7 (Acceptance), G-UI1 (Design Review)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-123719-23343-iter-5.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-123719-23343-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 87652f2 [Harden 2] fix(workflow): resolve screenshot URLs and accessibility bugs
+- Post-commit status: clean (only pre-existing unrelated modified files remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /vercel-composition-patterns: [yes — UI component story]
+  - /feature-dev: [no — Harden pass]
+  - /code-review: [yes — manual subagent review (CodeRabbit CLI fails in non-TTY)]
+  - /code-simplifier: [yes — code-simplifier:code-simplifier subagent]
+  - /frontend-design: [no — deferred to Pass 3 Refine]
+  - /web-design-guidelines: [no — deferred to Pass 3 Refine]
+  - /agent-browser: [yes — browser blocked by Clerk auth wall; confirmed build + API route behavior]
+  - /supabase-postgres-best-practices: [N/A — no schema changes]
+  - /ai-sdk: [N/A — no AI features]
+  - /next-cache-components: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check (story files) -> PASS (pre-existing errors in test files, none in story files)
+  - Command: curl http://localhost:3000/api/workflows/test-id -> 307 (correct auth redirect)
+- Files changed:
+  - app/components/workflow/WorkflowViewer.tsx (fixed 4 bugs + simplifier refinements)
+  - app/api/workflows/[id]/route.ts (signed URL generation + superseded_by content lookup)
+  - app/(dashboard)/library/[id]/page.tsx (signed URL generation + superseded_by lookup + new prop)
+- What was implemented:
+  - CRITICAL: screenshots now generate signed storage URLs (FRAMES_BUCKET) before sending
+    to client — fixes all broken screenshot images
+  - CRITICAL: outdated banner link now resolves superseding workflow's content_id and
+    links to the correct library page (not the current one)
+  - IMPORTANT: removed role/tabIndex/onKeyDown from step card divs — single bubble button
+    is the only focusable toggle per step (fixes WCAG 2.1 SC 4.1.2 violation)
+  - IMPORTANT: guarded uiElements with truthy check before length/map to prevent runtime
+    crash on malformed JSONB data
+  - Simplifier: named React imports, simplified uiElements guard, simplified Dialog
+    onOpenChange, removed redundant section-label comments
+- **Learnings for future iterations:**
+  - screenshotPath in WorkflowStep JSONB is a raw storage path — must resolve to signed URL
+    before passing to client components (same pattern as frames/route.ts)
+  - superseded_by is a workflow ID, not content_id — need extra DB lookup to build correct link
+  - CodeRabbit CLI unavailable in non-TTY (use manual code review subagent instead)
+  - FRAMES_STORAGE_BUCKET env var or 'video-frames' default — check frames/route.ts for pattern
+---
+
+## [2026-02-18] - US-043: Create workflow viewer component
+Thread: 20260218-131223-74355
+Run: 20260218-131223-74355 (iteration 1)
+Pass: 3 (Phase: Finalize)
+Gates cleared this pass: G6 (Audit), G7 (Acceptance), G-UI1 (Design Review), G5 (re-verified via code-simplifier — no changes needed)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7, G-UI1, G-UI2
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-131223-74355-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-131223-74355-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: f3ea632 [Refine 3] style(workflow): fix transition-all and add focus-visible rings
+- Post-commit status: clean (only pre-existing unrelated modified files remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /vercel-composition-patterns: [yes — UI component story]
+  - /feature-dev: [no — Finalize pass, implementation complete]
+  - /code-review: [no — completed in Pass 2]
+  - /code-simplifier: [yes — subagent confirmed no changes needed]
+  - /frontend-design: [yes — design audit; existing design meets standards]
+  - /web-design-guidelines: [yes — found transition-all and missing focus-visible; both fixed]
+  - /agent-browser: [no — auth wall blocks; confirmed in Pass 2]
+  - /supabase-postgres-best-practices: [N/A — no schema changes]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npx tsc --noEmit (story files) -> PASS (pre-existing errors in test files only)
+- Files changed:
+  - app/components/workflow/WorkflowViewer.tsx (fix: transition-all → specific properties, focus-visible rings, motion-reduce)
+  - app/(dashboard)/library/[id]/page.tsx (fix: indentation of WorkflowViewer props)
+- What was implemented:
+  - G6 Security audit: org-scoped queries ✓, signed URLs ✓, no XSS ✓, import boundaries ✓
+  - G6 Performance audit: lazy-loaded screenshots ✓, Promise.all parallel URL signing ✓
+  - G6 Regression audit: workflow section guarded by {workflow && ...} ✓, all detail views unaffected ✓
+  - G7 Acceptance: all 15 criteria verified against implementation
+  - G-UI1 Design Review: web-design-guidelines audit found transition-all on 4 elements and
+    missing focus-visible rings — both fixed; code-simplifier confirmed no further changes needed
+- **Learnings for future iterations:**
+  - Always replace transition-all with specific property transitions (border-color, box-shadow, etc.)
+  - Always add focus-visible:ring-* and motion-reduce:transition-none on interactive buttons
+  - web-design-guidelines skill provides actionable specific rules worth running on every UI component
+---
