@@ -7889,3 +7889,52 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - npx eslint does not work in this project (no eslint.config file); use npm run lint instead
   - All US-025 gates cleared in Pass 3; Pass 4 is purely a final-verification + COMPLETE pass
 ---
+
+## [2026-02-18] - US-028: Implement approval queue for Tier 3 agent actions
+Thread: N/A
+Run: 20260218-123719-23343 (iteration 2)
+Pass: 4 (Phase: Finalize)
+Gates cleared this pass: G1, G2, G3, G4, G5, G6, G7
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-123719-23343-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-123719-23343-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 765b9d7 [Finalize 4] fix(approvals): add pending filter and JSON error handling
+- Commit: 9a53f75 [Finalize 4] refactor(approvals): fix type safety and simplify rejection logic
+- Post-commit status: clean (remaining dirty files belong to other stories)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: no — finalize pass, no new architecture needed
+  - /code-review: no — addressed in Pass 2
+  - /code-simplifier: yes (via code-simplifier:code-simplifier subagent — found 2 issues, both fixed)
+  - /frontend-design: no — addressed in Pass 2
+  - /web-design-guidelines: no — addressed in Pass 2
+  - /agent-browser: no — not a UI-only change
+  - /supabase-postgres-best-practices: yes (N/A — no DB schema changes this pass)
+  - /ai-sdk: N/A
+  - /next-cache-components: N/A
+  - /vercel-composition-patterns: N/A
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check -> PASS (no US-028 errors; pre-existing Buffer/test errors only)
+  - All 11 acceptance criteria verified -> PASS
+- Files changed:
+  - app/api/organizations/agent-approvals/[id]/route.ts (narrow rejection_reason type + JSON error handling)
+  - lib/services/agent-permissions.ts (add .eq('status', 'pending') filter + simplify rejection_reason update)
+- What was implemented:
+  - Found and committed two previously unstaged US-028 improvements in the working tree:
+    1. Missing .eq('status', 'pending') filter in getPendingApprovals (bug: was returning ALL approvals)
+    2. try-catch around request.json() for defensive JSON parse error handling in PATCH route
+  - Applied code-simplifier improvements:
+    1. Narrowed rejection_reason from unknown to string|undefined before passing to reviewApproval
+    2. Replaced conditional spread with rejection_reason: rejectionReason ?? null (simpler, always explicit)
+- **Learnings for future iterations:**
+  - Always check git diff before finalize pass — prior passes may have left improvements unstaged
+  - When body is typed as Record<string, unknown>, always narrow field types before passing to typed functions
+  - Conditional spreads on nullable DB columns can always be simplified to field: value ?? null
+---
