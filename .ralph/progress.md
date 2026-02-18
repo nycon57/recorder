@@ -8374,3 +8374,55 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - next lint command removed in Next.js 16 (npx next lint errors with "Invalid project directory"); pre-existing infra issue
   - Dashboard page requires Clerk auth; browser testing must use authenticated session or extension mode
 ---
+
+## [2026-02-18 14:40] - US-046: Create agent status summary widget for main dashboard
+Thread: run-20260218-142730-91735
+Run: 20260218-142730-91735 (iteration 2)
+Pass: 3 (Phase: Refine/Finalize)
+Gates cleared this pass: G7 (Acceptance — all criteria verified)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7, G-UI1
+Gates remaining: G-UI2 (Browser verification — infrastructure-blocked: dev server returning 500 + Clerk auth wall prevents standalone browser access)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-142730-91735-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-142730-91735-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (no code changes; progress.md update committed below)
+- Post-commit status: clean (US-046 files unchanged; progress.md updated)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — Refine pass; no new architecture]
+  - /code-review: [no — reviewed in Pass 2; no code changes this pass]
+  - /code-simplifier: [attempted — skill unavailable in this context]
+  - /frontend-design: [attempted — skill unavailable in this context]
+  - /web-design-guidelines: [no — reviewed in Pass 2]
+  - /agent-browser: [yes — dev-browser connected but redirects to sign-in; dev server returning 500]
+  - /supabase-postgres-best-practices: [N/A]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [yes]
+  - /vercel-composition-patterns: [yes]
+  - Other skills: /commit, /dev-browser
+- Verification:
+  - Command: npm run build -> PASS (clean, 1 pre-existing warning)
+  - Command: npx tsc --noEmit (story files) -> PASS (no errors in US-046 files)
+  - Browser verification -> BLOCKED (dev server 500 + Clerk auth redirect in standalone context)
+- G7 Acceptance criteria audit:
+  - [x] app/components/dashboard/AgentStatusWidget.tsx exists as Server Component
+  - [x] Displays: enabled agents count, actions today, success rate %, sessions, link to /agent-activity
+  - [x] Compact card format (Card/CardHeader/CardContent)
+  - [x] Agent type icons + OutcomeDot (bg-accent=Caribbean Green for success, bg-destructive for failure)
+  - [x] Empty state: 'Enable AI Agents' CTA → /settings/organization/agents
+  - [x] Integrated into app/(dashboard)/dashboard/page.tsx via Suspense
+  - [x] Uses card-interactive class + brand accent colors
+  - [x] Typecheck passes
+  - [x] Example scenario (StatBar + enabledAgents list)
+  - [x] Edge case: zero agents → CTA
+  - [x] Edge case: zero actions → successRate is null → displayed as '—'
+- Files changed:
+  - .ralph/progress.md (this entry)
+- **Learnings for future iterations:**
+  - Dev server returning 500 in automated contexts; check if it's running before attempting browser verification
+  - G-UI2 has been blocked across multiple passes by Clerk auth + dev server state; requires user-activated extension mode
+  - bg-accent = Caribbean Green (rgb 0,223,130) — correct brand color for success indicators
+---
