@@ -1956,7 +1956,7 @@ Run summary: .ralph/runs/run-20260211-234038-89477-iter-2.md
   - supabaseAdmin bypasses RLS but the org_id filter in the RPC provides equivalent query-level isolation
 ---
 
-## [2026-02-11] - US-014: Verify and document content-scoped chat API filtering
+## [2026-02-11] - US-014: Verify and document content-scoped chat API filtering – pass 2
 Run: 20260211-234038-89477 (iteration 3)
 Pass: 2/3 - Quality Review
 Run log: .ralph/runs/run-20260211-234038-89477-iter-3.log
@@ -2086,7 +2086,7 @@ Run summary: .ralph/runs/run-20260212-001541-37824-iter-2.md
   - Pre-existing type errors in transcribe-*.ts (Buffer type) are known and accepted
 ---
 
-## [2026-02-12] - US-015: Create curate_knowledge job handler skeleton
+## [2026-02-12] - US-015: Create curate_knowledge job handler skeleton – pass 2
 Thread: N/A
 Run: 20260212-004545-49087 (iteration 1)
 Pass: 2/3 - Quality Review
@@ -2124,7 +2124,7 @@ Run summary: .ralph/runs/run-20260212-004545-49087-iter-1.md
   - `npm run lint` (next lint) is broken in Next.js 16; use `ESLINT_USE_FLAT_CONFIG=false npx eslint <file>` as workaround
 ---
 
-## [2026-02-12] - US-015: Create curate_knowledge job handler skeleton
+## [2026-02-12] - US-015: Create curate_knowledge job handler skeleton – pass 3
 Thread: N/A
 Run: 20260212-004545-49087 (iteration 2)
 Pass: 3/3 - Polish & Finalize
@@ -2712,7 +2712,7 @@ Run summary: .ralph/runs/run-20260212-044112-7404-iter-3.md
   - Next.js 16 lint command is broken (eslint config moved), build still works
 ---
 
-## [2026-02-12] - US-021: Create knowledge_gaps table migration
+## [2026-02-12] - US-021: Create knowledge_gaps table migration – pass 2
 Thread: N/A
 Run: 20260212-051615-35829 (iteration 1)
 Pass: 2/3 - Quality Review
@@ -2755,7 +2755,7 @@ Run summary: .ralph/runs/run-20260212-051615-35829-iter-1.md
   - Update types should exclude identity columns (id, org_id, created_at) to match project conventions
 ---
 
-## [2026-02-12] - US-021: Create knowledge_gaps table migration
+## [2026-02-12] - US-021: Create knowledge_gaps table migration – pass 3
 Thread: N/A
 Run: 20260212-054118-25497 (iteration 1)
 Pass: 3/3 - Polish & Finalize
@@ -3303,7 +3303,7 @@ Run summary: .ralph/runs/run-20260212-095642-48350-iter-1.md
   - The `proposed_action` JSONB field in `agent_approval_queue` is a flexible extension point for metadata like cost estimates
 ---
 
-## [2026-02-12] - US-029: Add agent action cost estimation
+## [2026-02-12] - US-029: Add agent action cost estimation – pass 2
 Thread: n/a
 Run: 20260212-095642-48350 (iteration 2)
 Pass: 2/3 - Quality Review
@@ -3342,7 +3342,7 @@ Run summary: .ralph/runs/run-20260212-095642-48350-iter-2.md
   - Avoid duplicate data display in different formats -- pick one canonical display and use tooltips for detail
 ---
 
-## [2026-02-12] - US-029: Add agent action cost estimation
+## [2026-02-12] - US-029: Add agent action cost estimation – pass 3
 Thread: n/a
 Run: 20260212-095642-48350 (iteration 3)
 Pass: 3/3 - Polish & Finalize
@@ -3429,7 +3429,7 @@ Run summary: .ralph/runs/run-20260212-095642-48350-iter-4.md
   - The (SELECT auth.uid()) subquery wrapper prevents per-row function evaluation
 ---
 
-## [2026-02-12] - US-030: Create agent_onboarding_plans table migration
+## [2026-02-12] - US-030: Create agent_onboarding_plans table migration – pass 2
 Thread: n/a
 Run: 20260212-104646-25413 (iteration 1)
 Pass: 2/3 - Quality Review
@@ -3467,7 +3467,7 @@ Run summary: .ralph/runs/run-20260212-104646-25413-iter-1.md
   - CodeRabbit CLI has TTY/raw-mode issues when run from non-interactive shells; fall back to feature-dev:code-reviewer subagent
 ---
 
-## [2026-02-12] - US-030: Create agent_onboarding_plans table migration
+## [2026-02-12] - US-030: Create agent_onboarding_plans table migration – pass 3
 Thread: n/a
 Run: 20260212-104646-25413 (iteration 2)
 Pass: 3/3 - Polish & Finalize
@@ -3554,7 +3554,7 @@ Run summary: .ralph/runs/run-20260212-104646-25413-iter-3.md
   - The transcript_chunks table is the right place to get word counts (not transcripts table)
 ---
 
-## [2026-02-12] - US-031: Implement generate-onboarding-plan job handler
+## [2026-02-12] - US-031: Implement generate-onboarding-plan job handler – pass 2
 Run: 20260212-111149-10113 (iteration 2)
 Pass: 2/3 - Quality Review
 Run log: .ralph/runs/run-20260212-111149-10113-iter-2.log
@@ -3592,7 +3592,7 @@ Run summary: .ralph/runs/run-20260212-111149-10113-iter-2.md
   - Even non-critical inner queries should log errors for observability
 ---
 
-## [2026-02-12] - US-031: Implement generate-onboarding-plan job handler
+## [2026-02-12] - US-031: Implement generate-onboarding-plan job handler – pass 3
 Run: 20260212-111149-10113 (iteration 3)
 Pass: 3/3 - Polish & Finalize
 Run log: .ralph/runs/run-20260212-111149-10113-iter-3.log
@@ -3950,7 +3950,7 @@ Run summary: .ralph/runs/run-20260212-111149-10113-iter-10.md
   - Memory merge needs deduplication since multiple onboarding completions accumulate insights
 ---
 
-## [2026-02-12] - US-034: Implement engagement tracking and adaptive path refinement
+## [2026-02-12] - US-034: Implement engagement tracking and adaptive path refinement – pass 2
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 1)
 Pass: 2/3 - Quality Review
@@ -3992,7 +3992,7 @@ Run summary: .ralph/runs/run-20260212-184011-96026-iter-1.md
   - When checking status transitions (e.g., active -> completed), always use the DB response after update rather than locally computed values to prevent concurrent duplicates
 ---
 
-## [2026-02-12] - US-034: Implement engagement tracking and adaptive path refinement
+## [2026-02-12] - US-034: Implement engagement tracking and adaptive path refinement – pass 3
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 2)
 Pass: 3/3 - Polish & Finalize
@@ -4339,7 +4339,7 @@ Run summary: .ralph/runs/run-20260212-184011-96026-iter-9.md
   - The concepts correction API at /api/concepts/[id] is different from /api/knowledge/concepts/[id]
 ---
 
-## [2026-02-12] - US-037: Integrate feedback into agent memory for behavior refinement
+## [2026-02-12] - US-037: Integrate feedback into agent memory for behavior refinement – pass 2
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 10)
 Pass: 2/3 - Quality Review
@@ -4379,7 +4379,7 @@ Run summary: .ralph/runs/run-20260212-184011-96026-iter-10.md
   - 32-bit hash functions have unacceptable collision risk for production memory keys; use SHA-256
 ---
 
-## [2026-02-12] - US-037: Integrate feedback into agent memory for behavior refinement
+## [2026-02-12] - US-037: Integrate feedback into agent memory for behavior refinement – pass 3
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 11)
 Pass: 3/3 - Polish & Finalize
@@ -4599,7 +4599,7 @@ Run summary: .ralph/runs/run-20260212-184011-96026-iter-15.md
   - Supabase query builders can be extracted into helper functions for DRY code
 ---
 
-## [2026-02-12] - US-039: Create in-app digest view and schedule weekly generation
+## [2026-02-12] - US-039: Create in-app digest view and schedule weekly generation – pass 2
 Thread: N/A
 Run: 20260212-184011-96026 (iteration 16)
 Pass: 2/3 - Quality Review
@@ -4700,7 +4700,7 @@ Run summary: .ralph/runs/run-20260215-174747-15083-iter-1.md
   - Pre-existing dirty files (app/layout.tsx, package.json) need careful exclusion from story commits
 ---
 
-## [2026-02-15] - US-039: Create in-app digest view and schedule weekly generation
+## [2026-02-15] - US-039: Create in-app digest view and schedule weekly generation – pass 2
 Thread: N/A
 Run: 20260215-174747-15083 (iteration 2)
 Pass: 4 (Phase: Finalize)
@@ -5709,7 +5709,7 @@ Run summary: .ralph/runs/run-20260215-213820-36588-iter-3.md
   - Pre-existing type errors in worker handlers (Buffer type) should be ignored
 ---
 
-## [2026-02-15] - US-050: Expose search and knowledge graph as MCP tools
+## [2026-02-15] - US-050: Expose search and knowledge graph as MCP tools – pass 2
 Thread: N/A
 Run: 20260215-221324-51038 (iteration 1)
 Pass: 2 (Phase: Harden)
@@ -5757,7 +5757,7 @@ Run summary: .ralph/runs/run-20260215-221324-51038-iter-1.md
   - eslint config in this repo uses next lint which has a known bug; npx eslint directly fails due to missing config
 ---
 
-## [2026-02-15] - US-050: Expose search and knowledge graph as MCP tools
+## [2026-02-15] - US-050: Expose search and knowledge graph as MCP tools – pass 3
 Thread: N/A
 Run: 20260215-221324-51038 (iteration 2)
 Pass: 3 (Phase: Refine)
@@ -5804,7 +5804,7 @@ Run summary: .ralph/runs/run-20260215-221324-51038-iter-2.md
   - unwrapSingleRow is a reusable pattern for any Supabase .single() call with McpToolError
 ---
 
-## [2026-02-15] - US-050: Expose search and knowledge graph as MCP tools
+## [2026-02-15] - US-050: Expose search and knowledge graph as MCP tools – pass 4
 Thread: N/A
 Run: 20260215-223827-90540 (iteration 1)
 Pass: 4 (Phase: Finalize)
@@ -6548,7 +6548,7 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - The `npm run lint` command has a pre-existing Next.js config issue ("no such directory: lint") — not related to story code
 ---
 
-## [2026-02-17] - US-051: Implement MCP auth and configuration page
+## [2026-02-17] - US-051: Implement MCP auth and configuration page – pass 2
 Thread: run-20260217-220707-72539
 Run: 20260217-220707-72539 (iteration 2)
 Pass: 5 (Phase: Finalize)
@@ -6597,7 +6597,7 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - Making required fields non-optional (removing '?') eliminates defensive `if (field)` guards throughout callers
 ---
 
-## [2026-02-17] - US-051: Implement MCP auth and configuration page
+## [2026-02-17] - US-051: Implement MCP auth and configuration page – pass 3
 Thread: run-20260217-220707-72539
 Run: 20260217-220707-72539 (iteration 3)
 Pass: 6 (Phase: Finalize)
@@ -7368,7 +7368,7 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - Always grep for staged-but-uncommitted changes before declaring finalize complete
 ---
 
-## [2026-02-18] - US-022: Implement analyze_knowledge_gaps job handler
+## [2026-02-18] - US-022: Implement analyze_knowledge_gaps job handler – pass 2
 Thread: N/A
 Run: 20260218-105205-65871 (iteration 1)
 Pass: 5 (Phase: Finalize)
@@ -8043,7 +8043,7 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - card-interactive is a CSS class in globals.css (not a component) — apply as className
 ---
 
-## [2026-02-18] - US-043: Create workflow viewer component
+## [2026-02-18] - US-043: Create workflow viewer component – pass 2
 Thread: 20260218-123719-23343
 Run: 20260218-123719-23343 (iteration 5)
 Pass: 2 (Phase: Harden)
@@ -8098,7 +8098,7 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - FRAMES_STORAGE_BUCKET env var or 'video-frames' default — check frames/route.ts for pattern
 ---
 
-## [2026-02-18] - US-043: Create workflow viewer component
+## [2026-02-18] - US-043: Create workflow viewer component – pass 3
 Thread: 20260218-131223-74355
 Run: 20260218-131223-74355 (iteration 1)
 Pass: 3 (Phase: Finalize)
@@ -8487,4 +8487,55 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - Dev server 500 persists across sessions; appears to be an environment/Clerk key issue pre-dating this story
   - Browser verification for auth-gated pages requires user to manually log in via extension mode
   - G-UI2 for authenticated Next.js apps should be attempted in extension mode with user pre-login
+---
+
+## [2026-02-18] - US-048: Implement agent audit trail export
+Thread: N/A
+Run: 20260218-145734-12606 (iteration 2)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1, G2, G3, G5
+Gates cleared (cumulative): G1, G2, G3, G5
+Gates remaining: G4 (Code Review), G6 (Audit), G7 (Acceptance)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-145734-12606-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-145734-12606-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: df38fab feat(agent-audit): implement audit trail export endpoint and UI button
+- Post-commit status: clean (pre-existing modifications in other stories remain unstaged)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — foundation pass focused on direct implementation; story scope was clear]
+  - /code-review: [no — Pass 1; deferred to Pass 2]
+  - /code-simplifier: [yes — run via subagent; extracted buildActivityQuery helper, removed duplication]
+  - /frontend-design: [no — minor UI addition (button + dialog), not a full UI story]
+  - /web-design-guidelines: [no — Pass 1]
+  - /agent-browser: [no — Pass 1]
+  - /supabase-postgres-best-practices: [yes — applied to query design]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A — export is always dynamic]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS (✓ Compiled, 116/116 static pages, route ƒ /api/organizations/agent-audit/export)
+  - Command: npm run type:check -> PASS (no errors in US-048 files; pre-existing errors in other workers)
+- Files changed:
+  - app/api/organizations/agent-audit/export/route.ts (created)
+  - app/(dashboard)/agent-activity/page.tsx (modified)
+- What was implemented:
+  - GET /api/organizations/agent-audit/export: admin-only endpoint supporting CSV and JSON formats,
+    startDate/endDate/agentType/actionType query params, 30-day default date range, 1-per-minute
+    per-org rate limit via Redis NX/TTL, streaming CSV via ReadableStream in 1,000-row batches,
+    proper Content-Disposition filename (agent-audit-org_{id}-YYYY-MM-DD-to-YYYY-MM-DD.ext),
+    date input validation returning 400 on invalid dates, zero-row export returns CSV header only.
+  - Export Audit Trail button on agent activity page: opens Dialog with format selector (CSV/JSON),
+    start/end date pickers defaulting to last 30 days, export button that builds URL with current
+    agentType/actionType filters and triggers browser download, handles 429 rate limit with user
+    message and Retry-After display, error state for failed exports.
+- **Learnings for future iterations:**
+  - The `progress.md` file exceeds 256KB and can't be read directly; use grep/tail or append-only writes
+  - The `npm run lint` command fails with "no such directory: .../lint" when not executed from the project root via the Bash tool; the build already validates correctness since `ignoreDuringBuilds: true`
+  - Rate-limit-per-org using Redis SET NX + TTL is simpler and more appropriate than Upstash Ratelimit class for very low limits (1/min) — avoids instantiating a full sliding window limiter
+  - The code-simplifier subagent correctly extracted shared query logic; the simplification was valid and the build confirmed correctness
 ---
