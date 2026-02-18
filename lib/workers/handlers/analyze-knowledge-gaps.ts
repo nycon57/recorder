@@ -147,7 +147,11 @@ export async function handleAnalyzeKnowledgeGaps(
       const scoredGaps = clusters.map(scoreCluster);
 
       progressCallback?.(80, 'Upserting knowledge gaps...');
-      const { created, updated } = await upsertKnowledgeGaps(supabase, orgId, scoredGaps);
+      const { created, updated, newHighSeverityGaps } = await upsertKnowledgeGaps(
+        supabase,
+        orgId,
+        scoredGaps
+      );
 
       progressCallback?.(90, 'Running bus factor analysis...');
       try {
@@ -155,6 +159,26 @@ export async function handleAnalyzeKnowledgeGaps(
       } catch (busFactorError) {
         // Bus factor failure must not fail the main gap analysis job.
         console.error('[AnalyzeKnowledgeGaps] Bus factor analysis failed:', busFactorError);
+      }
+
+      // Notify when new critical or high severity gaps are detected.
+      if (newHighSeverityGaps.length > 0) {
+        const alertSummary = newHighSeverityGaps
+          .map((g) => `${g.topic} (${g.severity}, impact ${g.impactScore})`)
+          .join('; ');
+        try {
+          await logAgentAction({
+            orgId,
+            agentType: AGENT_TYPE,
+            actionType: 'gap_alert',
+            targetEntity: 'knowledge_gap',
+            outcome: 'success',
+            outputSummary: `New critical/high gaps detected: ${alertSummary}`,
+          });
+        } catch (alertError) {
+          // Alert failure must not fail the main job.
+          console.error('[AnalyzeKnowledgeGaps] gap_alert logging failed:', alertError);
+        }
       }
 
       progressCallback?.(
@@ -540,12 +564,19 @@ function calculateSeverity(impactScore: number): KnowledgeGapSeverity {
 // Upsert
 // ---------------------------------------------------------------------------
 
+/** Newly inserted gap summary used for gap_alert notifications. */
+interface NewGapSummary {
+  topic: string;
+  severity: KnowledgeGapSeverity;
+  impactScore: number;
+}
+
 /** Upsert gaps: update existing gaps with high embedding similarity, insert new ones. */
 async function upsertKnowledgeGaps(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
   gaps: ScoredGap[]
-): Promise<{ created: number; updated: number }> {
+): Promise<{ created: number; updated: number; newHighSeverityGaps: NewGapSummary[] }> {
   const { data: existingGaps } = await supabase
     .from('knowledge_gaps')
     .select('id, topic, metadata, search_count, impact_score')
@@ -571,6 +602,7 @@ async function upsertKnowledgeGaps(
 
   let created = 0;
   let updated = 0;
+  const newHighSeverityGaps: NewGapSummary[] = [];
 
   const toUpdate: Array<{ match: (typeof existingWithEmbeddings)[number]; gap: ScoredGap }> = [];
   const toInsert: ScoredGap[] = [];
@@ -600,7 +632,7 @@ async function upsertKnowledgeGaps(
           metadata: { embedding: gap.embedding } as unknown as Json,
         }))
       )
-      .select('id, topic, search_count, impact_score, metadata');
+      .select('id, topic, severity, search_count, impact_score, metadata');
 
     if (insertError) {
       console.error('[AnalyzeKnowledgeGaps] Batch insert failed:', insertError);
@@ -615,6 +647,14 @@ async function upsertKnowledgeGaps(
           uniqueSearchers: 0,
           embedding: extractEmbeddingFromMetadata(row.metadata),
         });
+        // Track newly inserted critical/high severity gaps for gap_alert notification.
+        if (row.severity === 'critical' || row.severity === 'high') {
+          newHighSeverityGaps.push({
+            topic: row.topic,
+            severity: row.severity,
+            impactScore: row.impact_score ?? 0,
+          });
+        }
       }
     }
   }
@@ -648,7 +688,7 @@ async function upsertKnowledgeGaps(
     updated++;
   }
 
-  return { created, updated };
+  return { created, updated, newHighSeverityGaps };
 }
 
 /** Extract embedding array from metadata, or null. */

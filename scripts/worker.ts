@@ -22,6 +22,8 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import {
   scheduleCurateKnowledgeJobs,
   CURATOR_SCHEDULE_INTERVAL_MS,
+  scheduleAnalyzeKnowledgeGapsJobs,
+  GAP_ANALYSIS_SCHEDULE_INTERVAL_MS,
 } from '@/lib/workers/scheduler';
 
 const args = process.argv.slice(2);
@@ -106,6 +108,16 @@ async function startScheduler(): Promise<void> {
   setInterval(async () => {
     await scheduleCurateKnowledgeJobs();
   }, CURATOR_SCHEDULE_INTERVAL_MS);
+
+  // Schedule weekly analyze_knowledge_gaps jobs for all orgs with gap_intelligence enabled.
+  // Runs immediately on startup, then at the configured interval (default: weekly).
+  console.log(
+    `[Scheduler] Gap scheduler: analyze_knowledge_gaps per enabled org (every ${GAP_ANALYSIS_SCHEDULE_INTERVAL_MS / 1000 / 60} min)`
+  );
+  await scheduleAnalyzeKnowledgeGapsJobs();
+  setInterval(async () => {
+    await scheduleAnalyzeKnowledgeGapsJobs();
+  }, GAP_ANALYSIS_SCHEDULE_INTERVAL_MS);
 }
 
 async function main() {
