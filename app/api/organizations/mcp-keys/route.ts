@@ -44,7 +44,7 @@ export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
 
     const keyHex = randomBytes(16).toString('hex');
     const fullKey = `trb_mcp_${keyHex}`;
-    const keyPrefix = fullKey.substring(0, 12);
+    const keyPrefix = `trb_mcp_${keyHex.slice(0, 8)}`;
     const keyHash = createHash('sha256').update(fullKey).digest('hex');
 
     const { data: newKey, error } = await supabaseAdmin

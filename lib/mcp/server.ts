@@ -66,14 +66,12 @@ function toTextContent(value: unknown): CallToolResult['content'] {
 function wrapHandler<TArgs>(
   toolName: string,
   handler: (args: TArgs) => Promise<unknown>,
-  keyId?: string
+  keyId: string
 ): (args: TArgs) => Promise<CallToolResult> {
   return async (args: TArgs) => {
     try {
       // Per-key rate limiting (100 req/min via Upstash Redis)
-      if (keyId) {
-        await checkMcpRateLimit(keyId);
-      }
+      await checkMcpRateLimit(keyId);
 
       return { content: toTextContent(await handler(args)) };
     } catch (error) {
@@ -109,7 +107,7 @@ function wrapHandler<TArgs>(
 function registerTools(
   server: McpServer,
   ctx: McpToolContext,
-  keyId?: string
+  keyId: string
 ): void {
   server.tool(
     'searchRecordings',

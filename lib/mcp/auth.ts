@@ -14,8 +14,8 @@ export interface McpAuthContext {
   orgId: string;
   scopes: string[];
   rateLimit: number;
-  /** The mcp_api_keys row ID (set only for trb_mcp_ keys). */
-  keyId?: string;
+  /** Stable key identifier used for per-key rate limiting. */
+  keyId: string;
 }
 
 /**
@@ -43,10 +43,15 @@ export async function authenticateMcpConnection(
     throw new McpAuthError(result.error || 'Invalid or missing API key');
   }
 
+  // Derive a stable keyId from the legacy key for rate limiting
+  const keyHash = createHash('sha256').update(apiKey).digest('hex');
+  const legacyKeyId = `legacy_${keyHash.slice(0, 16)}`;
+
   return {
     orgId: result.orgId,
     scopes: result.scopes || [],
     rateLimit: result.rateLimit || 1000,
+    keyId: legacyKeyId,
   };
 }
 

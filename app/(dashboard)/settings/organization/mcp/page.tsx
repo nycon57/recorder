@@ -358,8 +358,9 @@ export default function McpSettingsPage() {
         isLoading={revokeMutation.isPending}
         onConfirm={() => {
           if (keyToRevoke) {
-            revokeMutation.mutate(keyToRevoke);
-            setKeyToRevoke(null);
+            revokeMutation.mutate(keyToRevoke, {
+              onSettled: () => setKeyToRevoke(null),
+            });
           }
         }}
         useAlertDialog
