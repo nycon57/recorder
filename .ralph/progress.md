@@ -8539,3 +8539,51 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - Rate-limit-per-org using Redis SET NX + TTL is simpler and more appropriate than Upstash Ratelimit class for very low limits (1/min) — avoids instantiating a full sliding window limiter
   - The code-simplifier subagent correctly extracted shared query logic; the simplification was valid and the build confirmed correctness
 ---
+
+## [2026-02-18] - US-048: Implement agent audit trail export
+Thread: N/A
+Run: 20260218-145734-12606 (iteration 3)
+Pass: 2 (Phase: Harden)
+Gates cleared this pass: G4 (Code Review), G6 (Audit), G7 (Acceptance)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-145734-12606-iter-3.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-145734-12606-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: c31dafe fix(agent-audit): stream JSON export and validate params before rate limit
+- Post-commit status: clean (US-048 files only; pre-existing modifications in other stories remain unstaged)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — Harden pass; architecture already established]
+  - /code-review: [yes — manual review (CodeRabbit CLI failed in non-TTY env); identified JSON buffering and param-validation-order issues]
+  - /code-simplifier: [no — code was already simplified in Pass 1; Harden pass focused on correctness]
+  - /frontend-design: [no — no UI changes this pass]
+  - /web-design-guidelines: [no — UI from Pass 1 already meets standards]
+  - /agent-browser: [no — no UI changes this pass]
+  - /supabase-postgres-best-practices: [yes — confirmed paginated queries with org_id scoping]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A — export is always dynamic]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS (✓ Compiled successfully, route ƒ /api/organizations/agent-audit/export present)
+  - Command: npm run type:check -> PASS (no errors in US-048 files; pre-existing errors in other test files only)
+- Files changed:
+  - app/api/organizations/agent-audit/export/route.ts (modified)
+- What was implemented:
+  - Fixed JSON export to use ReadableStream (streaming one row at a time, batches of 1000) instead of
+    accumulating all rows in memory before JSON.stringify — satisfies the 10,000+ row streaming edge case.
+  - Moved query-param validation (format, startDate/endDate) before the rate-limit check so invalid
+    requests don't consume a rate-limit slot.
+  - Removed Transfer-Encoding: chunked header (invalid in HTTP/2; Next.js handles framing).
+  - All 13 acceptance criteria verified as passing.
+- **Learnings for future iterations:**
+  - CodeRabbit CLI fails with "Raw mode not supported" in non-TTY environments (Claude Code subprocess);
+    fall back to manual code review — document this in guardrails.
+  - JSON streaming via ReadableStream: open '[', iterate rows with prefix logic (first='\n', rest=',\n'),
+    close with '\n]'. Simple and avoids accumulating all rows in memory.
+  - Always validate request params before consuming rate-limit slots to avoid burning limits on bad inputs.
+---
