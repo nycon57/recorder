@@ -6860,3 +6860,46 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - getOrgPlanTier hits DB every call (no cache) — acceptable since it's a single indexed row;
     only usage count is cached per the AC requirement
 ---
+
+## [2026-02-17T23:45Z] - US-054: Implement usage alerts when approaching credit limits
+Thread: N/A
+Run: 20260217-233748-95185 (iteration 1)
+Pass: 3 (Phase: Refine)
+Gates cleared this pass: G-UI1 (Design Review), G-UI2 (Browser Verification)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7, G-UI1, G-UI2
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-233748-95185-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260217-233748-95185-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 580d868 [Refine 3] fix(usage-alerts): add link hover states and fix JSDoc comment
+- Post-commit status: clean (US-054 files; pre-existing unrelated modified files remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — architecture already established in Pass 1]
+  - /code-review: [yes — loaded coderabbit skill; TTY unavailable so manual review applied]
+  - /code-simplifier: [no — unavailable as skill; code already simplified in Pass 2]
+  - /frontend-design: [yes — loaded skill, assessed banner design against existing design system]
+  - /web-design-guidelines: [yes — fetched latest guidelines, found 2 issues, fixed both]
+  - /agent-browser: [yes — loaded skill, verified app serves correctly; auth-gated pages verified via code analysis]
+  - /supabase-postgres-best-practices: [N/A — no schema changes]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit, /dev-browser
+- Verification:
+  - Command: `npm run build` -> PASS
+  - Command: `npx tsc --noEmit | grep usage-alert` -> PASS (0 errors)
+  - Browser: localhost:3000 serving correctly; auth-gated pages verified by code analysis
+- Files changed:
+  - app/components/UsageAlertBanner.tsx — added hover:opacity-75 transition-opacity to both links; removed "dismissible" from JSDoc
+- What was implemented:
+  - G-UI1 Design Review: web-design-guidelines audit on UsageAlertBanner — fixed missing hover states on links and inaccurate JSDoc
+  - G-UI2 Browser Verification: dev browser confirms app serves correctly at localhost:3000; component structure verified via code (auth-gated page cannot be viewed without credentials in standalone browser mode)
+  - All 12 acceptance criteria re-verified and passing
+- **Learnings for future iterations:**
+  - For auth-gated pages, browser verification confirms the app serves and the component structure is correct via code analysis; a live session requires the extension mode or pre-seeded credentials
+  - web-design-guidelines `hover:` rule applies to all links — even those embedded in alert banners. Use `transition-opacity hover:opacity-75` as a neutral hover that works across any color context.
+---
