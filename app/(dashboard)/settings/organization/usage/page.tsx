@@ -27,10 +27,6 @@ import { Badge } from '@/app/components/ui/badge';
 import { Progress } from '@/app/components/ui/progress';
 import { Skeleton } from '@/app/components/ui/skeleton';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 interface UsageData {
   planTier: string;
   creditLimit: number;
@@ -59,10 +55,6 @@ interface UsageData {
   month: string;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
   curator: 'Curator',
   gap_intelligence: 'Gap Intelligence',
@@ -89,13 +81,10 @@ function formatCost(usd: number): string {
 }
 
 function formatDay(isoDate: string): string {
-  const d = new Date(isoDate);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  // Parse as UTC to avoid local-timezone off-by-one on ISO date strings
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
 }
-
-// ---------------------------------------------------------------------------
-// Loading skeleton
-// ---------------------------------------------------------------------------
 
 function UsageLoading() {
   return (
@@ -125,10 +114,6 @@ function UsageLoading() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Stat card
-// ---------------------------------------------------------------------------
-
 function StatCard({
   title,
   value,
@@ -155,10 +140,6 @@ function StatCard({
     </Card>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
 
 export default function UsagePage() {
   const { data, isLoading, error } = useQuery<UsageData>({
@@ -190,7 +171,6 @@ export default function UsagePage() {
   const usagePercent = creditLimit > 0 ? Math.min(100, Math.round((summary.totalCredits / creditLimit) * 100)) : 0;
   const isFreePlan = planTier === 'free';
 
-  // Recharts data: bar chart (by agent), line chart (by day)
   const agentChartData = byAgent.map((row) => ({
     name: AGENT_DISPLAY_NAMES[row.agentType] ?? row.agentType,
     credits: Math.round(row.totalCredits),

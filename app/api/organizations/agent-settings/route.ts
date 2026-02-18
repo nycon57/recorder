@@ -14,7 +14,6 @@ import {
   upgradePlanError,
 } from '@/lib/services/agent-config';
 
-/** Boolean setting columns that PATCH may update */
 const BOOLEAN_FIELDS = [
   'curator_enabled',
   'gap_intelligence_enabled',
@@ -24,7 +23,7 @@ const BOOLEAN_FIELDS = [
   'global_agent_enabled',
 ] as const;
 
-/** Maps a settings column name back to the agent type string */
+/** Reverse map: settings column -> agent type (excludes global_agent_enabled) */
 const COLUMN_TO_AGENT: Partial<Record<(typeof BOOLEAN_FIELDS)[number], string>> = {
   curator_enabled: 'curator',
   gap_intelligence_enabled: 'gap_intelligence',
@@ -61,7 +60,6 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     return errors.badRequest('Invalid JSON in request body');
   }
 
-  // Validate: only allow known boolean fields
   const updates: Record<string, boolean> = {};
   for (const field of BOOLEAN_FIELDS) {
     if (field in body) {
@@ -76,18 +74,19 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     return errors.badRequest('No valid fields to update');
   }
 
-  // Plan tier check: reject if enabling an agent that the plan does not allow
-  for (const [field, value] of Object.entries(updates)) {
-    if (!value) continue; // Disabling is always permitted
-    const agentType = COLUMN_TO_AGENT[field as (typeof BOOLEAN_FIELDS)[number]];
-    if (!agentType) continue; // global_agent_enabled has no tier restriction
-    const access = await checkAgentPlanAccess(orgId, agentType);
-    if (!access.allowed) {
-      return NextResponse.json(upgradePlanError(), { status: 403 });
-    }
+  // Reject if enabling an agent the plan does not allow (disabling is always permitted)
+  const agentsBeingEnabled = Object.entries(updates)
+    .filter(([, value]) => value)
+    .map(([field]) => COLUMN_TO_AGENT[field as (typeof BOOLEAN_FIELDS)[number]])
+    .filter((agentType): agentType is string => !!agentType);
+
+  const accessResults = await Promise.all(
+    agentsBeingEnabled.map((agentType) => checkAgentPlanAccess(orgId, agentType))
+  );
+  if (accessResults.some((r) => !r.allowed)) {
+    return NextResponse.json(upgradePlanError(), { status: 403 });
   }
 
-  // Upsert: create row with defaults if missing, then apply updates
   const { data, error } = await supabaseAdmin
     .from('org_agent_settings')
     .upsert(

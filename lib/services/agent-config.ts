@@ -16,10 +16,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export type OrgAgentSettings = Database['public']['Tables']['org_agent_settings']['Row'];
 
-/** Plan tiers as stored in org_quotas.plan_tier */
 export type PlanTier = 'free' | 'starter' | 'professional' | 'enterprise';
 
-/** Column names that map to agent type strings */
 const AGENT_COLUMN_MAP: Record<string, keyof OrgAgentSettings> = {
   curator: 'curator_enabled',
   gap_intelligence: 'gap_intelligence_enabled',
@@ -38,24 +36,12 @@ const DEFAULT_SETTINGS: Omit<OrgAgentSettings, 'id' | 'org_id' | 'created_at' | 
   metadata: {},
 };
 
-/**
- * Agents allowed per plan tier.
- * Enterprise unlocks all agents; lower tiers have progressive subsets.
- */
+/** Agents unlocked per plan tier -- single source of truth for plan gating */
 const TIER_ALLOWED_AGENTS: Record<PlanTier, ReadonlySet<string>> = {
-  free: new Set([]),
+  free: new Set<string>(),
   starter: new Set(['onboarding', 'digest']),
   professional: new Set(['onboarding', 'digest', 'curator']),
   enterprise: new Set(['curator', 'gap_intelligence', 'onboarding', 'digest', 'workflow_extraction']),
-};
-
-/** Minimum plan tier required for each agent */
-const AGENT_REQUIRED_TIER: Record<string, PlanTier> = {
-  onboarding: 'starter',
-  digest: 'starter',
-  curator: 'professional',
-  gap_intelligence: 'enterprise',
-  workflow_extraction: 'enterprise',
 };
 
 const TIER_ORDER: Record<PlanTier, number> = {
@@ -65,23 +51,27 @@ const TIER_ORDER: Record<PlanTier, number> = {
   enterprise: 3,
 };
 
-/** Returns true when `actual` meets or exceeds `required`. */
+/** Tiers sorted lowest to highest, derived from TIER_ORDER */
+const TIERS_ASCENDING = (Object.keys(TIER_ORDER) as PlanTier[]).sort(
+  (a, b) => TIER_ORDER[a] - TIER_ORDER[b]
+);
+
 function tierMeetsRequirement(actual: PlanTier, required: PlanTier): boolean {
   return TIER_ORDER[actual] >= TIER_ORDER[required];
 }
 
 /**
- * Determine which plan tier an agent requires.
- * Returns 'starter' for unknown agents (safe default).
+ * Determine the minimum plan tier an agent requires.
+ * Returns 'enterprise' for unknown agents (safest default).
  */
 export function getRequiredTierForAgent(agentType: string): PlanTier {
-  return AGENT_REQUIRED_TIER[agentType] ?? 'starter';
+  for (const tier of TIERS_ASCENDING) {
+    if (TIER_ALLOWED_AGENTS[tier].has(agentType)) return tier;
+  }
+  return 'enterprise';
 }
 
-/**
- * Get the plan tier for an org from org_quotas.
- * Returns 'free' when no quota row exists (safe default).
- */
+/** Returns 'free' when no quota row exists (safe default). */
 export async function getOrgPlanTier(orgId: string): Promise<PlanTier> {
   const { data, error } = await supabaseAdmin
     .from('org_quotas')
@@ -97,18 +87,12 @@ export async function getOrgPlanTier(orgId: string): Promise<PlanTier> {
   return tier in TIER_ORDER ? tier : 'free';
 }
 
-/**
- * Check whether a plan tier allows an agent type.
- * Used by API routes to generate specific 403 messages.
- */
+/** Used by API routes to gate access and generate specific 403 messages. */
 export function planTierAllowsAgent(planTier: PlanTier, agentType: string): boolean {
   return TIER_ALLOWED_AGENTS[planTier]?.has(agentType) ?? false;
 }
 
-/**
- * Get agent settings for an org.
- * Returns the stored row or synthesized defaults if no row exists.
- */
+/** Returns the stored row or synthesized defaults when no row exists. */
 export async function getAgentSettings(orgId: string): Promise<OrgAgentSettings> {
   const { data, error } = await supabaseAdmin
     .from('org_agent_settings')
@@ -134,26 +118,19 @@ export async function getAgentSettings(orgId: string): Promise<OrgAgentSettings>
 }
 
 /**
- * Check whether a specific agent type is enabled for an org.
- *
- * Returns false when any of the following are true:
- * - The org's plan tier does not include the agent
- * - The global kill switch (global_agent_enabled) is off
- * - The individual agent toggle is off
+ * Returns false when the org's plan tier excludes the agent,
+ * the global kill switch is off, or the individual toggle is off.
  */
 export async function isAgentEnabled(orgId: string, agentType: string): Promise<boolean> {
-  // Fetch plan tier and settings in parallel for efficiency
   const [planTier, settings] = await Promise.all([
     getOrgPlanTier(orgId),
     getAgentSettings(orgId),
   ]);
 
-  // Plan tier gate — checked before individual toggles
   if (!planTierAllowsAgent(planTier, agentType)) {
     return false;
   }
 
-  // Global kill switch overrides individual toggles
   if (!settings.global_agent_enabled) {
     return false;
   }
@@ -166,10 +143,7 @@ export async function isAgentEnabled(orgId: string, agentType: string): Promise<
   return settings[column] === true;
 }
 
-/**
- * Upgrade-required error payload for API routes that gate on plan tier.
- * Return this as the body with HTTP 403 when plan tier blocks access.
- */
+/** HTTP 403 body when an org's plan tier blocks agent access. */
 export function upgradePlanError() {
   return {
     error: 'Agent features require Pro or Enterprise plan',
@@ -177,10 +151,7 @@ export function upgradePlanError() {
   } as const;
 }
 
-/**
- * Check whether an org's plan tier satisfies the requirement for a given agent.
- * Intended for API routes that must return 403 with upgrade details.
- */
+/** Check whether an org's plan tier satisfies the requirement for a given agent. */
 export async function checkAgentPlanAccess(
   orgId: string,
   agentType: string

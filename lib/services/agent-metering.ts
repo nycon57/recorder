@@ -8,7 +8,6 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
-/** Credits per 1000 tokens, configurable via CREDITS_PER_1K_TOKENS env var */
 function getCreditsPerKTokens(): number {
   const envVal = process.env.CREDITS_PER_1K_TOKENS;
   if (!envVal) return 1.0;
@@ -16,20 +15,17 @@ function getCreditsPerKTokens(): number {
   return Number.isFinite(parsed) ? parsed : 1.0;
 }
 
-/** Calculate credits from token counts */
 export function calculateCredits(tokensInput: number, tokensOutput: number): number {
   const totalTokens = tokensInput + tokensOutput;
   return (totalTokens / 1000) * getCreditsPerKTokens();
 }
 
-/** Summary of usage over a time period */
 export interface UsageSummary {
   totalCredits: number;
   totalTokens: number;
   actionCount: number;
 }
 
-/** Per-agent usage breakdown */
 export interface AgentUsageBreakdown {
   agentType: string;
   totalCredits: number;
@@ -37,7 +33,6 @@ export interface AgentUsageBreakdown {
   actionCount: number;
 }
 
-/** Record a single agent action's usage */
 export async function recordUsage(params: {
   orgId: string;
   agentType: string;
@@ -74,73 +69,65 @@ export async function recordUsage(params: {
 const ZERO_SUMMARY: UsageSummary = { totalCredits: 0, totalTokens: 0, actionCount: 0 };
 
 /**
- * Get aggregated usage summary for an org over a time period.
- * Uses database-side aggregation to avoid fetching unbounded rows.
- * Returns zeroed summary on error or when no usage exists.
+ * Normalize an RPC result into an array of rows.
+ * Supabase RPCs may return a single object or an array depending on the
+ * function definition. Returns null for empty/missing data so callers
+ * can short-circuit to a default value.
  */
+function normalizeRpcRows(data: unknown): Record<string, unknown>[] | null {
+  if (!data) return null;
+  const rows = Array.isArray(data) ? data : [data];
+  return rows.length === 0 ? null : rows;
+}
+
 export async function getUsageSummary(
   orgId: string,
   period: 'day' | 'week' | 'month'
 ): Promise<UsageSummary> {
-  const since = getPeriodStart(period);
-
   const { data, error } = await supabaseAdmin.rpc('get_agent_usage_summary', {
     p_org_id: orgId,
-    p_since: since,
+    p_since: getPeriodStart(period),
   } as Record<string, unknown>);
 
   if (error) {
     console.error('[AgentMetering] Failed to get usage summary:', {
-      orgId,
-      period,
-      error: error.message,
+      orgId, period, error: error.message,
     });
     return ZERO_SUMMARY;
   }
 
-  if (!data || (Array.isArray(data) && data.length === 0)) {
-    return ZERO_SUMMARY;
-  }
+  const rows = normalizeRpcRows(data);
+  if (!rows) return ZERO_SUMMARY;
 
-  const row = Array.isArray(data) ? data[0] : data;
+  const row = rows[0];
   return {
-    totalCredits: row.total_credits ?? 0,
+    totalCredits: Number(row.total_credits ?? 0),
     totalTokens: Number(row.total_tokens ?? 0),
     actionCount: Number(row.action_count ?? 0),
   };
 }
 
-/**
- * Get usage broken down by agent type for an org over a time period.
- * Uses database-side aggregation with GROUP BY to avoid fetching unbounded rows.
- * Returns an empty array on error or when no usage exists.
- */
+/** Returns an empty array on error or when no usage exists. */
 export async function getUsageByAgent(
   orgId: string,
   period: 'day' | 'week' | 'month'
 ): Promise<AgentUsageBreakdown[]> {
-  const since = getPeriodStart(period);
-
   const { data, error } = await supabaseAdmin.rpc('get_agent_usage_by_agent', {
     p_org_id: orgId,
-    p_since: since,
+    p_since: getPeriodStart(period),
   } as Record<string, unknown>);
 
   if (error) {
     console.error('[AgentMetering] Failed to get usage by agent:', {
-      orgId,
-      period,
-      error: error.message,
+      orgId, period, error: error.message,
     });
     return [];
   }
 
-  if (!data || (Array.isArray(data) && data.length === 0)) {
-    return [];
-  }
+  const rows = normalizeRpcRows(data);
+  if (!rows) return [];
 
-  const rows = Array.isArray(data) ? data : [data];
-  return rows.map((row: Record<string, unknown>) => ({
+  return rows.map((row) => ({
     agentType: String(row.agent_type ?? ''),
     totalCredits: Number(row.total_credits ?? 0),
     totalTokens: Number(row.total_tokens ?? 0),
@@ -148,7 +135,6 @@ export async function getUsageByAgent(
   }));
 }
 
-/** Daily credit usage for a single day */
 export interface DailyUsage {
   /** ISO date string, e.g. "2026-02-17" */
   day: string;
@@ -157,40 +143,30 @@ export interface DailyUsage {
   actionCount: number;
 }
 
-/** Usage attributed to a specific content item */
 export interface TopContentUsage {
   contentId: string;
   totalCredits: number;
   actionCount: number;
 }
 
-/**
- * Get daily credit usage for the current calendar month.
- * Returns one row per day with activity, sorted ascending by date.
- * Returns an empty array on error or when no usage exists.
- */
+/** One row per day with activity for the current calendar month, ascending. */
 export async function getUsageByDay(orgId: string): Promise<DailyUsage[]> {
-  const since = getMonthStart();
-
   const { data, error } = await supabaseAdmin.rpc('get_agent_usage_by_day', {
     p_org_id: orgId,
-    p_since: since,
+    p_since: getMonthStart(),
   } as Record<string, unknown>);
 
   if (error) {
     console.error('[AgentMetering] Failed to get usage by day:', {
-      orgId,
-      error: error.message,
+      orgId, error: error.message,
     });
     return [];
   }
 
-  if (!data || (Array.isArray(data) && data.length === 0)) {
-    return [];
-  }
+  const rows = normalizeRpcRows(data);
+  if (!rows) return [];
 
-  const rows = Array.isArray(data) ? data : [data];
-  return rows.map((row: Record<string, unknown>) => ({
+  return rows.map((row) => ({
     day: String(row.day ?? ''),
     totalCredits: Number(row.total_credits ?? 0),
     totalTokens: Number(row.total_tokens ?? 0),
@@ -198,50 +174,39 @@ export async function getUsageByDay(orgId: string): Promise<DailyUsage[]> {
   }));
 }
 
-/**
- * Get top content items by credit consumption for the current month.
- * Returns up to `limit` items sorted by total credits descending.
- * Returns an empty array on error or when no usage exists.
- */
+/** Top content items by credit consumption for the current month (descending). */
 export async function getTopContentByUsage(
   orgId: string,
   limit = 10
 ): Promise<TopContentUsage[]> {
-  const since = getMonthStart();
-
   const { data, error } = await supabaseAdmin.rpc('get_top_content_by_usage', {
     p_org_id: orgId,
-    p_since: since,
+    p_since: getMonthStart(),
     p_limit: limit,
   } as Record<string, unknown>);
 
   if (error) {
     console.error('[AgentMetering] Failed to get top content by usage:', {
-      orgId,
-      error: error.message,
+      orgId, error: error.message,
     });
     return [];
   }
 
-  if (!data || (Array.isArray(data) && data.length === 0)) {
-    return [];
-  }
+  const rows = normalizeRpcRows(data);
+  if (!rows) return [];
 
-  const rows = Array.isArray(data) ? data : [data];
-  return rows.map((row: Record<string, unknown>) => ({
+  return rows.map((row) => ({
     contentId: String(row.content_id ?? ''),
     totalCredits: Number(row.total_credits ?? 0),
     actionCount: Number(row.action_count ?? 0),
   }));
 }
 
-/** ISO timestamp for the first moment of the current calendar month */
 function getMonthStart(): string {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 }
 
-/** Compute the ISO timestamp for the start of a period relative to now */
 function getPeriodStart(period: 'day' | 'week' | 'month'): string {
   const now = new Date();
   switch (period) {

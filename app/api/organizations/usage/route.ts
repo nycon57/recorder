@@ -6,8 +6,7 @@ import {
   getTopContentByUsage,
   type DailyUsage,
 } from '@/lib/services/agent-metering';
-import { getOrgPlanTier } from '@/lib/services/agent-config';
-import type { PlanTier } from '@/lib/services/agent-config';
+import { getOrgPlanTier, type PlanTier } from '@/lib/services/agent-config';
 
 /** Credit limits per plan tier (monthly). */
 const PLAN_CREDIT_LIMITS: Record<PlanTier, number> = {
@@ -18,15 +17,9 @@ const PLAN_CREDIT_LIMITS: Record<PlanTier, number> = {
 };
 
 /**
- * Project monthly credit usage from daily activity so far this month.
- * Accounts for varying month lengths and weekday/weekend variance.
- *
- * Strategy:
- * 1. Compute per-day averages for weekdays and weekends separately.
- * 2. Count remaining weekdays/weekend days in the calendar month.
- * 3. Project total = credits so far + (avg_weekday × remaining_weekdays)
- *                                    + (avg_weekend × remaining_weekends)
- * Falls back to simple linear extrapolation when fewer than 3 days of data exist.
+ * Project monthly credit usage from daily activity so far.
+ * Separates weekday/weekend averages for accuracy when >= 3 days of data exist;
+ * falls back to simple linear extrapolation otherwise.
  */
 function projectMonthlyUsage(dailyData: DailyUsage[], now: Date): number {
   if (dailyData.length === 0) return 0;
@@ -38,12 +31,10 @@ function projectMonthlyUsage(dailyData: DailyUsage[], now: Date): number {
   if (dailyData.length < 3 || remainingDays <= 0) {
     // Simple linear extrapolation for sparse data or end of month
     const totalSoFar = dailyData.reduce((sum, d) => sum + d.totalCredits, 0);
-    const daysElapsed = currentDay;
-    const dailyAvg = totalSoFar / daysElapsed;
+    const dailyAvg = totalSoFar / currentDay;
     return Math.round(totalSoFar + dailyAvg * remainingDays);
   }
 
-  // Separate weekday vs weekend averages to handle usage patterns
   let weekdayTotal = 0;
   let weekdayCount = 0;
   let weekendTotal = 0;
@@ -51,7 +42,7 @@ function projectMonthlyUsage(dailyData: DailyUsage[], now: Date): number {
 
   for (const d of dailyData) {
     const date = new Date(d.day);
-    const dayOfWeek = date.getDay(); // 0=Sun, 6=Sat
+    const dayOfWeek = date.getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) {
       weekendTotal += d.totalCredits;
       weekendCount++;
@@ -64,7 +55,6 @@ function projectMonthlyUsage(dailyData: DailyUsage[], now: Date): number {
   const avgWeekday = weekdayCount > 0 ? weekdayTotal / weekdayCount : 0;
   const avgWeekend = weekendCount > 0 ? weekendTotal / weekendCount : avgWeekday;
 
-  // Count remaining weekdays and weekend days in the month
   let remainingWeekdays = 0;
   let remainingWeekends = 0;
   for (let day = currentDay + 1; day <= daysInMonth; day++) {
@@ -93,7 +83,6 @@ export const GET = apiHandler(async () => {
   const { orgId } = await requireOrg();
   const now = new Date();
 
-  // Fetch all data in parallel
   const [summary, byAgent, byDay, topContent, planTier] = await Promise.all([
     getUsageSummary(orgId, 'month'),
     getUsageByAgent(orgId, 'month'),
