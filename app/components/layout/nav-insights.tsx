@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { BarChart3, Newspaper } from "lucide-react"
+import { BarChart3, Newspaper, AlertTriangle } from "lucide-react"
 
 import {
   SidebarGroup,
@@ -17,6 +17,7 @@ export function NavInsights({ hasDigestEnabled = false }: { hasDigestEnabled?: b
   const pathname = usePathname()
   const isAnalyticsActive = pathname === "/analytics"
   const isDigestActive = pathname === "/digest"
+  const isKnowledgeGapsActive = pathname === "/knowledge-gaps"
 
   return (
     <SidebarGroup>
@@ -32,6 +33,18 @@ export function NavInsights({ hasDigestEnabled = false }: { hasDigestEnabled?: b
               <Link href="/analytics">
                 <BarChart3 />
                 <span>Analytics</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={isKnowledgeGapsActive}
+              tooltip="Knowledge gaps"
+            >
+              <Link href="/knowledge-gaps">
+                <AlertTriangle />
+                <span>Knowledge Gaps</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

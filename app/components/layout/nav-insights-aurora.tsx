@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import * as motion from "motion/react-client"
-import { Newspaper } from "lucide-react"
+import { Newspaper, AlertTriangle } from "lucide-react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Analytics01Icon } from "@hugeicons/core-free-icons"
 
@@ -59,6 +59,7 @@ export function NavInsightsAurora({ hasDigestEnabled = false }: { hasDigestEnabl
   const pathname = usePathname()
   const isAnalyticsActive = pathname === "/analytics"
   const isDigestActive = pathname === "/digest"
+  const isKnowledgeGapsActive = pathname === "/knowledge-gaps"
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
@@ -100,6 +101,22 @@ export function NavInsightsAurora({ hasDigestEnabled = false }: { hasDigestEnabl
                       <HugeiconsIcon icon={Analytics01Icon} className="size-4" />
                     </span>
                     <span>Analytics</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </MotionDiv>
+            <MotionDiv {...(mounted ? { variants: itemVariants } : {})}>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isKnowledgeGapsActive}
+                  tooltip="Knowledge gaps"
+                >
+                  <Link href="/knowledge-gaps" className="group/nav-item">
+                    <span className="inline-flex transition-transform duration-200 group-hover/nav-item:scale-110">
+                      <AlertTriangle className="size-4" />
+                    </span>
+                    <span>Knowledge Gaps</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
