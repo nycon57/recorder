@@ -7,6 +7,7 @@
 
 import { googleAI, PROMPTS, GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import { isAgentEnabled } from '@/lib/services/agent-config';
 import type { Database } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
@@ -210,7 +211,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
     // Fetch recording metadata for context (including analysis settings)
     const { data: recording } = await supabase
       .from('content')
-      .select('title, metadata, analysis_type, skip_analysis')
+      .select('title, metadata, analysis_type, skip_analysis, content_type')
       .eq('id', recordingId)
       .single();
 
@@ -526,8 +527,8 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
       .update({ status: 'completed' })
       .eq('id', recordingId);
 
-    // Enqueue embedding generation job
-    await supabase.from('jobs').insert({
+    // Enqueue embeddings job (always required)
+    const embeddingsInsert = supabase.from('jobs').insert({
       type: 'generate_embeddings',
       status: 'pending',
       payload: {
@@ -538,6 +539,25 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
       },
       dedupe_key: `generate_embeddings:${recordingId}`,
     });
+
+    // Enqueue workflow extraction in parallel for screen recordings when the agent is enabled
+    const shouldExtractWorkflow =
+      recording?.content_type === 'recording' &&
+      (await isAgentEnabled(orgId, 'workflow_extraction'));
+
+    if (shouldExtractWorkflow) {
+      const workflowInsert = supabase.from('jobs').insert({
+        type: 'workflow_extraction',
+        status: 'pending',
+        payload: { recordingId, orgId },
+        dedupe_key: `workflow_extraction:${recordingId}`,
+        priority: 2, // JOB_PRIORITY.NORMAL
+      });
+      logger.info('Enqueuing workflow extraction job', { context: { recordingId } });
+      await Promise.all([embeddingsInsert, workflowInsert]);
+    } else {
+      await embeddingsInsert;
+    }
 
     logger.info('Enqueued embedding generation', {
       context: {

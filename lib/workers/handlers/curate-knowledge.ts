@@ -1169,6 +1169,18 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
           `Potentially superseded by "${newContent.title ?? 'Untitled'}" (${detail})`
         );
         confidence = Math.max(confidence, 0.8);
+
+        // When concept overlap ≥ 80%, mark any active workflows for this content as outdated
+        if (overlapPercent >= 80) {
+          try {
+            await markSupersededWorkflowsAsOutdated(supabase, item.id, contentId, orgId);
+          } catch (workflowError) {
+            console.error(
+              `[CurateKnowledge] Failed to mark workflows outdated for ${item.id} (non-critical):`,
+              workflowError,
+            );
+          }
+        }
       }
       // Criterion 2: concept freshness (any shared concepts, lower signal)
       else if (sharedCount > 0) {
@@ -1237,6 +1249,58 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
 
   console.log(
     `[CurateKnowledge] Staleness check triggered by ${contentId}: flagged ${flaggedCount} of ${candidates.length} candidates`
+  );
+}
+
+/**
+ * Mark the active workflows of a superseded content item as 'outdated'.
+ *
+ * When new content covers 80%+ of an existing content item's concepts, the
+ * existing workflows are no longer current. This function:
+ * 1. Checks whether the superseded content has any active (draft/published) workflows.
+ * 2. Looks up the new content's most recent workflow (if already extracted).
+ * 3. Updates the superseded workflows to status='outdated', setting superseded_by
+ *    to the new workflow's ID when available (null if extraction hasn't run yet).
+ */
+async function markSupersededWorkflowsAsOutdated(
+  supabase: ReturnType<typeof createAdminClient>,
+  supersededContentId: string,
+  newContentId: string,
+  orgId: string,
+): Promise<void> {
+  const { data: existingWorkflows } = await supabase
+    .from('workflows')
+    .select('id')
+    .eq('content_id', supersededContentId)
+    .eq('org_id', orgId)
+    .in('status', ['draft', 'published']);
+
+  if (!existingWorkflows?.length) return;
+
+  // Find the new content's most recent workflow (may not exist yet if extraction
+  // hasn't run — superseded_by will be updated once workflow_extraction completes)
+  const { data: newWorkflow } = await supabase
+    .from('workflows')
+    .select('id')
+    .eq('content_id', newContentId)
+    .eq('org_id', orgId)
+    .in('status', ['draft', 'published'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const supersededById = newWorkflow?.id ?? null;
+
+  await supabase
+    .from('workflows')
+    .update({ status: 'outdated', superseded_by: supersededById })
+    .eq('content_id', supersededContentId)
+    .eq('org_id', orgId)
+    .in('id', existingWorkflows.map(w => w.id));
+
+  console.log(
+    `[CurateKnowledge] Marked ${existingWorkflows.length} workflow(s) for content ${supersededContentId} as outdated` +
+      (supersededById ? ` — superseded by workflow ${supersededById}` : ' (new workflow not yet extracted)'),
   );
 }
 
