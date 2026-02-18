@@ -701,7 +701,6 @@ async function busFactorAnalysis(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string
 ): Promise<void> {
-  // Count active users. Skip for teams too small to have a bus factor problem.
   const { count: activeUserCount } = await supabase
     .from('users')
     .select('id', { count: 'exact', head: true })
@@ -731,8 +730,8 @@ async function busFactorAnalysis(
       inputSummary: `Bus factor analysis for org ${orgId} (${activeUserCount} active users)`,
     },
     async () => {
-      // Fetch all concept_mentions for the org (concept_id + content_id only).
-      const { data: mentions, error: mentionsError } = await supabase
+      // concept_mentions is not in generated DB types — cast to concrete shape below.
+      const { data: rawMentions, error: mentionsError } = await supabase
         .from('concept_mentions')
         .select('concept_id, content_id')
         .eq('org_id', orgId)
@@ -743,10 +742,10 @@ async function busFactorAnalysis(
         return;
       }
 
-      if (!mentions?.length) return;
+      if (!rawMentions?.length) return;
 
-      // Build content_id → created_by map from active, processed content.
-      const uniqueContentIds = [...new Set(mentions.map((m: any) => m.content_id as string))];
+      const mentions = rawMentions as { concept_id: string; content_id: string }[];
+      const uniqueContentIds = [...new Set(mentions.map((m) => m.content_id))];
       const contentUserMap = new Map<string, string>();
       const BATCH = 100;
 
@@ -769,18 +768,12 @@ async function busFactorAnalysis(
       const conceptUsers = new Map<string, Set<string>>();
       const conceptCounts = new Map<string, number>();
 
-      for (const mention of mentions as any[]) {
-        const contentId = mention.content_id as string;
-        const conceptId = mention.concept_id as string;
+      for (const { content_id: contentId, concept_id: conceptId } of mentions) {
         const userId = contentUserMap.get(contentId);
-        if (!userId) continue; // content deleted, unprocessed, or filtered out
+        if (!userId) continue;
 
-        let userSet = conceptUsers.get(conceptId);
-        if (!userSet) {
-          userSet = new Set();
-          conceptUsers.set(conceptId, userSet);
-        }
-        userSet.add(userId);
+        if (!conceptUsers.has(conceptId)) conceptUsers.set(conceptId, new Set());
+        conceptUsers.get(conceptId)!.add(userId);
         conceptCounts.set(conceptId, (conceptCounts.get(conceptId) ?? 0) + 1);
       }
 
@@ -805,27 +798,26 @@ async function busFactorAnalysis(
         return;
       }
 
-      // Resolve concept names for the at-risk concepts.
       const conceptIds = singleExpert.map((s) => s.conceptId);
-      const { data: conceptRows } = await supabase
+      // knowledge_concepts is not in generated DB types — cast to concrete shape.
+      const { data: rawConceptRows } = await supabase
         .from('knowledge_concepts')
         .select('id, name')
+        .eq('org_id', orgId)
         .in('id', conceptIds);
-      const conceptNameMap = new Map<string, string>(
-        (conceptRows ?? []).map((c: any) => [c.id as string, c.name as string])
-      );
+      const conceptRows = (rawConceptRows ?? []) as { id: string; name: string }[];
+      const conceptNameMap = new Map<string, string>(conceptRows.map((c) => [c.id, c.name]));
 
-      // Resolve display names for the expert users.
       const expertIds = [...new Set(singleExpert.map((s) => s.expertUserId))];
       const { data: userRows } = await supabase
         .from('users')
         .select('id, name, email')
+        .eq('org_id', orgId)
         .in('id', expertIds);
       const userDisplayName = new Map<string, string>(
-        (userRows ?? []).map((u: any) => [u.id as string, (u.name ?? u.email) as string])
+        (userRows ?? []).map((u) => [u.id, u.name ?? u.email])
       );
 
-      // Load existing open/acknowledged bus_factor gaps to enable upsert.
       const { data: existingGaps } = await supabase
         .from('knowledge_gaps')
         .select('id, metadata')
@@ -840,16 +832,22 @@ async function busFactorAnalysis(
         }
       }
 
-      // Upsert a knowledge_gap for each single-expert concept.
-      let created = 0;
       let updated = 0;
+      const toInsert: Array<{
+        org_id: string;
+        topic: string;
+        description: string;
+        severity: KnowledgeGapSeverity;
+        status: string;
+        metadata: Json;
+      }> = [];
 
       for (const { conceptId, expertUserId, mentionCount } of singleExpert) {
         const conceptName = conceptNameMap.get(conceptId);
         if (!conceptName) continue;
 
         const userName = userDisplayName.get(expertUserId) ?? expertUserId;
-        // 5+ mentions → well-documented by one person, therefore high-risk.
+        // 5+ mentions = well-documented by one person, therefore high-risk.
         const severity: KnowledgeGapSeverity = mentionCount >= 5 ? 'high' : 'medium';
         const topic = `${conceptName} (single expert)`;
         const description =
@@ -864,17 +862,22 @@ async function busFactorAnalysis(
 
         const existingId = existingByConceptId.get(conceptId);
         if (existingId) {
+          // Updates must be per-row: each gap has unique topic/description/severity.
           const { error } = await supabase
             .from('knowledge_gaps')
             .update({ topic, description, severity, metadata })
             .eq('id', existingId);
           if (!error) updated++;
         } else {
-          const { error } = await supabase
-            .from('knowledge_gaps')
-            .insert({ org_id: orgId, topic, description, severity, status: 'open', metadata });
-          if (!error) created++;
+          toInsert.push({ org_id: orgId, topic, description, severity, status: 'open', metadata });
         }
+      }
+
+      // Batch-insert new gaps in a single round trip.
+      let created = 0;
+      if (toInsert.length) {
+        const { error } = await supabase.from('knowledge_gaps').insert(toInsert);
+        created = error ? 0 : toInsert.length;
       }
 
       console.log(
