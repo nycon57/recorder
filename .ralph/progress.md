@@ -7325,3 +7325,45 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - /code-simplifier skill is unavailable in this environment; fall back to manual simplification review
   - log-activity.sh does not exist in this project; skip that step
 ---
+
+## [2026-02-18] - US-022: Implement analyze_knowledge_gaps job handler
+Thread: N/A
+Run: 20260218-102702-26527 (iteration 2)
+Pass: 4 (Phase: Finalize)
+Gates cleared this pass: G3 (Build Verification), G7 (Acceptance)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-102702-26527-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-102702-26527-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 6f66612 [Finalize 4] fix(workers): track uniqueSearchers on existing gaps during upsert
+- Post-commit status: clean for US-022 files (pre-existing modified files from other stories remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: no (backend story, finalize pass)
+  - /code-review: no (Pass 2 complete)
+  - /code-simplifier: no (Pass 3 complete)
+  - /frontend-design: no (backend story)
+  - /web-design-guidelines: no (backend story)
+  - /agent-browser: no (backend story)
+  - /supabase-postgres-best-practices: yes
+  - /ai-sdk: yes
+  - /next-cache-components: N/A
+  - /vercel-composition-patterns: N/A
+  - Other skills: /commit
+- Verification:
+  - Command: `npm run type:check` -> PASS (pre-existing Buffer errors in unrelated handlers only)
+  - Command: `npm run build` -> PASS
+  - Command: `ESLINT_USE_FLAT_CONFIG=false npx eslint lib/workers/handlers/analyze-knowledge-gaps.ts` -> PASS
+- Files changed:
+  - lib/workers/handlers/analyze-knowledge-gaps.ts (tracked uniqueSearchers in existingWithEmbeddings)
+- What was implemented:
+  - Found uncommitted improvement from prior pass: uniqueSearchers was referenced via `?? 0` fallback on match objects but not included in the tracking type or initial mapping. Added uniqueSearchers field to the existingWithEmbeddings type, initialized to 0 from DB rows (unique_searchers not selected), and used combinedUniqueSearchers = Math.max(match.uniqueSearchers, gap.uniqueSearchers) to keep the value monotonically non-decreasing across runs.
+  - All acceptance criteria verified: handler exists, isAgentEnabled check, three data sources mined, >0.8 clustering, impact_score formula, severity thresholds, >0.9 upsert merge, withAgentLogging, JobType union, JOB_HANDLERS registration, edge cases (no data → skipped, duplicate merge, bot filtering via null user_id).
+- **Learnings for future iterations:**
+  - When inline types reference fields also used downstream (e.g., in Math.max comparisons), ensure the field is included in the type definition AND initialized in the mapping — otherwise TypeScript ?? 0 fallback silently masks a missing field
+  - Always grep for staged-but-uncommitted changes before declaring finalize complete
+---
