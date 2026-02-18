@@ -8144,3 +8144,90 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - Always add focus-visible:ring-* and motion-reduce:transition-none on interactive buttons
   - web-design-guidelines skill provides actionable specific rules worth running on every UI component
 ---
+
+## [2026-02-18 13:12:23] - US-044: Implement workflow staleness detection and wire into processing pipeline
+Thread: 20260218-131223-74355
+Run: 20260218-131223-74355 (iteration 2)
+Pass: 1 (Phase: Foundation)
+Gates cleared this pass: G1 (Comprehension), G2 (Implementation), G3 (Build Verification), G5 (Simplification)
+Gates cleared (cumulative): G1, G2, G3, G5
+Gates remaining: G4 (Code Review), G6 (Audit), G7 (Acceptance)
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-131223-74355-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-131223-74355-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: e0089e1 feat(workflow): add staleness detection and pipeline wiring
+- Post-commit status: clean (story files only; pre-existing unstaged changes from other stories remain)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — backend-only story; no architecture ambiguity requiring planning]
+  - /code-review: [no — Pass 1; scheduled for Pass 2]
+  - /code-simplifier: [yes]
+  - /frontend-design: [N/A — no UI changes]
+  - /web-design-guidelines: [N/A — no UI changes]
+  - /agent-browser: [N/A — no UI changes]
+  - /supabase-postgres-best-practices: [yes — queries scoped by org_id, used .maybeSingle()]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A — no page/route changes]
+  - /vercel-composition-patterns: [N/A — no component changes]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check (changed files) -> PASS (no errors in curate-knowledge.ts or docify-google.ts)
+- Files changed:
+  - lib/workers/handlers/curate-knowledge.ts
+  - lib/workers/handlers/docify-google.ts
+- What was implemented:
+  1. Added `markSupersededWorkflowsAsOutdated()` to curate-knowledge.ts. When detectStaleness() detects ≥80% concept overlap, it marks the superseded content's active workflows as 'outdated', setting superseded_by to the new content's workflow ID (null if not yet extracted). Non-fatal via try/catch.
+  2. Wired workflow_extraction job into docify-google.ts: after document generation, if content_type='recording' and isAgentEnabled(orgId,'workflow_extraction'), enqueue workflow_extraction job in parallel with generate_embeddings (priority=2/NORMAL, dedupe_key prevents duplicates).
+- **Learnings for future iterations:**
+  - Supabase insert builders are PostgrestFilterBuilder, not Promise — use them directly in Promise.all without wrapping in a typed Promise array
+  - Handlers cannot import JOB_PRIORITY from job-processor.ts (circular dep); use numeric value with inline comment
+  - The 'outdated' as const cast is unnecessary when WorkflowStatus union already includes 'outdated'
+---
+
+## [2026-02-18 13:47:26] - US-044: Implement workflow staleness detection and wire into processing pipeline
+Thread: 20260218-134726-25773
+Run: 20260218-134726-25773 (iteration 1)
+Pass: 2 (Phase: Harden)
+Gates cleared this pass: G3 (Build Verification), G4 (Code Review), G6 (Audit), G7 (Acceptance)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-134726-25773-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-134726-25773-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: (pending — see below)
+- Post-commit status: (pending)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — N/A for Harden pass]
+  - /code-review: [yes — manual review (CodeRabbit CLI requires TTY)]
+  - /code-simplifier: [no — G5 cleared in Pass 1]
+  - /frontend-design: [N/A — no UI changes]
+  - /web-design-guidelines: [N/A — no UI changes]
+  - /agent-browser: [N/A — no UI changes]
+  - /supabase-postgres-best-practices: [N/A — no new queries added]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check (changed files) -> PASS (no errors in curate-knowledge.ts or docify-google.ts)
+- Files changed:
+  - lib/workers/handlers/curate-knowledge.ts (fix: check updateError from workflows update)
+- What was implemented:
+  - Harden: Added error check to `markSupersededWorkflowsAsOutdated` — the Supabase `.update()` call now destructures `{ error: updateError }` and throws if the update fails. Previously the error was silently ignored; now it propagates to the non-fatal try/catch in `detectStaleness`.
+  - All 9 acceptance criteria verified passing.
+  - Security: org_id-scoped queries, no user input in SQL.
+  - Performance: parallel Promise.all, indexed columns, short-circuit on non-recording types.
+  - Regression: markSupersededWorkflowsAsOutdated is non-fatal, embeddings path unchanged.
+- **Learnings for future iterations:**
+  - CodeRabbit CLI requires interactive TTY — cannot run in non-TTY agent context; use manual review instead
+  - Always check error return from Supabase `.update()` calls — builders return `{ error }` not throw
+---

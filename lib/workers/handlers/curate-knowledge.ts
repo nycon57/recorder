@@ -1291,12 +1291,16 @@ async function markSupersededWorkflowsAsOutdated(
 
   const supersededById = newWorkflow?.id ?? null;
 
-  await supabase
+  const { error: updateError } = await supabase
     .from('workflows')
     .update({ status: 'outdated', superseded_by: supersededById })
     .eq('content_id', supersededContentId)
     .eq('org_id', orgId)
     .in('id', existingWorkflows.map(w => w.id));
+
+  if (updateError) {
+    throw new Error(`Failed to mark workflows as outdated: ${updateError.message}`);
+  }
 
   console.log(
     `[CurateKnowledge] Marked ${existingWorkflows.length} workflow(s) for content ${supersededContentId} as outdated` +
