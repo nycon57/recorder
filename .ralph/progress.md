@@ -7275,3 +7275,53 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - Check that non-critical operations (suggestion logging, memory writes) are wrapped in try/catch
     so a transient DB failure doesn't cascade to fail the entire job.
 ---
+
+## [2026-02-18 10:27] - US-020: Implement merge suggestion logic and schedule Curator periodic runs
+Thread: [session 20260218-102702-26527]
+Run: 20260218-102702-26527 (iteration 1)
+Pass: 3 (Phase: Finalize)
+Gates cleared this pass: G7 (Acceptance)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-102702-26527-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-102702-26527-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (no code changes; all US-020 changes already committed in Passes 1–2)
+- Post-commit status: clean (remaining modified files are pre-existing from other stories)
+- Skills invoked:
+  - /next-best-practices: MANDATORY — yes
+  - /vercel-react-best-practices: MANDATORY — yes
+  - /writing-clearly-and-concisely: MANDATORY — yes
+  - /feature-dev: no — finalize pass, no architecture changes
+  - /code-review: no — completed in Pass 2
+  - /code-simplifier: no — skill unavailable (tool error); simplification was done manually in Pass 2
+  - /frontend-design: N/A — no UI changes
+  - /web-design-guidelines: N/A — no UI changes
+  - /agent-browser: N/A — no UI changes
+  - /supabase-postgres-best-practices: N/A — no schema changes
+  - /ai-sdk: N/A — no AI SDK changes
+  - /next-cache-components: N/A — worker code, no pages
+  - /vercel-composition-patterns: N/A — no component changes
+  - Other skills: /commit (no commit needed this pass)
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npx tsc --noEmit (US-020 files) -> PASS (no errors in our files; pre-existing test errors elsewhere)
+- Files changed:
+  - none (all changes from Passes 1–2)
+- What was implemented:
+  All 10 acceptance criteria verified:
+  1. suggestMerges() implemented — curate-knowledge.ts:956-1005
+  2. Logs action_type 'suggest_merge' with JSON { sourceIds, reason, suggestedAction } — lines 984-999
+  3. curate_knowledge scheduled daily — scheduler.ts + scripts/worker.ts
+  4. Dedupe key format: curate_knowledge:{orgId}:{YYYY-MM-DD} — scheduler.ts:65
+  5. All curator-enabled orgs processed — scheduler.ts queries org_agent_settings
+  6. Typecheck passes — confirmed (no errors in our files)
+  7. Example AC: NEAR_DUPLICATE ≥80% overlap → archive_older — buildMergeSuggestion():944-945
+  8. Edge case: dedupe_key prevents double-run — scheduler.ts checks pending/processing/completed
+  9. Edge case: curator disabled mid-cycle → isAgentEnabled() skips job — curate-knowledge.ts:146-149
+  10. Edge case: org with 0 content → early return with 'No new content' — curate-knowledge.ts:234-243
+- **Learnings for future iterations:**
+  - /code-simplifier skill is unavailable in this environment; fall back to manual simplification review
+  - log-activity.sh does not exist in this project; skip that step
+---
