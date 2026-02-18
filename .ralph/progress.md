@@ -6265,6 +6265,53 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - Recovery/finalize runs should be concise — verify gates, record progress, emit signal
 ---
 
+## [2026-02-18 08:57:00] - US-016: Implement auto-categorization logic for Knowledge Curator
+Thread: N/A
+Run: 20260218-085648-91558 (iteration 2)
+Pass: 6 (Phase: Finalize)
+Gates cleared this pass: G1, G2, G3, G4, G5, G6, G7
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-085648-91558-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-085648-91558-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (no code changes — final verification run)
+- Post-commit status: clean (pre-existing modified files from other stories)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /commit: [MANDATORY — yes]
+  - /feature-dev: no (finalize pass, no new implementation)
+  - /code-review: no (completed in Pass 2)
+  - /code-simplifier: no (completed in Pass 3)
+  - /frontend-design: N/A (backend story)
+  - /web-design-guidelines: N/A (backend story)
+  - /agent-browser: N/A (backend story)
+  - /supabase-postgres-best-practices: N/A (no schema changes)
+  - /ai-sdk: yes (loaded for verification context)
+  - /next-cache-components: N/A (worker handler)
+  - /vercel-composition-patterns: N/A (no React components)
+  - Other skills: none
+- Verification:
+  - Command: npm run build -> PASS
+  - Command: npm run type:check (grep curate-knowledge) -> PASS (0 errors in our file)
+- Files changed:
+  - none (verification-only pass)
+- What was implemented:
+  - Final verification pass confirming all 12 acceptance criteria met in curate-knowledge.ts
+  - categorizeContent(): queries concepts, org tags, content-tag associations, calls Gemini
+  - Stores suggestions in agent_activity_log (action_type 'suggest_tags', target_entity 'content')
+  - No auto-apply; only suggests tags with confidence 0-1
+  - Agent memory with key tag_vocabulary:{orgId} (storeMemory + recallMemory)
+  - Logged via withAgentLogging agentType 'curator', actionType 'auto_categorize'
+  - Edge cases: no concepts → skipped; existing tags filtered; near-duplicates deduplicated
+  - Build PASS, type-check PASS (pre-existing test file errors unrelated to US-016)
+- **Learnings for future iterations:**
+  - When prior pass marks all gates clear but doesn't emit COMPLETE, subsequent pass just re-verifies and signals
+---
+
 ## [2026-02-17] - US-039: Create in-app digest view and schedule weekly generation
 Thread: N/A
 Run: 20260217-213700-9017 (iteration 14)
@@ -6902,4 +6949,47 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
 - **Learnings for future iterations:**
   - For auth-gated pages, browser verification confirms the app serves and the component structure is correct via code analysis; a live session requires the extension mode or pre-seeded credentials
   - web-design-guidelines `hover:` rule applies to all links — even those embedded in alert banners. Use `transition-opacity hover:opacity-75` as a neutral hover that works across any color context.
+---
+
+## [2026-02-18] - US-010: Add related content suggestions to content detail page
+Thread: N/A
+Run: 20260218-085648-91558 (iteration 1)
+Pass: 5 (Phase: Finalize)
+Gates cleared this pass: G7 (final acceptance verification)
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7, G-UI1, G-UI2
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-085648-91558-iter-1.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-085648-91558-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (no code changes — finalize verification run)
+- Post-commit status: clean (pre-existing unrelated modifications in app/, lib/, package files)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /commit: [MANDATORY — yes]
+  - /feature-dev: [no — finalize pass, no new implementation]
+  - /code-review: [no — completed in Pass 2]
+  - /code-simplifier: [no — completed in Pass 3]
+  - /frontend-design: [N/A — verified in prior passes]
+  - /web-design-guidelines: [N/A — completed in Pass 2]
+  - /agent-browser: [N/A — blocked by Clerk auth, verified via code in Pass 3]
+  - /supabase-postgres-best-practices: [N/A — no DB changes]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: none
+- Verification:
+  - Command: `npm run build` -> PASS (✓ Compiled successfully in 7.7s)
+  - Command: `npm run type:check` -> PASS (0 errors in US-010 files; pre-existing errors in lib/workers/transcribe*.ts only)
+  - All 10 acceptance criteria verified against source code -> PASS
+- Files changed:
+  - none (no code changes this pass)
+- What was implemented:
+  - Finalize verification pass — confirmed all gates cleared by prior passes still hold
+  - app/(dashboard)/library/[id]/page.tsx: RelatedContent imported (line 12), rendered conditionally for 'completed'/'transcribed' status (line 182-195), heading with text-lg font-light (line 191), mt-8 spacing (line 190), aria-labelledby (line 190), Suspense boundary for graceful degradation (line 192), contentId and item.org_id passed (line 193)
+  - app/components/content/RelatedContent.tsx: async Server Component, concept overlap + vector similarity fallback, empty state rendered, clickable cards, limit=5 default
+- **Learnings for future iterations:**
+  - When all gates are cleared in a prior pass, the Finalize pass is a quick verification — read files, run build+typecheck, confirm criteria, emit COMPLETE
 ---
