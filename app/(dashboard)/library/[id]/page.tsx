@@ -12,6 +12,7 @@ import {
 import { RelatedContent } from '@/app/components/content/RelatedContent';
 import { ContentChatWidget } from '@/app/components/content/ContentChatWidget';
 import { OnboardingViewTracker } from '@/app/components/onboarding/OnboardingViewTracker';
+import type { WorkflowStep } from '@/lib/types/database';
 import WorkflowViewer from '@/app/components/workflow/WorkflowViewer';
 
 async function getContentItem(id: string, clerkOrgId: string) {
@@ -147,7 +148,7 @@ export default async function LibraryItemDetailPage({
     .filter(Boolean) || [];
 
   // Fetch the most recent non-archived workflow for this content
-  const { data: workflow } = await supabaseAdmin
+  const { data: rawWorkflow } = await supabaseAdmin
     .from('workflows')
     .select('*')
     .eq('content_id', id)
@@ -156,6 +157,37 @@ export default async function LibraryItemDetailPage({
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  const FRAMES_BUCKET = process.env.FRAMES_STORAGE_BUCKET || 'video-frames';
+
+  let workflow = rawWorkflow;
+  let supersededByContentId: string | null = null;
+
+  if (rawWorkflow) {
+    const steps = await Promise.all(
+      rawWorkflow.steps.map(async (step: WorkflowStep) => {
+        if (!step.screenshotPath) return step;
+        try {
+          const { data } = await supabaseAdmin.storage
+            .from(FRAMES_BUCKET)
+            .createSignedUrl(step.screenshotPath, 3600);
+          return { ...step, screenshotPath: data?.signedUrl ?? null };
+        } catch {
+          return { ...step, screenshotPath: null };
+        }
+      })
+    );
+    workflow = { ...rawWorkflow, steps };
+
+    if (rawWorkflow.superseded_by) {
+      const { data: superseding } = await supabaseAdmin
+        .from('workflows')
+        .select('content_id')
+        .eq('id', rawWorkflow.superseded_by)
+        .single();
+      supersededByContentId = superseding?.content_id ?? null;
+    }
+  }
 
   const sharedProps = {
     recording: item,
@@ -200,7 +232,11 @@ export default async function LibraryItemDetailPage({
       {workflow && (
         <section className="mt-8 px-4 container mx-auto" aria-labelledby="workflow-heading">
           <h2 id="workflow-heading" className="text-lg font-light mb-4">Workflow</h2>
-          <WorkflowViewer workflowId={workflow.id} workflow={workflow} />
+          <WorkflowViewer
+                  workflowId={workflow.id}
+                  workflow={workflow}
+                  supersededByContentId={supersededByContentId}
+                />
         </section>
       )}
       {showRelated && (

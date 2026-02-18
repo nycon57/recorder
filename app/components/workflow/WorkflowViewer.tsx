@@ -1,6 +1,6 @@
 'use client';
 
-import * as React from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Clock, Maximize2 } from 'lucide-react';
 
@@ -11,14 +11,14 @@ import {
   DialogTitle,
 } from '@/app/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import type { WorkflowStep, WorkflowStatus } from '@/lib/types/database';
-import type { Database } from '@/lib/types/database';
+import type { WorkflowStep, WorkflowStatus, Database } from '@/lib/types/database';
 
 type WorkflowRow = Database['public']['Tables']['workflows']['Row'];
 
 export interface WorkflowViewerProps {
   workflowId: string;
   workflow?: WorkflowRow;
+  supersededByContentId?: string | null;
 }
 
 function formatTimestamp(seconds: number): string {
@@ -49,16 +49,20 @@ const STATUS_CONFIG: Record<WorkflowStatus, { label: string; className: string }
 export default function WorkflowViewer({
   workflowId,
   workflow: initialWorkflow,
+  supersededByContentId: initialSupersededContentId,
 }: WorkflowViewerProps) {
-  const [workflow, setWorkflow] = React.useState<WorkflowRow | null>(
+  const [workflow, setWorkflow] = useState<WorkflowRow | null>(
     initialWorkflow ?? null
   );
-  const [loading, setLoading] = React.useState(!initialWorkflow);
-  const [error, setError] = React.useState<string | null>(null);
-  const [activeStep, setActiveStep] = React.useState<number | null>(null);
-  const [expandedImage, setExpandedImage] = React.useState<string | null>(null);
+  const [loading, setLoading] = useState(!initialWorkflow);
+  const [error, setError] = useState<string | null>(null);
+  const [activeStep, setActiveStep] = useState<number | null>(null);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [supersededContentId, setSupersededContentId] = useState<string | null>(
+    initialSupersededContentId ?? null
+  );
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (initialWorkflow || !workflowId) return;
 
     let cancelled = false;
@@ -68,7 +72,10 @@ export default function WorkflowViewer({
         const response = await fetch(`/api/workflows/${workflowId}`);
         if (!response.ok) throw new Error('Failed to load workflow');
         const data = await response.json();
-        if (!cancelled) setWorkflow(data.workflow);
+        if (!cancelled) {
+          setWorkflow(data.workflow);
+          setSupersededContentId(data.supersededByContentId ?? null);
+        }
       } catch {
         if (!cancelled) setError('Failed to load workflow');
       } finally {
@@ -104,7 +111,6 @@ export default function WorkflowViewer({
 
   return (
     <div className="space-y-4">
-      {/* Title and status badge */}
       <div className="flex items-center gap-3 flex-wrap">
         <h3 className="flex-1 min-w-0 truncate text-base font-medium text-foreground">
           {workflow.title}
@@ -114,7 +120,6 @@ export default function WorkflowViewer({
         </Badge>
       </div>
 
-      {/* Outdated banner */}
       {workflow.status === 'outdated' && (
         <div className="flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-300">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -124,7 +129,7 @@ export default function WorkflowViewer({
               <>
                 {' '}
                 <Link
-                  href={`/library/${contentId}`}
+                  href={`/library/${supersededContentId ?? contentId}`}
                   className="underline underline-offset-2 hover:text-yellow-800 dark:hover:text-yellow-200"
                 >
                   View the latest version
@@ -135,7 +140,6 @@ export default function WorkflowViewer({
         </div>
       )}
 
-      {/* Timeline */}
       {steps.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
           No steps extracted yet.
@@ -156,7 +160,7 @@ export default function WorkflowViewer({
                   />
                 )}
 
-                {/* Step number bubble */}
+                {/* Step number bubble — primary interactive element for keyboard/screen readers */}
                 <button
                   type="button"
                   onClick={() => setActiveStep(isActive ? null : step.stepNumber)}
@@ -172,23 +176,14 @@ export default function WorkflowViewer({
                   {step.stepNumber}
                 </button>
 
-                {/* Step card */}
+                {/* Step card — mouse-accessible click target, not a separate tab stop */}
                 <div
                   className={cn(
                     'card-interactive flex-1 cursor-pointer rounded-xl border bg-card p-4 transition-all duration-200',
                     isActive && 'border-accent/30 shadow-[0_0_15px_rgba(0,223,130,0.12)]'
                   )}
                   onClick={() => setActiveStep(isActive ? null : step.stepNumber)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setActiveStep(isActive ? null : step.stepNumber);
-                    }
-                  }}
                 >
-                  {/* Title and timestamp */}
                   <div className="flex flex-wrap items-start gap-2">
                     <h4 className="min-w-0 flex-1 text-sm font-medium leading-snug text-foreground">
                       {step.title}
@@ -206,14 +201,12 @@ export default function WorkflowViewer({
                     )}
                   </div>
 
-                  {/* Description */}
                   {step.description && (
                     <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
                       {step.description}
                     </p>
                   )}
 
-                  {/* Screenshot */}
                   {step.screenshotPath && (
                     <div className="mt-3">
                       <button
@@ -242,8 +235,7 @@ export default function WorkflowViewer({
                     </div>
                   )}
 
-                  {/* UI elements */}
-                  {step.uiElements.length > 0 && (
+                  {step.uiElements && step.uiElements.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {step.uiElements.map((el, i) => (
                         <span
@@ -262,12 +254,9 @@ export default function WorkflowViewer({
         </ol>
       )}
 
-      {/* Screenshot expand modal */}
       <Dialog
         open={!!expandedImage}
-        onOpenChange={(open) => {
-          if (!open) setExpandedImage(null);
-        }}
+        onOpenChange={() => setExpandedImage(null)}
       >
         <DialogContent className="max-w-4xl border-border/50 p-2" showCloseButton>
           <DialogTitle className="sr-only">Screenshot preview</DialogTitle>
