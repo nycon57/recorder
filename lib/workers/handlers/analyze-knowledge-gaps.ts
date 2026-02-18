@@ -149,6 +149,14 @@ export async function handleAnalyzeKnowledgeGaps(
       progressCallback?.(80, 'Upserting knowledge gaps...');
       const { created, updated } = await upsertKnowledgeGaps(supabase, orgId, scoredGaps);
 
+      progressCallback?.(90, 'Running bus factor analysis...');
+      try {
+        await busFactorAnalysis(supabase, orgId);
+      } catch (busFactorError) {
+        // Bus factor failure must not fail the main gap analysis job.
+        console.error('[AnalyzeKnowledgeGaps] Bus factor analysis failed:', busFactorError);
+      }
+
       progressCallback?.(
         100,
         `Analysis complete: ${scoredGaps.length} gaps (${created} new, ${updated} updated)`
@@ -676,6 +684,205 @@ function findBestMatch(
   }
 
   return bestMatch;
+}
+
+// ---------------------------------------------------------------------------
+// Bus Factor Analysis
+// ---------------------------------------------------------------------------
+
+/**
+ * Identifies concepts where all content mentions come from a single user.
+ * Creates or updates 'bus_factor' knowledge gaps for at-risk concepts.
+ *
+ * Skipped entirely for orgs with fewer than 3 active users — bus factor
+ * analysis is meaningless for solo users or very small teams.
+ */
+async function busFactorAnalysis(
+  supabase: ReturnType<typeof createAdminClient>,
+  orgId: string
+): Promise<void> {
+  // Count active users. Skip for teams too small to have a bus factor problem.
+  const { count: activeUserCount } = await supabase
+    .from('users')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .eq('status', 'active')
+    .is('deleted_at', null);
+
+  if (!activeUserCount || activeUserCount < 3) {
+    await logAgentAction({
+      orgId,
+      agentType: AGENT_TYPE,
+      actionType: 'detect_bus_factor',
+      outcome: 'skipped',
+      outputSummary: 'org has fewer than 3 active users',
+    });
+    console.log(
+      `[AnalyzeKnowledgeGaps] Bus factor skipped for ${orgId}: fewer than 3 active users`
+    );
+    return;
+  }
+
+  await withAgentLogging(
+    {
+      orgId,
+      agentType: AGENT_TYPE,
+      actionType: 'detect_bus_factor',
+      inputSummary: `Bus factor analysis for org ${orgId} (${activeUserCount} active users)`,
+    },
+    async () => {
+      // Fetch all concept_mentions for the org (concept_id + content_id only).
+      const { data: mentions, error: mentionsError } = await supabase
+        .from('concept_mentions')
+        .select('concept_id, content_id')
+        .eq('org_id', orgId)
+        .limit(5000);
+
+      if (mentionsError) {
+        console.warn('[AnalyzeKnowledgeGaps] concept_mentions query failed:', mentionsError);
+        return;
+      }
+
+      if (!mentions?.length) return;
+
+      // Build content_id → created_by map from active, processed content.
+      const uniqueContentIds = [...new Set(mentions.map((m: any) => m.content_id as string))];
+      const contentUserMap = new Map<string, string>();
+      const BATCH = 100;
+
+      for (let i = 0; i < uniqueContentIds.length; i += BATCH) {
+        const batch = uniqueContentIds.slice(i, i + BATCH);
+        const { data: rows } = await supabase
+          .from('content')
+          .select('id, created_by')
+          .in('id', batch)
+          .eq('org_id', orgId)
+          .is('deleted_at', null)
+          .in('status', ['completed', 'transcribed']);
+
+        for (const row of rows ?? []) {
+          contentUserMap.set(row.id, row.created_by);
+        }
+      }
+
+      // Group mentions by concept_id, tracking unique contributors and count.
+      const conceptUsers = new Map<string, Set<string>>();
+      const conceptCounts = new Map<string, number>();
+
+      for (const mention of mentions as any[]) {
+        const contentId = mention.content_id as string;
+        const conceptId = mention.concept_id as string;
+        const userId = contentUserMap.get(contentId);
+        if (!userId) continue; // content deleted, unprocessed, or filtered out
+
+        let userSet = conceptUsers.get(conceptId);
+        if (!userSet) {
+          userSet = new Set();
+          conceptUsers.set(conceptId, userSet);
+        }
+        userSet.add(userId);
+        conceptCounts.set(conceptId, (conceptCounts.get(conceptId) ?? 0) + 1);
+      }
+
+      // Keep only concepts with exactly one contributor — the bus factor signal.
+      const singleExpert: Array<{
+        conceptId: string;
+        expertUserId: string;
+        mentionCount: number;
+      }> = [];
+      for (const [conceptId, userSet] of conceptUsers) {
+        if (userSet.size === 1) {
+          singleExpert.push({
+            conceptId,
+            expertUserId: [...userSet][0],
+            mentionCount: conceptCounts.get(conceptId) ?? 0,
+          });
+        }
+      }
+
+      if (!singleExpert.length) {
+        console.log(`[AnalyzeKnowledgeGaps] No bus factor risks found for ${orgId}`);
+        return;
+      }
+
+      // Resolve concept names for the at-risk concepts.
+      const conceptIds = singleExpert.map((s) => s.conceptId);
+      const { data: conceptRows } = await supabase
+        .from('knowledge_concepts')
+        .select('id, name')
+        .in('id', conceptIds);
+      const conceptNameMap = new Map<string, string>(
+        (conceptRows ?? []).map((c: any) => [c.id as string, c.name as string])
+      );
+
+      // Resolve display names for the expert users.
+      const expertIds = [...new Set(singleExpert.map((s) => s.expertUserId))];
+      const { data: userRows } = await supabase
+        .from('users')
+        .select('id, name, email')
+        .in('id', expertIds);
+      const userDisplayName = new Map<string, string>(
+        (userRows ?? []).map((u: any) => [u.id as string, (u.name ?? u.email) as string])
+      );
+
+      // Load existing open/acknowledged bus_factor gaps to enable upsert.
+      const { data: existingGaps } = await supabase
+        .from('knowledge_gaps')
+        .select('id, metadata')
+        .eq('org_id', orgId)
+        .in('status', ['open', 'acknowledged']);
+
+      const existingByConceptId = new Map<string, string>(); // conceptId → gap id
+      for (const gap of existingGaps ?? []) {
+        const meta = gap.metadata as Record<string, unknown> | null;
+        if (meta?.gapType === 'bus_factor' && typeof meta.conceptId === 'string') {
+          existingByConceptId.set(meta.conceptId, gap.id);
+        }
+      }
+
+      // Upsert a knowledge_gap for each single-expert concept.
+      let created = 0;
+      let updated = 0;
+
+      for (const { conceptId, expertUserId, mentionCount } of singleExpert) {
+        const conceptName = conceptNameMap.get(conceptId);
+        if (!conceptName) continue;
+
+        const userName = userDisplayName.get(expertUserId) ?? expertUserId;
+        // 5+ mentions → well-documented by one person, therefore high-risk.
+        const severity: KnowledgeGapSeverity = mentionCount >= 5 ? 'high' : 'medium';
+        const topic = `${conceptName} (single expert)`;
+        const description =
+          `Only ${userName} has recorded content about ${conceptName}. ` +
+          `Consider having another team member document this topic.`;
+        const metadata: Json = {
+          gapType: 'bus_factor',
+          expertUserId,
+          conceptId,
+          mentionCount,
+        };
+
+        const existingId = existingByConceptId.get(conceptId);
+        if (existingId) {
+          const { error } = await supabase
+            .from('knowledge_gaps')
+            .update({ topic, description, severity, metadata })
+            .eq('id', existingId);
+          if (!error) updated++;
+        } else {
+          const { error } = await supabase
+            .from('knowledge_gaps')
+            .insert({ org_id: orgId, topic, description, severity, status: 'open', metadata });
+          if (!error) created++;
+        }
+      }
+
+      console.log(
+        `[AnalyzeKnowledgeGaps] Bus factor: ${singleExpert.length} at-risk concepts, ` +
+          `${created} new gaps, ${updated} updated`
+      );
+    }
+  );
 }
 
 // ---------------------------------------------------------------------------
