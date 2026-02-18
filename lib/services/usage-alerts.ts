@@ -89,8 +89,8 @@ async function getCachedUsage(orgId: string): Promise<number | null> {
   if (!redis) return null;
   try {
     const raw = await redis.get<string>(USAGE_CACHE_KEY(orgId));
-    if (raw === null || raw === undefined) return null;
-    const parsed = parseFloat(String(raw));
+    if (raw == null) return null;
+    const parsed = parseFloat(raw);
     return Number.isFinite(parsed) ? parsed : null;
   } catch {
     return null;
@@ -188,13 +188,11 @@ export async function checkUsageLimits(orgId: string): Promise<UsageAlert | null
     // Free tier has no credit limit — nothing to gate
     if (limit <= 0) return null;
 
-    // Fetch monthly usage: Redis cache → DB fallback
     let currentUsage = await getCachedUsage(orgId);
 
     if (currentUsage === null) {
       const summary = await getUsageSummary(orgId, 'month');
       currentUsage = summary.totalCredits;
-      // Best-effort cache write; failures are silently ignored
       await setCachedUsage(orgId, currentUsage);
     }
 
@@ -210,7 +208,6 @@ export async function checkUsageLimits(orgId: string): Promise<UsageAlert | null
       message: buildMessage(level, percent),
     };
 
-    // Log the alert (deduplicated to at most once per 60s)
     await logUsageAlert(orgId, alert);
 
     return alert;

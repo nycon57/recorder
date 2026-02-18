@@ -24,9 +24,8 @@ export function UsageAlertBanner() {
       if (!res.ok) throw new Error('Failed to load usage alert');
       return res.json();
     },
-    // Refresh on the same cadence as the Redis cache TTL
     refetchInterval: 60_000,
-    // Don't throw on error — a missing banner is acceptable
+    staleTime: 55_000,
     retry: false,
   });
 
