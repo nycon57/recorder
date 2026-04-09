@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useSession } from "@/lib/auth/auth-client";
 import {
   Users,
   UserPlus,
@@ -77,7 +77,7 @@ export function DepartmentMembersModal({
   onOpenChange,
   department,
 }: DepartmentMembersModalProps) {
-  const { getToken } = useAuth();
+  const { data: session } = useSession();
   const [members, setMembers] = useState<DepartmentMember[]>([]);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,14 +90,8 @@ export function DepartmentMembersModal({
   // Fetch department members
   const fetchMembers = async () => {
     try {
-      const token = await getToken();
       const response = await fetch(
-        `/api/organizations/departments/${department.id}/members?includeDetails=true`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        `/api/organizations/departments/${department.id}/members?includeDetails=true`
       );
 
       if (!response.ok) {
@@ -117,12 +111,7 @@ export function DepartmentMembersModal({
   // Fetch available users (org members not in this department)
   const fetchAvailableUsers = async () => {
     try {
-      const token = await getToken();
-      const response = await fetch("/api/organizations/members", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch("/api/organizations/members");
 
       if (!response.ok) {
         throw new Error("Failed to fetch users");
@@ -162,14 +151,12 @@ export function DepartmentMembersModal({
     setAddingUser(true);
 
     try {
-      const token = await getToken();
       const response = await fetch(
         `/api/organizations/departments/${department.id}/members`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ userId: selectedUserId }),
         }
@@ -198,14 +185,10 @@ export function DepartmentMembersModal({
     setRemovingUserId(userId);
 
     try {
-      const token = await getToken();
       const response = await fetch(
         `/api/organizations/departments/${department.id}/members/${userId}`,
         {
           method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 

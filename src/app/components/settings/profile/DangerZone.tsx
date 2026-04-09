@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { AlertTriangle, Trash2, Download, Ban } from 'lucide-react';
-import { useAuth, useUser } from '@clerk/nextjs';
+import { useSession, signOut } from '@/lib/auth/auth-client';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/app/components/ui/button';
@@ -13,8 +13,8 @@ import { useToast } from '@/app/components/ui/use-toast';
 import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 
 export function DangerZone() {
-  const { user } = useUser();
-  const { signOut } = useAuth();
+  const { data: session } = useSession();
+  const user = session?.user;
   const router = useRouter();
   const { toast } = useToast();
 
@@ -88,9 +88,9 @@ export function DangerZone() {
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
     try {
-      // Note: In production, this would delete from Supabase first, then Clerk
-      // For now, we'll just delete from Clerk
-      await user?.delete();
+      // Delete user via API (handles Supabase + Better Auth cleanup)
+      const response = await fetch('/api/profile', { method: 'DELETE' });
+      if (!response.ok) throw new Error('Failed to delete account');
 
       toast({
         title: 'Account Deleted',
@@ -230,7 +230,7 @@ export function DangerZone() {
         description="This action is irreversible. All your data will be permanently deleted."
         confirmText="Delete Account Permanently"
         variant="destructive"
-        requireTypedConfirmation={user?.primaryEmailAddress?.emailAddress || ''}
+        requireTypedConfirmation={user?.email || ''}
         warnings={[
           {
             title: 'All data will be lost',

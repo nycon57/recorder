@@ -1,6 +1,6 @@
 'use client';
 
-import { SignedIn, SignedOut } from '@clerk/nextjs';
+import { useSession } from '@/lib/auth/auth-client';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils/cn';
 import { Button } from '@/app/components/ui/button';
 
 export default function PremiumNavbar() {
+  const { data: session } = useSession();
+  const isSignedIn = !!session;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -87,28 +89,29 @@ export default function PremiumNavbar() {
           <div className="flex items-center gap-3">
             {/* Desktop Auth Buttons */}
             <div className="hidden items-center gap-3 lg:flex">
-              <SignedOut>
-                <Link href="/sign-in">
-                  <Button
-                    variant="ghost"
-                    className="glass-caribbean border border-[#00DF81]/20
-                      text-[#00DF81] hover:bg-[#00DF81]/10 font-light"
-                  >
-                    Sign In
-                  </Button>
-                </Link>
-                <Link href="/sign-up">
-                  <Button
-                    className="bg-gradient-to-r from-[#00DF81] to-[#2CC295]
-                      text-[#01001a] font-medium
-                      hover:shadow-[0_0_30px_rgba(0,223,129,0.5)]
-                      transition-all duration-300"
-                  >
-                    Get Started
-                  </Button>
-                </Link>
-              </SignedOut>
-              <SignedIn>
+              {!isSignedIn ? (
+                <>
+                  <Link href="/sign-in">
+                    <Button
+                      variant="ghost"
+                      className="glass-caribbean border border-[#00DF81]/20
+                        text-[#00DF81] hover:bg-[#00DF81]/10 font-light"
+                    >
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link href="/sign-up">
+                    <Button
+                      className="bg-gradient-to-r from-[#00DF81] to-[#2CC295]
+                        text-[#01001a] font-medium
+                        hover:shadow-[0_0_30px_rgba(0,223,129,0.5)]
+                        transition-all duration-300"
+                    >
+                      Get Started
+                    </Button>
+                  </Link>
+                </>
+              ) : (
                 <Link href="/dashboard">
                   <Button
                     className="bg-gradient-to-r from-[#00DF81] to-[#2CC295]
@@ -119,7 +122,7 @@ export default function PremiumNavbar() {
                     Dashboard
                   </Button>
                 </Link>
-              </SignedIn>
+              )}
             </div>
 
             {/* Mobile Menu Toggle */}
@@ -167,26 +170,27 @@ export default function PremiumNavbar() {
 
             {/* Mobile Auth Buttons */}
             <div className="flex flex-col gap-3 pt-4 border-t border-[#00DF81]/20">
-              <SignedOut>
-                <Link href="/sign-in" onClick={() => setIsMenuOpen(false)}>
-                  <Button
-                    variant="ghost"
-                    className="w-full glass-caribbean border border-[#00DF81]/20
-                      text-[#00DF81] hover:bg-[#00DF81]/10 font-light"
-                  >
-                    Sign In
-                  </Button>
-                </Link>
-                <Link href="/sign-up" onClick={() => setIsMenuOpen(false)}>
-                  <Button
-                    className="w-full bg-gradient-to-r from-[#00DF81] to-[#2CC295]
-                      text-[#01001a] font-medium"
-                  >
-                    Get Started
-                  </Button>
-                </Link>
-              </SignedOut>
-              <SignedIn>
+              {!isSignedIn ? (
+                <>
+                  <Link href="/sign-in" onClick={() => setIsMenuOpen(false)}>
+                    <Button
+                      variant="ghost"
+                      className="w-full glass-caribbean border border-[#00DF81]/20
+                        text-[#00DF81] hover:bg-[#00DF81]/10 font-light"
+                    >
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link href="/sign-up" onClick={() => setIsMenuOpen(false)}>
+                    <Button
+                      className="w-full bg-gradient-to-r from-[#00DF81] to-[#2CC295]
+                        text-[#01001a] font-medium"
+                    >
+                      Get Started
+                    </Button>
+                  </Link>
+                </>
+              ) : (
                 <Link href="/dashboard" onClick={() => setIsMenuOpen(false)}>
                   <Button
                     className="w-full bg-gradient-to-r from-[#00DF81] to-[#2CC295]
@@ -195,7 +199,7 @@ export default function PremiumNavbar() {
                     Dashboard
                   </Button>
                 </Link>
-              </SignedIn>
+              )}
             </div>
           </nav>
         </div>

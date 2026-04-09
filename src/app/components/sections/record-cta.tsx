@@ -1,7 +1,7 @@
 'use client';
 
-import { SignUpButton } from '@clerk/nextjs';
 import Image from 'next/image';
+import Link from 'next/link';
 
 import { Button } from '@/app/components/ui/button';
 
@@ -40,14 +40,13 @@ export default function RecordCTA({
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-          <SignUpButton mode="modal">
-            <Button
-              className="w-full bg-white text-foreground hover:bg-white/90 sm:w-auto"
-              variant="default"
-            >
-              {ctaLabel}
-            </Button>
-          </SignUpButton>
+          <Button
+            asChild
+            className="w-full bg-white text-foreground hover:bg-white/90 sm:w-auto"
+            variant="default"
+          >
+            <Link href="/sign-up">{ctaLabel}</Link>
+          </Button>
         </div>
       </div>
     </section>

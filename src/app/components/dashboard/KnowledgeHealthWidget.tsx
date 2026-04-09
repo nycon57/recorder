@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { auth } from '@clerk/nextjs/server';
+import { headers } from 'next/headers';
+import { auth } from '@/lib/auth/auth';
 import {
   AlertTriangle,
   BookOpen,
@@ -129,13 +130,15 @@ function MetricRow({ icon, label, value, href }: MetricRowProps) {
 }
 
 async function getInternalOrgId(): Promise<string | null> {
-  const { userId } = await auth();
-  if (!userId) return null;
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+  if (!session) return null;
 
   const { data } = await supabaseAdmin
     .from('users')
     .select('org_id')
-    .eq('clerk_id', userId)
+    .eq('clerk_id', session.user.id)
     .maybeSingle();
 
   return data?.org_id ?? null;

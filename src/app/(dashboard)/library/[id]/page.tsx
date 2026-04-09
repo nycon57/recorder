@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
-import { auth } from '@clerk/nextjs/server';
+import { headers } from 'next/headers';
+import { auth } from '@/lib/auth/auth';
 import { redirect, notFound } from 'next/navigation';
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -15,17 +16,7 @@ import { OnboardingViewTracker } from '@/app/components/onboarding/OnboardingVie
 import type { WorkflowStep } from '@/lib/types/database';
 import WorkflowViewer from '@/app/components/workflow/WorkflowViewer';
 
-async function getContentItem(id: string, clerkOrgId: string) {
-  const { data: org } = await supabaseAdmin
-    .from('organizations')
-    .select('id')
-    .eq('clerk_org_id', clerkOrgId)
-    .single();
-
-  if (!org) {
-    return null;
-  }
-
+async function getContentItem(id: string, internalOrgId: string) {
   const { data: item, error } = await supabaseAdmin
     .from('content')
     .select(
@@ -36,7 +27,7 @@ async function getContentItem(id: string, clerkOrgId: string) {
     `
     )
     .eq('id', id)
-    .eq('org_id', org.id)
+    .eq('org_id', internalOrgId)
     .single();
 
   if (error || !item) {
@@ -104,9 +95,24 @@ export default async function LibraryItemDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ sourceKey?: string; highlight?: string; t?: string }>;
 }) {
-  const { userId, orgId } = await auth();
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
 
-  if (!userId || !orgId) {
+  if (!session) {
+    redirect('/');
+  }
+
+  // Look up the user's org from database
+  const { data: userData } = await supabaseAdmin
+    .from('users')
+    .select('org_id')
+    .eq('clerk_id', session.user.id)
+    .maybeSingle();
+
+  const orgId = userData?.org_id;
+
+  if (!orgId) {
     redirect('/');
   }
 

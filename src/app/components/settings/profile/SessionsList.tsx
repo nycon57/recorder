@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Monitor, Smartphone, Tablet, Globe, MapPin, Clock, Loader2, Shield } from 'lucide-react';
-import { useSession } from '@clerk/nextjs';
+import { useSession } from '@/lib/auth/auth-client';
 
 import { useFetchWithAbort } from '@/app/hooks/useFetchWithAbort';
 import { useToast } from '@/app/components/ui/use-toast';
@@ -43,7 +43,7 @@ interface Session {
 
 export function SessionsList() {
   const { toast } = useToast();
-  const { session: clerkSession } = useSession();
+  const { data: currentSession } = useSession();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isRevoking, setIsRevoking] = useState<string | null>(null);
   const [sessionToRevoke, setSessionToRevoke] = useState<Session | null>(null);
@@ -71,8 +71,8 @@ export function SessionsList() {
     '/api/profile/sessions',
     {
       onSuccess: (data) => {
-        // Get current Clerk session ID
-        const currentSessionId = clerkSession?.id;
+        // Get current session ID
+        const currentSessionId = currentSession?.session?.id;
 
         // Transform API response to match component's Session interface
         const formattedSessions: Session[] = (data.data?.sessions || []).map((session: ApiSession) => ({

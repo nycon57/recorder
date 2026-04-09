@@ -1,6 +1,5 @@
 'use client';
 
-import { SignUpButton } from '@clerk/nextjs';
 import { Check } from 'lucide-react';
 import Link from 'next/link';
 
@@ -176,18 +175,19 @@ export default function RecordPricing({
                         </Link>
                       </Button>
                     ) : (
-                      <SignUpButton mode="modal">
-                        <Button
-                          className={cn(
-                            'w-full',
-                            isHighlighted &&
-                              'bg-white text-foreground hover:bg-white/90'
-                          )}
-                          variant={isHighlighted ? 'default' : 'secondary'}
-                        >
+                      <Button
+                        asChild
+                        className={cn(
+                          'w-full',
+                          isHighlighted &&
+                            'bg-white text-foreground hover:bg-white/90'
+                        )}
+                        variant={isHighlighted ? 'default' : 'secondary'}
+                      >
+                        <Link href="/sign-up">
                           {plan.ctaLabel ?? 'Get Started'}
-                        </Button>
-                      </SignUpButton>
+                        </Link>
+                      </Button>
                     )}
                   </div>
                 </div>

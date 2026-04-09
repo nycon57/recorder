@@ -1,6 +1,5 @@
 'use client';
 
-import { SignUpButton } from '@clerk/nextjs';
 import { Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -99,14 +98,13 @@ export default function RecordHero({
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
-                  <SignUpButton mode="modal">
-                    <Button
-                      className="w-full sm:w-auto"
-                      aria-label={ctaLabel}
-                    >
-                      {ctaLabel}
-                    </Button>
-                  </SignUpButton>
+                  <Button
+                    asChild
+                    className="w-full sm:w-auto"
+                    aria-label={ctaLabel}
+                  >
+                    <Link href="/sign-up">{ctaLabel}</Link>
+                  </Button>
                   <Button
                     asChild
                     variant="secondary"

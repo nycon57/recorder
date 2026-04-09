@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useSession } from "@/lib/auth/auth-client";
 import { AlertCircle, AlertTriangle, Users, Building2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,7 +40,7 @@ export function DeleteDepartmentModal({
   departments,
   onSuccess,
 }: DeleteDepartmentModalProps) {
-  const { getToken } = useAuth();
+  const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [reassignTo, setReassignTo] = useState<string | null>(null);
 
@@ -96,8 +96,6 @@ export function DeleteDepartmentModal({
     setLoading(true);
 
     try {
-      const token = await getToken();
-
       const url = new URL(`/api/organizations/departments/${department.id}`, window.location.origin);
       if (reassignTo) {
         url.searchParams.set("reassignUsersTo", reassignTo);
@@ -105,9 +103,6 @@ export function DeleteDepartmentModal({
 
       const response = await fetch(url.toString(), {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       const data = await response.json();

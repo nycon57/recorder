@@ -2,13 +2,12 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 
 import { Toaster } from '@/app/components/ui/sonner';
-import { ClerkProviderWrapper } from '@/app/components/providers/clerk-provider-wrapper';
 import { QueryProvider } from '@/lib/providers/query-provider';
 
 import './globals.css';
 
 // Force dynamic rendering to prevent static generation at build time
-// Root layout uses ClerkProvider which requires runtime env vars
+// Root layout uses runtime env vars
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
@@ -69,12 +68,10 @@ export default function RootLayout({
         )}
       </head>
       <body className="bg-background text-foreground antialiased">
-        <ClerkProviderWrapper>
-          <QueryProvider>
-            {children}
-            <Toaster />
-          </QueryProvider>
-        </ClerkProviderWrapper>
+        <QueryProvider>
+          {children}
+          <Toaster />
+        </QueryProvider>
       </body>
     </html>
   );

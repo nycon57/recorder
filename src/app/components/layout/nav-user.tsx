@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useUser, useClerk } from "@clerk/nextjs"
+import { useSession, signOut } from "@/lib/auth/auth-client"
 import { ChevronsUpDown, Settings, LogOut, User as UserIcon } from "lucide-react"
 
 import {
@@ -29,17 +29,18 @@ import {
  * Displays user avatar, name, and account actions
  */
 export function NavUser() {
-  const { user, isLoaded } = useUser()
-  const { signOut } = useClerk()
+  const { data: session, isPending } = useSession()
 
-  // Wait for Clerk to load and user to be available
-  if (!isLoaded || !user) {
+  // Wait for session to load
+  if (isPending || !session?.user) {
     return null
   }
 
+  const user = session.user
+
   // Get user display information
-  const userName = user.fullName || user.username || "User"
-  const userEmail = user.primaryEmailAddress?.emailAddress || ""
+  const userName = user.name || "User"
+  const userEmail = user.email || ""
   const userInitials = userName
     .split(" ")
     .map((n) => n[0])
@@ -63,7 +64,7 @@ export function NavUser() {
             >
               <Avatar className="size-8 rounded-lg">
                 <AvatarImage
-                  src={user.imageUrl}
+                  src={user.image || undefined}
                   alt={userName}
                 />
                 <AvatarFallback className="rounded-lg">
@@ -89,7 +90,7 @@ export function NavUser() {
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="size-8 rounded-lg">
                   <AvatarImage
-                    src={user.imageUrl}
+                    src={user.image || undefined}
                     alt={userName}
                   />
                   <AvatarFallback className="rounded-lg">
