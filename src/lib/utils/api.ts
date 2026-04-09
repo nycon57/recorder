@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { headers } from 'next/headers';
 
+import { auth } from '@/lib/auth/auth';
 import type { ApiError, ApiSuccess } from '@/lib/validations/api';
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -108,17 +109,19 @@ export const errors = {
     ),
 };
 
-// Get authenticated user from Clerk
+// Get authenticated user from Better Auth
 export async function getAuthUser() {
-  const { userId, orgId } = await auth();
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
 
-  if (!userId) {
+  if (!session) {
     return null;
   }
 
   return {
-    userId,
-    orgId: orgId || null,
+    userId: session.user.id,
+    orgId: null as string | null, // Organization resolved in requireOrg()
   };
 }
 
@@ -137,13 +140,9 @@ export async function requireAuth() {
 export async function requireOrg() {
   const user = await requireAuth();
 
-  if (!user.orgId) {
-    throw new Error('Organization context required');
-  }
-
   // PERFORMANCE OPTIMIZATION: Check cache first to avoid an extra DB query
-  // MULTI-TENANT: Include orgId in cache key for proper isolation
-  const cacheKey = `${user.userId}:${user.orgId}`;
+  // MULTI-TENANT: Use auth user ID as cache key
+  const cacheKey = `ba:${user.userId}`;
   let cachedUser;
   try {
     cachedUser = await UserCache.get(cacheKey);
@@ -156,17 +155,17 @@ export async function requireOrg() {
     // Cache hit - return cached user data
     return {
       userId: cachedUser.id,
-      clerkUserId: cachedUser.clerkUserId,
+      clerkUserId: cachedUser.clerkUserId, // Kept for backward compat during migration
       orgId: cachedUser.orgId,
       role: cachedUser.role,
-      clerkOrgId: user.orgId,
+      clerkOrgId: cachedUser.orgId, // Alias for backward compat
     };
   }
 
   // Cache miss - fetch from database
   const supabase = supabaseAdmin;
 
-  // Look up the user by clerk_id (users.clerk_id = Clerk user ID)
+  // Look up the user by clerk_id column (stores auth provider ID — Better Auth user ID during migration)
   const { data: userData, error } = await supabase
     .from('users')
     .select('id, org_id, role, email, name')
@@ -175,18 +174,21 @@ export async function requireOrg() {
 
   // If user doesn't exist, throw a clear error
   if (error?.code === 'PGRST116') {
-    throw new Error(`User ${user.userId} not found in database. Please ensure user is synced from Clerk.`);
+    throw new Error(`User ${user.userId} not found in database. Please ensure user record exists.`);
   } else if (error) {
     console.error('[requireOrg] Error fetching user org:', error);
     throw new Error('User organization not found');
   }
 
+  if (!userData!.org_id) {
+    throw new Error('Organization context required');
+  }
+
   // Cache the user data for 5 minutes (best effort - don't fail request on cache errors)
-  // MULTI-TENANT: Use composite cache key with orgId for isolation
   try {
     await UserCache.set(cacheKey, {
       id: userData!.id,
-      clerkUserId: user.userId,
+      clerkUserId: user.userId, // Kept for backward compat during migration
       orgId: userData!.org_id,
       role: userData!.role,
       email: userData!.email,
@@ -199,10 +201,10 @@ export async function requireOrg() {
 
   return {
     userId: userData!.id, // Internal UUID
-    clerkUserId: user.userId, // Clerk user ID
+    clerkUserId: user.userId, // Auth provider ID (Better Auth user ID)
     orgId: userData!.org_id, // Internal org UUID
     role: userData!.role,
-    clerkOrgId: user.orgId, // Clerk org ID for reference
+    clerkOrgId: userData!.org_id, // Alias for backward compat
   };
 }
 
@@ -229,7 +231,7 @@ export async function requireSystemAdmin() {
   // Use admin client to bypass RLS for user lookup
   const supabase = supabaseAdmin;
 
-  // Check for system admin flag
+  // Check for system admin flag (clerk_id column stores auth provider ID)
   const { data: userData, error } = await supabase
     .from('users')
     .select('id, clerk_id, is_system_admin, email, role')
@@ -250,7 +252,7 @@ export async function requireSystemAdmin() {
 
   return {
     userId: userData.id,
-    clerkUserId: user.userId,
+    clerkUserId: user.userId, // Auth provider ID (Better Auth user ID)
     email: userData.email,
     role: userData.role,
     isSystemAdmin: true,

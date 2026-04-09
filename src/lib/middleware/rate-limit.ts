@@ -111,7 +111,7 @@ async function logRateLimitViolation(
 
     // Only log if we have a userId (authenticated request)
     if (userId) {
-      // Get user's org_id for audit log
+      // Get user's org_id for audit log (clerk_id column stores auth provider ID)
       const { data: user } = await supabaseAdmin
         .from('users')
         .select('org_id')
@@ -237,15 +237,17 @@ export function rateLimit(
 }
 
 /**
- * Helper to extract userId from request using requireAuth pattern
+ * Helper to extract userId from request using Better Auth session
  * Use this for authenticated endpoints
  */
 export async function extractUserIdFromAuth(request: NextRequest): Promise<string | undefined> {
   try {
-    // Import requireAuth dynamically to avoid circular dependencies
-    const { auth } = await import('@clerk/nextjs/server');
-    const { userId } = await auth();
-    return userId || undefined;
+    const { auth } = await import('@/lib/auth/auth');
+    const { headers } = await import('next/headers');
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+    return session?.user?.id || undefined;
   } catch (error) {
     // If auth fails, return undefined and rate limit by IP
     return undefined;
@@ -286,12 +288,17 @@ export const rateLimiters_preset = {
  */
 export async function extractAdminUserId(request: NextRequest): Promise<string | undefined> {
   try {
-    const { auth } = await import('@clerk/nextjs/server');
-    const { userId } = await auth();
+    const { auth } = await import('@/lib/auth/auth');
+    const { headers } = await import('next/headers');
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
 
-    if (!userId) return undefined;
+    if (!session?.user?.id) return undefined;
 
-    // Check if user is admin/owner
+    const userId = session.user.id;
+
+    // Check if user is admin/owner (clerk_id column stores auth provider ID)
     const { data: user } = await supabaseAdmin
       .from('users')
       .select('role')

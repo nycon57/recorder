@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+
+import { requireAuth } from '@/lib/utils/api';
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId, orgId } = await auth();
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { userId } = await requireAuth();
 
     // TODO: Fetch usage from database
     // This is placeholder data
@@ -38,6 +35,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(usage);
   } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     console.error('Error fetching usage:', error);
     return NextResponse.json(
       { error: 'Failed to fetch usage' },

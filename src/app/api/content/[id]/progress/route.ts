@@ -14,9 +14,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { createLogger } from '@/lib/utils/logger';
+import { requireOrg } from '@/lib/utils/api';
 
 const logger = createLogger({ service: 'content-progress-api' });
 
@@ -59,11 +59,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   try {
-    const { userId, orgId } = await auth();
-
-    if (!userId || !orgId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { orgId } = await requireOrg();
 
     const { id: contentId } = await params;
 
@@ -186,6 +182,15 @@ export async function GET(
 
     return NextResponse.json(response);
   } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === 'Unauthorized') {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      if (error.message === 'Organization context required') {
+        return NextResponse.json({ error: 'Organization context required' }, { status: 403 });
+      }
+    }
+
     logger.error('Failed to get content progress', {
       error: error as Error,
     });
