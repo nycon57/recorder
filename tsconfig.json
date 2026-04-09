@@ -29,10 +29,10 @@
     ],
     "paths": {
       "@/components/*": [
-        "./app/components/*"
+        "./src/app/components/*"
       ],
       "@/*": [
-        "./*"
+        "./src/*"
       ]
     }
   },

@@ -16,14 +16,14 @@ import {
   executeListRecordings,
   toolDescriptions,
   type ToolContext,
-} from '../lib/services/chat-tools';
+} from '../src/lib/services/chat-tools';
 import {
   searchRecordingsInputSchema,
   getDocumentInputSchema,
   getTranscriptInputSchema,
   getRecordingMetadataInputSchema,
   listRecordingsInputSchema,
-} from '../lib/validations/chat';
+} from '../src/lib/validations/chat';
 
 // ANSI color codes for terminal output
 const colors = {

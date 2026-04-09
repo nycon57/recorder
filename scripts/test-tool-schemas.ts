@@ -13,14 +13,14 @@ import {
   executeGetRecordingMetadata,
   executeListRecordings,
   toolDescriptions,
-} from '../lib/services/chat-tools';
+} from '../src/lib/services/chat-tools';
 import {
   searchRecordingsInputSchema,
   getDocumentInputSchema,
   getTranscriptInputSchema,
   getRecordingMetadataInputSchema,
   listRecordingsInputSchema,
-} from '../lib/validations/chat';
+} from '../src/lib/validations/chat';
 
 // ANSI colors
 const GREEN = '\x1b[32m';
