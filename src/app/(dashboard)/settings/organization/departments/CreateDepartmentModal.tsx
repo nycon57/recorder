@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useSession } from "@/lib/auth/auth-client";
 import { Building2, ChevronRight, Check, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -77,7 +77,7 @@ export function CreateDepartmentModal({
   allDepartments,
   onSuccess,
 }: CreateDepartmentModalProps) {
-  const { getToken } = useAuth();
+  const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -141,12 +141,10 @@ export function CreateDepartmentModal({
     setLoading(true);
 
     try {
-      const token = await getToken();
       const response = await fetch("/api/organizations/departments", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           name: name.trim(),

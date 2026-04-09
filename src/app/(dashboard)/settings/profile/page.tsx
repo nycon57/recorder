@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { useSession } from '@/lib/auth/auth-client';
 import { User, ImageIcon, Settings2, Smartphone, Shield, AlertTriangle } from 'lucide-react';
 
 import {
@@ -22,10 +22,10 @@ import {
 import { cn } from '@/lib/utils';
 
 export default function ProfilePage() {
-  const { userId } = useAuth();
+  const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState('general');
 
-  if (!userId) {
+  if (!session?.user) {
     return null;
   }
 

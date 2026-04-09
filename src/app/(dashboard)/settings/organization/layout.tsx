@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@clerk/nextjs';
+import { useSession } from '@/lib/auth/auth-client';
 import {
   Building2,
   Users,
@@ -105,17 +105,17 @@ export default function OrganizationSettingsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { userId } = useAuth();
+  const { data: session } = useSession();
 
   const { data: userRole, isLoading } = useQuery({
-    queryKey: ['user-role', userId],
+    queryKey: ['user-role', session?.user?.id],
     queryFn: async () => {
       const response = await fetch('/api/profile');
       if (!response.ok) throw new Error('Failed to fetch user role');
       const data = await response.json();
       return data.data?.role;
     },
-    enabled: !!userId,
+    enabled: !!session?.user,
   });
 
   if (isLoading) {

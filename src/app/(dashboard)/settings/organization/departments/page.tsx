@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useSession } from "@/lib/auth/auth-client";
 import {
   Building2,
   Plus,
@@ -72,7 +72,7 @@ const visibilityLabels = {
 };
 
 export default function DepartmentsPage() {
-  const { getToken } = useAuth();
+  const { data: session } = useSession();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -90,12 +90,7 @@ export default function DepartmentsPage() {
   // Fetch departments
   const fetchDepartments = async () => {
     try {
-      const token = await getToken();
-      const response = await fetch("/api/organizations/departments?includeTree=true&includeMembers=true", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch("/api/organizations/departments?includeTree=true&includeMembers=true");
 
       if (!response.ok) {
         throw new Error("Failed to fetch departments");

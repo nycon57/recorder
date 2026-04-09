@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useSession } from "@/lib/auth/auth-client";
 import { Building2, ChevronRight, Check, AlertCircle, Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -77,7 +77,7 @@ export function EditDepartmentModal({
   allDepartments,
   onSuccess,
 }: EditDepartmentModalProps) {
-  const { getToken } = useAuth();
+  const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(department.name);
   const [description, setDescription] = useState(department.description || "");
@@ -149,8 +149,6 @@ export function EditDepartmentModal({
     setLoading(true);
 
     try {
-      const token = await getToken();
-
       // Only send changed fields
       const updates: any = {};
       if (name !== department.name) updates.name = name.trim();
@@ -175,7 +173,6 @@ export function EditDepartmentModal({
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(updates),
       });

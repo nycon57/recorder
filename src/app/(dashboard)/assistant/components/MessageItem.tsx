@@ -16,7 +16,7 @@ import React, { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Bot, Copy, Check, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useUser } from '@clerk/nextjs';
+import { useSession } from '@/lib/auth/auth-client';
 import {
   messageVariants,
   usePrefersReducedMotion,
@@ -136,7 +136,8 @@ export function MessageItem({
 }: MessageItemProps) {
   const [copied, setCopied] = useState(false);
   const prefersReducedMotion = usePrefersReducedMotion();
-  const { user } = useUser();
+  const { data: session } = useSession();
+  const user = session?.user;
 
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
@@ -448,8 +449,8 @@ export function MessageItem({
       {/* User Avatar on right side */}
       {isUser && (
         <MessageAvatar
-          src={user?.imageUrl || '/user-avatar.png'}
-          name={user?.fullName || user?.firstName || 'You'}
+          src={user?.image || '/user-avatar.png'}
+          name={user?.name || 'You'}
           className="bg-muted"
           aria-hidden="true"
         />

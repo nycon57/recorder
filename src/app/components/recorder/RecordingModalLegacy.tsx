@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
+import { useSession } from '@/lib/auth/auth-client';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL, fetchFile } from '@ffmpeg/util';
 import { toast } from 'sonner';
@@ -17,7 +17,8 @@ interface RecordingModalProps {
 
 export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModalProps) {
   const router = useRouter();
-  const { orgId, userId } = useAuth();
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -106,7 +107,7 @@ export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModa
   };
 
   const handleUpload = async () => {
-    if (!recordingBlob || !orgId || !userId) return;
+    if (!recordingBlob || !userId) return;
 
     setIsUploading(true);
     try {

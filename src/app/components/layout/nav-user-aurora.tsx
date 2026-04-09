@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useUser, useClerk } from "@clerk/nextjs"
+import { useSession, signOut } from "@/lib/auth/auth-client"
 import * as motion from "motion/react-client"
 import { ChevronsUpDown, Settings, LogOut, User as UserIcon } from "lucide-react"
 
@@ -67,8 +67,7 @@ const containerVariants = {
 }
 
 export function NavUserAurora() {
-  const { user, isLoaded } = useUser()
-  const { signOut } = useClerk()
+  const { data: session, isPending } = useSession()
   const [mounted, setMounted] = React.useState(false)
 
   // Prevent hydration mismatch by only rendering motion after mount
@@ -76,14 +75,16 @@ export function NavUserAurora() {
     setMounted(true)
   }, [])
 
-  // Wait for Clerk to load and user to be available
-  if (!isLoaded || !user) {
+  // Wait for session to load
+  if (isPending || !session?.user) {
     return null
   }
 
+  const user = session.user
+
   // Get user display information
-  const userName = user.fullName || user.username || "User"
-  const userEmail = user.primaryEmailAddress?.emailAddress || ""
+  const userName = user.name || "User"
+  const userEmail = user.email || ""
   const userInitials = userName
     .split(" ")
     .map((n) => n[0])
@@ -128,7 +129,7 @@ export function NavUserAurora() {
                     "hover:shadow-[0_0_15px_rgba(0,223,130,0.25)]"
                   )}>
                     <AvatarImage
-                      src={user.imageUrl}
+                      src={user.image || undefined}
                       alt={userName}
                     />
                     <AvatarFallback className="rounded-lg bg-accent/20 text-accent">
@@ -160,7 +161,7 @@ export function NavUserAurora() {
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                   <Avatar className="size-8 rounded-lg">
                     <AvatarImage
-                      src={user.imageUrl}
+                      src={user.image || undefined}
                       alt={userName}
                     />
                     <AvatarFallback className="rounded-lg bg-accent/20 text-accent">

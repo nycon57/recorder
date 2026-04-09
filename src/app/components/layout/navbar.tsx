@@ -1,7 +1,7 @@
 'use client';
 
 import * as NavigationMenuPrimitive from '@radix-ui/react-navigation-menu';
-import { SignedIn, SignedOut } from '@clerk/nextjs';
+import { useSession } from '@/lib/auth/auth-client';
 import { Menu, Sparkles, MessageSquare } from 'lucide-react';
 import React from 'react';
 
@@ -62,6 +62,9 @@ const menuItems: MenuItem[] = [
 ];
 
 export default function Navbar() {
+  const { data: session } = useSession();
+  const isSignedIn = !!session;
+
   return (
     <section className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container">
@@ -88,30 +91,31 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center gap-2">
-            <SignedOut>
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="group relative overflow-hidden transition-all duration-300 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10"
-              >
-                <a href="/sign-in">
-                  <span className="relative z-10">Sign In</span>
-                  <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-primary/10 to-primary/5 transition-transform duration-300 group-hover:translate-x-0" />
-                </a>
-              </Button>
-              <Button
-                asChild
-                size="sm"
-                className="group relative overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-primary/30"
-              >
-                <a href="/sign-up">
-                  <span className="relative z-10">Get Started</span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                </a>
-              </Button>
-            </SignedOut>
-            <SignedIn>
+            {!isSignedIn ? (
+              <>
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="group relative overflow-hidden transition-all duration-300 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10"
+                >
+                  <a href="/sign-in">
+                    <span className="relative z-10">Sign In</span>
+                    <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-primary/10 to-primary/5 transition-transform duration-300 group-hover:translate-x-0" />
+                  </a>
+                </Button>
+                <Button
+                  asChild
+                  size="sm"
+                  className="group relative overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-primary/30"
+                >
+                  <a href="/sign-up">
+                    <span className="relative z-10">Get Started</span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                  </a>
+                </Button>
+              </>
+            ) : (
               <Button
                 asChild
                 size="sm"
@@ -122,7 +126,7 @@ export default function Navbar() {
                   <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                 </a>
               </Button>
-            </SignedIn>
+            )}
           </div>
         </nav>
 
@@ -167,19 +171,20 @@ export default function Navbar() {
                   </Accordion>
 
                   <div className="flex flex-col gap-3">
-                    <SignedOut>
-                      <Button asChild variant="outline">
-                        <a href="/sign-in">Sign In</a>
-                      </Button>
-                      <Button asChild>
-                        <a href="/sign-up">Get Started</a>
-                      </Button>
-                    </SignedOut>
-                    <SignedIn>
+                    {!isSignedIn ? (
+                      <>
+                        <Button asChild variant="outline">
+                          <a href="/sign-in">Sign In</a>
+                        </Button>
+                        <Button asChild>
+                          <a href="/sign-up">Get Started</a>
+                        </Button>
+                      </>
+                    ) : (
                       <Button asChild>
                         <a href="/dashboard">Dashboard</a>
                       </Button>
-                    </SignedIn>
+                    )}
                   </div>
                 </div>
               </SheetContent>

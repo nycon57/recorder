@@ -1,6 +1,6 @@
 'use client';
 
-import { SignedIn, SignedOut } from '@clerk/nextjs';
+import { useSession } from '@/lib/auth/auth-client';
 import {
   Menu,
   X,
@@ -219,6 +219,8 @@ const mobileFooterVariants = {
 };
 
 export default function AuroraNavbar() {
+  const { data: session } = useSession();
+  const isSignedIn = !!session;
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
@@ -296,36 +298,37 @@ export default function AuroraNavbar() {
 
           {/* Desktop CTA Buttons */}
           <div className="hidden lg:flex items-center gap-3">
-            <SignedOut>
-              <Button
-                asChild
-                variant="ghost"
-                className={cn(
-                  'text-sm font-medium',
-                  'transition-all duration-300',
-                  'hover:text-accent hover:bg-accent/10'
-                )}
-              >
-                <Link href="/sign-in">Sign In</Link>
-              </Button>
-              <Button
-                asChild
-                className={cn(
-                  'text-sm font-medium rounded-full',
-                  'bg-gradient-to-r from-accent to-secondary',
-                  'text-accent-foreground',
-                  'transition-all duration-300',
-                  'hover:shadow-[0_0_30px_rgba(0,223,130,0.4)]',
-                  'hover:scale-105'
-                )}
-              >
-                <Link href="/sign-up">
-                  Get Started
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </Link>
-              </Button>
-            </SignedOut>
-            <SignedIn>
+            {!isSignedIn ? (
+              <>
+                <Button
+                  asChild
+                  variant="ghost"
+                  className={cn(
+                    'text-sm font-medium',
+                    'transition-all duration-300',
+                    'hover:text-accent hover:bg-accent/10'
+                  )}
+                >
+                  <Link href="/sign-in">Sign In</Link>
+                </Button>
+                <Button
+                  asChild
+                  className={cn(
+                    'text-sm font-medium rounded-full',
+                    'bg-gradient-to-r from-accent to-secondary',
+                    'text-accent-foreground',
+                    'transition-all duration-300',
+                    'hover:shadow-[0_0_30px_rgba(0,223,130,0.4)]',
+                    'hover:scale-105'
+                  )}
+                >
+                  <Link href="/sign-up">
+                    Get Started
+                    <ArrowRight className="ml-1 h-4 w-4" />
+                  </Link>
+                </Button>
+              </>
+            ) : (
               <Button
                 asChild
                 className={cn(
@@ -342,7 +345,7 @@ export default function AuroraNavbar() {
                   <ArrowRight className="ml-1 h-4 w-4" />
                 </Link>
               </Button>
-            </SignedIn>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -449,38 +452,39 @@ export default function AuroraNavbar() {
                     initial="hidden"
                     animate="visible"
                   >
-                    <SignedOut>
-                      <Button
-                        asChild
-                        variant="outline"
-                        className={cn(
-                          'w-full h-12 rounded-xl',
-                          'border-border/50 hover:border-accent/30',
-                          'hover:bg-accent/5 transition-all duration-300'
-                        )}
-                        onClick={() => setMobileOpen(false)}
-                      >
-                        <Link href="/sign-in">Sign In</Link>
-                      </Button>
-                      <Button
-                        asChild
-                        className={cn(
-                          'w-full h-12 rounded-xl',
-                          'bg-gradient-to-r from-accent to-secondary',
-                          'text-accent-foreground font-medium',
-                          'shadow-[0_0_20px_rgba(0,223,130,0.3)]',
-                          'hover:shadow-[0_0_30px_rgba(0,223,130,0.5)]',
-                          'transition-shadow duration-300'
-                        )}
-                        onClick={() => setMobileOpen(false)}
-                      >
-                        <Link href="/sign-up">
-                          Get Started
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </Link>
-                      </Button>
-                    </SignedOut>
-                    <SignedIn>
+                    {!isSignedIn ? (
+                      <>
+                        <Button
+                          asChild
+                          variant="outline"
+                          className={cn(
+                            'w-full h-12 rounded-xl',
+                            'border-border/50 hover:border-accent/30',
+                            'hover:bg-accent/5 transition-all duration-300'
+                          )}
+                          onClick={() => setMobileOpen(false)}
+                        >
+                          <Link href="/sign-in">Sign In</Link>
+                        </Button>
+                        <Button
+                          asChild
+                          className={cn(
+                            'w-full h-12 rounded-xl',
+                            'bg-gradient-to-r from-accent to-secondary',
+                            'text-accent-foreground font-medium',
+                            'shadow-[0_0_20px_rgba(0,223,130,0.3)]',
+                            'hover:shadow-[0_0_30px_rgba(0,223,130,0.5)]',
+                            'transition-shadow duration-300'
+                          )}
+                          onClick={() => setMobileOpen(false)}
+                        >
+                          <Link href="/sign-up">
+                            Get Started
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </>
+                    ) : (
                       <Button
                         asChild
                         className={cn(
@@ -498,7 +502,7 @@ export default function AuroraNavbar() {
                           <ArrowRight className="ml-2 h-4 w-4" />
                         </Link>
                       </Button>
-                    </SignedIn>
+                    )}
                   </motion.div>
                 </div>
               </SheetContent>

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
-import { auth } from '@clerk/nextjs/server';
+import { headers } from 'next/headers';
+import { auth } from '@/lib/auth/auth';
 
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/app/components/ui/sidebar';
 import { Separator } from '@/app/components/ui/separator';
@@ -26,11 +27,15 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { userId } = await auth();
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
 
-  if (!userId) {
+  if (!session) {
     redirect('/');
   }
+
+  const userId = session.user.id;
 
   // Fetch user role and system admin status for conditional navigation
   // Using admin client to bypass RLS (safe in server component)
