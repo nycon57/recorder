@@ -46,7 +46,7 @@ function testFailed(testName, reason) {
 function verifyCacheIsolation() {
   log('\n1. CACHE KEY ISOLATION', colors.blue);
 
-  const cacheFile = path.join(__dirname, '../lib/services/cache/multi-layer-cache.ts');
+  const cacheFile = path.join(__dirname, '../src/lib/services/cache/multi-layer-cache.ts');
 
   try {
     const content = fs.readFileSync(cacheFile, 'utf8');
@@ -81,7 +81,7 @@ function verifyCacheIsolation() {
 function verifySystemAdmin() {
   log('\n2. SYSTEM ADMIN AUTHORIZATION', colors.blue);
 
-  const apiFile = path.join(__dirname, '../lib/utils/api.ts');
+  const apiFile = path.join(__dirname, '../src/lib/utils/api.ts');
 
   try {
     const content = fs.readFileSync(apiFile, 'utf8');
@@ -116,8 +116,8 @@ function verifySystemAdmin() {
 function verifyUUIDValidation() {
   log('\n3. UUID VALIDATION', colors.blue);
 
-  const validationFile = path.join(__dirname, '../lib/utils/validation.ts');
-  const analyticsFile = path.join(__dirname, '../app/api/admin/analytics/route.ts');
+  const validationFile = path.join(__dirname, '../src/lib/utils/validation.ts');
+  const analyticsFile = path.join(__dirname, '../src/app/api/admin/analytics/route.ts');
 
   try {
     // Check validation utility exists
@@ -152,7 +152,7 @@ function verifyUUIDValidation() {
 function verifyRateLimiter() {
   log('\n4. RATE LIMITER FAIL-CLOSED', colors.blue);
 
-  const rateLimiterFile = path.join(__dirname, '../lib/services/quotas/rate-limiter.ts');
+  const rateLimiterFile = path.join(__dirname, '../src/lib/services/quotas/rate-limiter.ts');
 
   try {
     const content = fs.readFileSync(rateLimiterFile, 'utf8');
@@ -194,7 +194,7 @@ function verifyRateLimiter() {
 function verifyAtomicQuota() {
   log('\n5. ATOMIC QUOTA CHECKS', colors.blue);
 
-  const quotaFile = path.join(__dirname, '../lib/services/quotas/quota-manager.ts');
+  const quotaFile = path.join(__dirname, '../src/lib/services/quotas/quota-manager.ts');
 
   try {
     const content = fs.readFileSync(quotaFile, 'utf8');

@@ -4,7 +4,7 @@
  * Run with: npx tsx scripts/apply-match-chunks-migration.ts
  */
 
-import { supabaseAdmin } from '../lib/supabase/admin';
+import { supabaseAdmin } from '../src/lib/supabase/admin';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
