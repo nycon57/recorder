@@ -228,9 +228,9 @@ async function main() {
   section('5. Job Handlers');
 
   const handlers = [
-    { name: 'transcribe-gemini-video', path: '../lib/workers/handlers/transcribe-gemini-video' },
-    { name: 'docify-google', path: '../lib/workers/handlers/docify-google' },
-    { name: 'embeddings-google', path: '../lib/workers/handlers/embeddings-google' },
+    { name: 'transcribe-gemini-video', path: '../src/lib/workers/handlers/transcribe-gemini-video' },
+    { name: 'docify-google', path: '../src/lib/workers/handlers/docify-google' },
+    { name: 'embeddings-google', path: '../src/lib/workers/handlers/embeddings-google' },
   ];
 
   for (const handler of handlers) {
@@ -257,7 +257,7 @@ async function main() {
 
   try {
     totalChecks++;
-    const { streamingManager } = await import('../lib/services/streaming-processor');
+    const { streamingManager } = await import('../src/lib/services/streaming-processor');
     const connectionCount = streamingManager.getConnectionCount();
 
     check('Streaming manager', 'pass', `${connectionCount} active connections`);
