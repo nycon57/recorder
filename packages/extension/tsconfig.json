@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "noEmit": true,
+    "paths": {
+      "@tribora/shared": ["../shared/src/index.ts"],
+      "@tribora/shared/*": ["../shared/src/*"]
+    },
+    "types": ["chrome"]
+  },
+  "include": [
+    "entrypoints/**/*.ts",
+    "entrypoints/**/*.tsx",
+    ".wxt/types/**/*.d.ts"
+  ],
+  "exclude": ["node_modules", ".output"]
+}

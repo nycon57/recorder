@@ -1,6 +1,10 @@
 # Kanban config (contains Linear team UUIDs)
 .agents/kanban/
 
+# Chrome extension build output (WXT)
+packages/extension/.output/
+packages/extension/.wxt/
+
 # Logs
 logs
 *.log

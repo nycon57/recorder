@@ -33,6 +33,12 @@
       ],
       "@/*": [
         "./src/*"
+      ],
+      "@tribora/shared": [
+        "./packages/shared/src"
+      ],
+      "@tribora/shared/*": [
+        "./packages/shared/src/*"
       ]
     }
   },
@@ -44,6 +50,7 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "packages/extension"
   ]
 }

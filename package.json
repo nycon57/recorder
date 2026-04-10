@@ -2,9 +2,14 @@
   "name": "recorder",
   "private": true,
   "version": "0.0.0",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:extension": "npm run dev --workspace=@tribora/extension",
     "build": "next build",
+    "build:extension": "npm run build --workspace=@tribora/extension",
     "start": "next start",
     "lint": "next lint",
     "format": "prettier . --cache",
