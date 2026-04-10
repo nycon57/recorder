@@ -1,8 +1,9 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/types/database';
 
 // Lazy initialization to avoid loading env vars at import time
-let _supabaseAdmin: SupabaseClient | null = null;
+let _supabaseAdmin: SupabaseClient<Database> | null = null;
 
 /**
  * Supabase Admin Client with service role key
@@ -10,10 +11,10 @@ let _supabaseAdmin: SupabaseClient | null = null;
  *
  * Lazily initialized on first access to support environment variable loading
  */
-export const supabaseAdmin = new Proxy({} as SupabaseClient, {
+export const supabaseAdmin = new Proxy({} as SupabaseClient<Database>, {
   get(target, prop) {
     if (!_supabaseAdmin) {
-      _supabaseAdmin = createSupabaseClient(
+      _supabaseAdmin = createSupabaseClient<Database>(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!,
         {
@@ -32,7 +33,7 @@ export const supabaseAdmin = new Proxy({} as SupabaseClient, {
  * Create a new admin client instance (for handlers that need fresh instances)
  */
 export function createClient() {
-  return createSupabaseClient(
+  return createSupabaseClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
