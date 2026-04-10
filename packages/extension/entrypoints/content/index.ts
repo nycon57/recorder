@@ -9,6 +9,7 @@ import type { PageContext } from "@tribora/shared";
 import { buildPageContext } from "./context-engine";
 import { createDomObserver } from "./dom-observer";
 import { createDomOverlay } from "./dom-overlay"; // TRIB-24
+import { createAudioCapture } from "./audio-capture"; // TRIB-25
 
 export default defineContentScript({
   matches: ["<all_urls>"],
@@ -81,5 +82,23 @@ export default defineContentScript({
       }
       return false;
     });
+
+    // ── TRIB-25: Audio capture + push-to-talk ────────────────────────────────
+    const audioCapture = createAudioCapture(
+      (finalTranscript) => {
+        chrome.runtime.sendMessage({
+          type: "STT_FINAL",
+          transcript: finalTranscript,
+        });
+      },
+      (err) => {
+        console.error("[Tribora STT]", err);
+        chrome.runtime.sendMessage({
+          type: "STT_ERROR",
+          state: { status: "error", error: err.message },
+        });
+      },
+    );
+    audioCapture.start();
   },
 });

@@ -16,3 +16,7 @@ export type {
   OverlayPulseMessage,
   OverlayClearMessage,
 } from "./overlay.js";
+
+// TRIB-25 — STT types and hotkey defaults
+export type { SttStatus, SttState, SttMessage, HotkeyConfig } from "./stt.js";
+export { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_WIN } from "./stt.js";
