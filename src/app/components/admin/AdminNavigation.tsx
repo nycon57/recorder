@@ -9,6 +9,7 @@ import {
   Activity,
   Lightbulb,
   HardDrive,
+  FileWarning,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -52,6 +53,13 @@ const navItems: NavItem[] = [
     href: '/admin/storage-recommendations',
     icon: Lightbulb,
     description: 'Optimization suggestions',
+  },
+  // TRIB-34: Wiki Review surfaces flagged contradictions for admin approval
+  {
+    title: 'Wiki Review',
+    href: '/admin/wiki-review',
+    icon: FileWarning,
+    description: 'Resolve flagged contradictions',
   },
 ];
 

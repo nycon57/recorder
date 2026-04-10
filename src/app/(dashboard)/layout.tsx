@@ -7,6 +7,7 @@ import { Separator } from '@/app/components/ui/separator';
 import { AuroraSidebar } from '@/app/components/layout/aurora-sidebar';
 import { Breadcrumbs } from '@/app/components/layout/breadcrumbs';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { getPendingReviewCount } from '@/lib/services/wiki-review';
 
 // Force dynamic rendering for all dashboard pages (auth required)
 export const dynamic = 'force-dynamic';
@@ -43,6 +44,7 @@ export default async function DashboardLayout({
   let isSystemAdmin = false;
   let hasOnboardingPlan = false;
   let hasDigestEnabled = false;
+  let wikiReviewCount = 0;
 
   try {
     const { data: userData } = await supabaseAdmin
@@ -62,7 +64,7 @@ export default async function DashboardLayout({
 
     // Run independent sidebar queries in parallel
     if (userData?.org_id) {
-      const [planResult, settingsResult] = await Promise.all([
+      const [planResult, settingsResult, pendingReviewCount] = await Promise.all([
         userData.id
           ? supabaseAdmin
               .from('agent_onboarding_plans')
@@ -78,12 +80,17 @@ export default async function DashboardLayout({
           .select('digest_enabled, global_agent_enabled')
           .eq('org_id', userData.org_id)
           .maybeSingle(),
+        // TRIB-34: cached (60s) count of pending flagged contradictions for
+        // the admin nav badge. Swallowed on failure — sidebar should never
+        // block on this.
+        getPendingReviewCount(userData.org_id).catch(() => 0),
       ]);
 
       hasOnboardingPlan = !!planResult.data;
       hasDigestEnabled =
         settingsResult.data?.digest_enabled === true &&
         settingsResult.data?.global_agent_enabled !== false;
+      wikiReviewCount = pendingReviewCount;
     }
   } catch (error) {
     console.error('[DashboardLayout] Error fetching user data:', error);
@@ -92,7 +99,7 @@ export default async function DashboardLayout({
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <AuroraSidebar role={userRole} isSystemAdmin={isSystemAdmin} hasOnboardingPlan={hasOnboardingPlan} hasDigestEnabled={hasDigestEnabled} />
+      <AuroraSidebar role={userRole} isSystemAdmin={isSystemAdmin} hasOnboardingPlan={hasOnboardingPlan} hasDigestEnabled={hasDigestEnabled} wikiReviewCount={wikiReviewCount} />
       <SidebarInset>
         {/* Header with sidebar trigger and breadcrumbs */}
         <header className="flex h-16 shrink-0 items-center gap-2 px-4 sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-accent/10 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
