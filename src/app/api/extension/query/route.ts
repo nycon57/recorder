@@ -17,16 +17,43 @@
  *   citation    — { sourceId: string, title: string, recordingUrl?: string }
  *   done        — {}
  *
- * Phase 1 MVP: Uses vendor wiki pages only (no org wiki or LLM fusion).
- * The content is split into ~100-char chunks and streamed as text_chunk
- * events. Element selectors from the wiki page are emitted as element_ref
- * events. A citation event references the vendor page source URL.
+ * TRIB-35: Two-layer fusion.
+ *
+ * Flow:
+ *   1. requireOrg() — fail fast before touching the stream.
+ *   2. Resolve {app, screen} from appSignature.
+ *   3. Layer 1: resolveVendorWikiPage({ app, screen }) — generic vendor docs.
+ *   4. Embed the user question via generateEmbeddingWithFallback (RETRIEVAL_QUERY).
+ *   5. Layer 2: resolveOrgWikiPagesByVector({ orgId, questionEmbedding, limit: 3 })
+ *              — top-3 currently-active org wiki pages by cosine similarity.
+ *   6. If both layers are empty → graceful "no documentation" fallback + done.
+ *   7. Build the PRD Part 3 Component 3 fusion prompt (see product-architecture-v2.md
+ *      line 427+). Sections: VENDOR KNOWLEDGE, ORG KNOWLEDGE, INTERACTIVE ELEMENTS,
+ *      QUESTION. ORG KNOWLEDGE takes precedence on conflict.
+ *   8. Call ai.models.generateContentStream(...) with temperature 0.4 and
+ *      maxOutputTokens 2048 for a snappy conversational response.
+ *   9. Each streamed chunk goes through a TagStreamParser state machine which:
+ *        - Buffers tokens
+ *        - Emits plain text as `text_chunk` events (word-chunked ~120 chars)
+ *        - Parses complete `[ELEMENT:selector:label]` tags into `element_ref`
+ *        - Parses complete `[SOURCE:id:title]` tags into `citation`
+ *        - Holds partial tag prefixes across chunk boundaries
+ *        - Passes malformed tags through as plain text
+ *  10. On stream end or error, emit a terminal `done` event and close.
+ *
+ * Runtime: nodejs (NOT edge) — Vercel Fluid Compute supports long-running
+ * SSE streams on Node. Preserve the existing SSE headers.
  */
 
 import { NextRequest } from 'next/server';
+import { GoogleGenAI } from '@google/genai';
 
 import { requireOrg, errors } from '@/lib/utils/api';
 import { resolveVendorWikiPage } from '@/lib/services/vendor-wiki-resolver';
+import { resolveOrgWikiPagesByVector } from '@/lib/services/org-wiki-embedding';
+import type { ResolvedOrgWikiPage } from '@/lib/services/org-wiki-embedding';
+import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
+import { createClient as createAdminClient } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -67,7 +94,7 @@ function encodeEvent(encoder: TextEncoder, data: SseEvent): Uint8Array {
  * boundaries so the extension TTS doesn't cut mid-word.
  */
 function chunkText(text: string, chunkSize = 120): string[] {
-  const words = text.split(/\s+/);
+  const words = text.split(/\s+/).filter(Boolean);
   const chunks: string[] = [];
   let current = '';
 
@@ -94,8 +121,342 @@ interface PageContext {
   elements?: Array<{ selector: string; label: string }>;
 }
 
+/** Lazy Gemini client — no import-time env var reads (Fluid Compute safe). */
+let _genaiClient: GoogleGenAI | null = null;
+function getGenAIClient(): GoogleGenAI {
+  if (!_genaiClient) {
+    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GOOGLE_AI_API_KEY environment variable is not set');
+    }
+    _genaiClient = new GoogleGenAI({ apiKey });
+  }
+  return _genaiClient;
+}
+
+// -------------------- Fusion prompt --------------------
+
+const ORG_SEPARATOR = '\n\n---\n\n';
+const MAX_CONTENT_CHARS_PER_PAGE = 3000;
+
+/**
+ * Build the PRD Part 3 Component 3 fusion prompt. Sections are kept in the
+ * order specified by product-architecture-v2.md line 435+:
+ *   VENDOR KNOWLEDGE → ORG KNOWLEDGE → INTERACTIVE ELEMENTS → QUESTION.
+ *
+ * Rules block is inlined verbatim (paraphrased slightly for clarity) and
+ * enforces: org precedence, `[ELEMENT:selector:label]` tagging,
+ * `[SOURCE:id:title]` citations, org sources first.
+ */
+function buildFusionPrompt(args: {
+  app: string;
+  screen: string;
+  question: string;
+  vendorMarkdown: string | null;
+  orgPages: ResolvedOrgWikiPage[];
+  elements: Array<{ selector: string; label: string }>;
+}): string {
+  const { app, screen, question, vendorMarkdown, orgPages, elements } = args;
+
+  const vendorSection = vendorMarkdown
+    ? vendorMarkdown.slice(0, MAX_CONTENT_CHARS_PER_PAGE)
+    : '(no vendor documentation available for this screen)';
+
+  const orgSection =
+    orgPages.length > 0
+      ? orgPages
+          .map((page) => {
+            const header = `### ${page.topic} [SOURCE:${page.id}:${page.topic}]`;
+            const body = (page.content ?? '').slice(0, MAX_CONTENT_CHARS_PER_PAGE);
+            return `${header}\n${body}`;
+          })
+          .join(ORG_SEPARATOR)
+      : '(no org-specific knowledge available for this screen)';
+
+  const elementsSection =
+    elements.length > 0
+      ? elements.map((el) => `- ${el.label}: ${el.selector}`).join('\n')
+      : '(no interactive elements provided)';
+
+  return `You are a context-aware assistant helping someone use ${app}'s ${screen} page.
+
+VENDOR KNOWLEDGE (generic software documentation):
+${vendorSection}
+
+ORG KNOWLEDGE (how this team specifically uses it):
+${orgSection}
+
+INTERACTIVE ELEMENTS VISIBLE ON SCREEN:
+${elementsSection}
+
+QUESTION: ${question}
+
+Rules:
+- ORG KNOWLEDGE takes precedence over VENDOR KNOWLEDGE when they conflict. Explicitly mention when you're following the team's specific way.
+- When referring to a clickable element that exists in INTERACTIVE ELEMENTS, tag it like [ELEMENT:selector:label] so the extension can highlight/point at it. Use the selector exactly as provided above.
+- When citing a source, tag it [SOURCE:id:title]. Use the org page id for org citations and the vendor page id for vendor citations. Org sources should come first in the citation list.
+- Keep the answer concise and conversational. Prioritize actionable steps a user can follow right now.
+- If you don't know the answer from either layer, say so clearly instead of guessing.`;
+}
+
+// -------------------- Tag-parsing state machine --------------------
+
+/**
+ * Parses a streamed LLM response containing inline `[ELEMENT:selector:label]`
+ * and `[SOURCE:id:title]` tags. Designed to handle:
+ *
+ *   (a) Tags at the start, middle, or end of a chunk.
+ *   (b) Tags split across multiple chunks
+ *       (e.g. "[ELEM" arrives in chunk 1, "ENT:a.btn:Click]" in chunk 2).
+ *   (c) Malformed tags ("[ELEMENT: no closing]" or "[FOO:bar:baz]")
+ *       are flushed as plain text after we confirm they can't be a tag.
+ *   (d) Plain text interleaved with tags.
+ *
+ * Strategy:
+ *   - Hold a running `buffer` of unflushed text.
+ *   - On each `push(chunk)`, append the chunk and scan:
+ *       1. Find the earliest `[` in the buffer.
+ *       2. If no `[`: everything is plain text → flush and return.
+ *       3. Flush everything BEFORE the `[` as plain text.
+ *       4. Starting at `[`, check for a complete tag regex match.
+ *          - If match: emit the typed event, advance past the match, loop.
+ *       5. Otherwise, check if the remaining buffer starts with a prefix of
+ *          either "[ELEMENT:" or "[SOURCE:". If so, hold the buffer (it
+ *          might be a tag in progress) and return.
+ *       6. Otherwise, this `[` is not the start of a tag. Flush it as plain
+ *          text and keep scanning.
+ *   - On `flush()`, emit whatever's left in the buffer as plain text.
+ *
+ * Text emission is word-chunked via `chunkText(~120 chars)` so the extension
+ * TTS doesn't cut mid-word.
+ *
+ * Test scenarios (conceptual — see PR body for fuller notes):
+ *
+ *   Scenario 1: plain text
+ *     push("Click the button.") → text_chunk "Click the button."
+ *
+ *   Scenario 2: tag at end of chunk
+ *     push("Open the menu ") → text_chunk "Open the menu"
+ *     push("[ELEMENT:.menu:Menu]") → element_ref {.menu, Menu, highlight}
+ *
+ *   Scenario 3: tag split across chunks
+ *     push("Click [ELEM") → text_chunk "Click" (buffer holds "[ELEM")
+ *     push("ENT:.btn:Save]") → element_ref {.btn, Save, highlight}
+ *
+ *   Scenario 4: malformed tag passes through
+ *     push("[FOO:bar:baz] done") → text_chunk "[FOO:bar:baz] done"
+ *
+ *   Scenario 5: multiple tags in one chunk
+ *     push("See [SOURCE:abc:Guide] and click [ELEMENT:.ok:OK]")
+ *       → text_chunk "See", citation {abc, Guide}, text_chunk "and click",
+ *         element_ref {.ok, OK, highlight}
+ */
+class TagStreamParser {
+  private buffer = '';
+
+  // Case-insensitive so the LLM lowercasing a tag doesn't break us.
+  // Matches [ELEMENT:x:y] or [SOURCE:x:y] where:
+  //   - arg1 (selector/id) has no `:` or `]`
+  //   - arg2 (label/title) has no `]`
+  // This handles typical UUIDs, class selectors, id selectors, and attribute
+  // selectors. CSS pseudo-classes like `a:hover` are NOT supported in the
+  // first argument — the fusion prompt tells the LLM to use the exact
+  // selector from INTERACTIVE ELEMENTS which the extension's context engine
+  // emits as attribute selectors.
+  private static readonly TAG_REGEX =
+    /\[(ELEMENT|SOURCE):([^:\]]+):([^\]]*)\]/i;
+
+  // Valid prefixes of a tag opener. If the buffer ends with any of these,
+  // we hold the buffer as a potential tag-in-progress instead of flushing.
+  private static readonly TAG_OPENER_PREFIXES = [
+    '[',
+    '[E',
+    '[EL',
+    '[ELE',
+    '[ELEM',
+    '[ELEME',
+    '[ELEMEN',
+    '[ELEMENT',
+    '[ELEMENT:',
+    '[S',
+    '[SO',
+    '[SOU',
+    '[SOUR',
+    '[SOURC',
+    '[SOURCE',
+    '[SOURCE:',
+  ];
+
+  constructor(
+    private readonly onText: (text: string) => void,
+    private readonly onElement: (el: {
+      selector: string;
+      label: string;
+    }) => void,
+    private readonly onCitation: (cite: {
+      sourceId: string;
+      title: string;
+    }) => void
+  ) {}
+
+  push(chunk: string): void {
+    if (!chunk) return;
+    this.buffer += chunk;
+    this.drain();
+  }
+
+  /**
+   * Drain as much of the buffer as possible into text/element/citation
+   * events. On return, the buffer either is empty or holds a partial tag
+   * prefix awaiting the next chunk.
+   */
+  private drain(): void {
+    // Loop until we can't make progress (either buffer is empty or holds
+    // only a potential tag prefix).
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const bracketIdx = this.buffer.indexOf('[');
+
+      // No bracket — all of buffer is safe plain text.
+      if (bracketIdx === -1) {
+        if (this.buffer.length > 0) {
+          this.emitText(this.buffer);
+          this.buffer = '';
+        }
+        return;
+      }
+
+      // Flush any plain text BEFORE the bracket first.
+      if (bracketIdx > 0) {
+        this.emitText(this.buffer.slice(0, bracketIdx));
+        this.buffer = this.buffer.slice(bracketIdx);
+      }
+
+      // Buffer now starts with `[`. Try to match a complete tag.
+      const match = this.buffer.match(TagStreamParser.TAG_REGEX);
+      if (match && match.index === 0) {
+        // Complete tag at buffer start — emit the typed event.
+        const tagKind = match[1].toUpperCase();
+        const arg1 = match[2];
+        const arg2 = match[3];
+
+        if (tagKind === 'ELEMENT') {
+          this.onElement({ selector: arg1, label: arg2 });
+        } else if (tagKind === 'SOURCE') {
+          this.onCitation({ sourceId: arg1, title: arg2 });
+        }
+
+        this.buffer = this.buffer.slice(match[0].length);
+        continue;
+      }
+
+      // No complete tag at buffer start. Decide: is this a potential
+      // tag in progress (hold), or just a literal `[` (pass through)?
+      if (this.looksLikePendingTag()) {
+        return; // hold buffer, wait for more
+      }
+
+      // Not a pending tag — this `[` is literal. Emit it as text and
+      // advance past it so we can keep scanning for the next `[`.
+      this.emitText('[');
+      this.buffer = this.buffer.slice(1);
+    }
+  }
+
+  /**
+   * Returns true if the current buffer could plausibly become a valid
+   * `[ELEMENT:...]` or `[SOURCE:...]` tag once more chunks arrive.
+   *
+   * Two cases count as "pending":
+   *   1. The entire buffer is a valid tag-opener prefix
+   *      (e.g. "[ELEM", "[SOURCE:").
+   *   2. The buffer starts with `[ELEMENT:` or `[SOURCE:` but the closing
+   *      `]` hasn't arrived yet (so the tag is in progress).
+   */
+  private looksLikePendingTag(): boolean {
+    // Case 1: full buffer IS a tag-opener prefix. Cap the check at 9 chars
+    // so "[ELEMENT:" is the longest we match — anything longer falls into
+    // case 2 (already committed to being a tag).
+    const shortBuffer = this.buffer.slice(0, 9);
+    if (TagStreamParser.TAG_OPENER_PREFIXES.includes(shortBuffer.toUpperCase())) {
+      return true;
+    }
+
+    // Case 2: buffer has the full tag prefix but no closing `]` yet.
+    const upper = this.buffer.toUpperCase();
+    if (upper.startsWith('[ELEMENT:') || upper.startsWith('[SOURCE:')) {
+      // If there's no `]` anywhere in the buffer, we're still waiting.
+      // If there IS a `]` but the regex didn't match, the tag is malformed
+      // (e.g. missing the second `:`) — fall through to literal-text mode.
+      if (!this.buffer.includes(']')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Flush any remaining buffered text as plain text chunks. Called once
+   * when the LLM stream completes to make sure partial-tag buffers and
+   * trailing prose don't get dropped.
+   */
+  flush(): void {
+    if (this.buffer.length > 0) {
+      this.emitText(this.buffer);
+      this.buffer = '';
+    }
+  }
+
+  private emitText(text: string): void {
+    if (!text) return;
+    const chunks = chunkText(text);
+    for (const chunk of chunks) {
+      this.onText(chunk);
+    }
+  }
+}
+
+// -------------------- Citation enrichment --------------------
+
+/**
+ * Given a set of org page ids that were cited, look up their first
+ * contributing recording source so the extension can deep-link the user
+ * to the recording on the hub. Best-effort: failures are swallowed and
+ * the citation is emitted without a recordingUrl.
+ *
+ * NOTE: This is an in-memory cache keyed by page id. We resolve lazily,
+ * only when the LLM actually cites a page, so we don't do DB work for
+ * unused pages.
+ */
+async function resolveRecordingUrlForPage(
+  pageId: string
+): Promise<string | undefined> {
+  try {
+    const supabase = createAdminClient();
+    const { data } = await supabase
+      .from('wiki_page_sources')
+      .select('source_id, source_type')
+      .eq('page_id', pageId)
+      .eq('source_type', 'recording')
+      .order('contributed_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const row = data as { source_id: string; source_type: string } | null;
+    if (!row?.source_id) return undefined;
+
+    return `/dashboard/recordings/${row.source_id}`;
+  } catch {
+    return undefined;
+  }
+}
+
+// -------------------- Route handler --------------------
+
 export async function POST(request: NextRequest) {
-  // Auth check before touching the stream
+  // Auth check before touching the stream so unauthorized clients
+  // get a plain 401 rather than a half-opened SSE connection.
   let orgId: string;
   try {
     const ctx = await requireOrg();
@@ -110,13 +471,11 @@ export async function POST(request: NextRequest) {
   // Parse request body
   let question: string;
   let context: PageContext;
-  let conversationId: string | undefined;
 
   try {
     const body = await request.json();
     question = body.question;
     context = body.context;
-    conversationId = body.conversationId;
   } catch {
     return errors.badRequest('Invalid JSON body');
   }
@@ -143,74 +502,213 @@ export async function POST(request: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      try {
-        // Phase 1: resolve vendor wiki page only
-        const wikiPage = await resolveVendorWikiPage({ app, screen });
+      /**
+       * Helper: enqueue a single SSE event. Wrapped so the tag parser and
+       * fusion flow all go through one code path.
+       */
+      const emit = (event: SseEvent) => {
+        controller.enqueue(encodeEvent(encoder, event));
+      };
 
-        if (!wikiPage) {
-          // No knowledge found — emit a graceful fallback and done
-          controller.enqueue(
-            encodeEvent(encoder, {
-              type: 'text_chunk',
-              text: `I don't have specific documentation for ${app} ${screen} yet. Please check the vendor's help center for guidance.`,
-            })
-          );
-          controller.enqueue(encodeEvent(encoder, { type: 'done' }));
+      /**
+       * Terminal helper: emit `done` and close the stream exactly once.
+       * Guards against double-close if an error path races the happy path.
+       */
+      let closed = false;
+      const finish = () => {
+        if (closed) return;
+        closed = true;
+        try {
+          emit({ type: 'done' });
+        } catch {
+          /* controller may already be closed */
+        }
+        try {
           controller.close();
-          return;
+        } catch {
+          /* already closed */
         }
+      };
 
-        // Stream content in text chunks
-        const chunks = chunkText(wikiPage.content);
-        for (const chunk of chunks) {
-          controller.enqueue(
-            encodeEvent(encoder, { type: 'text_chunk', text: chunk })
+      try {
+        // ---- Step 1: resolve vendor page (Layer 1) ---------------------
+        const vendorPage = await resolveVendorWikiPage({ app, screen });
+
+        // ---- Step 2: embed the question (RETRIEVAL_QUERY task) ---------
+        // Reuse the project's fallback-aware embedding helper so we get
+        // identical dimensions and retry behavior as TRIB-36 writes.
+        let questionEmbedding: number[] = [];
+        try {
+          const result = await generateEmbeddingWithFallback(
+            question,
+            'RETRIEVAL_QUERY'
+          );
+          questionEmbedding = result.embedding;
+        } catch (embedError) {
+          // If embedding fails, continue with an empty vector — the org
+          // resolver will short-circuit to an empty result and we'll
+          // fall through to vendor-only fusion.
+          console.error(
+            '[extension/query] embedding failed, continuing without org layer:',
+            embedError
           );
         }
 
-        // Emit element refs from the wiki page's element_selectors
-        const selectors = wikiPage.element_selectors as
-          | Array<{ selector: string; label: string; action?: string }>
-          | null;
-
-        if (Array.isArray(selectors)) {
-          for (const el of selectors) {
-            if (el.selector && el.label) {
-              controller.enqueue(
-                encodeEvent(encoder, {
-                  type: 'element_ref',
-                  selector: el.selector,
-                  label: el.label,
-                  action: (el.action as ElementRefEvent['action']) ?? 'highlight',
-                })
-              );
-            }
+        // ---- Step 3: resolve top-N org pages (Layer 2) -----------------
+        let orgPages: ResolvedOrgWikiPage[] = [];
+        if (questionEmbedding.length > 0) {
+          try {
+            orgPages = await resolveOrgWikiPagesByVector({
+              orgId,
+              questionEmbedding,
+              limit: 3,
+            });
+          } catch (orgError) {
+            console.error(
+              '[extension/query] org page resolution failed:',
+              orgError
+            );
           }
         }
 
-        // Emit citation for the vendor page
-        controller.enqueue(
-          encodeEvent(encoder, {
-            type: 'citation',
-            sourceId: wikiPage.id,
-            title: `${wikiPage.app} — ${wikiPage.screen}`,
-            recordingUrl: wikiPage.source_url ?? undefined,
-          })
+        // ---- Step 4: early exit if both layers are empty ---------------
+        if (!vendorPage && orgPages.length === 0) {
+          emit({
+            type: 'text_chunk',
+            text: `I don't have specific documentation for ${app} ${screen} yet. Please check the vendor's help center for guidance.`,
+          });
+          finish();
+          return;
+        }
+
+        // ---- Step 5: build the PRD fusion prompt -----------------------
+        const fusionPrompt = buildFusionPrompt({
+          app,
+          screen,
+          question,
+          vendorMarkdown: vendorPage?.content ?? null,
+          orgPages,
+          elements: context.elements ?? [],
+        });
+
+        // ---- Step 6: stream the LLM response through the tag parser ---
+        // Track which page ids we've already cited so we only enrich the
+        // recording URL lookup once per source.
+        const citedPageIds = new Set<string>();
+        const orgPageIds = new Set(orgPages.map((p) => p.id));
+        const vendorPageId = vendorPage?.id;
+        const vendorPageTitle = vendorPage
+          ? `${vendorPage.app} — ${vendorPage.screen}`
+          : null;
+        const vendorSourceUrl = vendorPage?.source_url ?? undefined;
+
+        const parser = new TagStreamParser(
+          // onText
+          (text) => emit({ type: 'text_chunk', text }),
+          // onElement
+          ({ selector, label }) => {
+            emit({
+              type: 'element_ref',
+              selector,
+              label: label || selector,
+              action: 'highlight',
+            });
+          },
+          // onCitation — fire-and-forget async enrichment; the synchronous
+          // citation event is emitted immediately so the extension's UI
+          // doesn't wait on a DB round-trip. Recording URL enrichment
+          // happens in the background and we re-emit if we find one.
+          ({ sourceId, title }) => {
+            if (citedPageIds.has(sourceId)) return;
+            citedPageIds.add(sourceId);
+
+            // Vendor citation — use the source_url directly.
+            if (sourceId === vendorPageId) {
+              emit({
+                type: 'citation',
+                sourceId,
+                title: title || vendorPageTitle || 'Vendor documentation',
+                recordingUrl: vendorSourceUrl,
+              });
+              return;
+            }
+
+            // Org citation — try to resolve a recording URL in the
+            // background so we don't block the text stream.
+            if (orgPageIds.has(sourceId)) {
+              emit({
+                type: 'citation',
+                sourceId,
+                title: title || 'Team knowledge',
+              });
+              resolveRecordingUrlForPage(sourceId)
+                .then((recordingUrl) => {
+                  if (recordingUrl) {
+                    emit({
+                      type: 'citation',
+                      sourceId,
+                      title: title || 'Team knowledge',
+                      recordingUrl,
+                    });
+                  }
+                })
+                .catch(() => {
+                  /* best-effort enrichment */
+                });
+              return;
+            }
+
+            // Unknown id — emit raw anyway so the extension still sees it.
+            emit({
+              type: 'citation',
+              sourceId,
+              title: title || 'Source',
+            });
+          }
         );
 
-        // Signal completion
-        controller.enqueue(encodeEvent(encoder, { type: 'done' }));
-        controller.close();
+        try {
+          const genai = getGenAIClient();
+          const stream = await genai.models.generateContentStream({
+            model: 'gemini-2.5-flash',
+            contents: fusionPrompt,
+            config: {
+              temperature: 0.4,
+              maxOutputTokens: 2048,
+            },
+          });
+
+          for await (const chunk of stream) {
+            const text = chunk.text;
+            if (typeof text === 'string' && text.length > 0) {
+              parser.push(text);
+            }
+          }
+
+          // Flush any trailing text / partial-tag buffer as plain text.
+          parser.flush();
+        } catch (llmError) {
+          console.error('[extension/query] LLM stream error:', llmError);
+          // Make sure any buffered text still makes it to the client.
+          parser.flush();
+          emit({
+            type: 'text_chunk',
+            text: 'I had trouble generating a response. Please try again.',
+          });
+        }
+
+        finish();
       } catch (error) {
         console.error('[extension/query] stream error:', error);
-        controller.enqueue(
-          encodeEvent(encoder, {
+        try {
+          emit({
             type: 'text_chunk',
             text: 'An error occurred while retrieving knowledge. Please try again.',
-          })
-        );
-        controller.enqueue(encodeEvent(encoder, { type: 'done' }));
-        controller.close();
+          });
+        } catch {
+          /* controller may already be closed */
+        }
+        finish();
       }
     },
   });
