@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Eye, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/app/components/ui/badge';

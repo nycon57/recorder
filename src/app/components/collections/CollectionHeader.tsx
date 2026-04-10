@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { ArrowLeft, FolderPlus, Settings, ChevronRight, Home } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import { cn } from '@/lib/utils';

@@ -121,7 +121,7 @@ export async function GET(
         return NextResponse.json(
           {
             error: 'Invalid query parameters',
-            details: error.errors.map((e) => ({
+            details: error.issues.map((e) => ({
               field: e.path.join('.'),
               message: e.message,
             })),
@@ -304,7 +304,7 @@ export async function POST(
         return NextResponse.json(
           {
             error: 'Invalid request body',
-            details: error.errors.map((e) => ({
+            details: error.issues.map((e) => ({
               field: e.path.join('.'),
               message: e.message,
             })),

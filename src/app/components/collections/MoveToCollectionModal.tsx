@@ -10,7 +10,7 @@ import {
   Home,
   Loader2,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import {

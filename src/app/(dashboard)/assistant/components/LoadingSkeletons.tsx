@@ -11,7 +11,7 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { Loader } from '@/app/components/ai-elements/loader';
 import { Shimmer } from '@/app/components/ai-elements/shimmer';

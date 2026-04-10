@@ -58,11 +58,11 @@ export const POST = apiHandler(async (
     if (!validationResult.success) {
       logger.warn('Invalid metadata request', {
         context: { requestId, orgId, userId, recordingId },
-        data: { errors: validationResult.error.errors },
+        data: { errors: validationResult.error.issues },
       });
       return errors.badRequest(
         'Invalid request data',
-        { errors: validationResult.error.errors },
+        { errors: validationResult.error.issues },
         requestId
       );
     }

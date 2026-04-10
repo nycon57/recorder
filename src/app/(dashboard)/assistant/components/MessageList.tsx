@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { Bot } from 'lucide-react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'motion/react';
 import {
   Conversation,
   ConversationContent,
