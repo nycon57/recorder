@@ -193,14 +193,62 @@ export function detectApp(
     return { app: entry.name, screen };
   }
 
-  // Unknown app — derive a human-readable screen from the hostname
-  return { app: "unknown", screen: hostnameFromUrl(url) };
+  // Unknown app — derive a best-effort screen name from the URL
+  return { app: "unknown", screen: hostnameScreenFromUrl(url), appVersion: undefined };
 }
 
-function hostnameFromUrl(url: string): string {
+/**
+ * Parse a URL into a best-effort screen identifier for apps not in the
+ * APP_REGISTRY. Returns a kebab-case slug capped at 60 chars.
+ *
+ * Special cases:
+ *   chrome://extensions/        → "chrome-extensions"
+ *   about:blank                 → "blank"
+ *   chrome-extension://, data:, devtools:, view-source:, javascript:
+ *                               → "internal"
+ *   https://example.com/        → "home"
+ *   https://example.com/a/b/c   → "a-b-c"
+ */
+export function hostnameScreenFromUrl(url: string): string {
   try {
-    return new URL(url).hostname;
+    const parsed = new URL(url);
+
+    // Internal/system URLs — no useful context to extract
+    if (
+      parsed.protocol === "chrome-extension:" ||
+      parsed.protocol === "devtools:" ||
+      parsed.protocol === "view-source:" ||
+      parsed.protocol === "data:" ||
+      parsed.protocol === "javascript:"
+    ) {
+      return "internal";
+    }
+
+    // Special browser scheme pages
+    if (parsed.protocol === "chrome:" || parsed.protocol === "edge:") {
+      const scheme = parsed.protocol.replace(":", "");
+      return `${scheme}-${parsed.hostname || "home"}`;
+    }
+    if (parsed.protocol === "about:") {
+      return parsed.pathname || "blank";
+    }
+
+    // Standard http(s) URL: extract path segments
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    if (segments.length === 0) {
+      return "home";
+    }
+
+    const slug = segments
+      .join("-")
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    return slug.slice(0, 60) || "home";
   } catch {
+    // Invalid URL
     return "unknown";
   }
 }
