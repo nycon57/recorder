@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -17,6 +17,8 @@ import {
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
+import { Label } from '@/app/components/ui/label';
 import { Switch } from '@/app/components/ui/switch';
 import {
   Select,
@@ -190,8 +192,14 @@ function formatExpiresIn(dateStr: string): string {
 
 interface AgentSettings {
   global_agent_enabled: boolean | null;
+  wiki_auto_publish?: boolean | null;
+  wiki_stale_threshold_days?: number | null;
   [key: string]: unknown;
 }
+
+const WIKI_STALE_THRESHOLD_MIN = 1;
+const WIKI_STALE_THRESHOLD_MAX = 365;
+const WIKI_STALE_THRESHOLD_DEFAULT = 90;
 
 interface AgentPermissionRow {
   agent_type: string;
@@ -210,6 +218,11 @@ export default function AgentsSettingsPage() {
   });
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  // Local draft state for the stale-threshold number input so typing feels
+  // instant; commits on blur / Enter via a PATCH.
+  const [staleThresholdDraft, setStaleThresholdDraft] = useState<string>(
+    String(WIKI_STALE_THRESHOLD_DEFAULT),
+  );
 
   // --- Queries ---
 
@@ -260,7 +273,7 @@ export default function AgentsSettingsPage() {
   // --- Mutations ---
 
   const settingsMutation = useMutation({
-    mutationFn: async (updates: Record<string, boolean>) => {
+    mutationFn: async (updates: Record<string, boolean | number>) => {
       const res = await fetch('/api/organizations/agent-settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -355,6 +368,13 @@ export default function AgentsSettingsPage() {
     },
   });
 
+  // Sync the stale-threshold draft from the server value whenever it changes.
+  useEffect(() => {
+    if (typeof settings?.wiki_stale_threshold_days === 'number') {
+      setStaleThresholdDraft(String(settings.wiki_stale_threshold_days));
+    }
+  }, [settings?.wiki_stale_threshold_days]);
+
   // --- Loading state ---
 
   if (settingsLoading || permissionsLoading) {
@@ -371,7 +391,30 @@ export default function AgentsSettingsPage() {
   // --- Helpers ---
 
   const globalEnabled = settings?.global_agent_enabled ?? true;
+  const wikiAutoPublish = settings?.wiki_auto_publish ?? false;
+  const wikiStaleThresholdServerValue =
+    settings?.wiki_stale_threshold_days ?? WIKI_STALE_THRESHOLD_DEFAULT;
   const pendingCount = approvals?.filter(a => a.status === 'pending').length ?? 0;
+
+  function commitStaleThreshold(): void {
+    const parsed = Number.parseInt(staleThresholdDraft, 10);
+    if (
+      !Number.isInteger(parsed) ||
+      parsed < WIKI_STALE_THRESHOLD_MIN ||
+      parsed > WIKI_STALE_THRESHOLD_MAX
+    ) {
+      // Reset to last-known-good server value so the input never shows invalid state.
+      setStaleThresholdDraft(String(wikiStaleThresholdServerValue));
+      toast.error(
+        `Stale threshold must be between ${WIKI_STALE_THRESHOLD_MIN} and ${WIKI_STALE_THRESHOLD_MAX} days`,
+      );
+      return;
+    }
+    if (parsed === wikiStaleThresholdServerValue) {
+      return;
+    }
+    settingsMutation.mutate({ wiki_stale_threshold_days: parsed });
+  }
 
   function getPermissionTier(agentType: string, actionType: string): PermissionTier {
     const row = permissions?.find(
@@ -418,6 +461,77 @@ export default function AgentsSettingsPage() {
             aria-label="Enable all agents"
           />
         </CardHeader>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-medium">Wiki compilation</CardTitle>
+          <CardDescription>
+            Control how the compilation engine updates your organization&apos;s wiki when
+            new content contradicts existing documentation.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <Label
+                htmlFor="wiki-auto-publish"
+                className="text-sm font-medium cursor-pointer"
+              >
+                Auto-publish wiki updates
+              </Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                When on, contradictory updates are applied automatically and previous
+                versions are superseded. When off, contradictions are flagged for admin
+                review before any change is published.
+              </p>
+            </div>
+            <Switch
+              id="wiki-auto-publish"
+              checked={wikiAutoPublish}
+              onCheckedChange={(checked) =>
+                settingsMutation.mutate({ wiki_auto_publish: checked })
+              }
+              disabled={settingsMutation.isPending}
+              aria-label="Auto-publish wiki updates"
+            />
+          </div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <Label
+                htmlFor="wiki-stale-threshold"
+                className="text-sm font-medium cursor-pointer"
+              >
+                Stale threshold (days)
+              </Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                Number of days after which a wiki page is flagged as stale by the wiki
+                lint job. Must be between {WIKI_STALE_THRESHOLD_MIN} and{' '}
+                {WIKI_STALE_THRESHOLD_MAX} days.
+              </p>
+            </div>
+            <Input
+              id="wiki-stale-threshold"
+              type="number"
+              inputMode="numeric"
+              min={WIKI_STALE_THRESHOLD_MIN}
+              max={WIKI_STALE_THRESHOLD_MAX}
+              step={1}
+              className="w-24 shrink-0"
+              value={staleThresholdDraft}
+              onChange={(e) => setStaleThresholdDraft(e.target.value)}
+              onBlur={commitStaleThreshold}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.currentTarget.blur();
+                }
+              }}
+              disabled={settingsMutation.isPending}
+              aria-label="Wiki stale threshold in days"
+            />
+          </div>
+        </CardContent>
       </Card>
 
       {costEstimate && (

@@ -33,7 +33,28 @@ const DEFAULT_SETTINGS: Omit<OrgAgentSettings, 'id' | 'org_id' | 'created_at' | 
   digest_enabled: false,
   workflow_extraction_enabled: false,
   global_agent_enabled: true,
+  wiki_auto_publish: false,
+  wiki_stale_threshold_days: 90,
   metadata: {},
+};
+
+/**
+ * Compilation-engine settings consumed by TRIB-32 (compile_wiki) and the
+ * future wiki lint scheduled job.
+ *
+ * - wikiAutoPublish: when true, the compile handler auto-supersedes contradictory
+ *   wiki content. When false, contradictions are flagged for admin review (TRIB-34).
+ * - wikiStaleThresholdDays: age threshold (days) after which a wiki page is marked
+ *   stale by the wiki lint scheduled job (future ticket).
+ */
+export interface WikiCompilationSettings {
+  wikiAutoPublish: boolean;
+  wikiStaleThresholdDays: number;
+}
+
+const DEFAULT_WIKI_COMPILATION_SETTINGS: WikiCompilationSettings = {
+  wikiAutoPublish: false,
+  wikiStaleThresholdDays: 90,
 };
 
 /** Agents unlocked per plan tier -- single source of truth for plan gating */
@@ -160,4 +181,28 @@ export async function checkAgentPlanAccess(
   const requiredTier = getRequiredTierForAgent(agentType);
   const allowed = tierMeetsRequirement(planTier, requiredTier);
   return { allowed, planTier, requiredTier };
+}
+
+/**
+ * Return the org's compilation-engine settings consumed by TRIB-32's compile_wiki
+ * handler and the future wiki lint scheduled job. Falls back to safe defaults
+ * ({ wikiAutoPublish: false, wikiStaleThresholdDays: 90 }) when the row is missing
+ * or on any database error, so callers never need to branch on the error path.
+ *
+ * Reuses getAgentSettings() so it automatically synthesizes defaults on missing
+ * rows and keeps a single read path against org_agent_settings.
+ */
+export async function getWikiCompilationSettings(
+  orgId: string
+): Promise<WikiCompilationSettings> {
+  try {
+    const row = await getAgentSettings(orgId);
+    return {
+      wikiAutoPublish: row.wiki_auto_publish ?? DEFAULT_WIKI_COMPILATION_SETTINGS.wikiAutoPublish,
+      wikiStaleThresholdDays:
+        row.wiki_stale_threshold_days ?? DEFAULT_WIKI_COMPILATION_SETTINGS.wikiStaleThresholdDays,
+    };
+  } catch {
+    return { ...DEFAULT_WIKI_COMPILATION_SETTINGS };
+  }
 }
