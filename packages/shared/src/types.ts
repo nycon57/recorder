@@ -25,6 +25,7 @@ export interface PageContext {
 export type ExtensionMessageType =
   | "GET_PAGE_CONTEXT"
   | "PAGE_CONTEXT_RESPONSE"
+  | "PAGE_CONTEXT_UPDATED"
   | "QUERY_KNOWLEDGE"
   | "KNOWLEDGE_RESPONSE"
   | "AUTH_CHECK"
@@ -33,5 +34,7 @@ export type ExtensionMessageType =
 export interface ExtensionMessage {
   type: ExtensionMessageType;
   payload?: unknown;
+  /** Populated on PAGE_CONTEXT_UPDATED messages sent from the content script */
+  context?: PageContext;
   error?: string;
 }
