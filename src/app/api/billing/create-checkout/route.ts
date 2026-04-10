@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 
 import { requireAuth } from '@/lib/utils/api';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16',
-});
+import { getStripe } from '@/lib/stripe';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,6 +12,8 @@ export async function POST(request: NextRequest) {
     if (!priceId) {
       return NextResponse.json({ error: 'Price ID required' }, { status: 400 });
     }
+
+    const stripe = getStripe();
 
     // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
