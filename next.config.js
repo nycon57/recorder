@@ -33,18 +33,18 @@ const COMMON_SECURITY_HEADERS = [
   },
 ];
 
-// Content Security Policy with Clerk and Supabase support
-const CSP_WITH_CLERK = {
+// Content Security Policy with Supabase support
+const CSP_POLICY = {
   key: 'Content-Security-Policy',
   value: [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https://cdn.jsdelivr.net https://unpkg.com/@ffmpeg/core@0.12.6/dist/ https://challenges.cloudflare.com https://*.clerk.accounts.dev https://*.clerk.com",
+    "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https://cdn.jsdelivr.net https://unpkg.com/@ffmpeg/core@0.12.6/dist/ https://challenges.cloudflare.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: blob: https://*.supabase.co https://*.clerk.com https://img.clerk.com https://storage.googleapis.com/eleven-public-cdn/",
+    "img-src 'self' data: blob: https://*.supabase.co https://storage.googleapis.com/eleven-public-cdn/",
     "media-src 'self' blob: data: https://*.supabase.co",
-    "connect-src 'self' blob: https://*.supabase.co https://*.clerk.com https://*.clerk.accounts.dev https://clerk-telemetry.com https://*.upstash.io https://storage.googleapis.com/eleven-public-cdn/ https://unpkg.com/@ffmpeg/core@0.12.6/dist/ wss://*.supabase.co https://*.react-grab.com https://cdn.jsdelivr.net",
-    "frame-src 'self' https://challenges.cloudflare.com https://*.clerk.accounts.dev https://*.clerk.com",
+    "connect-src 'self' blob: https://*.supabase.co https://*.upstash.io https://storage.googleapis.com/eleven-public-cdn/ https://unpkg.com/@ffmpeg/core@0.12.6/dist/ wss://*.supabase.co https://*.react-grab.com https://cdn.jsdelivr.net",
+    "frame-src 'self' https://challenges.cloudflare.com",
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
@@ -72,32 +72,32 @@ const nextConfig = {
   async headers() {
     return [
       // FFMPEG.wasm headers - ONLY for /record route
-      // COOP/COEP are required for SharedArrayBuffer but break Clerk/Supabase embeds
+      // COOP/COEP are required for SharedArrayBuffer but break Supabase embeds
       {
         source: '/record/:path*',
         headers: [
           ...COOP_COEP_HEADERS,
           ...COMMON_SECURITY_HEADERS,
-          CSP_WITH_CLERK,
+          CSP_POLICY,
         ],
       },
-      // Routes that require tailored headers to allow Supabase/Clerk assets
+      // Routes that require tailored headers to allow Supabase assets
       // without enabling COOP/COEP (which would break third-party embeds)
       {
         source: '/library',
-        headers: [...COMMON_SECURITY_HEADERS, CSP_WITH_CLERK],
+        headers: [...COMMON_SECURITY_HEADERS, CSP_POLICY],
       },
       {
         source: '/library/:path*',
-        headers: [...COMMON_SECURITY_HEADERS, CSP_WITH_CLERK],
+        headers: [...COMMON_SECURITY_HEADERS, CSP_POLICY],
       },
       {
         source: '/(recordings|search|dashboard)/:path*',
-        headers: [...COMMON_SECURITY_HEADERS, CSP_WITH_CLERK],
+        headers: [...COMMON_SECURITY_HEADERS, CSP_POLICY],
       },
       {
         source: '/((?!record|library|recordings|search|dashboard).*)',
-        headers: [...COMMON_SECURITY_HEADERS, CSP_WITH_CLERK],
+        headers: [...COMMON_SECURITY_HEADERS, CSP_POLICY],
       },
     ];
   },
@@ -137,15 +137,6 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: '**.supabase.co',
-      },
-      {
-        // Clerk user avatars
-        protocol: 'https',
-        hostname: 'img.clerk.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.clerk.accounts.dev',
       },
       {
         // Unsplash images for marketing pages

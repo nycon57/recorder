@@ -326,8 +326,8 @@ Required for all tests:
 - `GOOGLE_AI_API_KEY`
 
 Required for specific tests:
-- `CLERK_SECRET_KEY` (finalize endpoint auth)
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (auth)
+- `BETTER_AUTH_SECRET` (auth)
+- `BETTER_AUTH_URL` (auth)
 
 Optional but recommended:
 - `GOOGLE_GENERATIVE_AI_API_KEY` (AI assistant)

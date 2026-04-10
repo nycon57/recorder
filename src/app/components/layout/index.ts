@@ -2,7 +2,7 @@
  * Layout components for the marketing site
  * Provides reusable header and footer components with:
  * - Responsive navigation
- * - Clerk authentication integration
+ * - Better Auth authentication integration
  * - Dark mode support
  */
 

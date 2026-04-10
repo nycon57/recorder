@@ -52,8 +52,8 @@ async function main() {
     { name: 'GOOGLE_AI_API_KEY', required: true },
     { name: 'GOOGLE_GENERATIVE_AI_API_KEY', required: false },
     { name: 'GOOGLE_APPLICATION_CREDENTIALS', required: false },
-    { name: 'CLERK_SECRET_KEY', required: true },
-    { name: 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY', required: true },
+    { name: 'BETTER_AUTH_SECRET', required: true },
+    { name: 'BETTER_AUTH_URL', required: true },
   ];
 
   for (const { name, required } of envVars) {

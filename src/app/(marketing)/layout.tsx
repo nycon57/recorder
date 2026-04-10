@@ -2,7 +2,7 @@ import { Footer } from '@/app/components/layout';
 import AuroraNavbar from '@/app/components/layout/aurora-navbar';
 
 // Force dynamic rendering to prevent static generation at build time
-// Marketing pages use Clerk components which require runtime env vars
+// Marketing pages use auth components which require runtime env vars
 export const dynamic = 'force-dynamic';
 
 export default function MarketingLayout({

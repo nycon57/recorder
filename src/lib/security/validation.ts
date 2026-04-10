@@ -122,8 +122,7 @@ export const CSP_DIRECTIVES = {
   'script-src': [
     "'self'",
     "'unsafe-eval'", // Required for FFMPEG.wasm
-    'https://challenges.cloudflare.com', // Clerk
-    'https://clerk.*.clerk.accounts.dev',
+    'https://challenges.cloudflare.com', // Cloudflare Turnstile
   ],
   'style-src': ["'self'", "'unsafe-inline'"], // Material-UI requires inline styles
   'img-src': ["'self'", 'data:', 'blob:', 'https://*.supabase.co'],
@@ -132,8 +131,6 @@ export const CSP_DIRECTIVES = {
     "'self'",
     'https://*.supabase.co',
     'https://api.openai.com',
-    'https://*.clerk.accounts.dev',
-    'https://clerk.*.clerk.accounts.dev',
   ],
   'font-src': ["'self'", 'data:'],
   'object-src': ["'none'"],
