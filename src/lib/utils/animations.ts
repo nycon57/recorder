@@ -5,7 +5,7 @@
  * All animations respect prefers-reduced-motion
  */
 
-import { Variants } from 'framer-motion';
+import { Variants } from 'motion/react';
 
 /**
  * Check if user prefers reduced motion

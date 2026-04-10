@@ -96,7 +96,7 @@ export const updateMemberRoleSchema = z.object({
 // Schema for EditRoleModal form (just the role field)
 export const editRoleFormSchema = z.object({
   role: z.enum(['owner', 'admin', 'contributor', 'reader'], {
-    errorMap: () => ({ message: 'Please select a valid role' }),
+    error: 'Please select a valid role',
   }),
 });
 
@@ -651,7 +651,7 @@ export type UpdateOrgFeaturesInput = z.infer<typeof updateOrgFeaturesSchema>;
 export const enhancedInviteMemberSchema = z.object({
   email: z.string().email('Invalid email address'),
   role: z.enum(['owner', 'admin', 'contributor', 'reader'], {
-    errorMap: () => ({ message: 'Role must be owner, admin, contributor, or reader' }),
+    error: 'Role must be owner, admin, contributor, or reader',
   }),
   department_ids: z.array(z.string().uuid()).optional().default([]),
   custom_message: z.string().max(500).optional(),
@@ -851,7 +851,7 @@ export const createApiKeySchema = z.object({
     .max(20, 'Maximum 20 scopes'),
   rate_limit: z.number().int().positive().max(10000).optional().default(1000),
   ip_whitelist: z
-    .array(z.string().ip({ version: 'v4', message: 'Invalid IPv4 address' }))
+    .array(z.string().ipv4({ error: 'Invalid IPv4 address' }))
     .max(50, 'Maximum 50 IP addresses')
     .optional(),
   expires_at: z
@@ -873,7 +873,7 @@ export const updateApiKeySchema = z.object({
   description: z.string().max(500).optional(),
   scopes: z.array(apiKeyScopeEnum).min(1).max(20).optional(),
   rate_limit: z.number().int().positive().max(10000).optional(),
-  ip_whitelist: z.array(z.string().ip({ version: 'v4' })).max(50).optional(),
+  ip_whitelist: z.array(z.string().ipv4()).max(50).optional(),
   status: z.enum(['active', 'revoked']).optional(),
 });
 
@@ -1002,7 +1002,7 @@ export const auditLogFilterSchema = z.object({
     .enum(['user', 'recording', 'organization', 'department', 'api_key', 'webhook'])
     .optional(),
   resource_id: z.string().uuid().optional(),
-  ip_address: z.string().ip().optional(),
+  ip_address: z.string().ipv4().optional(),
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
 });

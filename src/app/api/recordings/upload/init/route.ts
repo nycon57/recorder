@@ -68,11 +68,11 @@ export const POST = withRateLimit(
       if (!validationResult.success) {
         logger.warn('Invalid init upload request', {
           context: { requestId, orgId, userId },
-          data: { errors: validationResult.error.errors },
+          data: { errors: validationResult.error.issues },
         });
         return errors.badRequest(
           'Invalid request data',
-          { errors: validationResult.error.errors },
+          { errors: validationResult.error.issues },
           requestId
         );
       }

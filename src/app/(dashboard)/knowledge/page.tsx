@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Brain, List, Network, Hash, Filter, AlertCircle, Loader2, Info, Sparkles, Upload, FileText, BookOpen } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';

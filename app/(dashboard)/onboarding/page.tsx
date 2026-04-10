@@ -15,7 +15,7 @@ import {
   CheckCircle2,
   ExternalLink,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 import { Progress } from '@/app/components/ui/progress';
 import { Checkbox } from '@/app/components/ui/checkbox';

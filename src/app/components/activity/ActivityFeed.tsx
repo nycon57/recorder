@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { format, isToday, isYesterday, isThisWeek, parseISO } from 'date-fns';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { ActivityItem } from './ActivityItem';
 import { ActivityFilter } from './ActivityFilter';
 import { Skeleton } from '@/app/components/ui/skeleton';

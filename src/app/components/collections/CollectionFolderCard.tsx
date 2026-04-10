@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { Folder, MoreHorizontal, Pencil, Trash2, FolderInput } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import {

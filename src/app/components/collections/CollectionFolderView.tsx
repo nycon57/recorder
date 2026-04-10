@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { FileX2, FolderPlus } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import {

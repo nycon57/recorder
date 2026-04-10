@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { signIn } from '@/lib/auth/auth-client';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'motion/react';
 import { ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';

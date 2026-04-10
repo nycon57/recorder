@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { LayoutGrid, Table as TableIcon, Search, X, Filter } from 'lucide-react';
 
 import { BaseContentCard, ContentItem } from '@/app/components/content';

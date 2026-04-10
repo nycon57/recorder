@@ -26,7 +26,7 @@ const logger = createLogger({ service: 'thumbnail-update' });
 const updateThumbnailSchema = z.object({
   thumbnailData: z.string().min(1, 'Thumbnail data is required'),
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp'], {
-    errorMap: () => ({ message: 'Invalid mime type. Allowed: image/jpeg, image/png, image/webp' }),
+    error: 'Invalid mime type. Allowed: image/jpeg, image/png, image/webp',
   }),
 });
 
@@ -61,11 +61,11 @@ export const PUT = apiHandler(async (
     if (!validation.success) {
       logger.warn('Invalid thumbnail update request', {
         context: { requestId, recordingId },
-        data: { errors: validation.error.errors },
+        data: { errors: validation.error.issues },
       });
       return errors.badRequest(
         'Invalid request data',
-        { errors: validation.error.errors },
+        { errors: validation.error.issues },
         requestId
       );
     }

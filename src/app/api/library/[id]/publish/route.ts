@@ -255,7 +255,7 @@ export const POST = apiHandler(
 
       // Check if it's a validation error
       if (error.name === 'ZodError') {
-        return errors.validationError(error.errors, requestId);
+        return errors.validationError(error.issues, requestId);
       }
 
       return errors.internalError(requestId);

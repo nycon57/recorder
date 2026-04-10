@@ -15,7 +15,7 @@
 import React, { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Bot, Copy, Check, ExternalLink } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { useSession } from '@/lib/auth/auth-client';
 import {
   messageVariants,

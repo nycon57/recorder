@@ -83,7 +83,7 @@ export const POST = withRateLimit(
     const validationResult = createRecordingSchema.safeParse(body);
     if (!validationResult.success) {
       return errors.badRequest('Invalid request data', {
-        errors: validationResult.error.errors,
+        errors: validationResult.error.issues,
       });
     }
 

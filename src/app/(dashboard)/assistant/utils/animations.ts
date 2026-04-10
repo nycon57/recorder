@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import type { Variants, Transition, Easing } from 'framer-motion';
+import type { Variants, Transition, Easing } from 'motion/react';
 
 /**
  * Easing presets - typed as tuples for framer-motion compatibility

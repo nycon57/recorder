@@ -20,7 +20,7 @@ import {
   FileArchive,
   Clock,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { formatBytes } from '@/lib/utils';
 import type { ExportResult } from '@/lib/types/phase8';
 

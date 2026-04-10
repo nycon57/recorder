@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { Clock, Heart, FileStack, FolderX, FolderPlus, ArrowRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
