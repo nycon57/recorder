@@ -3,6 +3,7 @@ import { nextCookies } from "better-auth/next-js";
 import { admin, magicLink, organization } from "better-auth/plugins";
 import { Pool } from "pg";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { ac, roles } from "@/lib/auth/permissions";
 
 const pool = new Pool({
   connectionString: process.env.DIRECT_DATABASE_URL,
@@ -19,6 +20,8 @@ export const auth = betterAuth({
     admin({
       defaultRole: "reader",
       adminRoles: ["admin", "owner"],
+      ac,
+      roles,
       schema: {
         user: {
           fields: {
