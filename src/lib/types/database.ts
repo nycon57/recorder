@@ -1841,6 +1841,88 @@ export interface Database {
           updated_at?: string | null;
         };
       };
+      /**
+       * Layer 2 of the two-layer knowledge store: org-scoped compiled wiki pages
+       * produced by the compile_wiki worker. See product-architecture-v2.md
+       * Part 3 Component 3.
+       */
+      org_wiki_pages: {
+        Row: {
+          id: string;
+          org_id: string;
+          app: string | null;
+          screen: string | null;
+          topic: string;
+          content: string;
+          confidence: number;
+          valid_from: string;
+          valid_until: string | null;
+          supersedes_id: string | null;
+          compilation_log: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          app?: string | null;
+          screen?: string | null;
+          topic: string;
+          content: string;
+          confidence?: number;
+          valid_from?: string;
+          valid_until?: string | null;
+          supersedes_id?: string | null;
+          compilation_log?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          app?: string | null;
+          screen?: string | null;
+          topic?: string;
+          content?: string;
+          confidence?: number;
+          valid_from?: string;
+          valid_until?: string | null;
+          supersedes_id?: string | null;
+          compilation_log?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      /**
+       * Tracks which recordings/documents contributed to each compiled
+       * org_wiki_pages row. Cascade-deletes with the page.
+       */
+      wiki_page_sources: {
+        Row: {
+          id: string;
+          page_id: string;
+          source_type: 'recording' | 'document' | 'manual';
+          source_id: string;
+          contributed_at: string;
+          contribution_summary: string | null;
+        };
+        Insert: {
+          id?: string;
+          page_id: string;
+          source_type: 'recording' | 'document' | 'manual';
+          source_id: string;
+          contributed_at?: string;
+          contribution_summary?: string | null;
+        };
+        Update: {
+          id?: string;
+          page_id?: string;
+          source_type?: 'recording' | 'document' | 'manual';
+          source_id?: string;
+          contributed_at?: string;
+          contribution_summary?: string | null;
+        };
+      };
       video_frames: {
         Row: {
           id: string;
