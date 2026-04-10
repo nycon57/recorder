@@ -1,4 +1,7 @@
 import { scheduleTokenRefresh } from "../utils/token-refresh.js";
+import { createTabRecorder } from "../utils/tab-recorder.js";
+import { uploadRecording } from "../utils/recording-uploader.js";
+import type { TabRecorder } from "../utils/tab-recorder.js";
 
 export default defineBackground(() => {
   console.log("Tribora service worker started");
@@ -6,6 +9,45 @@ export default defineBackground(() => {
   // TRIB-27: schedule token refresh 5 min before expiry on startup
   scheduleTokenRefresh();
 
+  // TRIB-48: recording state (scoped to service worker lifetime)
+  let activeRecorder: TabRecorder | null = null;
+
+  // TRIB-48: recording message handler (separate listener — Chrome dispatches to all)
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === 'RECORDING_START') {
+      void (async () => {
+        try {
+          activeRecorder = createTabRecorder();
+          await activeRecorder.start();
+          sendResponse({ ok: true, state: { status: 'recording', startedAt: Date.now() } });
+        } catch (err) {
+          sendResponse({ ok: false, error: (err as Error).message });
+        }
+      })();
+      return true; // keep channel open for async response
+    }
+    if (message?.type === 'RECORDING_STOP') {
+      void (async () => {
+        try {
+          if (!activeRecorder) return sendResponse({ ok: false, error: 'Not recording' });
+          const blob = await activeRecorder.stop();
+          activeRecorder = null;
+          const { recordingId } = await uploadRecording(blob, {
+            filename: `extension-${Date.now()}.webm`,
+            mimeType: 'video/webm',
+            source: 'extension',
+          });
+          sendResponse({ ok: true, recordingId });
+        } catch (err) {
+          sendResponse({ ok: false, error: (err as Error).message });
+        }
+      })();
+      return true; // keep channel open for async response
+    }
+    return false;
+  });
+
+  // TRIB-23 / TRIB-27: existing page context + auth listeners
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     console.log("Tribora background received message:", message.type);
 

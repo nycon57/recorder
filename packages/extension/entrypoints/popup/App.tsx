@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import type { SessionState } from "@tribora/shared";
+import type { SessionState, RecordingState } from "@tribora/shared";
 import { getStoredSession } from "../../utils/api-client.js";
 import {
   initiateSignIn,
@@ -8,6 +8,95 @@ import {
 } from "../../utils/auth-session.js";
 
 const VERSION = "0.0.1";
+
+function RecordingSection() {
+  const [recordingState, setRecordingState] = useState<RecordingState>({
+    status: "idle",
+  });
+
+  const startRecording = () => {
+    setRecordingState({ status: "requesting_capture" });
+    chrome.runtime.sendMessage(
+      { type: "RECORDING_START" },
+      (response: { ok: boolean; state?: RecordingState; error?: string }) => {
+        if (chrome.runtime.lastError || !response?.ok) {
+          setRecordingState({
+            status: "error",
+            error: chrome.runtime.lastError?.message ?? response?.error ?? "Failed to start",
+          });
+          return;
+        }
+        setRecordingState(response.state ?? { status: "recording", startedAt: Date.now() });
+      },
+    );
+  };
+
+  const stopRecording = () => {
+    setRecordingState((prev) => ({ ...prev, status: "uploading" }));
+    chrome.runtime.sendMessage(
+      { type: "RECORDING_STOP" },
+      (response: { ok: boolean; recordingId?: string; error?: string }) => {
+        if (chrome.runtime.lastError || !response?.ok) {
+          setRecordingState({
+            status: "error",
+            error: chrome.runtime.lastError?.message ?? response?.error ?? "Failed to stop",
+          });
+          return;
+        }
+        setRecordingState({ status: "idle", recordingId: response.recordingId });
+      },
+    );
+  };
+
+  const { status, error, recordingId } = recordingState;
+
+  return (
+    <div className="recording-section">
+      {status === "idle" && (
+        <>
+          {recordingId && (
+            <p className="recording-success">Recording saved!</p>
+          )}
+          <button
+            className="popup-btn popup-btn-record"
+            onClick={startRecording}
+          >
+            Start Recording
+          </button>
+        </>
+      )}
+      {status === "requesting_capture" && (
+        <button className="popup-btn popup-btn-record" disabled>
+          Requesting capture…
+        </button>
+      )}
+      {status === "recording" && (
+        <button
+          className="popup-btn popup-btn-stop"
+          onClick={stopRecording}
+        >
+          Stop Recording
+        </button>
+      )}
+      {status === "uploading" && (
+        <button className="popup-btn popup-btn-record" disabled>
+          Uploading…
+        </button>
+      )}
+      {status === "error" && (
+        <>
+          <p className="popup-error">{error}</p>
+          <button
+            className="popup-btn popup-btn-record"
+            onClick={() => setRecordingState({ status: "idle" })}
+          >
+            Start Recording
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function App() {
   const [session, setSession] = useState<SessionState | null>(null);
@@ -114,6 +203,7 @@ export default function App() {
             )}
           </div>
         </div>
+        <RecordingSection />
       </main>
       <footer className="popup-footer">
         <button

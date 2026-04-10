@@ -176,3 +176,47 @@ body {
   color: #dc2626;
   line-height: 1.4;
 }
+
+/* Recording section (TRIB-48) */
+.recording-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.popup-btn-record {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.popup-btn-record:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.popup-btn-record:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.popup-btn-stop {
+  background: #6b7280;
+  color: #ffffff;
+  animation: recording-pulse 1.5s ease-in-out infinite;
+}
+
+.popup-btn-stop:hover {
+  background: #4b5563;
+}
+
+@keyframes recording-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
+.recording-success {
+  font-size: 11px;
+  color: #16a34a;
+  line-height: 1.4;
+}
