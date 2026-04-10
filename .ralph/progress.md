@@ -8644,3 +8644,48 @@ Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-202
   - activity-log.sh does not exist; append directly with bash redirect
   - All gates can clear in Pass 2; Pass 3 is a lightweight verification + COMPLETE signal
 ---
+
+## [2026-02-18T15:57Z] - US-053: Create usage dashboard and plan tier gates
+Thread: N/A
+Run: 20260218-153737-96883 (iteration 2)
+Pass: 4 (Phase: Finalize)
+Gates cleared this pass: G7 re-verified
+Gates cleared (cumulative): G1, G2, G3, G4, G5, G6, G7, G-UI1, G-UI2
+Gates remaining: none — all clear
+Run log: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-153737-96883-iter-2.log
+Run summary: /Users/jarrettstanley/Desktop/websites/recorder/.ralph/runs/run-20260218-153737-96883-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (no code changes needed; all gates already clear from Pass 3)
+- Post-commit status: clean (pre-existing unrelated modified files only)
+- Skills invoked:
+  - /next-best-practices: [MANDATORY — yes]
+  - /vercel-react-best-practices: [MANDATORY — yes]
+  - /writing-clearly-and-concisely: [MANDATORY — yes]
+  - /feature-dev: [no — Finalize pass, not needed]
+  - /code-review: [no — completed in Pass 2]
+  - /code-simplifier: [no — completed in Pass 2]
+  - /frontend-design: [no — completed in Pass 3]
+  - /web-design-guidelines: [no — completed in Pass 3]
+  - /agent-browser: [no — completed in Pass 3]
+  - /supabase-postgres-best-practices: [N/A]
+  - /ai-sdk: [N/A]
+  - /next-cache-components: [N/A]
+  - /vercel-composition-patterns: [N/A]
+  - Other skills: /commit
+- Verification:
+  - Command: npm run type:check -> PASS (0 errors in US-053 files; pre-existing errors in transcribe/workflow files unchanged)
+  - G7 Acceptance: all 10 acceptance criteria re-verified by code inspection
+- Files changed:
+  - None (Finalize pass — all implementation complete from prior passes)
+- What was implemented:
+  - Finalize pass: confirmed all prior implementation still intact
+  - app/(dashboard)/settings/organization/usage/page.tsx: full usage dashboard with bar chart, line chart, top content, plan limit progress, projected monthly usage
+  - app/api/organizations/usage/route.ts: fetches usage summary, by-agent, by-day, top content, plan tier; weekday/weekend projection
+  - lib/services/agent-config.ts: isAgentEnabled gates by plan tier + toggle; upgradePlanError returns 403 body; free tier blocks all agents
+  - lib/services/agent-metering.ts: getUsageSummary, getUsageByAgent used by API
+  - app/(dashboard)/settings/organization/layout.tsx: Usage nav link present
+  - All acceptance criteria confirmed satisfied
+- **Learnings for future iterations:**
+  - US-053 was fully complete after Pass 3; Finalize pass only needed verification
+---

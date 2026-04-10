@@ -1,3 +1,6 @@
+# Kanban config (contains Linear team UUIDs)
+.agents/kanban/
+
 # Logs
 logs
 *.log
@@ -153,7 +156,16 @@ components.json
 CLAUDE.md
 .claude.md
 
+# TrueTone migration state
+.truetone/
+
 # BFG Repo-Cleaner reports
 .bfg-report/
 ..bfg-report/
 *.bfg-report/
+
+# Reference repositories (Clicky, Graphify, MemPalace, Rowboat)
+reference-repos/
+
+# Architecture documents
+product-architecture-*.md

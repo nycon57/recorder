@@ -1,0 +1,109 @@
+import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
+import {
+  getUsageSummary,
+  getUsageByAgent,
+  getUsageByDay,
+  getTopContentByUsage,
+  type DailyUsage,
+} from '@/lib/services/agent-metering';
+import { getOrgPlanTier, type PlanTier } from '@/lib/services/agent-config';
+
+/** Credit limits per plan tier (monthly). */
+const PLAN_CREDIT_LIMITS: Record<PlanTier, number> = {
+  free: 0,
+  starter: 1_000,
+  professional: 10_000,
+  enterprise: 100_000,
+};
+
+/**
+ * Project monthly credit usage from daily activity so far.
+ * Separates weekday/weekend averages for accuracy when >= 3 days of data exist;
+ * falls back to simple linear extrapolation otherwise.
+ */
+function projectMonthlyUsage(dailyData: DailyUsage[], now: Date): number {
+  if (dailyData.length === 0) return 0;
+
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const currentDay = now.getDate();
+  const remainingDays = daysInMonth - currentDay;
+
+  if (dailyData.length < 3 || remainingDays <= 0) {
+    // Simple linear extrapolation for sparse data or end of month.
+    // Use data point count (not currentDay) to avoid underestimating on zero-usage days.
+    const totalSoFar = dailyData.reduce((sum, d) => sum + d.totalCredits, 0);
+    const dailyAvg = totalSoFar / Math.max(1, dailyData.length);
+    return Math.round(totalSoFar + dailyAvg * remainingDays);
+  }
+
+  let weekdayTotal = 0;
+  let weekdayCount = 0;
+  let weekendTotal = 0;
+  let weekendCount = 0;
+
+  for (const d of dailyData) {
+    const date = new Date(d.day);
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      weekendTotal += d.totalCredits;
+      weekendCount++;
+    } else {
+      weekdayTotal += d.totalCredits;
+      weekdayCount++;
+    }
+  }
+
+  const avgWeekday = weekdayCount > 0 ? weekdayTotal / weekdayCount : 0;
+  const avgWeekend = weekendCount > 0 ? weekendTotal / weekendCount : avgWeekday;
+
+  let remainingWeekdays = 0;
+  let remainingWeekends = 0;
+  for (let day = currentDay + 1; day <= daysInMonth; day++) {
+    const dow = new Date(now.getFullYear(), now.getMonth(), day).getDay();
+    if (dow === 0 || dow === 6) {
+      remainingWeekends++;
+    } else {
+      remainingWeekdays++;
+    }
+  }
+
+  const creditsToDate = dailyData.reduce((sum, d) => sum + d.totalCredits, 0);
+  const projected = creditsToDate
+    + avgWeekday * remainingWeekdays
+    + avgWeekend * remainingWeekends;
+
+  return Math.round(projected);
+}
+
+/**
+ * GET /api/organizations/usage
+ * Returns AI credit usage data for the current month: summary, per-agent
+ * breakdown, daily trend, top content items, and projected monthly total.
+ */
+export const GET = apiHandler(async () => {
+  const { orgId } = await requireOrg();
+  const now = new Date();
+
+  const [summary, byAgent, byDay, topContent, planTier] = await Promise.all([
+    getUsageSummary(orgId, 'month'),
+    getUsageByAgent(orgId, 'month'),
+    getUsageByDay(orgId),
+    getTopContentByUsage(orgId, 10),
+    getOrgPlanTier(orgId),
+  ]);
+
+  const creditLimit = PLAN_CREDIT_LIMITS[planTier];
+  const projectedCredits = projectMonthlyUsage(byDay, now);
+
+  return successResponse({
+    planTier,
+    creditLimit,
+    summary,
+    byAgent,
+    byDay,
+    topContent,
+    projectedCredits,
+    projectedCostUsd: projectedCredits * 0.01, // $0.01 per credit
+    month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+  });
+});
