@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 
 import { Toaster } from '@/app/components/ui/sonner';
+import { PostHogProvider } from '@/providers/posthog-provider';
 import { QueryProvider } from '@/lib/providers/query-provider';
 
 import './globals.css';
@@ -69,8 +70,10 @@ export default function RootLayout({
       </head>
       <body className="bg-background text-foreground antialiased">
         <QueryProvider>
-          {children}
-          <Toaster />
+          <PostHogProvider>
+            {children}
+            <Toaster />
+          </PostHogProvider>
         </QueryProvider>
       </body>
     </html>
