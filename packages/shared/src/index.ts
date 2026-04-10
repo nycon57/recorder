@@ -20,3 +20,12 @@ export type {
 // TRIB-25 — STT types and hotkey defaults
 export type { SttStatus, SttState, SttMessage, HotkeyConfig } from "./stt.js";
 export { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_WIN } from "./stt.js";
+
+// TRIB-26 — TTS types and ElevenLabs voice config
+export type {
+  TtsStatus,
+  TtsState,
+  TtsMessage,
+  ElevenLabsVoiceConfig,
+} from "./tts.js";
+export { DEFAULT_VOICE_CONFIG } from "./tts.js";

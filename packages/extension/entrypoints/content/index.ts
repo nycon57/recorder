@@ -10,6 +10,7 @@ import { buildPageContext } from "./context-engine";
 import { createDomObserver } from "./dom-observer";
 import { createDomOverlay } from "./dom-overlay"; // TRIB-24
 import { createAudioCapture } from "./audio-capture"; // TRIB-25
+import { createAudioPlayer } from "./audio-playback"; // TRIB-26
 
 export default defineContentScript({
   matches: ["<all_urls>"],
@@ -100,5 +101,33 @@ export default defineContentScript({
       },
     );
     audioCapture.start();
+
+    // ── TRIB-26: Audio playback — TTS ────────────────────────────────────────
+    // A new listener is intentional: Chrome dispatches to ALL registered
+    // listeners; each TRIB handles only its own message types.
+    const audioPlayer = createAudioPlayer((ttsState) => {
+      if (ttsState.status === "error") {
+        console.error("[Tribora TTS state]", ttsState.error);
+      }
+    });
+
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (msg?.type === "TTS_SPEAK" && typeof msg.text === "string") {
+        void audioPlayer.speak(msg.text as string);
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (msg?.type === "TTS_SPEAK" && typeof msg.audioUrl === "string") {
+        void audioPlayer.playUrl(msg.audioUrl as string);
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (msg?.type === "TTS_STOP") {
+        audioPlayer.stop();
+        sendResponse({ ok: true });
+        return false;
+      }
+      return false;
+    });
   },
 });
