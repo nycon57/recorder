@@ -269,6 +269,61 @@ async function runExtractionPipeline(
   console.log(
     `[WorkflowExtraction] Extracted ${steps.length} steps for ${recordingId} (confidence: ${avgConfidence.toFixed(2)})`
   );
+
+  // TRIB-33: Enqueue the compile_wiki job as the next step in the pipeline.
+  // This runs AFTER the workflow has been successfully stored. A failure here
+  // is NOT fatal to workflow_extraction — the workflow was extracted, and a
+  // compile_wiki job can be re-enqueued manually if this fails.
+  try {
+    await enqueueCompileWikiJob(supabase, { recordingId, orgId });
+  } catch (error) {
+    console.error(
+      `[WorkflowExtraction] Failed to enqueue compile_wiki for ${recordingId}:`,
+      error
+    );
+    // Intentionally swallowed — workflow_extraction succeeded.
+  }
+}
+
+/**
+ * Enqueue a `compile_wiki` job for a recording after workflow extraction
+ * completes. Idempotent via the `dedupe_key` unique index on the `jobs`
+ * table: if a `compile_wiki:<recordingId>` row already exists, the insert
+ * no-ops and we log that fact instead of throwing.
+ *
+ * Payload shape is intentionally `{ recordingId, orgId }` to match
+ * `CompileWikiPayload` in `src/lib/workers/handlers/compile-wiki.ts`.
+ */
+async function enqueueCompileWikiJob(
+  supabase: ReturnType<typeof createAdminClient>,
+  args: { recordingId: string; orgId: string }
+): Promise<void> {
+  const { recordingId, orgId } = args;
+  const dedupeKey = `compile_wiki:${recordingId}`;
+
+  const { error } = await supabase.from('jobs').insert({
+    type: 'compile_wiki',
+    status: 'pending',
+    payload: { recordingId, orgId },
+    dedupe_key: dedupeKey,
+    priority: 2, // JOB_PRIORITY.NORMAL
+  });
+
+  if (error) {
+    // Unique-violation on dedupe_key means another worker already queued
+    // this recording's compile_wiki job — that's the desired behaviour.
+    if (error.code === '23505') {
+      console.log(
+        `[WorkflowExtraction] compile_wiki already queued for ${recordingId} (dedupe_key=${dedupeKey})`
+      );
+      return;
+    }
+    throw new Error(`Failed to enqueue compile_wiki job: ${error.message}`);
+  }
+
+  console.log(
+    `[WorkflowExtraction] Enqueued compile_wiki job for ${recordingId} (dedupe_key=${dedupeKey})`
+  );
 }
 
 /**
