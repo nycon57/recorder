@@ -29,3 +29,11 @@ export type {
   ElevenLabsVoiceConfig,
 } from "./tts.js";
 export { DEFAULT_VOICE_CONFIG } from "./tts.js";
+
+// TRIB-48 — Recording types
+export type {
+  RecordingStatus,
+  RecordingState,
+  RecordingMessage,
+  RecordingUploadInit,
+} from "./recording.js";

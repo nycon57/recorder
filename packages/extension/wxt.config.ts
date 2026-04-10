@@ -7,7 +7,7 @@ export default defineConfig({
     description:
       "AI-powered knowledge assistant — context-aware guidance on any web app.",
     version: "0.0.1",
-    permissions: ["activeTab", "storage", "tabs", "scripting"],
+    permissions: ["activeTab", "storage", "tabs", "scripting", "tabCapture"],
     host_permissions: ["<all_urls>"],
   },
 });
