@@ -8,6 +8,7 @@
 import type { PageContext } from "@tribora/shared";
 import { buildPageContext } from "./context-engine";
 import { createDomObserver } from "./dom-observer";
+import { createDomOverlay } from "./dom-overlay"; // TRIB-24
 
 export default defineContentScript({
   matches: ["<all_urls>"],
@@ -51,5 +52,34 @@ export default defineContentScript({
     });
 
     observer.start();
+
+    // ── TRIB-24: DOM overlay — visual teaching layer ─────────────────────────
+    // A second message listener is intentional: Chrome dispatches to ALL
+    // registered listeners; each handles only its own message types.
+    const overlay = createDomOverlay();
+
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (msg?.type === "OVERLAY_POINT") {
+        overlay.pointAt(msg.selector as string, msg.label as string | undefined);
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (msg?.type === "OVERLAY_HIGHLIGHT") {
+        overlay.highlight(msg.selector as string);
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (msg?.type === "OVERLAY_PULSE") {
+        overlay.pulse(msg.selector as string);
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (msg?.type === "OVERLAY_CLEAR") {
+        overlay.clear();
+        sendResponse({ ok: true });
+        return false;
+      }
+      return false;
+    });
   },
 });
