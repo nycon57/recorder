@@ -12,6 +12,7 @@
   "include": [
     "entrypoints/**/*.ts",
     "entrypoints/**/*.tsx",
+    "utils/**/*.ts",
     ".wxt/types/**/*.d.ts"
   ],
   "exclude": ["node_modules", ".output"]

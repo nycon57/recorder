@@ -1,8 +1,13 @@
+import { scheduleTokenRefresh } from "../utils/token-refresh.js";
+
 export default defineBackground(() => {
   console.log("Tribora service worker started");
 
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log("Tribora background received message:", message.type, sender);
+  // TRIB-27: schedule token refresh 5 min before expiry on startup
+  scheduleTokenRefresh();
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    console.log("Tribora background received message:", message.type);
 
     switch (message.type) {
       case "GET_PAGE_CONTEXT":
@@ -20,6 +25,15 @@ export default defineBackground(() => {
         // Forward to Tribora backend API (implemented in TRIB-25+)
         sendResponse({ type: "KNOWLEDGE_RESPONSE", payload: null });
         break;
+
+      // TRIB-27: handle auth state queries from popup or content script
+      case "AUTH_STATE_REQUEST":
+        void (async () => {
+          const { getStoredSession } = await import("../utils/api-client.js");
+          const session = await getStoredSession();
+          sendResponse(session);
+        })();
+        return true; // keep channel open for async response
 
       default:
         sendResponse({ error: "Unknown message type" });

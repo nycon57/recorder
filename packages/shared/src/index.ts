@@ -4,3 +4,5 @@ export type {
   ExtensionMessageType,
   ExtensionMessage,
 } from "./types.js";
+
+export type { SessionState, AuthMessage } from "./auth.js";
