@@ -1,0 +1,101 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 320px;
+  min-height: 160px;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+  color: #1a1a1a;
+  background: #ffffff;
+}
+
+.popup-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.popup-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: #0f0f0f;
+}
+
+.popup-version {
+  font-size: 11px;
+  color: #888;
+  font-weight: 500;
+}
+
+.popup-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-disconnected .status-dot {
+  background: #d1d5db;
+}
+
+.status-connected .status-dot {
+  background: #22c55e;
+}
+
+.status-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.popup-description {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.popup-footer {
+  padding-top: 4px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.popup-link {
+  font-size: 12px;
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.popup-link:hover {
+  text-decoration: underline;
+}

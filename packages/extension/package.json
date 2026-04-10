@@ -1,0 +1,25 @@
+{
+  "name": "@tribora/extension",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "prepare": "wxt prepare"
+  },
+  "dependencies": {
+    "@tribora/shared": "*",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.1",
+    "@wxt-dev/module-react": "1.1.5",
+    "typescript": "^5.9.3",
+    "wxt": "^0.21.0"
+  }
+}
