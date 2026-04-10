@@ -1,15 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
+import { NextResponse } from 'next/server';
 
 import { requireAuth } from '@/lib/utils/api';
+import { getStripe } from '@/lib/stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16',
-});
-
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const { userId } = await requireAuth();
+
+    const stripe = getStripe();
 
     // In production, you'd fetch the customer ID from your database
     // For now, this is a placeholder
