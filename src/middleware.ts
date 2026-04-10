@@ -10,6 +10,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Extension health check is public — skip auth
+  if (pathname === "/api/extension/health") {
+    return NextResponse.next();
+  }
+
   const { data: session } = await betterFetch<Session>(
     "/api/auth/get-session",
     {
@@ -52,6 +57,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/profile") ||
     pathname.startsWith("/api/recordings") ||
     pathname.startsWith("/api/search") ||
+    pathname.startsWith("/api/extension") ||
     pathname.startsWith("/api/storage") ||
     pathname.startsWith("/api/tags")
   ) {
