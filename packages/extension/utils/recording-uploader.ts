@@ -1,15 +1,14 @@
 /**
  * TRIB-48: Recording uploader
  *
- * Uploads a recorded Blob to R2 via the existing two-step upload process:
- *   1. POST /api/recordings/upload/init  → presigned uploadUrl + recordingId
- *   2. PUT  <uploadUrl>                  → upload the blob (chunked if >10 MB)
- *   3. POST /api/recordings/<id>/finalize → mark uploaded, enqueue processing
+ * Uploads a recorded Blob to Supabase Storage via the canonical two-step flow:
+ *   1. POST /api/recordings/upload/init  → presigned uploadUrl + recordingId + uploadPath
+ *   2. PUT  <uploadUrl>                  → single atomic PUT (no chunking — Supabase signed
+ *                                          URLs do not support Content-Range byte-range uploads)
+ *   3. POST /api/recordings/<id>/metadata → set title + storagePath, triggers processing
  */
 
 import { apiFetch } from './api-client.js';
-
-const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export type UploadProgressCallback = (uploaded: number, total: number) => void;
 
@@ -17,12 +16,9 @@ interface UploadInitResponse {
   recordingId: string;
   uploadUrl: string;
   uploadPath: string;
+  thumbnailUploadUrl: string | null;
+  thumbnailPath: string | null;
   token: string;
-}
-
-interface FinalizeResponse {
-  recording: Record<string, unknown>;
-  message: string;
 }
 
 export interface UploadResult {
@@ -34,7 +30,7 @@ export async function uploadRecording(
   metadata: { filename: string; mimeType: string; source: 'extension' },
   onProgress?: UploadProgressCallback,
 ): Promise<UploadResult> {
-  // Step 1: Init — get presigned URL + recordingId
+  // Step 1: Init — create recording entry, get presigned upload URL
   const init = await apiFetch<{ data: UploadInitResponse }>(
     '/api/recordings/upload/init',
     {
@@ -49,65 +45,38 @@ export async function uploadRecording(
     },
   );
 
-  const { recordingId, uploadUrl } = init.data;
+  const { recordingId, uploadUrl, uploadPath } = init.data;
 
-  // Step 2: Upload the blob to the presigned URL
-  if (blob.size > CHUNK_SIZE) {
-    await uploadChunked(blob, uploadUrl, onProgress);
-  } else {
-    const response = await fetch(uploadUrl, {
-      method: 'PUT',
-      body: blob,
-      headers: { 'Content-Type': metadata.mimeType },
-    });
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
-    }
-    onProgress?.(blob.size, blob.size);
+  // Step 2: Single atomic PUT to the presigned URL.
+  // Supabase signed uploads require an atomic PUT — Content-Range chunking is NOT supported.
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: blob,
+    headers: {
+      'Content-Type': metadata.mimeType,
+      'x-upsert': 'true',
+    },
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error(`Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
   }
 
-  // Step 3: Finalize — trigger processing
-  await apiFetch<{ data: FinalizeResponse }>(
-    `/api/recordings/${recordingId}/finalize`,
+  onProgress?.(blob.size, blob.size);
+
+  // Step 3: Post metadata — sets title + storagePath, transitions status to uploaded,
+  // and enqueues the first processing job. This is the canonical Step 2 of the
+  // upload/init → metadata flow (NOT the legacy /finalize route).
+  await apiFetch(
+    `/api/recordings/${recordingId}/metadata`,
     {
       method: 'POST',
-      body: JSON.stringify({ startProcessing: true }),
+      body: JSON.stringify({
+        title: metadata.filename.replace(/\.[^.]+$/, ''),
+        storagePath: uploadPath,
+      }),
     },
   );
 
   return { recordingId };
-}
-
-async function uploadChunked(
-  blob: Blob,
-  uploadUrl: string,
-  onProgress?: UploadProgressCallback,
-): Promise<void> {
-  const total = blob.size;
-  let uploaded = 0;
-
-  let start = 0;
-  while (start < total) {
-    const end = Math.min(start + CHUNK_SIZE, total);
-    const chunk = blob.slice(start, end);
-
-    const response = await fetch(uploadUrl, {
-      method: 'PUT',
-      body: chunk,
-      headers: {
-        'Content-Range': `bytes ${start}-${end - 1}/${total}`,
-        'Content-Type': blob.type,
-      },
-    });
-
-    if (!response.ok && response.status !== 308) {
-      throw new Error(
-        `Chunk upload failed at bytes ${start}-${end}: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    uploaded = end;
-    onProgress?.(uploaded, total);
-    start = end;
-  }
 }

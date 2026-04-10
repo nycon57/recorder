@@ -60,7 +60,10 @@ export function createTabRecorder(): TabRecorder {
 
     await new Promise<void>((resolve, reject) => {
       if (!mediaRecorder) return reject(new Error('No MediaRecorder'));
-      mediaRecorder.onerror = (e) => reject(e);
+      mediaRecorder.onerror = (e) => {
+        const msg = (e as MediaRecorderErrorEvent).error?.message ?? 'MediaRecorder error';
+        reject(new Error(msg));
+      };
       mediaRecorder.onstart = () => resolve();
       mediaRecorder.start(TIMESLICE_MS);
     });
@@ -80,7 +83,10 @@ export function createTabRecorder(): TabRecorder {
         resolve(new Blob(chunks, { type: mimeType }));
         chunks = [];
       };
-      recorder.onerror = (e) => reject(e);
+      recorder.onerror = (e) => {
+        const msg = (e as MediaRecorderErrorEvent).error?.message ?? 'MediaRecorder error';
+        reject(new Error(msg));
+      };
 
       if (recorder.state !== 'inactive') {
         recorder.stop();
