@@ -13,7 +13,7 @@ import sharp from 'sharp';
 import { getGoogleAI } from '@/lib/google/client';
 import type { ExtractedFrame } from '@/lib/services/frame-extraction';
 import type { OCRResult } from '@/lib/services/ocr-service';
-import { sanitizeVisualDescription, detectPII, logPIIDetection } from '@/lib/utils/security';
+import { sanitizeVisualDescription, sanitizeOcrText, detectPII, logPIIDetection } from '@/lib/utils/security';
 
 export type TransitionType =
   | 'navigation'
@@ -335,8 +335,8 @@ Respond in JSON:
 }`;
 
     const result = await model.generateContent([
-      { inlineData: { mimeType: 'image/jpeg', data: imgBefore.toString('base64') } },
-      { inlineData: { mimeType: 'image/jpeg', data: imgAfter.toString('base64') } },
+      { inlineData: { mimeType: frameBefore.mimeType, data: imgBefore.toString('base64') } },
+      { inlineData: { mimeType: frameAfter.mimeType, data: imgAfter.toString('base64') } },
       { text: prompt },
     ]);
 
@@ -396,14 +396,22 @@ Respond in JSON:
   }
 }
 
-/** Build OCR context string for the Gemini prompt */
+/** Build OCR context string for the Gemini prompt, with PII sanitization */
 function buildOcrContext(
   ocrBefore?: OCRResult,
   ocrAfter?: OCRResult
 ): string {
+  const sanitizePart = (text: string): string => {
+    const piiCheck = detectPII(text.slice(0, 500));
+    if (piiCheck.hasPII) {
+      logPIIDetection('ui-state-detector-ocr-context', piiCheck.types);
+    }
+    return sanitizeOcrText(text.slice(0, 500), 500);
+  };
+
   return [
-    ocrBefore?.text && `Text visible in "before" frame: ${ocrBefore.text.slice(0, 500)}`,
-    ocrAfter?.text && `Text visible in "after" frame: ${ocrAfter.text.slice(0, 500)}`,
+    ocrBefore?.text && `Text visible in "before" frame: ${sanitizePart(ocrBefore.text)}`,
+    ocrAfter?.text && `Text visible in "after" frame: ${sanitizePart(ocrAfter.text)}`,
   ]
     .filter(Boolean)
     .join('\n');

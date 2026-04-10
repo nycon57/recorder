@@ -191,7 +191,7 @@ export async function handleProcessTextNote(
     );
 
     // Enqueue document generation and metadata generation jobs
-    await Promise.all([
+    const [docGenResult, metadataGenResult] = await Promise.all([
       supabase.from('jobs').insert({
         type: 'doc_generate',
         status: 'pending',
@@ -214,6 +214,19 @@ export async function handleProcessTextNote(
         priority: 1,
       }),
     ]);
+
+    if (docGenResult.error) {
+      logger.error('Failed to enqueue doc_generate job', {
+        context: { recordingId, dedupeKey: `doc_generate:${recordingId}`, error: docGenResult.error.message },
+      });
+      throw new Error(`Failed to enqueue doc_generate job for ${recordingId}: ${docGenResult.error.message}`);
+    }
+    if (metadataGenResult.error) {
+      logger.error('Failed to enqueue generate_metadata job', {
+        context: { recordingId, dedupeKey: `generate_metadata:${recordingId}`, error: metadataGenResult.error.message },
+      });
+      throw new Error(`Failed to enqueue generate_metadata job for ${recordingId}: ${metadataGenResult.error.message}`);
+    }
 
     logger.info('Enqueued document generation and metadata generation jobs', {
       context: { recordingId, transcriptId: transcript.id },

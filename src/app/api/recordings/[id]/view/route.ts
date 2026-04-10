@@ -49,7 +49,7 @@ export const POST = apiHandler(async (request: NextRequest, context: any) => {
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('id, org_id')
-    .eq('clerk_id', userId)
+    .eq('id', userId)
     .single();
 
   if (userError || !user) {
@@ -144,7 +144,7 @@ export const GET = apiHandler(async (request: NextRequest, context: any) => {
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('org_id')
-    .eq('clerk_id', userId)
+    .eq('id', userId)
     .single();
 
   if (userError || !user) {

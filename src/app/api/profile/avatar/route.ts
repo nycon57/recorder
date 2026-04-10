@@ -36,7 +36,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('id, org_id')
-    .eq('clerk_id', userId)
+    .eq('id', userId)
     .single();
 
   if (userError || !user) {
@@ -143,7 +143,7 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
       avatar_url: null,
       updated_at: new Date().toISOString(),
     })
-    .eq('clerk_id', userId);
+    .eq('id', userId);
 
   if (updateError) {
     console.error('[DELETE /api/profile/avatar] Error removing avatar:', updateError);

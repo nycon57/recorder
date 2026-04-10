@@ -26,7 +26,7 @@ export function ResponseRating({
   const [saved, setSaved] = useState(false);
 
   const submitRating = useCallback(
-    async (score: number, userComment?: string) => {
+    async (score: number, userComment?: string): Promise<boolean> => {
       setIsSaving(true);
       try {
         const res = await fetch('/api/agent-feedback', {
@@ -40,9 +40,14 @@ export function ResponseRating({
           }),
         });
 
-        if (res.ok) setSaved(true);
+        if (res.ok) {
+          setSaved(true);
+          return true;
+        }
+        return false;
       } catch (err) {
         console.error('Rating submission error:', err);
+        return false;
       } finally {
         setIsSaving(false);
       }
@@ -54,15 +59,17 @@ export function ResponseRating({
     (star: number) => {
       setRating(star);
       setShowComment(true);
-      submitRating(star);
     },
-    [submitRating]
+    [],
   );
 
-  const handleCommentSubmit = useCallback(() => {
-    if (!comment.trim() || !rating) return;
+  const handleCommentSubmit = useCallback(async () => {
+    if (!rating) return;
     setSaved(false);
-    submitRating(rating, comment.trim());
+    const success = await submitRating(rating, comment.trim() || undefined);
+    if (success) {
+      setShowComment(false);
+    }
   }, [comment, rating, submitRating]);
 
   if (saved && !showComment) {
@@ -119,16 +126,14 @@ export function ResponseRating({
             className="flex-1 rounded border border-border/50 bg-muted/30 px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus-visible:border-accent focus-visible:outline-none"
             aria-label="Rating comment"
           />
-          {comment.trim() && (
-            <button
-              type="button"
-              onClick={handleCommentSubmit}
-              disabled={isSaving}
-              className="rounded px-2 py-1 text-xs font-medium text-accent hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
-            >
-              Send
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleCommentSubmit}
+            disabled={isSaving}
+            className="rounded px-2 py-1 text-xs font-medium text-accent hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+          >
+            {comment.trim() ? 'Send' : 'Submit'}
+          </button>
         </div>
       )}
     </div>

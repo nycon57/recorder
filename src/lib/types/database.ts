@@ -423,6 +423,7 @@ export interface Database {
           primary_color: string | null;
           domain: string | null;
           features: Json;
+          metadata: string | null;
           max_users: number | null;
           max_storage_gb: number | null;
           onboarded_at: string | null;
@@ -435,6 +436,7 @@ export interface Database {
           name: string;
           slug?: string | null;
           clerk_org_id?: string | null;
+          metadata?: string | null;
           plan?: OrganizationPlan;
           settings?: Json;
           billing_email?: string | null;
@@ -469,6 +471,7 @@ export interface Database {
           primary_color?: string | null;
           domain?: string | null;
           features?: Json;
+          metadata?: string | null;
           max_users?: number | null;
           max_storage_gb?: number | null;
           onboarded_at?: string | null;
@@ -479,12 +482,16 @@ export interface Database {
       users: {
         Row: {
           id: string; // UUID
-          clerk_id: string; // Clerk user ID
+          clerk_id: string | null; // Legacy — nullable, not used for new users
           email: string;
           name: string | null;
           avatar_url: string | null;
           org_id: string;
           role: UserRole;
+          email_verified: boolean;
+          banned: boolean;
+          ban_reason: string | null;
+          ban_expires: string | null;
           title: string | null;
           department_id: string | null;
           bio: string | null;
@@ -506,12 +513,16 @@ export interface Database {
         };
         Insert: {
           id?: string; // UUID, auto-generated
-          clerk_id: string; // Clerk user ID
+          clerk_id?: string | null;
           email: string;
           name?: string | null;
           avatar_url?: string | null;
-          org_id: string;
-          role: UserRole;
+          org_id?: string;
+          role?: UserRole;
+          email_verified?: boolean;
+          banned?: boolean;
+          ban_reason?: string | null;
+          ban_expires?: string | null;
           title?: string | null;
           department_id?: string | null;
           bio?: string | null;
@@ -532,12 +543,16 @@ export interface Database {
           updated_at?: string;
         };
         Update: {
-          clerk_id?: string;
+          clerk_id?: string | null;
           email?: string;
           name?: string | null;
           avatar_url?: string | null;
           org_id?: string;
           role?: UserRole;
+          email_verified?: boolean;
+          banned?: boolean;
+          ban_reason?: string | null;
+          ban_expires?: string | null;
           title?: string | null;
           department_id?: string | null;
           bio?: string | null;
@@ -1789,6 +1804,41 @@ export interface Database {
           filters?: Json;
           top_result_similarity?: number | null;
           user_feedback?: number | null;
+        };
+      };
+      vendor_wiki_pages: {
+        Row: {
+          id: string;
+          app: string;
+          app_version: string | null;
+          screen: string;
+          content: string;
+          element_selectors: Json | null;
+          source_url: string | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          app: string;
+          app_version?: string | null;
+          screen: string;
+          content: string;
+          element_selectors?: Json | null;
+          source_url?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          app?: string;
+          app_version?: string | null;
+          screen?: string;
+          content?: string;
+          element_selectors?: Json | null;
+          source_url?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
       };
       video_frames: {

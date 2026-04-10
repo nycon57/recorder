@@ -90,24 +90,19 @@ export async function recallMemory(params: {
   if (!data) return null;
 
   const row = data as AgentMemory;
-  const now = new Date().toISOString();
-  const newAccessCount = (row.access_count ?? 0) + 1;
 
-  // Update access metrics (best-effort; failure does not affect return value)
-  const { error: updateError } = await supabaseAdmin
-    .from('agent_memory')
-    .update({
-      access_count: newAccessCount,
-      last_accessed_at: now,
-    })
-    .eq('id', row.id);
+  // Atomic server-side increment via DB function to prevent lost updates under concurrency.
+  const { data: updated, error: updateError } = await supabaseAdmin.rpc(
+    'increment_memory_access',
+    { p_id: row.id } as any // RPC not in generated types
+  );
 
-  if (updateError) {
+  if (updateError || !updated || (Array.isArray(updated) && updated.length === 0)) {
     console.error('[AgentMemory] Failed to update access metrics:', updateError);
     return row;
   }
 
-  return { ...row, access_count: newAccessCount, last_accessed_at: now };
+  return (Array.isArray(updated) ? updated[0] : updated) as AgentMemory;
 }
 
 /**

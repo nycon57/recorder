@@ -27,7 +27,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       id,
       name,
       slug,
-      clerk_org_id,
+
       plan,
       logo_url,
       primary_color,
@@ -136,7 +136,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       id,
       name,
       slug,
-      clerk_org_id,
+
       plan,
       logo_url,
       primary_color,

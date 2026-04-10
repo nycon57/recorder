@@ -30,7 +30,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('id')
-    .eq('clerk_id', userId)
+    .eq('id', userId)
     .single();
 
   if (userError || !user) {
@@ -113,7 +113,7 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('id')
-    .eq('clerk_id', userId)
+    .eq('id', userId)
     .single();
 
   if (userError || !user) {

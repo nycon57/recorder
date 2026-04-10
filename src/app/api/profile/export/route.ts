@@ -25,7 +25,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('id, email, org_id')
-    .eq('clerk_id', userId)
+    .eq('id', userId)
     .single();
 
   if (userError || !user) {
@@ -41,7 +41,6 @@ export const POST = apiHandler(async (request: NextRequest) => {
       status: 'pending',
       payload: {
         user_id: user.id,
-        clerk_id: userId,
         email: user.email,
         requested_at: new Date().toISOString(),
       },
@@ -83,7 +82,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('id')
-    .eq('clerk_id', userId)
+    .eq('id', userId)
     .single();
 
   if (userError || !user) {
@@ -96,7 +95,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .from('jobs')
     .select('id, type, status, created_at, completed_at, started_at, error_message, result')
     .eq('type', 'export_user_data')
-    .contains('payload', { clerk_id: userId })
+    .contains('payload', { user_id: user.id })
     .order('created_at', { ascending: false })
     .limit(10);
 

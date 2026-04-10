@@ -111,11 +111,11 @@ async function logRateLimitViolation(
 
     // Only log if we have a userId (authenticated request)
     if (userId) {
-      // Get user's org_id for audit log (clerk_id column stores auth provider ID)
+      // Get user's org_id for audit log
       const { data: user } = await supabaseAdmin
         .from('users')
         .select('org_id')
-        .eq('clerk_id', userId)
+        .eq('id', userId)
         .single();
 
       if (user?.org_id) {
@@ -298,11 +298,11 @@ export async function extractAdminUserId(request: NextRequest): Promise<string |
 
     const userId = session.user.id;
 
-    // Check if user is admin/owner (clerk_id column stores auth provider ID)
+    // Check if user is admin/owner
     const { data: user } = await supabaseAdmin
       .from('users')
       .select('role')
-      .eq('clerk_id', userId)
+      .eq('id', userId)
       .single();
 
     if (user && ['admin', 'owner'].includes(user.role)) {

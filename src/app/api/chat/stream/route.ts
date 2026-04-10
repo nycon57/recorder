@@ -16,6 +16,7 @@ import {
 } from '@/lib/services/rag-google';
 import { rateLimiters } from '@/lib/rate-limit/limiter';
 import { requireOrg } from '@/lib/utils/api';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,14 +43,14 @@ function encodeEvent(encoder: TextEncoder, data: Record<string, unknown>): Uint8
  */
 export async function POST(request: NextRequest) {
   try {
-    const { userId, orgId, clerkUserId } = await requireOrg();
+    const { userId, orgId } = await requireOrg();
 
     // Skip rate limiting if Redis is not configured
     const isRedisConfigured = process.env.UPSTASH_REDIS_REST_URL &&
       !process.env.UPSTASH_REDIS_REST_URL.includes('your-redis');
 
     if (isRedisConfigured) {
-      const rateLimitResult = await rateLimiters.chat(clerkUserId);
+      const rateLimitResult = await rateLimiters.chat(userId);
       if (!rateLimitResult.success) {
         const retryAfter = rateLimitResult.reset - Math.floor(Date.now() / 1000);
         return new Response(
@@ -85,7 +86,26 @@ export async function POST(request: NextRequest) {
       return new Response('Message is required', { status: 400 });
     }
 
-    const convId = conversationId || await createConversation(orgId, userId, 'New Chat');
+    let convId: string;
+    if (conversationId) {
+      // Validate conversation belongs to org
+      const { data: conv, error: convError } = await supabaseAdmin
+        .from('chat_conversations')
+        .select('id')
+        .eq('id', conversationId)
+        .eq('org_id', orgId)
+        .maybeSingle();
+
+      if (convError) {
+        return new Response('Internal server error', { status: 500 });
+      }
+      if (!conv) {
+        return new Response('Conversation not found', { status: 404 });
+      }
+      convId = conversationId;
+    } else {
+      convId = await createConversation(orgId, userId, 'New Chat');
+    }
     const history = await getConversationHistory(convId, orgId);
 
     await saveChatMessage(convId, {

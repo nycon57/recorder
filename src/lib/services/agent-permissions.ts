@@ -153,7 +153,11 @@ export async function requestApproval(params: {
     existingQuery = existingQuery.is('content_id', null);
   }
 
-  const { data: existing } = await existingQuery.maybeSingle();
+  const { data: existing, error: existingError } = await existingQuery.maybeSingle();
+
+  if (existingError) {
+    throw new Error(`Failed to check for existing approval: ${existingError.message}`);
+  }
 
   if (existing) {
     return existing.id;

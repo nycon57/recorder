@@ -47,8 +47,7 @@ const CACHE_TTL = {
  * User data cache entry
  */
 export interface CachedUser {
-  id: string;           // Internal UUID
-  clerkUserId: string;  // Clerk user ID
+  id: string;           // Internal UUID (same as Better Auth user ID)
   orgId: string;        // Internal org UUID
   role: string;
   email?: string;
@@ -238,33 +237,33 @@ export class CacheService {
  */
 export class UserCache {
   /**
-   * Build cache key for user by Clerk ID
+   * Build cache key for user by auth user ID
    */
-  private static buildKey(clerkUserId: string): string {
-    return `${CACHE_PREFIXES.USER}:${clerkUserId}`;
+  private static buildKey(userId: string): string {
+    return `${CACHE_PREFIXES.USER}:${userId}`;
   }
 
   /**
-   * Get cached user by Clerk ID
+   * Get cached user by auth user ID
    */
-  static async get(clerkUserId: string): Promise<CachedUser | null> {
-    const key = this.buildKey(clerkUserId);
+  static async get(userId: string): Promise<CachedUser | null> {
+    const key = this.buildKey(userId);
     return CacheService.get<CachedUser>(key);
   }
 
   /**
    * Set cached user data
    */
-  static async set(clerkUserId: string, user: CachedUser): Promise<void> {
-    const key = this.buildKey(clerkUserId);
+  static async set(userId: string, user: CachedUser): Promise<void> {
+    const key = this.buildKey(userId);
     await CacheService.set(key, user, CACHE_TTL.USER);
   }
 
   /**
    * Invalidate user cache
    */
-  static async invalidate(clerkUserId: string): Promise<void> {
-    const key = this.buildKey(clerkUserId);
+  static async invalidate(userId: string): Promise<void> {
+    const key = this.buildKey(userId);
     await CacheService.delete(key);
   }
 
@@ -857,8 +856,8 @@ export const CacheInvalidation = {
   /**
    * Invalidate user cache (e.g., when user role changes)
    */
-  async invalidateUser(clerkUserId: string): Promise<void> {
-    await UserCache.invalidate(clerkUserId);
+  async invalidateUser(userId: string): Promise<void> {
+    await UserCache.invalidate(userId);
   },
 };
 

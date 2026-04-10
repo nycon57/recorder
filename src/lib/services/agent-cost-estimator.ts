@@ -5,10 +5,10 @@ export interface CostEstimate {
 }
 
 /**
- * Per-token blended cost (input + output) in USD.
- * Based on Gemini 2.0 Flash: $0.10/1M input + $0.40/1M output.
+ * Per-token blended average cost (input + output) in USD.
+ * Based on Gemini 2.0 Flash: $0.10/1M input + $0.40/1M output → blended average $0.25/1M.
  */
-const COST_PER_TOKEN_USD = 0.000002;
+const COST_PER_TOKEN_USD = 0.00000025;
 
 interface ActionCostProfile {
   tokens: number;

@@ -37,7 +37,6 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
     .select(
       `
       id,
-      clerk_id,
       email,
       name,
       avatar_url,
@@ -166,7 +165,6 @@ export const PATCH = apiHandler(async (request: NextRequest, context: RouteConte
     .select(
       `
       id,
-      clerk_id,
       email,
       name,
       avatar_url,

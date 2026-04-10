@@ -46,7 +46,6 @@ export const GET = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
     .select(
       `
       id,
-      clerk_id,
       email,
       name,
       avatar_url,

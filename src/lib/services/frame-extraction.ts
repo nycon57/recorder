@@ -40,6 +40,7 @@ export interface ExtractedFrame {
   width: number;
   height: number;
   sizeBytes: number;
+  mimeType: string;
 }
 
 export interface FrameExtractionResult {
@@ -178,6 +179,7 @@ export async function extractFrames(
         width: imageMetadata.width || 0,
         height: imageMetadata.height || 0,
         sizeBytes: imageBuffer.length,
+        mimeType: 'image/jpeg',
       });
     }
 

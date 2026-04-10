@@ -233,7 +233,7 @@ export async function handleExtractTextDocx(
     );
 
     // Enqueue document generation and metadata generation jobs
-    await Promise.all([
+    const [docGenResult, metadataGenResult] = await Promise.all([
       supabase.from('jobs').insert({
         type: 'doc_generate',
         status: 'pending',
@@ -256,6 +256,13 @@ export async function handleExtractTextDocx(
         priority: 1,
       }),
     ]);
+
+    if (docGenResult.error) {
+      throw new Error(`Failed to enqueue doc_generate job for ${recordingId}: ${docGenResult.error.message}`);
+    }
+    if (metadataGenResult.error) {
+      throw new Error(`Failed to enqueue generate_metadata job for ${recordingId}: ${metadataGenResult.error.message}`);
+    }
 
     logger.info('Enqueued document generation and metadata generation jobs', {
       context: { recordingId, transcriptId: transcript.id },

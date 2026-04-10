@@ -302,10 +302,9 @@ async function findContentForConcepts(
       .in('content_id', batch);
 
     if (mentionError) {
-      console.warn('[OnboardingPlan] Failed to fetch concept mentions batch:', mentionError.message);
-      continue;
+      throw new Error(`Failed to fetch concept mentions batch: ${mentionError.message}`);
     }
-    if (batchMentions) allMentions.push(...batchMentions);
+    allMentions.push(...batchMentions);
   }
 
   if (!allMentions.length) {

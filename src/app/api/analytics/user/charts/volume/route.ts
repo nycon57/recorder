@@ -40,7 +40,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { data: userData } = await supabase
     .from('users')
     .select('id')
-    .eq('clerk_id', userId)
+    .eq('id', userId)
     .single();
 
   if (!userData) {

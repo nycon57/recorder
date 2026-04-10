@@ -56,7 +56,7 @@ async function getInternalOrgId(): Promise<string | null> {
   const { data } = await supabaseAdmin
     .from('users')
     .select('org_id')
-    .eq('clerk_id', session.user.id)
+    .eq('id', session.user.id)
     .maybeSingle();
 
   return data?.org_id ?? null;

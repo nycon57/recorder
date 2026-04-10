@@ -133,13 +133,18 @@ export async function withAgentLogging<T>(
     const result = await fn();
     const durationMs = Date.now() - startTime;
 
-    await logAgentAction({
-      ...params,
-      outcome: 'success',
-      durationMs,
-    });
+    // Log success — wrap in try/catch so a logging failure never masks the real result.
+    try {
+      await logAgentAction({
+        ...params,
+        outcome: 'success',
+        durationMs,
+      });
+    } catch (logError) {
+      console.error('[AgentLogger] Failed to log action success:', logError);
+    }
 
-    // Record usage metering (recordUsage handles its own errors internally)
+    // Record usage metering — always runs even if logAgentAction failed.
     const tokensIn = params.usage?.tokensInput ?? 0;
     const tokensOut = params.usage?.tokensOutput ?? 0;
     await recordUsage({

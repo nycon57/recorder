@@ -2,7 +2,6 @@ import type { UserRole, UserStatus } from '@/lib/types/database';
 
 export interface OrganizationMember {
   id: string;
-  clerk_id: string;
   email: string;
   name: string | null;
   avatar_url: string | null;

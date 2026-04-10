@@ -51,7 +51,7 @@ export const GET = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
       updated_at,
       onboarded_at
     `)
-    .eq('clerk_id', userId)
+    .eq('id', userId)
     .single();
 
   if (error || !user) {
@@ -96,7 +96,7 @@ export const PATCH = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
       ...(body as Record<string, any>),
       updated_at: new Date().toISOString(),
     })
-    .eq('clerk_id', userId)
+    .eq('id', userId)
     .select(`
       id,
       email,

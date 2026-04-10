@@ -4,6 +4,7 @@ import Script from 'next/script';
 import { Toaster } from '@/app/components/ui/sonner';
 import { PostHogProvider } from '@/providers/posthog-provider';
 import { QueryProvider } from '@/lib/providers/query-provider';
+import { Analytics } from '@vercel/analytics/next';
 
 import './globals.css';
 
@@ -73,6 +74,7 @@ export default function RootLayout({
           <PostHogProvider>
             {children}
             <Toaster />
+            <Analytics />
           </PostHogProvider>
         </QueryProvider>
       </body>

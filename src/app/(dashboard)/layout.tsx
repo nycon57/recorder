@@ -48,7 +48,7 @@ export default async function DashboardLayout({
     const { data: userData } = await supabaseAdmin
       .from('users')
       .select('id, org_id, role, is_system_admin')
-      .eq('clerk_id', userId)
+      .eq('id', userId)
       .single();
 
     if (userData?.role) {

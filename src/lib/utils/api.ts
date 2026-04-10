@@ -155,21 +155,19 @@ export async function requireOrg() {
     // Cache hit - return cached user data
     return {
       userId: cachedUser.id,
-      clerkUserId: cachedUser.clerkUserId, // Kept for backward compat during migration
       orgId: cachedUser.orgId,
       role: cachedUser.role,
-      clerkOrgId: cachedUser.orgId, // Alias for backward compat
     };
   }
 
   // Cache miss - fetch from database
   const supabase = supabaseAdmin;
 
-  // Look up the user by clerk_id column (stores auth provider ID — Better Auth user ID during migration)
+  // Look up the user by primary key (Better Auth user.id IS users.id)
   const { data: userData, error } = await supabase
     .from('users')
     .select('id, org_id, role, email, name')
-    .eq('clerk_id', user.userId)
+    .eq('id', user.userId)
     .single();
 
   // If user doesn't exist, throw a clear error
@@ -188,7 +186,6 @@ export async function requireOrg() {
   try {
     await UserCache.set(cacheKey, {
       id: userData!.id,
-      clerkUserId: user.userId, // Kept for backward compat during migration
       orgId: userData!.org_id,
       role: userData!.role,
       email: userData!.email,
@@ -200,11 +197,9 @@ export async function requireOrg() {
   }
 
   return {
-    userId: userData!.id, // Internal UUID
-    clerkUserId: user.userId, // Auth provider ID (Better Auth user ID)
-    orgId: userData!.org_id, // Internal org UUID
+    userId: userData!.id,
+    orgId: userData!.org_id,
     role: userData!.role,
-    clerkOrgId: userData!.org_id, // Alias for backward compat
   };
 }
 
@@ -231,11 +226,11 @@ export async function requireSystemAdmin() {
   // Use admin client to bypass RLS for user lookup
   const supabase = supabaseAdmin;
 
-  // Check for system admin flag (clerk_id column stores auth provider ID)
+  // Check for system admin flag
   const { data: userData, error } = await supabase
     .from('users')
-    .select('id, clerk_id, is_system_admin, email, role')
-    .eq('clerk_id', user.userId)
+    .select('id, is_system_admin, email, role')
+    .eq('id', user.userId)
     .single();
 
   if (error || !userData) {
@@ -252,7 +247,6 @@ export async function requireSystemAdmin() {
 
   return {
     userId: userData.id,
-    clerkUserId: user.userId, // Auth provider ID (Better Auth user ID)
     email: userData.email,
     role: userData.role,
     isSystemAdmin: true,

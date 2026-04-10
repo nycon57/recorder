@@ -94,10 +94,12 @@ export function ConceptCorrection({
   );
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      abortControllerRef.current?.abort();
     };
   }, []);
 
@@ -109,20 +111,28 @@ export function ConceptCorrection({
         return;
       }
 
+      // Abort any in-flight request before starting a new one.
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       setIsSearching(true);
       try {
         const params = new URLSearchParams({ search: query, limit: '10' });
-        const res = await fetch(`/api/knowledge/concepts?${params}`);
+        const res = await fetch(`/api/knowledge/concepts?${params}`, { signal: controller.signal });
         if (!res.ok) throw new Error('Search failed');
         const result = await res.json();
         const concepts = (result.data?.concepts ?? []).filter(
           (c: { id: string }) => c.id !== conceptId
         );
         setMergeResults(concepts);
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
         setMergeResults([]);
       } finally {
-        setIsSearching(false);
+        if (!controller.signal.aborted) {
+          setIsSearching(false);
+        }
       }
     },
     [conceptId]

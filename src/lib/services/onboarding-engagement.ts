@@ -9,6 +9,7 @@ import { GoogleGenAI } from '@google/genai';
 
 import { storeMemory, recallMemory } from '@/lib/services/agent-memory';
 import { withAgentLogging } from '@/lib/services/agent-logger';
+import { detectPII, logPIIDetection } from '@/lib/utils/security';
 import type { LearningPathItem, EngagementData, Json } from '@/lib/types/database';
 
 const AGENT_TYPE = 'onboarding';
@@ -19,6 +20,15 @@ function sanitize(input: string, maxLength = 200): string {
     .replace(/[\n\r\t]/g, ' ')
     .substring(0, maxLength)
     .trim();
+}
+
+/** Sanitize and redact PII from user-generated text before sending to LLM */
+function redactPII(text: string): string {
+  const result = detectPII(text);
+  if (result.hasPII) {
+    logPIIDetection('onboarding-engagement-prompt', result.types);
+  }
+  return result.redacted;
 }
 
 function getSampleCount(metadata: unknown): number {
@@ -91,7 +101,7 @@ export async function analyzeOnboardingEngagement(input: AnalysisInput): Promise
           : 0;
 
         return {
-          title: item.title,
+          title: redactPII(sanitize(item.title)),
           contentType: item.contentType,
           completed: item.completed,
           estimatedMin: item.estimatedMinutes,
@@ -101,16 +111,20 @@ export async function analyzeOnboardingEngagement(input: AnalysisInput): Promise
         };
       });
 
+      // Redact PII from user-generated engagement data before sending to LLM
+      const redactedSearchQueries = engagementData.searchQueries.map((q) => redactPII(sanitize(q)));
+      const redactedChatQuestions = engagementData.chatQuestions.map((q) => redactPII(sanitize(q, 500)));
+
       const prompt = `You are an onboarding optimization analyst. Analyze this onboarding plan engagement data and provide actionable insights for improving future plans.
 
 **Role:** ${roleKey}
 **Completion rate:** ${completedItems}/${totalItems} (${Math.round(completionRate * 100)}%)
 
 **Learning path items:**
-${itemSummaries.map((s, i) => `${i + 1}. "${sanitize(s.title)}" [${s.contentType}] — completed: ${s.completed}, estimated: ${s.estimatedMin}min, actual: ${Math.round(s.actualSec / 60)}min, time ratio: ${s.timeRatio}, skipped: ${s.skipped}`).join('\n')}
+${itemSummaries.map((s, i) => `${i + 1}. "${s.title}" [${s.contentType}] — completed: ${s.completed}, estimated: ${s.estimatedMin}min, actual: ${Math.round(s.actualSec / 60)}min, time ratio: ${s.timeRatio}, skipped: ${s.skipped}`).join('\n')}
 
-**Search queries from the user:** ${engagementData.searchQueries.length > 0 ? engagementData.searchQueries.map((q) => sanitize(q)).join(', ') : 'none'}
-**Chat questions asked:** ${engagementData.chatQuestions.length > 0 ? engagementData.chatQuestions.map((q) => sanitize(q, 500)).join('; ') : 'none'}
+**Search queries from the user:** ${redactedSearchQueries.length > 0 ? redactedSearchQueries.join(', ') : 'none'}
+**Chat questions asked:** ${redactedChatQuestions.length > 0 ? redactedChatQuestions.join('; ') : 'none'}
 
 Provide a JSON object with these fields:
 {
@@ -198,10 +212,10 @@ function parseAnalysisResponse(text: string): AnalysisResult | null {
     if (!parsed || typeof parsed !== 'object') return null;
 
     return {
-      skippedTopics: Array.isArray(parsed.skippedTopics) ? parsed.skippedTopics : [],
-      highEngagementTopics: Array.isArray(parsed.highEngagementTopics) ? parsed.highEngagementTopics : [],
-      missingTopics: Array.isArray(parsed.missingTopics) ? parsed.missingTopics : [],
-      orderingInsights: Array.isArray(parsed.orderingInsights) ? parsed.orderingInsights : [],
+      skippedTopics: Array.isArray(parsed.skippedTopics) ? parsed.skippedTopics.filter((item: unknown) => typeof item === 'string') : [],
+      highEngagementTopics: Array.isArray(parsed.highEngagementTopics) ? parsed.highEngagementTopics.filter((item: unknown) => typeof item === 'string') : [],
+      missingTopics: Array.isArray(parsed.missingTopics) ? parsed.missingTopics.filter((item: unknown) => typeof item === 'string') : [],
+      orderingInsights: Array.isArray(parsed.orderingInsights) ? parsed.orderingInsights.filter((item: unknown) => typeof item === 'string') : [],
       summary: typeof parsed.summary === 'string' ? parsed.summary : '',
     };
   } catch {

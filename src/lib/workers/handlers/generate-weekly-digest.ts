@@ -359,6 +359,7 @@ async function collectSearchActivity(
   // Top queries by frequency
   const queryCounts = new Map<string, number>();
   for (const s of searches) {
+    if (!s.query) continue;
     const q = s.query.toLowerCase().trim();
     queryCounts.set(q, (queryCounts.get(q) ?? 0) + 1);
   }

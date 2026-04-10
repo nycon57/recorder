@@ -107,7 +107,7 @@ export default async function LibraryItemDetailPage({
   const { data: userData } = await supabaseAdmin
     .from('users')
     .select('org_id')
-    .eq('clerk_id', session.user.id)
+    .eq('id', session.user.id)
     .maybeSingle();
 
   const orgId = userData?.org_id;

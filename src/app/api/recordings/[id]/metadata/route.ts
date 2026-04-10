@@ -145,11 +145,15 @@ export const POST = apiHandler(async (
       updated_at: new Date().toISOString(),
     };
 
-    console.log('[Metadata Route] Updating content with payload:', {
-      recordingId,
-      thumbnail_url: updatePayload.thumbnail_url,
-      thumbnail_uploaded_in_metadata: updatePayload.metadata.thumbnail_uploaded,
-    });
+    if (process.env.NODE_ENV !== 'production') {
+      logger.debug('Updating content with payload', {
+        context: { requestId, recordingId },
+        data: {
+          thumbnail_url: updatePayload.thumbnail_url,
+          thumbnail_uploaded: updatePayload.metadata.thumbnail_uploaded,
+        },
+      });
+    }
 
     const { error: updateError } = await supabase
       .from('content')
@@ -165,7 +169,12 @@ export const POST = apiHandler(async (
       return errors.internalError(requestId);
     }
 
-    console.log('[Metadata Route] Successfully updated content with thumbnail_url:', thumbnailUrl);
+    if (process.env.NODE_ENV !== 'production') {
+      logger.debug('Successfully updated content with thumbnail_url', {
+        context: { requestId, recordingId },
+        data: { thumbnailUrl },
+      });
+    }
 
     logger.info('Recording updated', {
       context: { requestId, recordingId },

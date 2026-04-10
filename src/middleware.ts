@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth/auth";
+import { betterFetch } from "@better-fetch/fetch";
+import type { Session } from "@/lib/auth/auth";
 
 export async function middleware(request: NextRequest) {
-  const session = await auth.api.getSession({
-    headers: request.headers,
-  });
-
   const { pathname } = request.nextUrl;
+
+  // Skip middleware for auth API routes (avoid circular fetch)
+  if (pathname.startsWith("/api/auth")) {
+    return NextResponse.next();
+  }
+
+  const { data: session } = await betterFetch<Session>(
+    "/api/auth/get-session",
+    {
+      baseURL: request.nextUrl.origin,
+      headers: {
+        cookie: request.headers.get("cookie") || "",
+      },
+    }
+  );
 
   // Protected routes — require authentication
   if (
