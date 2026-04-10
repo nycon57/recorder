@@ -113,8 +113,11 @@ function buildUrl(opts: Required<DeepgramClientOptions>): string {
     language: opts.language,
     interim_results: String(opts.interim_results),
     endpointing: String(opts.endpointing),
-    encoding: "linear16",
-    sample_rate: "16000",
+    // Match the MediaRecorder mimeType below. Chrome only supports opus
+    // inside webm for MediaRecorder; linear16 PCM would require an
+    // AudioWorklet-based encoder path instead. Deepgram accepts opus
+    // natively — no explicit sample_rate needed (Deepgram reads the
+    // container header).
   });
   return `${DEEPGRAM_WSS_BASE}?${params.toString()}`;
 }
@@ -191,8 +194,12 @@ export function createDeepgramSession(
       socket.addEventListener("open", () => {
         // Start MediaRecorder piping audio chunks into the WebSocket
         try {
+          // Chrome supports `audio/webm;codecs=opus` natively for MediaRecorder.
+          // Deepgram reads the WebM/Opus container and transcribes in real time.
+          // (TRIB-59 fix: `codecs=pcm` is not supported by Chrome's MediaRecorder
+          // and would throw NotSupportedError at runtime.)
           const mr = new MediaRecorder(stream, {
-            mimeType: "audio/webm;codecs=pcm",
+            mimeType: "audio/webm;codecs=opus",
           });
 
           mr.addEventListener("dataavailable", (e: BlobEvent) => {
