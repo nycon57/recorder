@@ -8,7 +8,7 @@ An AI-powered knowledge management platform that enables browser-based screen/ca
 - **Backend:** Next.js API Routes, Node.js worker process
 - **Database:** PostgreSQL with pgvector (Supabase)
 - **Storage:** Cloudflare R2
-- **Auth:** Clerk (with Organizations)
+- **Auth:** Better Auth (with Organizations)
 - **AI/ML:** OpenAI (GPT, Whisper, embeddings)
 
 ## Quick Start
@@ -32,9 +32,9 @@ npm run worker
 Create a `.env.local` file with:
 
 ```bash
-# Clerk Authentication
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-CLERK_SECRET_KEY=
+# Better Auth
+BETTER_AUTH_SECRET=
+BETTER_AUTH_URL=
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=

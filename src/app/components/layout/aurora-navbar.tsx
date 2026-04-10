@@ -49,7 +49,7 @@ import {
  * - Aurora glow effects on hover
  * - Dynamic scroll detection
  * - Responsive mobile menu with Sheet
- * - Clerk auth integration
+ * - Better Auth integration
  * - Smooth animations with brand easing
  */
 

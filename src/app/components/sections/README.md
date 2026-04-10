@@ -250,14 +250,14 @@ All components use the design system from `/app/globals.css`:
 - **Card**: `/app/components/ui/card.tsx`
 - **Accordion**: `/app/components/ui/accordion.tsx`
 
-### Clerk Integration
-All CTAs use `SignUpButton` from `@clerk/nextjs`:
+### Auth Integration
+All CTAs link to the Better Auth sign-up page:
 ```typescript
-import { SignUpButton } from '@clerk/nextjs';
+import Link from 'next/link';
 
-<SignUpButton mode="modal">
+<Link href="/auth/sign-up">
   <Button>Get Started Free</Button>
-</SignUpButton>
+</Link>
 ```
 
 ## Usage Example

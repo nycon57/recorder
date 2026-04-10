@@ -82,10 +82,10 @@ export async function checkExternalServices(includeLastChecked = false) {
     });
   }
 
-  // Check Clerk status (no public status page, assume operational)
+  // Check Better Auth status (self-hosted, assume operational)
   services.push({
     id: '3',
-    name: 'Clerk',
+    name: 'Better Auth',
     status: 'operational' as const,
     uptime: 99.9,
     description: 'All systems operational',
