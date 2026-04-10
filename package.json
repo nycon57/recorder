@@ -32,7 +32,8 @@
     "db:optimize": "tsx scripts/optimize-database.ts",
     "analyze:search": "tsx scripts/analyze-search-quality.ts",
     "analyze:search:watch": "tsx watch scripts/analyze-search-quality.ts",
-    "mcp:dev": "tsx scripts/mcp-server.ts"
+    "mcp:dev": "tsx scripts/mcp-server.ts",
+    "verify": "npm run type:check && npm run lint && npm run build"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.23",

@@ -1,3 +1,6 @@
+// Sentry error monitoring
+const { withSentryConfig } = require('@sentry/nextjs');
+
 // Vercel Bot ID protection
 const { withBotId } = require('botid/next/config');
 
@@ -29,7 +32,7 @@ const COMMON_SECURITY_HEADERS = [
   },
   {
     key: 'Permissions-Policy',
-    value: 'camera=*, microphone=*, display-capture=*',
+    value: 'camera=(self), microphone=(self), geolocation=()',
   },
 ];
 
@@ -193,4 +196,12 @@ const nextConfig = {
 
 };
 
-module.exports = withBotId(nextConfig);
+module.exports = withSentryConfig(withBotId(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  tunnelRoute: '/monitoring',
+  disableLogger: true,
+  automaticVercelMonitors: true,
+});
