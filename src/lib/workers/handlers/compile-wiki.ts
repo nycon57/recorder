@@ -1,26 +1,41 @@
 /**
- * Compile Wiki Job Handler — New Page Creation (TRIB-31)
+ * Compile Wiki Job Handler — New Page + Update/Contradiction Detection
  *
  * Turns a processed recording (workflow extraction + docify + transcript)
- * into a brand-new `org_wiki_pages` row for the org. This is Step 3a of
- * Component 4 "Compiled Wiki" in product-architecture-v2.md.
+ * into an `org_wiki_pages` row for the org. Implements Steps 3a (new page)
+ * and 3b (update existing page) of Component 4 "Compiled Wiki" in
+ * product-architecture-v2.md.
  *
  * Pipeline:
  *   1. Load workflow + document + transcript inputs for the recording
  *   2. LLM-classify the recording into { app, screen, topic }
  *   3. Look up any existing matching `org_wiki_pages` row
- *      - If found: log `[TRIB-32]` update-path placeholder and return
- *      - If not:   generate a Markdown + YAML frontmatter wiki page
- *   4. Insert into `org_wiki_pages` and `wiki_page_sources`
+ *      - If found: Step 3b update path — LLM-diff existing page against new
+ *        recording and classify the delta as ADDITIVE, REDUNDANT, or
+ *        CONTRADICTION (TRIB-32)
+ *      - If not:   Step 3a — generate a Markdown + YAML frontmatter wiki page
+ *   4. Insert/update into `org_wiki_pages` and `wiki_page_sources`
  *   5. Best-effort embedding hook (activates when TRIB-36 lands)
  *
- * Step 3b (contradiction detection / update path) is deferred to TRIB-32.
+ * Step 3b classification outcomes:
+ *   - REDUNDANT: no content change, confidence nudged up, source appended
+ *   - ADDITIVE: content replaced with LLM-merged body, confidence bumped,
+ *     source appended
+ *   - CONTRADICTION: if `wiki_auto_publish` is false, the existing page's
+ *     content is left untouched and a `flagged` entry is written to
+ *     compilation_log for TRIB-34's admin review UI. If
+ *     `wiki_auto_publish` is true, the old row is superseded (valid_until
+ *     set to now()) and a new row is inserted with supersedes_id pointing
+ *     at the old row.
  */
 
 import { GoogleGenAI } from '@google/genai';
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
-import { getAgentSettings } from '@/lib/services/agent-config';
+import {
+  getAgentSettings,
+  getWikiCompilationSettings,
+} from '@/lib/services/agent-config';
 import { withAgentLogging } from '@/lib/services/agent-logger';
 import {
   detectPII,
@@ -306,13 +321,19 @@ async function runCompilationPipeline(
   });
 
   if (existingPage) {
-    console.log(
-      `[compile-wiki] [TRIB-32] update path — existing page ${existingPage.id} ` +
-        `(org=${orgId}, app=${classification.app ?? 'null'}, ` +
-        `screen=${classification.screen ?? 'null'}, topic="${classification.topic}"). ` +
-        `Skipping update in TRIB-31; TRIB-32 will extend this branch.`
-    );
-    progressCallback?.(100, 'Existing page found — update deferred to TRIB-32');
+    await runUpdatePath({
+      supabase,
+      existingPage,
+      orgId,
+      recordingId,
+      recordingTitle: recording.title,
+      workflow,
+      workflowSteps,
+      document,
+      transcript,
+      classification,
+      progressCallback,
+    });
     return;
   }
 
@@ -771,6 +792,698 @@ function escapeYamlString(value: string): string {
 function clampConfidence(value: number | null | undefined): number {
   if (typeof value !== 'number' || Number.isNaN(value)) return 0.5;
   return Math.min(1, Math.max(0, value));
+}
+
+// ---------------------------------------------------------------------------
+// Step 3b — Update existing page (TRIB-32)
+// ---------------------------------------------------------------------------
+
+/** Small confidence nudge applied when a recording corroborates an existing page. */
+const REDUNDANT_CONFIDENCE_DELTA = 0.05;
+
+type ContradictionEntry = {
+  old: string;
+  new: string;
+  field?: string;
+};
+
+type CompilationLogAction =
+  | 'created'
+  | 'additive'
+  | 'redundant'
+  | 'flagged'
+  | 'applied'
+  | 'rejected';
+
+interface CompilationLogEntry {
+  action: CompilationLogAction;
+  source_recording_id: string;
+  detected_at: string;
+  classification?: WikiClassification;
+  confidence?: number;
+  confidence_delta?: number;
+  additions?: string[];
+  contradictions?: ContradictionEntry[];
+  resolved_at?: string | null;
+  resolved_by?: string | null;
+}
+
+/**
+ * Structured output of the Step 3b LLM diff call. `action` is the primary
+ * classification; the other fields are only required for certain actions
+ * and we validate them defensively at parse time.
+ */
+interface WikiDiffResult {
+  action: 'additive' | 'redundant' | 'contradiction';
+  additions: string[];
+  contradictions: ContradictionEntry[];
+  merged_content: string | null;
+  confidence_delta: number;
+}
+
+interface UpdatePathInputs {
+  supabase: ReturnType<typeof createAdminClient>;
+  existingPage: OrgWikiPageRow;
+  orgId: string;
+  recordingId: string;
+  recordingTitle: string | null;
+  workflow: WorkflowRowForCompile | null;
+  workflowSteps: WorkflowStep[];
+  document: DocumentRowForCompile | null;
+  transcript: TranscriptRowForCompile | null;
+  classification: WikiClassification;
+  progressCallback?: ProgressCallback;
+}
+
+async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
+  const {
+    supabase,
+    existingPage,
+    orgId,
+    recordingId,
+    recordingTitle,
+    workflow,
+    workflowSteps,
+    document,
+    transcript,
+    classification,
+    progressCallback,
+  } = inputs;
+
+  console.log(
+    `[compile-wiki] Update path — existing page ${existingPage.id} ` +
+      `(org=${orgId}, app=${classification.app ?? 'null'}, ` +
+      `screen=${classification.screen ?? 'null'}, topic="${classification.topic}")`
+  );
+
+  // ---- 30% — Load existing page already done above (passed in) -------------
+  progressCallback?.(30, 'Loaded existing wiki page for diff...');
+
+  // ---- 50% — LLM diff call -------------------------------------------------
+  progressCallback?.(50, 'Running LLM diff against existing page...');
+
+  const diffResponseText = await callUpdateDiffLLM({
+    existingPage,
+    recordingTitle,
+    workflow,
+    workflowSteps,
+    document,
+    transcript,
+    recordingId,
+  });
+
+  // ---- 70% — Parse + classify ---------------------------------------------
+  progressCallback?.(70, 'Classifying new facts against existing content...');
+
+  const diff = parseUpdateDiff(diffResponseText, recordingId);
+
+  if (!diff) {
+    // Defensive no-op: we still want to record that this recording referenced
+    // the page (so the wiki_page_sources table stays truthful) but we do not
+    // mutate content or confidence when the LLM output is unparseable.
+    console.warn(
+      `[compile-wiki] LLM diff unparseable for recording ${recordingId}, ` +
+        `appending source-only and returning`
+    );
+    await insertWikiPageSource(supabase, {
+      pageId: existingPage.id,
+      recordingId,
+      recordingTitle,
+      summary: 'Source recorded (LLM diff unparseable — no content changes applied)',
+    });
+    progressCallback?.(100, 'Update path completed (no content changes)');
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+
+  // ---- 85% — Write branch --------------------------------------------------
+  progressCallback?.(85, `Applying ${diff.action} classification...`);
+
+  if (diff.action === 'redundant') {
+    await applyRedundantUpdate({
+      supabase,
+      existingPage,
+      recordingId,
+      recordingTitle,
+      nowIso,
+    });
+  } else if (diff.action === 'additive') {
+    await applyAdditiveUpdate({
+      supabase,
+      existingPage,
+      recordingId,
+      recordingTitle,
+      diff,
+      nowIso,
+    });
+  } else {
+    // contradiction
+    const settings = await getWikiCompilationSettings(orgId);
+    if (settings.wikiAutoPublish) {
+      await applyContradictionWithSupersede({
+        supabase,
+        existingPage,
+        orgId,
+        recordingId,
+        recordingTitle,
+        diff,
+        nowIso,
+        classification,
+      });
+    } else {
+      await applyContradictionFlagged({
+        supabase,
+        existingPage,
+        recordingId,
+        recordingTitle,
+        diff,
+        nowIso,
+      });
+    }
+  }
+
+  progressCallback?.(100, `Update path completed (${diff.action})`);
+}
+
+async function callUpdateDiffLLM(params: {
+  existingPage: OrgWikiPageRow;
+  recordingTitle: string | null;
+  workflow: WorkflowRowForCompile | null;
+  workflowSteps: WorkflowStep[];
+  document: DocumentRowForCompile | null;
+  transcript: TranscriptRowForCompile | null;
+  recordingId: string;
+}): Promise<string> {
+  const titleInput = sanitizeVisualDescription(
+    params.recordingTitle ?? params.workflow?.title ?? 'Untitled recording',
+    300
+  );
+
+  const workflowStepsBlock = params.workflowSteps
+    .slice(0, MAX_WORKFLOW_STEPS_IN_PROMPT)
+    .map((step, i) => {
+      const title = sanitizeVisualDescription(step.title ?? '', 200);
+      const description = sanitizeVisualDescription(step.description ?? '', 400);
+      const action = sanitizeVisualDescription(step.action ?? '', 50);
+      const uiEls = (step.uiElements ?? [])
+        .slice(0, 10)
+        .map((el) => sanitizeVisualDescription(String(el), 100))
+        .join(', ');
+      const line = `${i + 1}. ${title}${action ? ` (${action})` : ''}`;
+      const details = [description, uiEls ? `UI: ${uiEls}` : ''].filter(Boolean).join(' | ');
+      return details ? `${line}\n   ${details}` : line;
+    })
+    .join('\n');
+
+  const documentExcerpt = sanitizeVisualDescription(
+    params.document?.markdown ?? params.document?.summary ?? '',
+    MAX_DOCUMENT_CHARS
+  );
+
+  const transcriptExcerpt = sanitizeVisualDescription(
+    params.transcript?.text ?? '',
+    MAX_TRANSCRIPT_CHARS
+  );
+
+  // PII scan mirrors the generation path (Gemini + logs)
+  checkAndLogPII(
+    [titleInput, workflowStepsBlock, documentExcerpt, transcriptExcerpt].join(' '),
+    'compile-wiki-update-diff',
+    params.recordingId
+  );
+
+  // Follows product-architecture-v2.md Part 3 Component 4 Step 3b template.
+  const prompt = `You are a knowledge compiler. You maintain a wiki page about a specific workflow inside one organization's knowledge base. A new screen recording covering the same workflow has just been processed and you must decide how it changes the page.
+
+EXISTING PAGE (Markdown with YAML frontmatter):
+"""
+${params.existingPage.content}
+"""
+
+NEW RECORDING DATA:
+- Recording title: ${titleInput}
+- Workflow steps (extracted from UI state transitions):
+${workflowStepsBlock || '(no structured steps available)'}
+- Generated document excerpt:
+${documentExcerpt || '(none)'}
+- Narration transcript:
+${transcriptExcerpt || '(none)'}
+
+TASK: Decide how this new recording relates to the existing page and return a JSON object. Possible classifications:
+1. "redundant" — The recording covers the same ground as the existing page. No new information. No contradiction. (The page body should NOT change — we will only bump the confidence score and log the corroboration.)
+2. "additive" — The recording adds NEW information that does not conflict with anything already on the page (e.g. a new step, a new edge case, a new UI element). You must return merged_content containing the full updated page body — keep the existing structure and frontmatter, then splice the new information into the most appropriate section.
+3. "contradiction" — The recording contradicts something that is already on the page (e.g. the page says "click Save" but the recording clearly shows "click Submit", or the page says a field is required but the recording shows it is optional). List every contradicted fact as an object with "old" (exact string or paraphrase from the existing page), "new" (what the recording shows), and an optional "field" naming the UI element or section. Also return merged_content containing a *proposed* rewrite that resolves the contradictions — the caller may auto-apply it or route it to admin review depending on org settings.
+
+Rules:
+- Only use information grounded in the source material. Do not invent URLs, field names, keyboard shortcuts, or people.
+- Prefer the workflow steps when the transcript and document disagree with each other — the steps were extracted from actual UI transitions.
+- Never remove existing information from merged_content unless a contradiction explicitly supersedes it.
+- If you return merged_content, it MUST be the complete page body including the YAML frontmatter block and all sections. Do not wrap it in code fences.
+- additions must be a JSON array of short human-readable strings, one per new fact (empty array when none).
+- contradictions must be a JSON array of { old, new, field? } objects (empty array when none).
+- confidence_delta must be a number between -0.2 and 0.2 describing how the new recording should move the page's confidence score. Use positive values when the recording corroborates or clarifies, negative when it introduces doubt.
+
+Return ONLY a JSON object of the form:
+{
+  "action": "additive" | "redundant" | "contradiction",
+  "additions": ["..."],
+  "contradictions": [{"old": "...", "new": "...", "field": "..."}],
+  "merged_content": "complete Markdown page with YAML frontmatter, or empty string for redundant",
+  "confidence_delta": 0.0
+}
+
+Do not include any commentary before or after the JSON. Do not wrap the JSON in markdown fences.`;
+
+  try {
+    return await callGemini(prompt, {
+      temperature: 0.3,
+      maxOutputTokens: 8192,
+    });
+  } catch (error) {
+    console.error(
+      `[compile-wiki] Step 3b diff LLM call failed for ${params.recordingId}:`,
+      error
+    );
+    return '';
+  }
+}
+
+function parseUpdateDiff(
+  responseText: string,
+  recordingId: string
+): WikiDiffResult | null {
+  if (!responseText) return null;
+
+  try {
+    let cleaned = responseText.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+    }
+
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+
+    const rawAction = typeof parsed.action === 'string' ? parsed.action.toLowerCase() : '';
+    if (
+      rawAction !== 'additive' &&
+      rawAction !== 'redundant' &&
+      rawAction !== 'contradiction'
+    ) {
+      console.warn(
+        `[compile-wiki] LLM diff returned unknown action "${rawAction}" for ${recordingId}`
+      );
+      return null;
+    }
+
+    const additions = Array.isArray(parsed.additions)
+      ? parsed.additions
+          .map((v) => (typeof v === 'string' ? v.trim() : ''))
+          .filter((s): s is string => s.length > 0)
+      : [];
+
+    const contradictions = Array.isArray(parsed.contradictions)
+      ? parsed.contradictions
+          .map((raw): ContradictionEntry | null => {
+            if (!raw || typeof raw !== 'object') return null;
+            const obj = raw as Record<string, unknown>;
+            const oldVal = typeof obj.old === 'string' ? obj.old.trim() : '';
+            const newVal = typeof obj.new === 'string' ? obj.new.trim() : '';
+            if (!oldVal || !newVal) return null;
+            const field = typeof obj.field === 'string' ? obj.field.trim() : undefined;
+            return field ? { old: oldVal, new: newVal, field } : { old: oldVal, new: newVal };
+          })
+          .filter((c): c is ContradictionEntry => c !== null)
+      : [];
+
+    const mergedRaw =
+      typeof parsed.merged_content === 'string' ? parsed.merged_content : '';
+    const merged_content = stripCodeFences(mergedRaw) || null;
+
+    const rawDelta = Number(parsed.confidence_delta);
+    const confidence_delta =
+      Number.isFinite(rawDelta) ? Math.max(-0.2, Math.min(0.2, rawDelta)) : 0;
+
+    return {
+      action: rawAction,
+      additions,
+      contradictions,
+      merged_content,
+      confidence_delta,
+    };
+  } catch (error) {
+    console.error(
+      `[compile-wiki] Failed to parse Step 3b diff JSON for ${recordingId}:`,
+      error
+    );
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 3b — Write branches
+// ---------------------------------------------------------------------------
+
+async function applyRedundantUpdate(args: {
+  supabase: ReturnType<typeof createAdminClient>;
+  existingPage: OrgWikiPageRow;
+  recordingId: string;
+  recordingTitle: string | null;
+  nowIso: string;
+}): Promise<void> {
+  const { supabase, existingPage, recordingId, recordingTitle, nowIso } = args;
+
+  const newConfidence = clampConfidence(
+    (existingPage.confidence ?? 0.5) + REDUNDANT_CONFIDENCE_DELTA
+  );
+
+  const logEntry: CompilationLogEntry = {
+    action: 'redundant',
+    source_recording_id: recordingId,
+    detected_at: nowIso,
+    confidence_delta: REDUNDANT_CONFIDENCE_DELTA,
+  };
+
+  const updatedLog = appendCompilationLog(existingPage.compilation_log, logEntry);
+
+  const { error } = await supabase
+    .from('org_wiki_pages')
+    .update({
+      confidence: newConfidence,
+      compilation_log: updatedLog as unknown as Json,
+    } as never)
+    .eq('id', existingPage.id);
+
+  if (error) {
+    throw new Error(
+      `Failed to record redundant update on page ${existingPage.id}: ${error.message}`
+    );
+  }
+
+  await insertWikiPageSource(supabase, {
+    pageId: existingPage.id,
+    recordingId,
+    recordingTitle,
+    summary: `Redundant corroboration from recording (confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`,
+  });
+
+  console.log(
+    `[compile-wiki] Redundant update applied to page ${existingPage.id} ` +
+      `(confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`
+  );
+}
+
+async function applyAdditiveUpdate(args: {
+  supabase: ReturnType<typeof createAdminClient>;
+  existingPage: OrgWikiPageRow;
+  recordingId: string;
+  recordingTitle: string | null;
+  diff: WikiDiffResult;
+  nowIso: string;
+}): Promise<void> {
+  const { supabase, existingPage, recordingId, recordingTitle, diff, nowIso } = args;
+
+  const mergedContent = diff.merged_content?.trim();
+
+  // Defensive: if the LLM classified as additive but didn't actually return
+  // merged content, fall back to a redundant-style no-op (content stays, log
+  // records the no-op explicitly).
+  if (!mergedContent) {
+    console.warn(
+      `[compile-wiki] Additive diff missing merged_content for recording ${recordingId}, ` +
+        `falling back to source-only record on page ${existingPage.id}`
+    );
+    await insertWikiPageSource(supabase, {
+      pageId: existingPage.id,
+      recordingId,
+      recordingTitle,
+      summary: 'Additive classification but LLM returned no merged content — source recorded only',
+    });
+    return;
+  }
+
+  const newConfidence = clampConfidence(
+    (existingPage.confidence ?? 0.5) + diff.confidence_delta
+  );
+
+  const logEntry: CompilationLogEntry = {
+    action: 'additive',
+    source_recording_id: recordingId,
+    detected_at: nowIso,
+    additions: diff.additions,
+    confidence_delta: diff.confidence_delta,
+  };
+
+  const updatedLog = appendCompilationLog(existingPage.compilation_log, logEntry);
+
+  const { error } = await supabase
+    .from('org_wiki_pages')
+    .update({
+      content: mergedContent,
+      confidence: newConfidence,
+      compilation_log: updatedLog as unknown as Json,
+    } as never)
+    .eq('id', existingPage.id);
+
+  if (error) {
+    throw new Error(
+      `Failed to apply additive update to page ${existingPage.id}: ${error.message}`
+    );
+  }
+
+  await insertWikiPageSource(supabase, {
+    pageId: existingPage.id,
+    recordingId,
+    recordingTitle,
+    summary: `Additive update — ${diff.additions.length} new fact(s) merged (confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`,
+  });
+
+  console.log(
+    `[compile-wiki] Additive update applied to page ${existingPage.id} ` +
+      `(+${diff.additions.length} additions, confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`
+  );
+}
+
+async function applyContradictionFlagged(args: {
+  supabase: ReturnType<typeof createAdminClient>;
+  existingPage: OrgWikiPageRow;
+  recordingId: string;
+  recordingTitle: string | null;
+  diff: WikiDiffResult;
+  nowIso: string;
+}): Promise<void> {
+  const { supabase, existingPage, recordingId, recordingTitle, diff, nowIso } = args;
+
+  // Leave page content untouched; TRIB-34's admin review UI will surface the
+  // flagged entry and let a human decide whether to accept merged_content.
+  const logEntry: CompilationLogEntry = {
+    action: 'flagged',
+    source_recording_id: recordingId,
+    detected_at: nowIso,
+    contradictions: diff.contradictions,
+    additions: diff.additions,
+    confidence_delta: diff.confidence_delta,
+    resolved_at: null,
+    resolved_by: null,
+  };
+
+  const updatedLog = appendCompilationLog(existingPage.compilation_log, logEntry);
+
+  const { error } = await supabase
+    .from('org_wiki_pages')
+    .update({
+      compilation_log: updatedLog as unknown as Json,
+    } as never)
+    .eq('id', existingPage.id);
+
+  if (error) {
+    throw new Error(
+      `Failed to flag contradiction on page ${existingPage.id}: ${error.message}`
+    );
+  }
+
+  await insertWikiPageSource(supabase, {
+    pageId: existingPage.id,
+    recordingId,
+    recordingTitle,
+    summary: `Contradiction flagged for admin review — ${diff.contradictions.length} conflict(s)`,
+  });
+
+  console.log(
+    `[compile-wiki] Contradiction flagged on page ${existingPage.id} ` +
+      `(${diff.contradictions.length} conflicts, awaiting admin review via TRIB-34)`
+  );
+}
+
+async function applyContradictionWithSupersede(args: {
+  supabase: ReturnType<typeof createAdminClient>;
+  existingPage: OrgWikiPageRow;
+  orgId: string;
+  recordingId: string;
+  recordingTitle: string | null;
+  diff: WikiDiffResult;
+  nowIso: string;
+  classification: WikiClassification;
+}): Promise<void> {
+  const {
+    supabase,
+    existingPage,
+    orgId,
+    recordingId,
+    recordingTitle,
+    diff,
+    nowIso,
+    classification,
+  } = args;
+
+  const mergedContent = diff.merged_content?.trim();
+
+  // Defensive: auto-publish mode requires merged_content. If the LLM didn't
+  // return any, fall back to the flagged path so the old page isn't left in
+  // an inconsistent half-superseded state.
+  if (!mergedContent) {
+    console.warn(
+      `[compile-wiki] Auto-publish contradiction missing merged_content for recording ${recordingId}, ` +
+        `falling back to flagged path on page ${existingPage.id}`
+    );
+    await applyContradictionFlagged({
+      supabase,
+      existingPage,
+      recordingId,
+      recordingTitle,
+      diff,
+      nowIso,
+    });
+    return;
+  }
+
+  // Supersede the old row (valid_until = now()).
+  const { error: supersedeError } = await supabase
+    .from('org_wiki_pages')
+    .update({ valid_until: nowIso } as never)
+    .eq('id', existingPage.id);
+
+  if (supersedeError) {
+    throw new Error(
+      `Failed to supersede old page ${existingPage.id}: ${supersedeError.message}`
+    );
+  }
+
+  const newConfidence = clampConfidence(
+    (existingPage.confidence ?? 0.5) + diff.confidence_delta
+  );
+
+  const appliedLogEntry: CompilationLogEntry = {
+    action: 'applied',
+    source_recording_id: recordingId,
+    detected_at: nowIso,
+    contradictions: diff.contradictions,
+    additions: diff.additions,
+    confidence_delta: diff.confidence_delta,
+    resolved_at: nowIso,
+    resolved_by: null, // auto-applied (no user)
+  };
+
+  const newPageInsert: OrgWikiPageInsert = {
+    org_id: orgId,
+    app: classification.app,
+    screen: classification.screen,
+    topic: classification.topic,
+    content: mergedContent,
+    confidence: newConfidence,
+    supersedes_id: existingPage.id,
+    compilation_log: [appliedLogEntry] as unknown as Json,
+  };
+
+  const insertResponse = await supabase
+    .from('org_wiki_pages')
+    .insert(newPageInsert as never)
+    .select('id')
+    .single();
+
+  const insertError = insertResponse.error;
+  const newPage = insertResponse.data as { id: string } | null;
+
+  if (insertError || !newPage) {
+    throw new Error(
+      `Failed to insert superseding page for ${existingPage.id}: ${insertError?.message ?? 'unknown error'}`
+    );
+  }
+
+  await insertWikiPageSource(supabase, {
+    pageId: newPage.id,
+    recordingId,
+    recordingTitle,
+    summary: `Auto-applied contradiction resolution (supersedes ${existingPage.id}, ${diff.contradictions.length} conflicts)`,
+  });
+
+  // Best-effort embedding for the newly inserted row.
+  try {
+    await runBestEffortEmbedding(newPage.id);
+  } catch (embeddingError) {
+    console.warn(
+      `[compile-wiki] Embedding generation skipped for superseding page ${newPage.id}:`,
+      embeddingError instanceof Error ? embeddingError.message : embeddingError
+    );
+  }
+
+  console.log(
+    `[compile-wiki] Contradiction auto-applied: superseded ${existingPage.id} → ${newPage.id} ` +
+      `(${diff.contradictions.length} conflicts resolved, confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Step 3b — Shared helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Append a new entry to an existing compilation_log JSONB array. Defensively
+ * coerces non-array payloads (e.g. a legacy `{}` or `null`) to `[]` first so
+ * we never corrupt the column with an object shape.
+ */
+function appendCompilationLog(
+  existing: Json | null | undefined,
+  entry: CompilationLogEntry
+): CompilationLogEntry[] {
+  const base = Array.isArray(existing)
+    ? (existing as unknown as CompilationLogEntry[])
+    : [];
+  return [...base, entry];
+}
+
+async function insertWikiPageSource(
+  supabase: ReturnType<typeof createAdminClient>,
+  params: {
+    pageId: string;
+    recordingId: string;
+    recordingTitle: string | null;
+    summary: string;
+  }
+): Promise<void> {
+  const titleForSummary = params.recordingTitle?.trim()
+    ? params.recordingTitle.trim()
+    : params.recordingId.slice(0, 8);
+
+  const sourceInsert: WikiPageSourceInsert = {
+    page_id: params.pageId,
+    source_type: 'recording',
+    source_id: params.recordingId,
+    contribution_summary: `${params.summary} [recording: ${titleForSummary}]`,
+  };
+
+  const { error } = await supabase
+    .from('wiki_page_sources')
+    .insert(sourceInsert as never);
+
+  if (error) {
+    // Mirror the new-page branch's best-effort posture: log but don't throw.
+    console.error(
+      `[compile-wiki] Failed to insert wiki_page_sources row for page ${params.pageId}: ${error.message}`
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
