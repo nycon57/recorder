@@ -12,8 +12,10 @@ import {
   ZapIcon,
   Alert02Icon,
   Package01Icon,
+  Edit02Icon,
 } from "@hugeicons/core-free-icons"
 
+import { Badge } from "@/app/components/ui/badge"
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -33,6 +35,7 @@ import {
  * - Staggered entrance animation
  * - Icon scale on hover
  * - Aurora glow on active state
+ * - TRIB-34: Wiki Review entry with pending-count badge
  */
 
 interface AdminItem {
@@ -40,6 +43,8 @@ interface AdminItem {
   url: string
   icon: IconSvgElement
   description: string
+  /** When set, the item key that this badge count applies to (e.g. "wikiReview"). */
+  badgeKey?: "wikiReview"
 }
 
 const adminItems: AdminItem[] = [
@@ -72,6 +77,13 @@ const adminItems: AdminItem[] = [
     url: "/admin/quotas",
     icon: Package01Icon,
     description: "Quota management",
+  },
+  {
+    title: "Wiki Review",
+    url: "/admin/wiki-review",
+    icon: Edit02Icon,
+    description: "Flagged contradictions",
+    badgeKey: "wikiReview",
   },
 ]
 
@@ -114,7 +126,12 @@ const labelVariants = {
   },
 }
 
-export function NavAdminAurora() {
+interface NavAdminAuroraProps {
+  /** TRIB-34: pending wiki-contradiction count for the current org. */
+  wikiReviewCount?: number
+}
+
+export function NavAdminAurora({ wikiReviewCount = 0 }: NavAdminAuroraProps = {}) {
   const pathname = usePathname()
   const [mounted, setMounted] = React.useState(false)
 
@@ -123,6 +140,10 @@ export function NavAdminAurora() {
   }, [])
 
   const MotionDiv = mounted ? motion.div : "div"
+
+  const badgeCounts: Record<NonNullable<AdminItem["badgeKey"]>, number> = {
+    wikiReview: wikiReviewCount,
+  }
 
   return (
     <SidebarGroup>
@@ -148,6 +169,7 @@ export function NavAdminAurora() {
             >
               {adminItems.map((item, index) => {
                 const isActive = pathname === item.url
+                const badgeCount = item.badgeKey ? badgeCounts[item.badgeKey] : 0
 
                 return (
                   <MotionDiv
@@ -166,7 +188,16 @@ export function NavAdminAurora() {
                           <span className="inline-flex transition-transform duration-200 group-hover/nav-item:scale-110">
                             <HugeiconsIcon icon={item.icon} className="size-4" />
                           </span>
-                          <span>{item.title}</span>
+                          <span className="flex-1">{item.title}</span>
+                          {badgeCount > 0 && (
+                            <Badge
+                              variant="destructive"
+                              className="ml-auto h-5 min-w-5 justify-center px-1 text-[10px]"
+                              aria-label={`${badgeCount} pending`}
+                            >
+                              {badgeCount > 99 ? "99+" : badgeCount}
+                            </Badge>
+                          )}
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
