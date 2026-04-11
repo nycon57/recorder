@@ -37,6 +37,7 @@ import {
   getWikiCompilationSettings,
 } from '@/lib/services/agent-config';
 import { withAgentLogging } from '@/lib/services/agent-logger';
+import { generateOrgWikiPageEmbedding } from '@/lib/services/org-wiki-embedding';
 import {
   detectPII,
   logPIIDetection,
@@ -1487,30 +1488,22 @@ async function insertWikiPageSource(
 }
 
 // ---------------------------------------------------------------------------
-// Best-effort embedding hook (TRIB-36 integration seam)
+// Best-effort embedding hook (TRIB-36 integration — wired in TRIB-64)
 // ---------------------------------------------------------------------------
 
 /**
- * Placeholder for the embedding-generation hand-off. TRIB-36 will add
- * `src/lib/services/org-wiki-embedding.ts` with a
- * `generateOrgWikiPageEmbedding(pageId: string)` helper. When that PR lands,
- * replace the no-op body below with:
- *
- *     import { generateOrgWikiPageEmbedding } from '@/lib/services/org-wiki-embedding';
- *     // ...
- *     try {
- *       await generateOrgWikiPageEmbedding(pageId);
- *     } catch (error) {
- *       console.warn('[compile-wiki] Embedding generation failed:', error);
- *     }
- *
- * Keeping the import static avoids bundler warnings from both Turbopack and
- * webpack during the TRIB-31 window. Until TRIB-36 lands, this function is a
- * no-op and the compiled wiki page simply has no embedding row yet — TRIB-36
- * can backfill existing rows as part of its migration.
+ * Best-effort call into TRIB-36's org-wiki-embedding service after a wiki
+ * page is inserted or updated. Failures are logged but never thrown so the
+ * compile_wiki job still completes — the page simply ships without an
+ * embedding and TRIB-36's backfill can catch it on the next pass.
  */
 async function runBestEffortEmbedding(pageId: string): Promise<void> {
-  console.log(
-    `[compile-wiki] org-wiki-embedding hook pending TRIB-36; no embedding generated for page ${pageId}`
-  );
+  try {
+    await generateOrgWikiPageEmbedding(pageId);
+  } catch (error) {
+    console.warn(
+      `[compile-wiki] Embedding generation failed for page ${pageId}:`,
+      error
+    );
+  }
 }
