@@ -866,6 +866,10 @@ export interface Database {
           digest_enabled: boolean | null;
           workflow_extraction_enabled: boolean | null;
           global_agent_enabled: boolean | null;
+          /** When true, compile_wiki (TRIB-32) auto-applies contradictory updates. When false, contradictions are flagged for admin review (TRIB-34). */
+          wiki_auto_publish: boolean;
+          /** Days after which a wiki page is considered stale by the wiki lint job. */
+          wiki_stale_threshold_days: number;
           metadata: Json;
           created_at: string;
           updated_at: string;
@@ -879,6 +883,8 @@ export interface Database {
           digest_enabled?: boolean | null;
           workflow_extraction_enabled?: boolean | null;
           global_agent_enabled?: boolean | null;
+          wiki_auto_publish?: boolean;
+          wiki_stale_threshold_days?: number;
           metadata?: Json;
           created_at?: string;
           updated_at?: string;
@@ -890,6 +896,8 @@ export interface Database {
           digest_enabled?: boolean | null;
           workflow_extraction_enabled?: boolean | null;
           global_agent_enabled?: boolean | null;
+          wiki_auto_publish?: boolean;
+          wiki_stale_threshold_days?: number;
           metadata?: Json;
           updated_at?: string;
         };

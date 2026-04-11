@@ -21,9 +21,10 @@ const BOOLEAN_FIELDS = [
   'digest_enabled',
   'workflow_extraction_enabled',
   'global_agent_enabled',
+  'wiki_auto_publish',
 ] as const;
 
-/** Reverse map: settings column -> agent type (excludes global_agent_enabled) */
+/** Reverse map: settings column -> agent type (excludes global_agent_enabled and wiki_auto_publish) */
 const COLUMN_TO_AGENT: Partial<Record<(typeof BOOLEAN_FIELDS)[number], string>> = {
   curator_enabled: 'curator',
   gap_intelligence_enabled: 'gap_intelligence',
@@ -31,6 +32,10 @@ const COLUMN_TO_AGENT: Partial<Record<(typeof BOOLEAN_FIELDS)[number], string>> 
   digest_enabled: 'digest',
   workflow_extraction_enabled: 'workflow_extraction',
 };
+
+/** Bounds for the wiki stale threshold (days). Matches DB CHECK constraint. */
+const WIKI_STALE_THRESHOLD_MIN = 1;
+const WIKI_STALE_THRESHOLD_MAX = 365;
 
 /**
  * GET /api/organizations/agent-settings
@@ -60,7 +65,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     return errors.badRequest('Invalid JSON in request body');
   }
 
-  const updates: Record<string, boolean> = {};
+  const updates: Record<string, boolean | number> = {};
   for (const field of BOOLEAN_FIELDS) {
     if (field in body) {
       if (typeof body[field] !== 'boolean') {
@@ -70,13 +75,28 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     }
   }
 
+  if ('wiki_stale_threshold_days' in body) {
+    const value = body.wiki_stale_threshold_days;
+    if (
+      typeof value !== 'number' ||
+      !Number.isInteger(value) ||
+      value < WIKI_STALE_THRESHOLD_MIN ||
+      value > WIKI_STALE_THRESHOLD_MAX
+    ) {
+      return errors.badRequest(
+        `Field "wiki_stale_threshold_days" must be an integer between ${WIKI_STALE_THRESHOLD_MIN} and ${WIKI_STALE_THRESHOLD_MAX}`
+      );
+    }
+    updates.wiki_stale_threshold_days = value;
+  }
+
   if (Object.keys(updates).length === 0) {
     return errors.badRequest('No valid fields to update');
   }
 
   // Reject if enabling an agent the plan does not allow (disabling is always permitted)
   const agentsBeingEnabled = Object.entries(updates)
-    .filter(([, value]) => value)
+    .filter(([, value]) => value === true)
     .map(([field]) => COLUMN_TO_AGENT[field as (typeof BOOLEAN_FIELDS)[number]])
     .filter((agentType): agentType is string => !!agentType);
 
