@@ -103,6 +103,7 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'wai
  * - 'generate_onboarding_plan': Onboarding Agent — generate personalized learning paths for new team members
  * - 'generate_weekly_digest': Digest Agent — generate weekly knowledge digest for an org
  * - 'workflow_extraction': Workflow Extraction Agent — extract step-by-step workflows from screen recordings
+ * - 'compile_wiki': Compilation Engine — turn a processed recording into an org_wiki_pages row (Component 4)
  */
 export type JobType =
   | 'transcribe'
@@ -137,7 +138,8 @@ export type JobType =
   | 'analyze_knowledge_gaps'
   | 'generate_onboarding_plan'
   | 'generate_weekly_digest'
-  | 'workflow_extraction';
+  | 'workflow_extraction'
+  | 'compile_wiki';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 

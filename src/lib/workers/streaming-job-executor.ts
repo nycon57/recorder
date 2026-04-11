@@ -72,6 +72,9 @@ import { handleGenerateWeeklyDigest } from './handlers/generate-weekly-digest';
 // Workflow extraction handler
 import { handleWorkflowExtraction } from './handlers/workflow-extraction';
 
+// Wiki compilation handler (Compilation Engine — Wave 3 TRIB-31)
+import { handleCompileWiki } from './handlers/compile-wiki';
+
 const logger = createLogger({ service: 'streaming-job-executor' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
@@ -177,6 +180,10 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Workflow extraction handler
   workflow_extraction: handleWorkflowExtraction,
+
+  // Compilation Engine (Wave 3 TRIB-31) — new-page path only;
+  // contradiction/update path is TRIB-32.
+  compile_wiki: handleCompileWiki,
 };
 
 /**
