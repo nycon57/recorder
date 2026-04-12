@@ -434,6 +434,8 @@ export interface Database {
           deleted_at: string | null;
           created_at: string;
           updated_at: string;
+          /** TRIB-54: Links a customer org to its vendor org */
+          vendor_org_id: string | null;
         };
         Insert: {
           id?: string;
@@ -458,6 +460,7 @@ export interface Database {
           deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          vendor_org_id?: string | null;
         };
         Update: {
           id?: string;
@@ -481,6 +484,7 @@ export interface Database {
           onboarded_at?: string | null;
           deleted_at?: string | null;
           updated_at?: string;
+          vendor_org_id?: string | null;
         };
       };
       users: {
