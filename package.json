@@ -10,6 +10,7 @@
     "dev:extension": "npm run dev --workspace=@tribora/extension",
     "build": "next build",
     "build:extension": "npm run build --workspace=@tribora/extension",
+    "build:sdk": "npm run build --workspace=@tribora/sdk",
     "start": "next start",
     "lint": "next lint",
     "format": "prettier . --cache",
