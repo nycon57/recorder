@@ -11,6 +11,13 @@
  *     orgId?: string;             // ignored — resolved from session
  *   }
  *
+ * Query parameters:
+ *   ?as_of=<ISO 8601 timestamp>   // TRIB-40: optional point-in-time
+ *                                 //   knowledge retrieval. When provided,
+ *                                 //   the fusion engine pulls the org wiki
+ *                                 //   state as of that instant instead of
+ *                                 //   the currently-active set.
+ *
  * Returns an SSE stream with event types:
  *   text_chunk  — { text: string }
  *   element_ref — { selector: string, label: string, action: "highlight" | "point" | "pulse" }
@@ -487,6 +494,22 @@ export async function POST(request: NextRequest) {
     return errors.badRequest('context.url and context.appSignature are required');
   }
 
+  // TRIB-40: parse optional `?as_of=<ISO>` for point-in-time retrieval.
+  // Only accept valid ISO 8601 timestamps. Invalid values -> 400 instead
+  // of silently falling back to "now", which would confuse callers who
+  // think they're querying a snapshot.
+  const asOfParam = request.nextUrl.searchParams.get('as_of');
+  let asOf: string | null = null;
+  if (asOfParam !== null) {
+    const parsed = new Date(asOfParam);
+    if (Number.isNaN(parsed.getTime())) {
+      return errors.badRequest(
+        'as_of query parameter must be a valid ISO 8601 timestamp'
+      );
+    }
+    asOf = parsed.toISOString();
+  }
+
   // Resolve app + screen from appSignature
   const colonIdx = context.appSignature.indexOf(':');
   const app =
@@ -555,6 +578,8 @@ export async function POST(request: NextRequest) {
         }
 
         // ---- Step 3: resolve top-N org pages (Layer 2) -----------------
+        // TRIB-40: when `as_of` was supplied, the resolver uses the
+        // temporal variant RPC under the hood.
         let orgPages: ResolvedOrgWikiPage[] = [];
         if (questionEmbedding.length > 0) {
           try {
@@ -562,6 +587,7 @@ export async function POST(request: NextRequest) {
               orgId,
               questionEmbedding,
               limit: 3,
+              asOf,
             });
           } catch (orgError) {
             console.error(
