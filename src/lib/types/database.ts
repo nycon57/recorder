@@ -2771,6 +2771,44 @@ export interface Database {
           revoked_at?: string | null;
         };
       };
+      /**
+       * TRIB-57: Usage analytics events for vendor orgs.
+       * Records queries, context lookups, TTS requests, and SDK inits
+       * from vendor API key authenticated requests.
+       */
+      vendor_usage_events: {
+        Row: {
+          id: string;
+          vendor_org_id: string;
+          customer_org_id: string | null;
+          api_key_id: string | null;
+          event_type: string;
+          question: string | null;
+          app: string | null;
+          screen: string | null;
+          response_latency_ms: number | null;
+          had_org_knowledge: boolean;
+          had_vendor_knowledge: boolean;
+          satisfaction_score: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          vendor_org_id: string;
+          customer_org_id?: string | null;
+          api_key_id?: string | null;
+          event_type: string;
+          question?: string | null;
+          app?: string | null;
+          screen?: string | null;
+          response_latency_ms?: number | null;
+          had_org_knowledge?: boolean;
+          had_vendor_knowledge?: boolean;
+          satisfaction_score?: number | null;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+      };
     };
   };
 }
@@ -2829,6 +2867,30 @@ export interface VendorApiKey {
   last_used_at: string | null;
   created_at: string;
   revoked_at: string | null;
+}
+
+// =============================================================================
+// Vendor Usage Event Types
+// =============================================================================
+
+/** Allowed event types for vendor usage analytics */
+export type VendorUsageEventType = 'query' | 'context' | 'tts' | 'sdk_init';
+
+/** Row shape for vendor_usage_events */
+export interface VendorUsageEvent {
+  id: string;
+  vendor_org_id: string;
+  customer_org_id: string | null;
+  api_key_id: string | null;
+  event_type: VendorUsageEventType;
+  question: string | null;
+  app: string | null;
+  screen: string | null;
+  response_latency_ms: number | null;
+  had_org_knowledge: boolean;
+  had_vendor_knowledge: boolean;
+  satisfaction_score: number | null;
+  created_at: string;
 }
 
 // =============================================================================

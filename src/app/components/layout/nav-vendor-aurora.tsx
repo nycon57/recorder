@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation"
 import * as motion from "motion/react-client"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IconSvgElement } from "@hugeicons/react"
-import { Package01Icon } from "@hugeicons/core-free-icons"
+import { Package01Icon, Analytics02Icon } from "@hugeicons/core-free-icons"
 
 import {
   SidebarGroup,
@@ -38,6 +38,12 @@ const vendorItems: VendorItem[] = [
     url: "/vendor-admin",
     icon: Package01Icon,
     description: "White-label config",
+  },
+  {
+    title: "Analytics",
+    url: "/vendor-admin/analytics",
+    icon: Analytics02Icon,
+    description: "Usage analytics",
   },
 ]
 

@@ -507,12 +507,13 @@ export async function POST(request: NextRequest) {
   // TRIB-56: Accept API key auth (Bearer sk_live_...) alongside session auth.
   let orgId: string;
   let userId: string;
+  let authCtx: Awaited<ReturnType<typeof requireApiKeyOrSession>>;
   try {
-    const ctx = await requireApiKeyOrSession(request, 'query');
-    orgId = ctx.orgId;
+    authCtx = await requireApiKeyOrSession(request, 'query');
+    orgId = authCtx.orgId;
     // API key auth has no userId — use the keyId as a stable identifier
     // for user-memory features (which gracefully degrade for SDK callers).
-    userId = ctx.authMethod === 'session' ? ctx.userId : ctx.keyId;
+    userId = authCtx.authMethod === 'session' ? authCtx.userId : authCtx.keyId;
   } catch (error: any) {
     if (error.message === 'Unauthorized') {
       return errors.unauthorized();
@@ -573,6 +574,13 @@ export async function POST(request: NextRequest) {
       : 'unknown';
 
   const encoder = new TextEncoder();
+
+  // TRIB-57: Track request start time for latency measurement
+  const requestStartTime = Date.now();
+
+  // TRIB-57: Mutable flags for knowledge layer presence (set inside the stream)
+  let hadOrgKnowledge = false;
+  let hadVendorKnowledge = false;
 
   // TRIB-50: Collect org page IDs that were included in the fusion prompt
   // so after() can record interactions without blocking the SSE stream.
@@ -805,6 +813,11 @@ export async function POST(request: NextRequest) {
         // TRIB-50: capture page IDs for after() interaction recording
         resolvedOrgPageIds.push(...orgPages.map((p) => p.id));
 
+        // TRIB-57: set knowledge flags for usage analytics
+        hadOrgKnowledge = orgPages.length > 0;
+        hadVendorKnowledge =
+          vendorTrainingPages.length > 0 || vendorPage != null;
+
         // ---- Step 7: stream the LLM response through the tag parser ---
         // Track which page ids we've already cited so we only enrich the
         // recording URL lookup once per source.
@@ -989,6 +1002,35 @@ export async function POST(request: NextRequest) {
       );
     }
   });
+
+  // TRIB-57: Record vendor usage event fire-and-forget AFTER the response.
+  // Only for API-key-authenticated requests (vendor SDK callers).
+  // Session-auth requests are internal users, not vendor customers.
+  if (authCtx.authMethod === 'api_key') {
+    after(async () => {
+      try {
+        const supabase = createAdminClient();
+        await supabase.from('vendor_usage_events').insert({
+          vendor_org_id: authCtx.orgId,
+          customer_org_id: orgId !== authCtx.orgId ? orgId : null,
+          api_key_id: authCtx.keyId,
+          event_type: 'query',
+          question,
+          app,
+          screen,
+          response_latency_ms: Date.now() - requestStartTime,
+          had_org_knowledge: hadOrgKnowledge,
+          had_vendor_knowledge: hadVendorKnowledge,
+        });
+      } catch (err) {
+        // Best-effort — don't let analytics recording crash anything
+        console.error(
+          '[extension/query] failed to record vendor usage event:',
+          err
+        );
+      }
+    });
+  }
 
   return new Response(stream, {
     headers: {
