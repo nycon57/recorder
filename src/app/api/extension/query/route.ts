@@ -59,6 +59,7 @@ import { requireOrg, errors } from '@/lib/utils/api';
 import { resolveVendorWikiPage } from '@/lib/services/vendor-wiki-resolver';
 import { resolveOrgWikiPagesByVector } from '@/lib/services/org-wiki-embedding';
 import type { ResolvedOrgWikiPage } from '@/lib/services/org-wiki-embedding';
+import { resolveClusterContext } from '@/lib/services/wiki-clusters';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 
@@ -593,6 +594,62 @@ export async function POST(request: NextRequest) {
             console.error(
               '[extension/query] org page resolution failed:',
               orgError
+            );
+          }
+        }
+
+        // ---- Step 3b: widen context via same-cluster pages (TRIB-44) ---
+        // After the top-N pages are ranked by vector distance, pull up
+        // to 2 extra active pages from the SAME cluster as each match.
+        // This gives the LLM nearby knowledge that didn't happen to
+        // clear the cosine-similarity bar, which is especially useful
+        // for compound questions ("how does X interact with Y?").
+        //
+        // Gated by org_agent_settings.wiki_cluster_context_enabled so
+        // orgs can opt out without a code change. Defaults to true.
+        //
+        // Point-in-time queries (as_of) skip cluster expansion — the
+        // clusters table only stores the latest run's snapshot, so
+        // mixing it with temporal retrieval would produce incoherent
+        // context. Direct vector matches only for historical queries.
+        if (orgPages.length > 0 && asOf == null) {
+          try {
+            const supabase = createAdminClient();
+            const { data: settingsRaw } = await supabase
+              .from('org_agent_settings')
+              .select('wiki_cluster_context_enabled')
+              .eq('org_id', orgId)
+              .maybeSingle();
+
+            const settings = settingsRaw as
+              | { wiki_cluster_context_enabled: boolean | null }
+              | null;
+
+            // Default is ON — only skip when the org explicitly disabled it.
+            const enabled = settings?.wiki_cluster_context_enabled !== false;
+
+            if (enabled) {
+              const basePageIds = orgPages.map((p) => p.id);
+              const clusterPages = await resolveClusterContext({
+                orgId,
+                basePageIds,
+                perCluster: 2,
+                excludePageIds: basePageIds,
+              });
+
+              // Mix cluster-context pages in AFTER the vector-ranked
+              // pages so the LLM still sees the strongest matches
+              // first (prompt order matters for model attention).
+              if (clusterPages.length > 0) {
+                orgPages = [...orgPages, ...clusterPages];
+              }
+            }
+          } catch (clusterError) {
+            // Non-fatal: fall back to vector-matches-only if cluster
+            // expansion errors out. Logging lets us spot chronic issues.
+            console.error(
+              '[extension/query] cluster context expansion failed:',
+              clusterError
             );
           }
         }
