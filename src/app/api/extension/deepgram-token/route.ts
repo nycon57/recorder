@@ -20,9 +20,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireOrg, errors } from '@/lib/utils/api';
+import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// CORS preflight handler
+export function OPTIONS() {
+  return corsPreflightResponse();
+}
 
 /** TTL in seconds for the logical expiry timestamp (15 minutes). */
 const TOKEN_TTL_SECONDS = 15 * 60;
@@ -42,14 +48,17 @@ export async function POST(_request: NextRequest) {
       Date.now() + TOKEN_TTL_SECONDS * 1000
     ).toISOString();
 
-    return NextResponse.json({
-      token: apiKey,
-      expiresAt,
-      _warning:
-        'This is a server-side API key, not a scoped short-lived token. ' +
-        'The Deepgram SDK v5 does not yet expose a token-grant API. ' +
-        'Upgrade to scoped credentials when the SDK adds support.',
-    });
+    return NextResponse.json(
+      {
+        token: apiKey,
+        expiresAt,
+        _warning:
+          'This is a server-side API key, not a scoped short-lived token. ' +
+          'The Deepgram SDK v5 does not yet expose a token-grant API. ' +
+          'Upgrade to scoped credentials when the SDK adds support.',
+      },
+      { headers: CORS_HEADERS },
+    );
   } catch (error: any) {
     console.error('[extension/deepgram-token] error:', error);
 

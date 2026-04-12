@@ -12,9 +12,15 @@ import {
   countVendorWikiPages,
   listVendorApps,
 } from '@/lib/services/vendor-wiki-resolver';
+import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// CORS preflight handler
+export function OPTIONS() {
+  return corsPreflightResponse();
+}
 
 export async function GET(_request: NextRequest) {
   try {
@@ -23,16 +29,15 @@ export async function GET(_request: NextRequest) {
       listVendorApps(),
     ]);
 
-    return NextResponse.json({
-      status: 'ok',
-      wikiPageCount,
-      vendorDocsLoaded: vendorApps,
-    });
+    return NextResponse.json(
+      { status: 'ok', wikiPageCount, vendorDocsLoaded: vendorApps },
+      { headers: CORS_HEADERS },
+    );
   } catch (error) {
     console.error('[extension/health] error:', error);
     return NextResponse.json(
       { status: 'error', message: 'Health check failed' },
-      { status: 500 }
+      { status: 500, headers: CORS_HEADERS },
     );
   }
 }

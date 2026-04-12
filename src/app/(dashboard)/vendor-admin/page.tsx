@@ -20,6 +20,7 @@ import {
   Users,
   Activity,
   Clock,
+  Globe,
 } from 'lucide-react';
 
 import { Badge } from '@/app/components/ui/badge';
@@ -266,6 +267,29 @@ export default async function VendorAdminPage() {
                 {knowledgeScopeCount} app
                 {knowledgeScopeCount !== 1 ? 's' : ''} selected
               </Badge>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/vendor-admin/domain" className="group">
+          <Card className="transition-shadow hover:shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Globe className="h-5 w-5" />
+                Custom Domain
+              </CardTitle>
+              <CardDescription>
+                Serve the SDK from your own domain for white-label embedding.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {hasConfig && config.domain_verified ? (
+                <Badge variant="default">Verified</Badge>
+              ) : hasConfig && config.custom_domain ? (
+                <Badge variant="secondary">Pending</Badge>
+              ) : (
+                <Badge variant="outline">Not set</Badge>
+              )}
             </CardContent>
           </Card>
         </Link>

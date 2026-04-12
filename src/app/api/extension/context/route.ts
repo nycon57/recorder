@@ -20,9 +20,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// CORS preflight handler
+export function OPTIONS() {
+  return corsPreflightResponse();
+}
 
 /** Derive a screen slug from a URL pathname. */
 function screenFromUrl(url: string): string {
@@ -84,11 +90,10 @@ export async function POST(request: NextRequest) {
 
     const relevantWikiPages = (wikiPages ?? []).map((p) => p.id);
 
-    return NextResponse.json({
-      app,
-      screen,
-      relevantWikiPages,
-    });
+    return NextResponse.json(
+      { app, screen, relevantWikiPages },
+      { headers: CORS_HEADERS },
+    );
   } catch (error: any) {
     console.error('[extension/context] error:', error);
 
