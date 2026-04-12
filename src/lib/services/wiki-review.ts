@@ -26,9 +26,15 @@ export type OrgWikiPageRow = Database['public']['Tables']['org_wiki_pages']['Row
 /**
  * Canonical shape of a single entry inside `org_wiki_pages.compilation_log`.
  *
- * Mirrors the TRIB-32 writer in `src/lib/workers/handlers/compile-wiki.ts`.
- * Keep these fields in lockstep with that writer — changing one without the
+ * Mirrors the writer in `src/lib/workers/handlers/compile-wiki.ts`. Keep
+ * these fields in lockstep with that writer — changing one without the
  * other will silently drop admin-review data.
+ *
+ * TRIB-41 closed the "merged_content absent on flagged entries" gap, so the
+ * full diff — `old_content`, `new_content`, `merged_content`, and a short
+ * `diff_summary` — is now persisted on every `flagged` entry. The optional
+ * marker on those fields is retained purely for backwards compatibility with
+ * legacy entries written before TRIB-41 merged.
  */
 export interface CompilationLogEntry {
   action: 'created' | 'additive' | 'redundant' | 'flagged' | 'applied' | 'rejected';
@@ -41,8 +47,33 @@ export interface CompilationLogEntry {
   }>;
   additions?: string[];
   confidence_delta?: number;
-  /** Optional: may be populated when TRIB-32 evolves to stash merged_content. */
+  /**
+   * Full prior page body at flag time. Populated by TRIB-41; older entries
+   * may omit this field.
+   */
+  old_content?: string | null;
+  /**
+   * Raw new-recording draft body used to diff against `old_content`. Rarely
+   * used by the admin UI directly — kept for audit purposes.
+   */
+  new_content?: string | null;
+  /**
+   * Complete merged Markdown body proposed by the LLM. TRIB-41 guarantees
+   * this is present on every flagged entry emitted by compile-wiki, so the
+   * admin review approve path can adopt it verbatim. Legacy pre-TRIB-41
+   * entries may still be missing it — the approve action falls back to
+   * literal `{ old, new }` substring replacement when that happens.
+   */
   merged_content?: string | null;
+  /** Short human-readable description of the diff for the review UI. */
+  diff_summary?: string | null;
+  /**
+   * ISO timestamp of when a human (or the auto-publish path) applied the
+   * merged_content to the page. Null on flagged entries awaiting review.
+   */
+  applied_at?: string | null;
+  /** User id of the admin who approved the change. Null for auto-applied. */
+  applied_by?: string | null;
   resolved_at?: string | null;
   resolved_by?: string | null;
 }
@@ -162,6 +193,39 @@ export function getPendingReviewCount(orgId: string): Promise<number> {
     ['wiki-review-pending-count', orgId],
     { revalidate: 60, tags: [`wiki-review-count:${orgId}`] }
   )(orgId);
+}
+
+/**
+ * Uncached variant of {@link getPendingReviewCount}. Used by TRIB-43's
+ * knowledge health dashboard (and any other caller that wants live numbers
+ * without the 60-second `unstable_cache` layer).
+ *
+ * Returns the total number of unresolved `flagged` entries across all live
+ * `org_wiki_pages` rows scoped to the given org.
+ */
+export async function getPendingContradictionCount(orgId: string): Promise<number> {
+  const { data, error } = await supabaseAdmin
+    .from('org_wiki_pages')
+    .select('compilation_log')
+    .eq('org_id', orgId)
+    .is('valid_until', null)
+    .contains('compilation_log', [{ action: 'flagged' }]);
+
+  if (error) {
+    console.warn(
+      '[wiki-review] getPendingContradictionCount failed:',
+      error.message
+    );
+    return 0;
+  }
+
+  let total = 0;
+  const rows = (data ?? []) as Array<{ compilation_log: Json | null }>;
+  for (const row of rows) {
+    const log = readCompilationLog(row.compilation_log);
+    total += extractPendingContradictions(log).length;
+  }
+  return total;
 }
 
 /**
