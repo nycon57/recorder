@@ -17,7 +17,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireOrg, errors } from '@/lib/utils/api';
+import { errors } from '@/lib/utils/api';
+import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
@@ -37,7 +38,8 @@ function screenFromUrl(url: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireOrg();
+    // TRIB-56: Accept API key auth (Bearer sk_live_...) alongside session auth.
+    await requireApiKeyOrSession(request, 'context');
 
     const body = await request.json();
     const { url, appSignature } = body as {
@@ -92,6 +94,12 @@ export async function POST(request: NextRequest) {
 
     if (error.message === 'Unauthorized') {
       return errors.unauthorized();
+    }
+    if (error.message === 'Rate limit exceeded') {
+      return errors.rateLimitExceeded();
+    }
+    if (error.message === 'Insufficient scope') {
+      return errors.forbidden();
     }
     if (
       error.message === 'Organization context required' ||
