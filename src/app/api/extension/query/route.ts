@@ -24,19 +24,22 @@
  *   citation    — { sourceId: string, title: string, recordingUrl?: string }
  *   done        — {}
  *
- * TRIB-35: Two-layer fusion.
+ * TRIB-35/TRIB-54: Three-layer fusion.
  *
  * Flow:
  *   1. requireOrg() — fail fast before touching the stream.
  *   2. Resolve {app, screen} from appSignature.
  *   3. Layer 1: resolveVendorWikiPage({ app, screen }) — generic vendor docs.
  *   4. Embed the user question via generateEmbeddingWithFallback (RETRIEVAL_QUERY).
- *   5. Layer 2: resolveOrgWikiPagesByVector({ orgId, questionEmbedding, limit: 3 })
- *              — top-3 currently-active org wiki pages by cosine similarity.
- *   6. If both layers are empty → graceful "no documentation" fallback + done.
- *   7. Build the PRD Part 3 Component 3 fusion prompt (see product-architecture-v2.md
- *      line 427+). Sections: VENDOR KNOWLEDGE, ORG KNOWLEDGE, INTERACTIVE ELEMENTS,
- *      QUESTION. ORG KNOWLEDGE takes precedence on conflict.
+ *   5. Layer 2 (TRIB-54): If the org has a vendor_org_id, resolve the VENDOR
+ *              ORG's wiki pages by vector — vendor training docs. Respects
+ *              knowledge_scope from white_label_configs.
+ *   6. Layer 3: resolveOrgWikiPagesByVector({ orgId, questionEmbedding, limit: 3 })
+ *              — top-3 currently-active customer org wiki pages by cosine similarity.
+ *   7. If all layers are empty → graceful "no documentation" fallback + done.
+ *   8. Build the fusion prompt with three sections: VENDOR KNOWLEDGE,
+ *      VENDOR TRAINING, YOUR TEAM'S KNOWLEDGE. Precedence: customer > vendor
+ *      training > generic vendor docs.
  *   8. Call ai.models.generateContentStream(...) with temperature 0.4 and
  *      maxOutputTokens 2048 for a snappy conversational response.
  *   9. Each streamed chunk goes through a TagStreamParser state machine which:
@@ -61,6 +64,7 @@ import { resolveOrgWikiPagesByVector } from '@/lib/services/org-wiki-embedding';
 import type { ResolvedOrgWikiPage } from '@/lib/services/org-wiki-embedding';
 import { resolveClusterContext } from '@/lib/services/wiki-clusters';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
+import { getVendorForOrg } from '@/lib/services/vendor-customers';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
@@ -161,15 +165,37 @@ function buildFusionPrompt(args: {
   screen: string;
   question: string;
   vendorMarkdown: string | null;
+  vendorTrainingPages: ResolvedOrgWikiPage[];
   orgPages: ResolvedOrgWikiPage[];
   elements: Array<{ selector: string; label: string }>;
   userMemoryTopics?: string[];
 }): string {
-  const { app, screen, question, vendorMarkdown, orgPages, elements, userMemoryTopics } = args;
+  const {
+    app,
+    screen,
+    question,
+    vendorMarkdown,
+    vendorTrainingPages,
+    orgPages,
+    elements,
+    userMemoryTopics,
+  } = args;
 
   const vendorSection = vendorMarkdown
     ? vendorMarkdown.slice(0, MAX_CONTENT_CHARS_PER_PAGE)
     : '(no vendor documentation available for this screen)';
+
+  // TRIB-54: Vendor training layer — wiki pages from the vendor org
+  const vendorTrainingSection =
+    vendorTrainingPages.length > 0
+      ? vendorTrainingPages
+          .map((page) => {
+            const header = `### ${page.topic} [SOURCE:${page.id}:${page.topic}]`;
+            const body = (page.content ?? '').slice(0, MAX_CONTENT_CHARS_PER_PAGE);
+            return `${header}\n${body}`;
+          })
+          .join(ORG_SEPARATOR)
+      : '(no vendor training knowledge available)';
 
   const orgSection =
     orgPages.length > 0
@@ -180,7 +206,7 @@ function buildFusionPrompt(args: {
             return `${header}\n${body}`;
           })
           .join(ORG_SEPARATOR)
-      : '(no org-specific knowledge available for this screen)';
+      : '(no team-specific knowledge available)';
 
   const elementsSection =
     elements.length > 0
@@ -200,7 +226,10 @@ The user has previously been shown information about: ${userMemoryTopics.join(',
 VENDOR KNOWLEDGE (generic software documentation):
 ${vendorSection}
 
-ORG KNOWLEDGE (how this team specifically uses it):
+VENDOR TRAINING (how the vendor recommends using it):
+${vendorTrainingSection}
+
+YOUR TEAM'S KNOWLEDGE (how your team specifically uses it):
 ${orgSection}
 
 INTERACTIVE ELEMENTS VISIBLE ON SCREEN:
@@ -209,11 +238,11 @@ ${userContextSection}
 QUESTION: ${question}
 
 Rules:
-- ORG KNOWLEDGE takes precedence over VENDOR KNOWLEDGE when they conflict. Explicitly mention when you're following the team's specific way.
+- YOUR TEAM'S KNOWLEDGE takes highest precedence, followed by VENDOR TRAINING, then VENDOR KNOWLEDGE. Explicitly mention when you're following the team's specific way versus vendor recommendations.
 - When referring to a clickable element that exists in INTERACTIVE ELEMENTS, tag it like [ELEMENT:selector:label] so the extension can highlight/point at it. Use the selector exactly as provided above.
-- When citing a source, tag it [SOURCE:id:title]. Use the org page id for org citations and the vendor page id for vendor citations. Org sources should come first in the citation list.
+- When citing a source, tag it [SOURCE:id:title]. Use the page id for team/vendor-training citations and the vendor page id for vendor citations. Team sources should come first in the citation list, followed by vendor training sources.
 - Keep the answer concise and conversational. Prioritize actionable steps a user can follow right now.
-- If you don't know the answer from either layer, say so clearly instead of guessing.`;
+- If you don't know the answer from any layer, say so clearly instead of guessing.`;
 }
 
 // -------------------- Tag-parsing state machine --------------------
@@ -593,7 +622,44 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // ---- Step 3: resolve top-N org pages (Layer 2) -----------------
+        // ---- Step 3: TRIB-54 resolve vendor training pages (Layer 2) ----
+        // If the requesting org has a vendor_org_id, pull the vendor
+        // org's wiki pages as "vendor training" — how the vendor
+        // recommends using the software. knowledge_scope filtering
+        // limits which apps are included.
+        let vendorTrainingPages: ResolvedOrgWikiPage[] = [];
+        if (questionEmbedding.length > 0) {
+          try {
+            const vendorInfo = await getVendorForOrg(orgId);
+            if (vendorInfo) {
+              // Respect knowledge_scope: only include vendor training
+              // pages for apps in the configured scope (if any).
+              const inScope =
+                !vendorInfo.whiteLabelConfig.knowledge_scope ||
+                vendorInfo.whiteLabelConfig.knowledge_scope.length === 0 ||
+                vendorInfo.whiteLabelConfig.knowledge_scope.some(
+                  (s) => s.toLowerCase() === app
+                );
+
+              if (inScope) {
+                vendorTrainingPages = await resolveOrgWikiPagesByVector({
+                  orgId: vendorInfo.vendorOrgId,
+                  questionEmbedding,
+                  limit: 3,
+                  asOf,
+                });
+              }
+            }
+          } catch (vendorTrainingError) {
+            // Non-fatal: proceed without vendor training layer
+            console.error(
+              '[extension/query] vendor training page resolution failed:',
+              vendorTrainingError
+            );
+          }
+        }
+
+        // ---- Step 4: resolve top-N customer org pages (Layer 3) -------
         // TRIB-40: when `as_of` was supplied, the resolver uses the
         // temporal variant RPC under the hood.
         let orgPages: ResolvedOrgWikiPage[] = [];
@@ -613,7 +679,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // ---- Step 3b: widen context via same-cluster pages (TRIB-44) ---
+        // ---- Step 4b: widen context via same-cluster pages (TRIB-44) --
         // After the top-N pages are ranked by vector distance, pull up
         // to 2 extra active pages from the SAME cluster as each match.
         // This gives the LLM nearby knowledge that didn't happen to
@@ -669,8 +735,8 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // ---- Step 4: early exit if both layers are empty ---------------
-        if (!vendorPage && orgPages.length === 0) {
+        // ---- Step 5: early exit if all layers are empty -----------------
+        if (!vendorPage && vendorTrainingPages.length === 0 && orgPages.length === 0) {
           emit({
             type: 'text_chunk',
             text: `I don't have specific documentation for ${app} ${screen} yet. Please check the vendor's help center for guidance.`,
@@ -679,7 +745,7 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        // ---- Step 4b: TRIB-50 user memory lookup ----------------------
+        // ---- Step 5b: TRIB-50 user memory lookup ----------------------
         // Query prior interactions so the LLM can skip basic explanations
         // the user has already seen. Lightweight: single indexed query.
         let userMemoryTopics: string[] = [];
@@ -713,12 +779,13 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // ---- Step 5: build the PRD fusion prompt -----------------------
+        // ---- Step 6: build the three-layer fusion prompt ----------------
         const fusionPrompt = buildFusionPrompt({
           app,
           screen,
           question,
           vendorMarkdown: vendorPage?.content ?? null,
+          vendorTrainingPages,
           orgPages,
           elements: context.elements ?? [],
           userMemoryTopics:
@@ -728,11 +795,12 @@ export async function POST(request: NextRequest) {
         // TRIB-50: capture page IDs for after() interaction recording
         resolvedOrgPageIds.push(...orgPages.map((p) => p.id));
 
-        // ---- Step 6: stream the LLM response through the tag parser ---
+        // ---- Step 7: stream the LLM response through the tag parser ---
         // Track which page ids we've already cited so we only enrich the
         // recording URL lookup once per source.
         const citedPageIds = new Set<string>();
         const orgPageIds = new Set(orgPages.map((p) => p.id));
+        const vendorTrainingPageIds = new Set(vendorTrainingPages.map((p) => p.id));
         const vendorPageId = vendorPage?.id;
         const vendorPageTitle = vendorPage
           ? `${vendorPage.app} — ${vendorPage.screen}`
@@ -766,6 +834,18 @@ export async function POST(request: NextRequest) {
                 sourceId,
                 title: title || vendorPageTitle || 'Vendor documentation',
                 recordingUrl: vendorSourceUrl,
+              });
+              return;
+            }
+
+            // Vendor training citation — emit without recording URL
+            // (vendor training pages belong to the vendor org, not the
+            // customer, so we don't try to resolve customer recordings).
+            if (vendorTrainingPageIds.has(sourceId)) {
+              emit({
+                type: 'citation',
+                sourceId,
+                title: title || 'Vendor training',
               });
               return;
             }
