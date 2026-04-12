@@ -67,21 +67,14 @@ import { resolveClusterContext } from '@/lib/services/wiki-clusters';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
 import { getVendorForOrg } from '@/lib/services/vendor-customers';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// CORS headers for cross-origin SDK requests
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-  'Access-Control-Max-Age': '86400',
-};
-
 // Preflight handler for SDK cross-origin requests
 export function OPTIONS() {
-  return new Response(null, { status: 204, headers: CORS_HEADERS });
+  return corsPreflightResponse();
 }
 
 /** SSE event shapes */

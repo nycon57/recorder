@@ -19,9 +19,15 @@ import { NextResponse } from 'next/server';
 
 import { requireOrg, errors, successResponse } from '@/lib/utils/api';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// CORS preflight handler
+export function OPTIONS() {
+  return corsPreflightResponse();
+}
 
 interface UserMemoryTopic {
   pageId: string;

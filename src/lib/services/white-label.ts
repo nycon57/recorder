@@ -30,6 +30,9 @@ export interface UpdateWhiteLabelInput {
   voice_config?: WhiteLabelVoiceConfig;
   knowledge_scope?: string[] | null;
   custom_domain?: string | null;
+  domain_verification_token?: string | null;
+  domain_verified?: boolean;
+  domain_verified_at?: string | null;
   is_active?: boolean;
 }
 
@@ -123,6 +126,15 @@ export async function updateWhiteLabelConfig(
   }
   if (input.custom_domain !== undefined) {
     updates.custom_domain = input.custom_domain;
+  }
+  if (input.domain_verification_token !== undefined) {
+    updates.domain_verification_token = input.domain_verification_token;
+  }
+  if (input.domain_verified !== undefined) {
+    updates.domain_verified = input.domain_verified;
+  }
+  if (input.domain_verified_at !== undefined) {
+    updates.domain_verified_at = input.domain_verified_at;
   }
   if (input.is_active !== undefined) {
     updates.is_active = input.is_active;

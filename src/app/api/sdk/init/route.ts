@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { validateApiKey } from '@/lib/services/vendor-api-keys';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 import type {
   WhiteLabelBranding,
   WhiteLabelVoiceConfig,
@@ -30,19 +31,10 @@ import type {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// ─── CORS Headers ───────────────────────────────────────────────────────────
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-  'Access-Control-Max-Age': '86400',
-};
-
 // ─── OPTIONS (preflight) ────────────────────────────────────────────────────
 
 export function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+  return corsPreflightResponse();
 }
 
 // ─── GET ────────────────────────────────────────────────────────────────────

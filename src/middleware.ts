@@ -15,6 +15,50 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // SDK bundle route is public — skip auth (served with cache headers)
+  if (pathname === "/api/sdk/bundle") {
+    return NextResponse.next();
+  }
+
+  // ─── TRIB-58: Custom domain resolution ──────────────────────────────
+  // If the Host header matches a vendor's custom_domain, resolve their
+  // white-label config and inject headers for downstream routes.
+  const host = request.headers.get("host");
+  const mainDomain = process.env.NEXT_PUBLIC_APP_URL
+    ? new URL(process.env.NEXT_PUBLIC_APP_URL).host
+    : "localhost:3000";
+
+  if (host && host !== mainDomain && !host.startsWith("localhost")) {
+    // Lazy-import to avoid pulling Supabase into every middleware call
+    // for requests on the main domain
+    try {
+      const { resolveWhiteLabelByDomain } = await import(
+        "@/lib/services/white-label"
+      );
+      const config = await resolveWhiteLabelByDomain(host);
+      if (config) {
+        const response = NextResponse.next();
+        response.headers.set("x-tribora-vendor-org-id", config.vendor_org_id);
+        response.headers.set("x-tribora-config-id", config.id);
+
+        // For SDK routes on custom domains, skip session auth and return
+        // early — SDK auth is handled via API key in the route itself
+        if (pathname.startsWith("/api/sdk/") || pathname.startsWith("/api/extension/")) {
+          return response;
+        }
+      }
+    } catch (err) {
+      // Domain resolution failure should not block the request
+      console.warn("[middleware] Custom domain resolution error:", err);
+    }
+  }
+
+  // ─── SDK routes use API key auth, not session ───────────────────────
+  // Skip session check for SDK init (API key auth handled in route)
+  if (pathname.startsWith("/api/sdk/")) {
+    return NextResponse.next();
+  }
+
   const { data: session } = await betterFetch<Session>(
     "/api/auth/get-session",
     {

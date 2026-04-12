@@ -2841,6 +2841,9 @@ export interface WhiteLabelConfig {
   voice_config: WhiteLabelVoiceConfig;
   knowledge_scope: string[] | null;
   custom_domain: string | null;
+  domain_verification_token: string | null;
+  domain_verified: boolean;
+  domain_verified_at: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
