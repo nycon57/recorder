@@ -52,7 +52,7 @@
  * SSE streams on Node. Preserve the existing SSE headers.
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, after } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 
 import { requireOrg, errors } from '@/lib/utils/api';
@@ -163,8 +163,9 @@ function buildFusionPrompt(args: {
   vendorMarkdown: string | null;
   orgPages: ResolvedOrgWikiPage[];
   elements: Array<{ selector: string; label: string }>;
+  userMemoryTopics?: string[];
 }): string {
-  const { app, screen, question, vendorMarkdown, orgPages, elements } = args;
+  const { app, screen, question, vendorMarkdown, orgPages, elements, userMemoryTopics } = args;
 
   const vendorSection = vendorMarkdown
     ? vendorMarkdown.slice(0, MAX_CONTENT_CHARS_PER_PAGE)
@@ -186,6 +187,14 @@ function buildFusionPrompt(args: {
       ? elements.map((el) => `- ${el.label}: ${el.selector}`).join('\n')
       : '(no interactive elements provided)';
 
+  // TRIB-50: If user has prior interactions with some of these pages,
+  // inject a USER CONTEXT section so the LLM can skip basic explanations.
+  const userContextSection =
+    userMemoryTopics && userMemoryTopics.length > 0
+      ? `\nUSER CONTEXT:
+The user has previously been shown information about: ${userMemoryTopics.join(', ')}. Skip basic explanations they've already seen and focus on their specific question. If they ask about a topic they've seen before, go deeper rather than repeating fundamentals.\n`
+      : '';
+
   return `You are a context-aware assistant helping someone use ${app}'s ${screen} page.
 
 VENDOR KNOWLEDGE (generic software documentation):
@@ -196,7 +205,7 @@ ${orgSection}
 
 INTERACTIVE ELEMENTS VISIBLE ON SCREEN:
 ${elementsSection}
-
+${userContextSection}
 QUESTION: ${question}
 
 Rules:
@@ -466,9 +475,11 @@ export async function POST(request: NextRequest) {
   // Auth check before touching the stream so unauthorized clients
   // get a plain 401 rather than a half-opened SSE connection.
   let orgId: string;
+  let userId: string;
   try {
     const ctx = await requireOrg();
     orgId = ctx.orgId;
+    userId = ctx.userId;
   } catch (error: any) {
     if (error.message === 'Unauthorized') {
       return errors.unauthorized();
@@ -523,6 +534,10 @@ export async function POST(request: NextRequest) {
       : 'unknown';
 
   const encoder = new TextEncoder();
+
+  // TRIB-50: Collect org page IDs that were included in the fusion prompt
+  // so after() can record interactions without blocking the SSE stream.
+  const resolvedOrgPageIds: string[] = [];
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -664,6 +679,40 @@ export async function POST(request: NextRequest) {
           return;
         }
 
+        // ---- Step 4b: TRIB-50 user memory lookup ----------------------
+        // Query prior interactions so the LLM can skip basic explanations
+        // the user has already seen. Lightweight: single indexed query.
+        let userMemoryTopics: string[] = [];
+        if (orgPages.length > 0) {
+          try {
+            const supabase = createAdminClient();
+            const orgPageIds = orgPages.map((p) => p.id);
+            const { data: priorInteractions } = await supabase
+              .from('user_wiki_interactions')
+              .select('wiki_page_id')
+              .eq('user_id', userId)
+              .eq('org_id', orgId)
+              .in('wiki_page_id', orgPageIds);
+
+            if (priorInteractions && priorInteractions.length > 0) {
+              const priorPageIds = new Set(
+                (priorInteractions as { wiki_page_id: string }[]).map(
+                  (r) => r.wiki_page_id
+                )
+              );
+              userMemoryTopics = orgPages
+                .filter((p) => priorPageIds.has(p.id))
+                .map((p) => p.topic);
+            }
+          } catch (memoryError) {
+            // Non-fatal: proceed without user memory context
+            console.error(
+              '[extension/query] user memory lookup failed:',
+              memoryError
+            );
+          }
+        }
+
         // ---- Step 5: build the PRD fusion prompt -----------------------
         const fusionPrompt = buildFusionPrompt({
           app,
@@ -672,7 +721,12 @@ export async function POST(request: NextRequest) {
           vendorMarkdown: vendorPage?.content ?? null,
           orgPages,
           elements: context.elements ?? [],
+          userMemoryTopics:
+            userMemoryTopics.length > 0 ? userMemoryTopics : undefined,
         });
+
+        // TRIB-50: capture page IDs for after() interaction recording
+        resolvedOrgPageIds.push(...orgPages.map((p) => p.id));
 
         // ---- Step 6: stream the LLM response through the tag parser ---
         // Track which page ids we've already cited so we only enrich the
@@ -794,6 +848,56 @@ export async function POST(request: NextRequest) {
         finish();
       }
     },
+  });
+
+  // TRIB-50: Record user-wiki interactions fire-and-forget AFTER the
+  // response completes. Uses next/server after() so it doesn't block
+  // the SSE stream. Deduplicates: skips if same (user, page, type)
+  // tuple already exists within the last hour.
+  after(async () => {
+    if (resolvedOrgPageIds.length === 0) return;
+
+    try {
+      const supabase = createAdminClient();
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+      // Find existing interactions within the last hour for dedup
+      const { data: existing } = await supabase
+        .from('user_wiki_interactions')
+        .select('wiki_page_id, interaction_type')
+        .eq('user_id', userId)
+        .eq('org_id', orgId)
+        .in('wiki_page_id', resolvedOrgPageIds)
+        .gte('created_at', oneHourAgo);
+
+      const existingSet = new Set(
+        (
+          (existing as
+            | { wiki_page_id: string; interaction_type: string }[]
+            | null) ?? []
+        ).map((r) => `${r.wiki_page_id}:${r.interaction_type}`)
+      );
+
+      // Build rows: 'taught' for all org pages included in the prompt
+      const rows = resolvedOrgPageIds
+        .filter((pageId) => !existingSet.has(`${pageId}:taught`))
+        .map((pageId) => ({
+          user_id: userId,
+          org_id: orgId,
+          wiki_page_id: pageId,
+          interaction_type: 'taught' as const,
+        }));
+
+      if (rows.length > 0) {
+        await supabase.from('user_wiki_interactions').insert(rows);
+      }
+    } catch (err) {
+      // Best-effort — don't let interaction tracking crash anything
+      console.error(
+        '[extension/query] failed to record user wiki interactions:',
+        err
+      );
+    }
   });
 
   return new Response(stream, {

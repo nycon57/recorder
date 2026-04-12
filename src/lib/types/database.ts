@@ -2107,6 +2107,39 @@ export interface Database {
           created_at?: string;
         };
       };
+      /**
+       * TRIB-50: Tracks which wiki pages each user has been exposed to via
+       * the extension's fusion query. Enables the LLM to skip redundant
+       * explanations and tailor responses to knowledge gaps.
+       *
+       * interaction_type: queried | taught | viewed
+       */
+      user_wiki_interactions: {
+        Row: {
+          id: string;
+          user_id: string;
+          org_id: string;
+          wiki_page_id: string;
+          interaction_type: 'viewed' | 'queried' | 'taught';
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          org_id: string;
+          wiki_page_id: string;
+          interaction_type: 'viewed' | 'queried' | 'taught';
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          org_id?: string;
+          wiki_page_id?: string;
+          interaction_type?: 'viewed' | 'queried' | 'taught';
+          created_at?: string;
+        };
+      };
       video_frames: {
         Row: {
           id: string;
