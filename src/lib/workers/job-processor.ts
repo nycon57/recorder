@@ -74,6 +74,9 @@ import { handleWorkflowExtraction } from './handlers/workflow-extraction';
 // Wiki compilation handler (Compilation Engine — Wave 3 TRIB-31)
 import { handleCompileWiki } from './handlers/compile-wiki';
 
+// Vendor doc ingestion handler (TRIB-45)
+import { handleIngestVendorDocs } from './handlers/ingest-vendor-docs';
+
 // ALTERNATIVE: Google Cloud Speech-to-Text mode (requires API enablement)
 // import { transcribeRecording } from './handlers/transcribe-google';
 // import { generateDocument } from './handlers/docify-google';
@@ -275,6 +278,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   // Compilation Engine (Wave 3 TRIB-31) — new-page path only;
   // contradiction/update path is TRIB-32.
   compile_wiki: handleCompileWiki,
+
+  // Vendor doc ingestion (TRIB-45)
+  ingest_vendor_docs: handleIngestVendorDocs,
 };
 
 // PERF-WK-001: Job priority levels (0 = highest, 3 = lowest)

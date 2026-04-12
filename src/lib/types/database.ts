@@ -104,6 +104,7 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'wai
  * - 'generate_weekly_digest': Digest Agent — generate weekly knowledge digest for an org
  * - 'workflow_extraction': Workflow Extraction Agent — extract step-by-step workflows from screen recordings
  * - 'compile_wiki': Compilation Engine — turn a processed recording into an org_wiki_pages row (Component 4)
+ * - 'ingest_vendor_docs': Vendor Doc Ingestion — crawl vendor documentation sites and populate vendor_wiki_pages (TRIB-45)
  */
 export type JobType =
   | 'transcribe'
@@ -139,7 +140,8 @@ export type JobType =
   | 'generate_onboarding_plan'
   | 'generate_weekly_digest'
   | 'workflow_extraction'
-  | 'compile_wiki';
+  | 'compile_wiki'
+  | 'ingest_vendor_docs';
 
 export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 
@@ -1833,6 +1835,8 @@ export interface Database {
           content: string;
           element_selectors: Json | null;
           source_url: string | null;
+          /** TRIB-45: SHA256 hash of content for deduplication during re-crawl */
+          content_hash: string | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -1844,6 +1848,7 @@ export interface Database {
           content: string;
           element_selectors?: Json | null;
           source_url?: string | null;
+          content_hash?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
@@ -1855,6 +1860,7 @@ export interface Database {
           content?: string;
           element_selectors?: Json | null;
           source_url?: string | null;
+          content_hash?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
