@@ -55,7 +55,8 @@
 import { NextRequest, after } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 
-import { requireOrg, errors } from '@/lib/utils/api';
+import { errors } from '@/lib/utils/api';
+import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import { resolveVendorWikiPage } from '@/lib/services/vendor-wiki-resolver';
 import { resolveOrgWikiPagesByVector } from '@/lib/services/org-wiki-embedding';
 import type { ResolvedOrgWikiPage } from '@/lib/services/org-wiki-embedding';
@@ -474,15 +475,24 @@ async function resolveRecordingUrlForPage(
 export async function POST(request: NextRequest) {
   // Auth check before touching the stream so unauthorized clients
   // get a plain 401 rather than a half-opened SSE connection.
+  // TRIB-56: Accept API key auth (Bearer sk_live_...) alongside session auth.
   let orgId: string;
   let userId: string;
   try {
-    const ctx = await requireOrg();
+    const ctx = await requireApiKeyOrSession(request, 'query');
     orgId = ctx.orgId;
-    userId = ctx.userId;
+    // API key auth has no userId — use the keyId as a stable identifier
+    // for user-memory features (which gracefully degrade for SDK callers).
+    userId = ctx.authMethod === 'session' ? ctx.userId : ctx.keyId;
   } catch (error: any) {
     if (error.message === 'Unauthorized') {
       return errors.unauthorized();
+    }
+    if (error.message === 'Rate limit exceeded') {
+      return errors.rateLimitExceeded();
+    }
+    if (error.message === 'Insufficient scope') {
+      return errors.forbidden();
     }
     return errors.forbidden();
   }

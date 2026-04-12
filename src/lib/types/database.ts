@@ -2729,6 +2729,44 @@ export interface Database {
           updated_at?: string;
         };
       };
+      vendor_api_keys: {
+        Row: {
+          id: string;
+          vendor_org_id: string;
+          white_label_config_id: string;
+          name: string;
+          key_hash: string;
+          key_prefix: string;
+          scopes: string[];
+          rate_limit_rpm: number;
+          is_active: boolean;
+          last_used_at: string | null;
+          created_at: string;
+          revoked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          vendor_org_id: string;
+          white_label_config_id: string;
+          name: string;
+          key_hash: string;
+          key_prefix: string;
+          scopes?: string[];
+          rate_limit_rpm?: number;
+          is_active?: boolean;
+          last_used_at?: string | null;
+          created_at?: string;
+          revoked_at?: string | null;
+        };
+        Update: {
+          name?: string;
+          scopes?: string[];
+          rate_limit_rpm?: number;
+          is_active?: boolean;
+          last_used_at?: string | null;
+          revoked_at?: string | null;
+        };
+      };
     };
   };
 }
@@ -2764,6 +2802,29 @@ export interface WhiteLabelConfig {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+// =============================================================================
+// Vendor API Key Types
+// =============================================================================
+
+/** Allowed scopes for vendor API keys */
+export type VendorApiKeyScope = 'query' | 'context' | 'tts';
+
+/** Full vendor API key row (never includes the plaintext key) */
+export interface VendorApiKey {
+  id: string;
+  vendor_org_id: string;
+  white_label_config_id: string;
+  name: string;
+  key_hash: string;
+  key_prefix: string;
+  scopes: VendorApiKeyScope[];
+  rate_limit_rpm: number;
+  is_active: boolean;
+  last_used_at: string | null;
+  created_at: string;
+  revoked_at: string | null;
 }
 
 // =============================================================================
