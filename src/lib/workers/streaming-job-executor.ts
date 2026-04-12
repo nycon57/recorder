@@ -75,6 +75,9 @@ import { handleWorkflowExtraction } from './handlers/workflow-extraction';
 // Wiki compilation handler (Compilation Engine — Wave 3 TRIB-31)
 import { handleCompileWiki } from './handlers/compile-wiki';
 
+// Vendor doc ingestion handler (TRIB-45)
+import { handleIngestVendorDocs } from './handlers/ingest-vendor-docs';
+
 const logger = createLogger({ service: 'streaming-job-executor' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
@@ -184,6 +187,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   // Compilation Engine (Wave 3 TRIB-31) — new-page path only;
   // contradiction/update path is TRIB-32.
   compile_wiki: handleCompileWiki,
+
+  // Vendor doc ingestion (TRIB-45)
+  ingest_vendor_docs: handleIngestVendorDocs,
 };
 
 /**
