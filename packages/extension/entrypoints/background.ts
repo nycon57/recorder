@@ -277,13 +277,46 @@ export default defineBackground(() => {
           if (!activeRecorder) return sendResponse({ ok: false, error: 'Not recording' });
           const blob = await activeRecorder.stop();
           activeRecorder = null;
-          const { recordingId } = await uploadRecording(blob, {
-            filename: `extension-${Date.now()}.webm`,
-            mimeType: 'video/webm',
-            source: 'extension',
-          });
+
+          // TRIB-49: relay upload progress + retry state to popup via storage
+          const UPLOAD_STATE_KEY = 'tribora_upload_state';
+
+          const broadcastUploadState = (patch: Record<string, unknown>) => {
+            void chrome.storage.session.set({
+              [UPLOAD_STATE_KEY]: { status: 'uploading', ...patch },
+            });
+          };
+
+          const { recordingId } = await uploadRecording(
+            blob,
+            {
+              filename: `extension-${Date.now()}.webm`,
+              mimeType: 'video/webm',
+              source: 'extension',
+            },
+            {
+              onProgress: (progress) => {
+                broadcastUploadState({
+                  uploadProgress: progress.percent,
+                  uploadedBytes: progress.uploaded,
+                  totalBytes: progress.total,
+                });
+              },
+              onRetry: (info) => {
+                broadcastUploadState({
+                  retryAttempt: info.attempt,
+                  retryMax: info.maxAttempts,
+                });
+              },
+            },
+          );
+
+          // Clear upload state on success
+          void chrome.storage.session.remove(UPLOAD_STATE_KEY);
           sendResponse({ ok: true, recordingId });
         } catch (err) {
+          // Clear upload state on failure
+          void chrome.storage.session.remove('tribora_upload_state');
           sendResponse({ ok: false, error: (err as Error).message });
         }
       })();
