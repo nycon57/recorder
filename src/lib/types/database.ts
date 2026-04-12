@@ -2691,8 +2691,79 @@ export interface Database {
         };
         Update: Record<string, never>;
       };
+      /**
+       * TRIB-52: White-label configuration for vendor orgs.
+       * One row per vendor org. Stores branding, voice config,
+       * knowledge scoping, and custom domain settings.
+       */
+      white_label_configs: {
+        Row: {
+          id: string;
+          vendor_org_id: string;
+          branding: Json;
+          voice_config: Json;
+          knowledge_scope: string[] | null;
+          custom_domain: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          vendor_org_id: string;
+          branding?: Json;
+          voice_config?: Json;
+          knowledge_scope?: string[] | null;
+          custom_domain?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          vendor_org_id?: string;
+          branding?: Json;
+          voice_config?: Json;
+          knowledge_scope?: string[] | null;
+          custom_domain?: string | null;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+      };
     };
   };
+}
+
+// =============================================================================
+// White-Label Config Types
+// =============================================================================
+
+/** Branding shape stored in white_label_configs.branding JSONB */
+export interface WhiteLabelBranding {
+  logo_url?: string;
+  primary_color?: string;
+  secondary_color?: string;
+  product_name?: string;
+  support_email?: string;
+}
+
+/** Voice config shape stored in white_label_configs.voice_config JSONB */
+export interface WhiteLabelVoiceConfig {
+  elevenlabs_voice_id?: string;
+  stability?: number;
+  similarity_boost?: number;
+}
+
+/** Full white-label config row with typed JSONB fields */
+export interface WhiteLabelConfig {
+  id: string;
+  vendor_org_id: string;
+  branding: WhiteLabelBranding;
+  voice_config: WhiteLabelVoiceConfig;
+  knowledge_scope: string[] | null;
+  custom_domain: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 // =============================================================================
