@@ -22,6 +22,13 @@ const API_BASE_URL =
   (import.meta.env as Record<string, string>).VITE_TRIBORA_API_URL ||
   "http://localhost:3000";
 
+/**
+ * Timeout (ms) for the initial backend TTS request. The stream itself has
+ * no total-duration ceiling — only the request/connect phase is bounded so
+ * a dead backend doesn't leave a pending fetch forever.
+ */
+const TTS_REQUEST_TIMEOUT_MS = 15_000;
+
 // ─── Public types ────────────────────────────────────────────────────────────
 
 /** A live TTS streaming session — callers read from `stream` and call
@@ -59,6 +66,13 @@ export async function streamTts(
     headers.set("Authorization", `Bearer ${session.token}`);
   }
 
+  // AbortController bounds the request/connect phase with an explicit timeout
+  // and gives callers a handle to cancel in-flight streams cleanly.
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => {
+    controller.abort(new Error(`[Tribora TTS] Request timed out after ${TTS_REQUEST_TIMEOUT_MS}ms`));
+  }, TTS_REQUEST_TIMEOUT_MS);
+
   let response: Response;
 
   try {
@@ -67,12 +81,23 @@ export async function streamTts(
       headers,
       credentials: "include",
       body: JSON.stringify({ text, voice }),
+      signal: controller.signal,
     });
   } catch (networkErr) {
+    clearTimeout(timeoutHandle);
+    if ((networkErr as Error).name === "AbortError") {
+      throw new Error(
+        `[Tribora TTS] Request aborted: ${(networkErr as Error).message}`,
+      );
+    }
     throw new Error(
       `[Tribora TTS] Network error reaching /api/extension/tts: ${(networkErr as Error).message}`,
     );
   }
+
+  // Headers are in — the connect-phase timeout has fired its job. Streaming
+  // the body has no further ceiling; cleanup() below still aborts on demand.
+  clearTimeout(timeoutHandle);
 
   if (!response.ok) {
     if (response.status === 404) {
@@ -97,6 +122,13 @@ export async function streamTts(
   return {
     stream: response.body,
     cleanup: () => {
+      try {
+        // Aborting the controller cancels both the fetch and any reader
+        // reads from response.body, guaranteeing cleanup under all states.
+        controller.abort();
+      } catch {
+        // abort() errors are non-fatal
+      }
       try {
         void response.body?.cancel();
       } catch {

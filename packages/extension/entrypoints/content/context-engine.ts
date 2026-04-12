@@ -181,14 +181,11 @@ export function detectApp(
       return { app: entry.name, screen };
     }
 
-    // URL matched but DOM not yet loaded — still claim the app, fall back screen
-    if (urlMatches && entry.domFingerprints.length === 0) {
-      const screen = entry.detectScreen(url, doc) ?? "unknown";
-      return { app: entry.name, screen };
-    }
-
     // URL matched but DOM fingerprint didn't — could be a loading state.
     // Still return with URL-derived app name so we don't lose the match.
+    // (A previous `domFingerprints.length === 0` special case was removed:
+    // `every()` returns true on empty arrays, so an empty fingerprint list
+    // already takes the `domMatches` branch above.)
     const screen = entry.detectScreen(url, doc) ?? "unknown";
     return { app: entry.name, screen };
   }
@@ -366,9 +363,17 @@ export function extractBreadcrumbs(doc: Document): string[] | undefined {
 
   if (!nav) return undefined;
 
-  const items = Array.from(nav.querySelectorAll("li, [aria-current], a, span"))
-    .map((el) => (el as HTMLElement).innerText?.trim() ?? el.textContent?.trim() ?? "")
-    .filter(Boolean);
+  // Deduplicate: a nested `<li><a>Home</a></li>` otherwise yields both "Home"
+  // (from the `li`) and "Home" (from the `a`). Walk candidates in order,
+  // keep the first occurrence of each label, and drop empties.
+  const seen = new Set<string>();
+  const items: string[] = [];
+  for (const el of Array.from(nav.querySelectorAll("li, [aria-current], a, span"))) {
+    const label = ((el as HTMLElement).innerText?.trim() ?? el.textContent?.trim() ?? "").trim();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    items.push(label);
+  }
 
   return items.length > 0 ? items : undefined;
 }
