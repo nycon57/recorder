@@ -1944,6 +1944,62 @@ export interface Database {
         };
       };
       /**
+       * TRIB-42: Daily wiki lint check results per org. Written by the
+       * `POST /api/cron/wiki-lint` cron handler. One row per org per
+       * calendar day (UTC) — the handler upserts on (org_id, run_day).
+       *
+       * Counts live in top-level columns for fast dashboard aggregation
+       * (TRIB-43 knowledge health dashboard). The full payload — arrays
+       * of page IDs / gap tuples — lives in `details` JSONB:
+       *
+       * details = {
+       *   orphans:          { page_id, topic }[];
+       *   stale:            { page_id, topic, last_contributed_at, threshold_days }[];
+       *   stale_links:      { page_id, topic, target_topic, target_page_id }[];
+       *   coverage_gaps:    { app, screen, vendor_pages_count }[];
+       *   confidence_decay: { page_id, topic, old_confidence, new_confidence }[];
+       * }
+       *
+       * `run_day` is a generated UTC-date column — callers never set it
+       * on Insert/Update (Postgres GENERATED ALWAYS AS).
+       */
+      wiki_lint_results: {
+        Row: {
+          id: string;
+          org_id: string;
+          run_at: string;
+          run_day: string;
+          orphan_count: number;
+          stale_count: number;
+          stale_link_count: number;
+          coverage_gap_count: number;
+          confidence_decay_count: number;
+          details: Json;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          run_at?: string;
+          orphan_count?: number;
+          stale_count?: number;
+          stale_link_count?: number;
+          coverage_gap_count?: number;
+          confidence_decay_count?: number;
+          details?: Json;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          run_at?: string;
+          orphan_count?: number;
+          stale_count?: number;
+          stale_link_count?: number;
+          coverage_gap_count?: number;
+          confidence_decay_count?: number;
+          details?: Json;
+        };
+      };
+      /**
        * TRIB-38: Typed relationship graph between org_wiki_pages rows.
        * Populated by compile_wiki Step 4 (TRIB-39) and consumed by the
        * fusion engine + community-detection worker (TRIB-44). See PRD
