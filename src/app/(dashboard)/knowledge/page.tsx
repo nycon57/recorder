@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Brain, List, Network, Hash, Filter, AlertCircle, Loader2, Info, Sparkles, Upload, FileText, BookOpen } from 'lucide-react';
+import Link from 'next/link';
+import { Brain, List, Network, Hash, Filter, AlertCircle, Loader2, Info, Sparkles, Upload, FileText, BookOpen, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
@@ -262,7 +263,14 @@ function KnowledgePageContent() {
             </p>
           </div>
 
-          {/* Right: View mode toggle */}
+          {/* Right: Health link + View mode toggle */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <Button asChild variant="outline" size="sm" className="min-h-[44px]">
+              <Link href="/knowledge/health">
+                <Activity className="h-4 w-4 mr-2" aria-hidden="true" />
+                Health
+              </Link>
+            </Button>
           <div className="flex items-center border rounded-lg p-1 bg-muted/20 w-full sm:w-auto" role="group" aria-label="View mode selection">
             <Button
               variant={viewMode === 'graph' ? 'secondary' : 'ghost'}
@@ -286,6 +294,7 @@ function KnowledgePageContent() {
               <List className="h-4 w-4" aria-hidden="true" />
               <span>List</span>
             </Button>
+          </div>
           </div>
         </div>
 
