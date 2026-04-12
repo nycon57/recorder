@@ -131,6 +131,14 @@ export interface ResolveOrgWikiPagesByVectorArgs {
   orgId: string;
   questionEmbedding: number[];
   limit?: number;
+  /**
+   * TRIB-40: optional point-in-time filter. When set to an ISO 8601
+   * timestamp, the resolver switches to the temporal variant RPC and
+   * returns pages that were active at that instant instead of the
+   * currently-active set. `null`/`undefined` preserves the default
+   * "currently-active only" behavior.
+   */
+  asOf?: string | null;
 }
 
 export interface ResolvedOrgWikiPage {
@@ -144,23 +152,27 @@ export interface ResolvedOrgWikiPage {
 }
 
 /**
- * Return currently-active org wiki pages ranked by cosine distance to
- * the query embedding. Used by the fusion engine in TRIB-35.
+ * Return org wiki pages ranked by cosine distance to the query embedding.
+ * Used by the fusion engine in TRIB-35.
  *
- * Only pages where `valid_until IS NULL` (currently-active) and
- * `embedding IS NOT NULL` (already processed by compile_wiki) are
- * considered. Results are ordered by ascending distance — lower is
- * more similar.
+ * Default behavior: only pages where `valid_until IS NULL` (currently-active)
+ * and `embedding IS NOT NULL` (already processed by compile_wiki) are
+ * considered. Results are ordered by ascending distance — lower is more
+ * similar.
  *
- * Implementation: delegates to the `match_org_wiki_pages` Postgres
- * function registered via migration `trib_36_match_org_wiki_pages_fn`.
- * Doing this in SQL (vs. a raw parameterized query) keeps the JS client
- * type-safe and matches the pattern used by `match_chunks`.
+ * TRIB-40: when `asOf` is provided, switches to the temporal-aware
+ * `match_org_wiki_pages_as_of` RPC which filters by
+ * `valid_from <= asOf AND (valid_until IS NULL OR valid_until > asOf)`.
+ * This powers `/api/extension/query?as_of=<ISO>` point-in-time knowledge
+ * retrieval.
+ *
+ * Implementation: delegates to the `match_org_wiki_pages` (default) or
+ * `match_org_wiki_pages_as_of` (temporal) Postgres functions.
  */
 export async function resolveOrgWikiPagesByVector(
   args: ResolveOrgWikiPagesByVectorArgs
 ): Promise<ResolvedOrgWikiPage[]> {
-  const { orgId, questionEmbedding, limit = DEFAULT_MATCH_LIMIT } = args;
+  const { orgId, questionEmbedding, limit = DEFAULT_MATCH_LIMIT, asOf } = args;
 
   if (!questionEmbedding || questionEmbedding.length === 0) {
     logger.warn('resolveOrgWikiPagesByVector called with empty embedding', {
@@ -175,15 +187,23 @@ export async function resolveOrgWikiPagesByVector(
   // rpc and converts it to the pgvector wire format. This mirrors how
   // hierarchical-search.ts and agent-memory.ts pass embeddings to their
   // respective match_* functions.
-  const { data, error } = await supabase.rpc('match_org_wiki_pages' as never, {
-    query_embedding: questionEmbedding as unknown as string,
-    match_org_id: orgId,
-    match_limit: limit,
-  } as never);
+  const { data, error } =
+    asOf != null
+      ? await supabase.rpc('match_org_wiki_pages_as_of' as never, {
+          query_embedding: questionEmbedding as unknown as string,
+          match_org_id: orgId,
+          match_as_of: asOf,
+          match_limit: limit,
+        } as never)
+      : await supabase.rpc('match_org_wiki_pages' as never, {
+          query_embedding: questionEmbedding as unknown as string,
+          match_org_id: orgId,
+          match_limit: limit,
+        } as never);
 
   if (error) {
     logger.error('match_org_wiki_pages RPC failed', {
-      context: { orgId, limit },
+      context: { orgId, limit, asOf: asOf ?? null },
       error,
     });
     throw new Error(`Failed to resolve org wiki pages by vector: ${error.message}`);
