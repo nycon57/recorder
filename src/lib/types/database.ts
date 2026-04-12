@@ -872,6 +872,12 @@ export interface Database {
           wiki_auto_publish: boolean;
           /** Days after which a wiki page is considered stale by the wiki lint job. */
           wiki_stale_threshold_days: number;
+          /**
+           * TRIB-44: When true, the fusion engine in /api/extension/query pulls
+           * additional context pages from the same cluster(s) as the top-N
+           * vector-matched pages before building the LLM prompt. Defaults to true.
+           */
+          wiki_cluster_context_enabled: boolean;
           metadata: Json;
           created_at: string;
           updated_at: string;
@@ -887,6 +893,7 @@ export interface Database {
           global_agent_enabled?: boolean | null;
           wiki_auto_publish?: boolean;
           wiki_stale_threshold_days?: number;
+          wiki_cluster_context_enabled?: boolean;
           metadata?: Json;
           created_at?: string;
           updated_at?: string;
@@ -900,6 +907,7 @@ export interface Database {
           global_agent_enabled?: boolean | null;
           wiki_auto_publish?: boolean;
           wiki_stale_threshold_days?: number;
+          wiki_cluster_context_enabled?: boolean;
           metadata?: Json;
           updated_at?: string;
         };
@@ -1879,6 +1887,13 @@ export interface Database {
            * See src/lib/services/org-wiki-embedding.ts. TRIB-36.
            */
           embedding: number[] | null;
+          /**
+           * TRIB-44: FK to wiki_clusters. Populated weekly by the Louvain
+           * community-detection cron at /api/cron/wiki-clusters. NULL for
+           * pages that have no edges in wiki_relationships or that were
+           * added since the last detection run.
+           */
+          cluster_id: string | null;
         };
         Insert: {
           id?: string;
@@ -1895,6 +1910,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
           embedding?: number[] | null;
+          cluster_id?: string | null;
         };
         Update: {
           id?: string;
@@ -1911,6 +1927,54 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
           embedding?: number[] | null;
+          cluster_id?: string | null;
+        };
+      };
+      /**
+       * TRIB-44: Louvain-detected communities over wiki_relationships.
+       * One row per detected cluster per org. Refreshed weekly by the
+       * /api/cron/wiki-clusters route, which deletes existing clusters
+       * for the org and re-inserts fresh rows before updating
+       * org_wiki_pages.cluster_id on each page.
+       *
+       * The fusion engine in /api/extension/query reads cluster_id to
+       * widen context: after the top-N vector-matched pages are selected,
+       * it pulls additional pages from the same cluster(s) so the LLM
+       * sees related knowledge that didn't match on cosine distance alone.
+       *
+       * See src/lib/services/wiki-clusters.ts for the detection algorithm
+       * and product-architecture-v2.md Part 9 for the Graphify rationale.
+       */
+      wiki_clusters: {
+        Row: {
+          id: string;
+          org_id: string;
+          /** Human-readable cluster name — currently derived from the central page topic. */
+          name: string;
+          member_count: number;
+          /** Highest-degree node in the cluster. Serves as the label anchor. */
+          central_page_id: string | null;
+          /** Global Louvain modularity score for the detection run (stored per row for convenience). */
+          modularity: number | null;
+          computed_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          member_count?: number;
+          central_page_id?: string | null;
+          modularity?: number | null;
+          computed_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          member_count?: number;
+          central_page_id?: string | null;
+          modularity?: number | null;
+          computed_at?: string;
         };
       };
       /**

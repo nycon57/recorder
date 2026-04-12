@@ -27,6 +27,10 @@
     {
       "path": "/api/cron/wiki-lint",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/wiki-clusters",
+      "schedule": "0 4 * * 0"
     }
   ]
 }
