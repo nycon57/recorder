@@ -47,6 +47,7 @@ import type { Database, Json, WorkflowStep } from '@/lib/types/database';
 
 import type { ProgressCallback } from '../job-processor';
 import { runRelationshipExtraction } from './compile-wiki-relationships';
+import { runCrossPageContradictionDetection } from './compile-wiki-cross-page';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 type OrgWikiPageInsert = Database['public']['Tables']['org_wiki_pages']['Insert'];
@@ -441,12 +442,26 @@ async function runCompilationPipeline(
   }
 
   // ---- Step 8 — Relationship extraction (TRIB-39) --------------------------
-  progressCallback?.(98, 'Extracting wiki relationships (best-effort)...');
+  progressCallback?.(97, 'Extracting wiki relationships (best-effort)...');
 
   await runRelationshipExtraction({
     supabase,
     orgId,
     pageId: newPage.id,
+    topic: classification.topic,
+    content: generatedContent,
+    recordingId,
+  });
+
+  // ---- Step 9 — Cross-page contradiction detection (TRIB-41) ---------------
+  progressCallback?.(99, 'Detecting cross-page contradictions (best-effort)...');
+
+  await runCrossPageContradictionDetection({
+    supabase,
+    orgId,
+    pageId: newPage.id,
+    app: classification.app,
+    screen: classification.screen,
     topic: classification.topic,
     content: generatedContent,
     recordingId,
@@ -838,6 +853,18 @@ interface CompilationLogEntry {
   confidence_delta?: number;
   additions?: string[];
   contradictions?: ContradictionEntry[];
+  /**
+   * TRIB-41 audit-trail additions. Populated on every `flagged` and `applied`
+   * entry so the admin review UI can show a full before/after diff and apply
+   * the LLM's `merged_content` verbatim instead of falling back to literal
+   * substring replacement.
+   */
+  old_content?: string | null;
+  new_content?: string | null;
+  merged_content?: string | null;
+  diff_summary?: string | null;
+  applied_at?: string | null;
+  applied_by?: string | null;
   resolved_at?: string | null;
   resolved_by?: string | null;
 }
@@ -985,13 +1012,26 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
     }
   }
 
-  // ---- 95% — Relationship extraction (TRIB-39) -----------------------------
+  // ---- 93% — Relationship extraction (TRIB-39) -----------------------------
   if (relationshipTarget) {
-    progressCallback?.(95, 'Extracting wiki relationships (best-effort)...');
+    progressCallback?.(93, 'Extracting wiki relationships (best-effort)...');
     await runRelationshipExtraction({
       supabase,
       orgId,
       pageId: relationshipTarget.pageId,
+      topic: classification.topic,
+      content: relationshipTarget.content,
+      recordingId,
+    });
+
+    // ---- 97% — Cross-page contradiction detection (TRIB-41) ----------------
+    progressCallback?.(97, 'Detecting cross-page contradictions (best-effort)...');
+    await runCrossPageContradictionDetection({
+      supabase,
+      orgId,
+      pageId: relationshipTarget.pageId,
+      app: classification.app,
+      screen: classification.screen,
       topic: classification.topic,
       content: relationshipTarget.content,
       recordingId,
@@ -1319,6 +1359,14 @@ async function applyContradictionFlagged(args: {
 
   // Leave page content untouched; TRIB-34's admin review UI will surface the
   // flagged entry and let a human decide whether to accept merged_content.
+  //
+  // TRIB-41: persist the full audit trail — old_content, merged_content, a
+  // short diff_summary, plus applied_at/applied_by placeholders — so the
+  // approve server action can adopt `merged_content` verbatim instead of
+  // falling back to literal substring replacement.
+  const mergedContent = diff.merged_content?.trim() || null;
+  const diffSummary = buildDiffSummary(diff);
+
   const logEntry: CompilationLogEntry = {
     action: 'flagged',
     source_recording_id: recordingId,
@@ -1326,6 +1374,12 @@ async function applyContradictionFlagged(args: {
     contradictions: diff.contradictions,
     additions: diff.additions,
     confidence_delta: diff.confidence_delta,
+    old_content: existingPage.content,
+    new_content: null,
+    merged_content: mergedContent,
+    diff_summary: diffSummary,
+    applied_at: null,
+    applied_by: null,
     resolved_at: null,
     resolved_by: null,
   };
@@ -1423,8 +1477,17 @@ async function applyContradictionWithSupersede(args: {
     contradictions: diff.contradictions,
     additions: diff.additions,
     confidence_delta: diff.confidence_delta,
+    // TRIB-41 audit trail — mirror the shape used for flagged entries so the
+    // admin UI / dashboards can treat auto-applied and human-approved rows
+    // uniformly when surfacing history.
+    old_content: existingPage.content,
+    new_content: null,
+    merged_content: mergedContent,
+    diff_summary: buildDiffSummary(diff),
+    applied_at: nowIso,
+    applied_by: null, // auto-applied (no user)
     resolved_at: nowIso,
-    resolved_by: null, // auto-applied (no user)
+    resolved_by: null,
   };
 
   const newPageInsert: OrgWikiPageInsert = {
@@ -1495,6 +1558,41 @@ function appendCompilationLog(
     ? (existing as unknown as CompilationLogEntry[])
     : [];
   return [...base, entry];
+}
+
+/**
+ * Build a short human-readable summary of a contradiction diff for the
+ * admin review UI and dashboards. Keeps the string under ~240 characters so
+ * the JSONB payload stays compact regardless of how noisy the LLM diff is.
+ *
+ * TRIB-41.
+ */
+function buildDiffSummary(diff: WikiDiffResult): string {
+  const contradictionCount = diff.contradictions.length;
+  const additionCount = diff.additions.length;
+
+  const parts: string[] = [];
+  parts.push(
+    contradictionCount === 1
+      ? '1 contradiction'
+      : `${contradictionCount} contradictions`
+  );
+  if (additionCount > 0) {
+    parts.push(additionCount === 1 ? '1 addition' : `${additionCount} additions`);
+  }
+
+  // Include a truncated preview of the first contradicted field so admins
+  // can scan the log without opening every entry.
+  const firstContradiction = diff.contradictions[0];
+  if (firstContradiction) {
+    const label = firstContradiction.field
+      ? firstContradiction.field
+      : firstContradiction.old.slice(0, 60);
+    parts.push(`first: "${label.slice(0, 80)}"`);
+  }
+
+  const joined = parts.join(', ');
+  return joined.length > 240 ? `${joined.slice(0, 237)}...` : joined;
 }
 
 async function insertWikiPageSource(
