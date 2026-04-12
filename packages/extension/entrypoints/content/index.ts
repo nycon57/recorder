@@ -95,11 +95,15 @@ export default defineContentScript({
     });
 
     // ── TRIB-25: Audio capture + push-to-talk ────────────────────────────────
+    // TRIB-65: include current `latestContext` in STT_FINAL so the background
+    // service worker can POST it directly to /api/extension/query without
+    // having to round-trip back to this content script via GET_PAGE_CONTEXT.
     const audioCapture = createAudioCapture(
       (finalTranscript) => {
         chrome.runtime.sendMessage({
           type: "STT_FINAL",
           transcript: finalTranscript,
+          context: latestContext,
         });
       },
       (err) => {
