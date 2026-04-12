@@ -106,6 +106,78 @@ const CONFIDENCE_DECAY_AGE_DAYS = 90;
 // ---------------------------------------------------------------------------
 
 /**
+ * Fetch the most-recent `wiki_lint_results` row for the given org. Returns
+ * `null` if the org has never been linted — callers (e.g. TRIB-43 knowledge
+ * health dashboard) are expected to render a "first run not yet scheduled"
+ * empty state in that case.
+ *
+ * The `details` JSONB column is parsed into a typed {@link LintDetails}
+ * object, defensively falling back to empty arrays on any shape mismatch so
+ * older rows written before Wave 4 don't crash the dashboard.
+ */
+export async function getLatestLintResult(
+  orgId: string,
+  supabase: AdminClient = createClient()
+): Promise<LintResult | null> {
+  const { data, error } = await supabase
+    .from('wiki_lint_results')
+    .select(
+      'id, org_id, run_at, orphan_count, stale_count, stale_link_count, coverage_gap_count, confidence_decay_count, details'
+    )
+    .eq('org_id', orgId)
+    .order('run_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('[wiki-lint] getLatestLintResult failed:', error.message);
+    return null;
+  }
+  if (!data) return null;
+
+  // Supabase's generated types over-resolve .from(...).select().maybeSingle()
+  // to `never` on some tables (same workaround used throughout this service
+  // and wiki-clusters.ts). Cast once to the narrow shape we actually need.
+  const row = data as unknown as {
+    id: string;
+    org_id: string;
+    run_at: string;
+    orphan_count: number;
+    stale_count: number;
+    stale_link_count: number;
+    coverage_gap_count: number;
+    confidence_decay_count: number;
+    details: Partial<LintDetails> | null;
+  };
+
+  const rawDetails = row.details ?? {};
+  const details: LintDetails = {
+    orphans: Array.isArray(rawDetails.orphans) ? rawDetails.orphans : [],
+    stale: Array.isArray(rawDetails.stale) ? rawDetails.stale : [],
+    stale_links: Array.isArray(rawDetails.stale_links)
+      ? rawDetails.stale_links
+      : [],
+    coverage_gaps: Array.isArray(rawDetails.coverage_gaps)
+      ? rawDetails.coverage_gaps
+      : [],
+    confidence_decay: Array.isArray(rawDetails.confidence_decay)
+      ? rawDetails.confidence_decay
+      : [],
+  };
+
+  return {
+    org_id: row.org_id,
+    run_at: row.run_at,
+    orphan_count: row.orphan_count,
+    stale_count: row.stale_count,
+    stale_link_count: row.stale_link_count,
+    coverage_gap_count: row.coverage_gap_count,
+    confidence_decay_count: row.confidence_decay_count,
+    details,
+  };
+}
+
+/**
  * Run lint on every org that has at least one active `org_wiki_pages` row.
  * Failures are isolated per-org — one org erroring does not abort the run.
  * Returns successful lint results; failures are logged.
