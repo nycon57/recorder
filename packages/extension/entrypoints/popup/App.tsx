@@ -9,10 +9,33 @@ import {
 
 const VERSION = "0.0.1";
 
+const UPLOAD_STATE_KEY = "tribora_upload_state";
+
 function RecordingSection() {
   const [recordingState, setRecordingState] = useState<RecordingState>({
     status: "idle",
   });
+
+  // TRIB-49: listen for upload progress from the background service worker
+  useEffect(() => {
+    if (recordingState.status !== "uploading") return;
+
+    const listener = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      area: string,
+    ) => {
+      if (area !== "session" || !changes[UPLOAD_STATE_KEY]) return;
+      const newVal = changes[UPLOAD_STATE_KEY].newValue as
+        | RecordingState
+        | undefined;
+      if (newVal) {
+        setRecordingState((prev) => ({ ...prev, ...newVal }));
+      }
+    };
+
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, [recordingState.status]);
 
   const startRecording = () => {
     setRecordingState({ status: "requesting_capture" });
@@ -32,7 +55,7 @@ function RecordingSection() {
   };
 
   const stopRecording = () => {
-    setRecordingState((prev) => ({ ...prev, status: "uploading" }));
+    setRecordingState({ status: "uploading", uploadProgress: 0 });
     chrome.runtime.sendMessage(
       { type: "RECORDING_STOP" },
       (response: { ok: boolean; recordingId?: string; error?: string }) => {
@@ -48,7 +71,7 @@ function RecordingSection() {
     );
   };
 
-  const { status, error, recordingId } = recordingState;
+  const { status, error, recordingId, uploadProgress, retryAttempt, retryMax } = recordingState;
 
   return (
     <div className="recording-section">
@@ -79,9 +102,19 @@ function RecordingSection() {
         </button>
       )}
       {status === "uploading" && (
-        <button className="popup-btn popup-btn-record" disabled>
-          Uploading…
-        </button>
+        <div className="upload-progress-section">
+          <div className="upload-progress-bar-track">
+            <div
+              className="upload-progress-bar-fill"
+              style={{ width: `${uploadProgress ?? 0}%` }}
+            />
+          </div>
+          <p className="upload-progress-label">
+            {retryAttempt
+              ? `Retrying upload (attempt ${retryAttempt}/${retryMax ?? 3})…`
+              : `Uploading… ${uploadProgress ?? 0}%`}
+          </p>
+        </div>
       )}
       {status === "error" && (
         <>

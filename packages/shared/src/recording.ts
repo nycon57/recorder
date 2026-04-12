@@ -13,6 +13,12 @@ export interface RecordingState {
   duration?: number;
   uploadedBytes?: number;
   totalBytes?: number;
+  /** Upload progress percentage (0-100) */
+  uploadProgress?: number;
+  /** When retrying a failed upload, current attempt (1-indexed) */
+  retryAttempt?: number;
+  /** Total retry attempts allowed */
+  retryMax?: number;
 }
 
 export interface RecordingMessage {
