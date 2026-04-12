@@ -41,11 +41,13 @@ export interface DomOverlay {
 
 // ─── Internal state ───────────────────────────────────────────────────────────
 
+type OverlayMode = "cursor" | "highlight" | "pulse";
+
 interface OverlayState {
   currentSelector: string | null;
   currentLabel: string | null;
   rafHandle: number | null;
-  isPulsing: boolean;
+  mode: OverlayMode | null;
 }
 
 // ─── SVG cursor builder ───────────────────────────────────────────────────────
@@ -104,6 +106,9 @@ export function createDomOverlay(): DomOverlay {
 
   const container = document.createElement("div");
   container.id = OVERLAY_ID;
+  // Mark every tribora-owned element so we can distinguish our nodes from
+  // host-page nodes that happen to share these IDs.
+  container.setAttribute("data-tribora-owner", "true");
   applyStyles(container, {
     position: "fixed",
     top: "0",
@@ -118,6 +123,7 @@ export function createDomOverlay(): DomOverlay {
   // ── Cursor element (24×24 SVG circle) ───────────────────────────────────────
   const cursor = document.createElement("div");
   cursor.id = CURSOR_ID;
+  cursor.setAttribute("data-tribora-owner", "true");
   applyStyles(cursor, {
     position: "absolute",
     width: "24px",
@@ -134,6 +140,7 @@ export function createDomOverlay(): DomOverlay {
   // ── Label tooltip ────────────────────────────────────────────────────────────
   const labelEl = document.createElement("div");
   labelEl.id = LABEL_ID;
+  labelEl.setAttribute("data-tribora-owner", "true");
   applyStyles(labelEl, {
     position: "absolute",
     display: "none",
@@ -153,6 +160,7 @@ export function createDomOverlay(): DomOverlay {
   // ── Highlight ring ───────────────────────────────────────────────────────────
   const highlight = document.createElement("div");
   highlight.id = HIGHLIGHT_ID;
+  highlight.setAttribute("data-tribora-owner", "true");
   applyStyles(highlight, {
     position: "absolute",
     display: "none",
@@ -175,7 +183,7 @@ export function createDomOverlay(): DomOverlay {
     currentSelector: null,
     currentLabel: null,
     rafHandle: null,
-    isPulsing: false,
+    mode: null,
   };
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -196,11 +204,26 @@ export function createDomOverlay(): DomOverlay {
       return null;
     }
 
+    // Reject elements that are effectively invisible. getBoundingClientRect()
+    // can return a non-zero rect for display:block elements whose parents set
+    // visibility:hidden or opacity:0, and single-axis-zero rects are common
+    // for flex-column collapsed items. Any of these should no-op the overlay.
+    if (el instanceof HTMLElement || el instanceof SVGElement) {
+      const computed = window.getComputedStyle(el);
+      if (
+        computed.visibility === "hidden" ||
+        computed.display === "none" ||
+        computed.opacity === "0"
+      ) {
+        return null;
+      }
+    }
+
     const rect = el.getBoundingClientRect();
 
-    if (rect.width === 0 && rect.height === 0) {
-      // Element exists but has no visual footprint (hidden/detached)
-      console.warn("[Tribora] Target element has zero bounding rect:", selector);
+    if (rect.width === 0 || rect.height === 0) {
+      // Element exists but has zero bounding area on at least one axis —
+      // treat as hidden/detached rather than drawing a zero-width ring.
       return null;
     }
 
@@ -240,12 +263,25 @@ export function createDomOverlay(): DomOverlay {
   }
 
   function recalculate(): void {
-    if (!state.currentSelector) return;
+    if (!state.currentSelector || !state.mode) return;
 
     const rect = getTargetRect(state.currentSelector);
     if (!rect) return;
 
-    positionCursor(rect, state.currentLabel ?? undefined);
+    // Preserve whatever mode the overlay was in when scroll/resize fires.
+    // Previously this unconditionally called positionCursor(), which re-set
+    // display:block on the cursor and overwrote the pulse animation on the
+    // highlight ring — making the first scroll effectively flip highlight /
+    // pulse back into cursor mode.
+    if (state.mode === "cursor") {
+      positionCursor(rect, state.currentLabel ?? undefined);
+      positionHighlight(rect);
+      return;
+    }
+
+    // highlight and pulse modes: keep the cursor hidden and just reposition
+    // the highlight ring. The animation styles on the highlight element are
+    // left untouched so pulse continues to animate across scrolls.
     positionHighlight(rect);
   }
 
@@ -274,7 +310,7 @@ export function createDomOverlay(): DomOverlay {
 
     state.currentSelector = selector;
     state.currentLabel = labelText ?? null;
-    state.isPulsing = false;
+    state.mode = "cursor";
 
     positionCursor(rect, labelText);
 
@@ -292,7 +328,7 @@ export function createDomOverlay(): DomOverlay {
 
     state.currentSelector = selector;
     state.currentLabel = null;
-    state.isPulsing = false;
+    state.mode = "highlight";
 
     applyStyles(cursor, { display: "none" });
     applyStyles(labelEl, { display: "none" });
@@ -310,7 +346,7 @@ export function createDomOverlay(): DomOverlay {
 
     state.currentSelector = selector;
     state.currentLabel = null;
-    state.isPulsing = true;
+    state.mode = "pulse";
 
     applyStyles(cursor, { display: "none" });
     applyStyles(labelEl, { display: "none" });
@@ -325,7 +361,7 @@ export function createDomOverlay(): DomOverlay {
   function clear(): void {
     state.currentSelector = null;
     state.currentLabel = null;
-    state.isPulsing = false;
+    state.mode = null;
 
     if (state.rafHandle !== null) {
       cancelAnimationFrame(state.rafHandle);

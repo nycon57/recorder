@@ -22,6 +22,14 @@ interface GetSessionResponse {
     token: string;
     expiresAt: string;
   } | null;
+  // Better Auth's organization plugin exposes this as `activeOrganization`
+  // on the /api/auth/get-session response. Keep `activeOrg` as an alias so
+  // older web-side code doesn't break if it switches back mid-rollout.
+  activeOrganization?: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
   activeOrg?: {
     id: string;
     name: string;
@@ -54,6 +62,9 @@ export async function refreshSession(): Promise<SessionState> {
       return state;
     }
 
+    // Better Auth's org plugin uses `activeOrganization`; fall back to the
+    // legacy `activeOrg` key if the backend is still on the old shape.
+    const org = data.activeOrganization ?? data.activeOrg ?? null;
     const state: SessionState = {
       status: "authenticated",
       user: {
@@ -62,11 +73,11 @@ export async function refreshSession(): Promise<SessionState> {
         name: data.user.name,
         image: data.user.image,
       },
-      activeOrg: data.activeOrg
+      activeOrg: org
         ? {
-            id: data.activeOrg.id,
-            name: data.activeOrg.name,
-            slug: data.activeOrg.slug,
+            id: org.id,
+            name: org.name,
+            slug: org.slug,
           }
         : undefined,
       token: data.session?.token,

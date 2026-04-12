@@ -56,7 +56,13 @@ export function createAudioPlayer(
 ): AudioPlayer {
   let state: TtsState = { status: "idle" };
   let currentAudio: HTMLAudioElement | null = null;
+  let currentObjectUrl: string | null = null;
   let currentSession: { cleanup: () => void } | null = null;
+  // Session token: every call to speak()/playUrl() gets a fresh token so
+  // later-starting awaits from earlier calls can detect that they've been
+  // superseded and bail out before clobbering state. Prevents the race where
+  // an old speak() completes its stream read after a newer speak() started.
+  let activeToken = 0;
 
   // ── Internal helpers ────────────────────────────────────────────────────
 
@@ -71,6 +77,13 @@ export function createAudioPlayer(
       currentAudio.src = "";
       currentAudio = null;
     }
+    if (currentObjectUrl) {
+      // Revoke the blob URL synchronously. Previously this only happened on
+      // audio.onended/onerror, which leaked the URL if a new speak() started
+      // mid-playback or the stream was aborted.
+      URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = null;
+    }
     if (currentSession) {
       currentSession.cleanup();
       currentSession = null;
@@ -82,10 +95,17 @@ export function createAudioPlayer(
   return {
     async speak(text: string): Promise<void> {
       teardown();
+      const token = ++activeToken;
       setState({ status: "requesting", text });
 
       try {
         const session = await streamTts(text);
+        // If a newer speak()/playUrl()/stop() started while we were waiting
+        // on the backend, abandon this stream entirely.
+        if (token !== activeToken) {
+          session.cleanup();
+          return;
+        }
         currentSession = session;
 
         // Collect the full stream into chunks, then build a Blob.
@@ -97,7 +117,24 @@ export function createAudioPlayer(
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          // Stream read is the main async boundary — re-check the token on
+          // every chunk so we can bail out promptly if we've been superseded.
+          if (token !== activeToken) {
+            try {
+              await reader.cancel();
+            } catch {
+              // cancel() errors are non-fatal
+            }
+            session.cleanup();
+            return;
+          }
           if (value) chunks.push(value);
+        }
+
+        // Re-check one more time before we touch any shared state.
+        if (token !== activeToken) {
+          session.cleanup();
+          return;
         }
 
         // Session stream is exhausted — cleanup the request handle
@@ -106,18 +143,23 @@ export function createAudioPlayer(
 
         const blob = new Blob(chunks as BlobPart[], { type: "audio/mpeg" });
         const objectUrl = URL.createObjectURL(blob);
+        currentObjectUrl = objectUrl;
 
         const audio = new Audio(objectUrl);
         currentAudio = audio;
 
         audio.onended = () => {
+          if (token !== activeToken) return;
           URL.revokeObjectURL(objectUrl);
+          currentObjectUrl = null;
           currentAudio = null;
           setState({ status: "idle" });
         };
 
         audio.onerror = () => {
+          if (token !== activeToken) return;
           URL.revokeObjectURL(objectUrl);
+          currentObjectUrl = null;
           currentAudio = null;
           setState({
             status: "error",
@@ -129,6 +171,8 @@ export function createAudioPlayer(
         setState({ status: "playing", text });
         await audio.play();
       } catch (error) {
+        // Do not clobber state if a newer call has taken over.
+        if (token !== activeToken) return;
         teardown();
         const message = (error as Error).message;
         console.error("[Tribora TTS]", message);
@@ -138,6 +182,7 @@ export function createAudioPlayer(
 
     async playUrl(url: string): Promise<void> {
       teardown();
+      const token = ++activeToken;
       setState({ status: "playing" });
 
       try {
@@ -145,11 +190,13 @@ export function createAudioPlayer(
         currentAudio = audio;
 
         audio.onended = () => {
+          if (token !== activeToken) return;
           currentAudio = null;
           setState({ status: "idle" });
         };
 
         audio.onerror = () => {
+          if (token !== activeToken) return;
           currentAudio = null;
           setState({
             status: "error",
@@ -159,6 +206,7 @@ export function createAudioPlayer(
 
         await audio.play();
       } catch (error) {
+        if (token !== activeToken) return;
         teardown();
         setState({
           status: "error",
@@ -168,6 +216,8 @@ export function createAudioPlayer(
     },
 
     stop(): void {
+      // Bump the token so any in-flight awaits on the old session bail out.
+      activeToken++;
       teardown();
       setState({ status: "idle" });
     },

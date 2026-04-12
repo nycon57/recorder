@@ -30,6 +30,16 @@ export default defineContentScript({
     // This keeps compatibility with the existing GET_PAGE_CONTEXT handler.
     let latestContext: PageContext = initialContext;
 
+    // Proactively push the initial context to the background service worker
+    // so it has a current view of the page without waiting for the first SPA
+    // navigation. Use the same PAGE_CONTEXT_UPDATED shape the observer emits
+    // below, and ignore "receiving end does not exist" errors if the
+    // background isn't listening yet.
+    chrome.runtime.sendMessage(
+      { type: "PAGE_CONTEXT_UPDATED", context: initialContext },
+      () => void chrome.runtime.lastError,
+    );
+
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message.type === "GET_PAGE_CONTEXT") {
         sendResponse({ type: "PAGE_CONTEXT_RESPONSE", payload: latestContext });
