@@ -1943,6 +1943,50 @@ export interface Database {
           contribution_summary?: string | null;
         };
       };
+      /**
+       * TRIB-38: Typed relationship graph between org_wiki_pages rows.
+       * Populated by compile_wiki Step 4 (TRIB-39) and consumed by the
+       * fusion engine + community-detection worker (TRIB-44). See PRD
+       * Part 3 Component 3: Relationship Graph.
+       *
+       * relationship_type: requires | precedes | contradicts | related
+       * source_type:       extracted (from [[wiki-links]]) | inferred (LLM) | manual (admin UI)
+       */
+      wiki_relationships: {
+        Row: {
+          id: string;
+          org_id: string;
+          source_page_id: string;
+          target_page_id: string;
+          relationship_type: 'requires' | 'precedes' | 'contradicts' | 'related';
+          confidence: number;
+          evidence: string | null;
+          source_type: 'extracted' | 'inferred' | 'manual';
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          source_page_id: string;
+          target_page_id: string;
+          relationship_type: 'requires' | 'precedes' | 'contradicts' | 'related';
+          confidence?: number;
+          evidence?: string | null;
+          source_type?: 'extracted' | 'inferred' | 'manual';
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          source_page_id?: string;
+          target_page_id?: string;
+          relationship_type?: 'requires' | 'precedes' | 'contradicts' | 'related';
+          confidence?: number;
+          evidence?: string | null;
+          source_type?: 'extracted' | 'inferred' | 'manual';
+          created_at?: string;
+        };
+      };
       video_frames: {
         Row: {
           id: string;
