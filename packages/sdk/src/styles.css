@@ -1,0 +1,370 @@
+/* Tribora SDK Widget Styles — scoped via Shadow DOM */
+
+:host {
+  all: initial;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1f2937;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ─── FAB (Floating Action Button) ────────────────────────────────────── */
+
+.tribora-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--tribora-primary, #6366f1);
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.tribora-fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.tribora-fab:active {
+  transform: scale(0.96);
+}
+
+.tribora-fab.tribora-fab--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.5);
+}
+
+.tribora-fab svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+/* Custom logo in FAB */
+.tribora-fab img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* ─── Panel ───────────────────────────────────────────────────────────── */
+
+.tribora-panel {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 370px;
+  height: 520px;
+  max-height: calc(100vh - 48px);
+  max-width: calc(100vw - 48px);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 2147483646;
+  opacity: 0;
+  transform: translateY(16px) scale(0.95);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+
+.tribora-panel.tribora-panel--open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* ─── Panel Header ────────────────────────────────────────────────────── */
+
+.tribora-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--tribora-primary, #6366f1);
+  color: white;
+  flex-shrink: 0;
+}
+
+.tribora-header-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.tribora-header-title {
+  font-size: 15px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.tribora-close-btn {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease;
+  outline: none;
+}
+
+.tribora-close-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.tribora-close-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* ─── Messages area ───────────────────────────────────────────────────── */
+
+.tribora-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tribora-messages::-webkit-scrollbar {
+  width: 4px;
+}
+
+.tribora-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tribora-messages::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+
+/* Welcome message */
+.tribora-welcome {
+  text-align: center;
+  padding: 32px 16px;
+  color: #6b7280;
+}
+
+.tribora-welcome-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.tribora-welcome h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 6px;
+}
+
+.tribora-welcome p {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Message bubbles */
+.tribora-msg {
+  max-width: 90%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.55;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.tribora-msg--user {
+  align-self: flex-end;
+  background: var(--tribora-primary, #6366f1);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.tribora-msg--assistant {
+  align-self: flex-start;
+  background: #f3f4f6;
+  color: #1f2937;
+  border-bottom-left-radius: 4px;
+}
+
+.tribora-msg--assistant p {
+  margin-bottom: 8px;
+}
+
+.tribora-msg--assistant p:last-child {
+  margin-bottom: 0;
+}
+
+.tribora-msg--assistant code {
+  background: #e5e7eb;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 13px;
+  font-family: 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Streaming indicator */
+.tribora-msg--streaming::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 14px;
+  background: var(--tribora-primary, #6366f1);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: tribora-blink 0.8s step-end infinite;
+}
+
+@keyframes tribora-blink {
+  50% { opacity: 0; }
+}
+
+/* ─── Citations ───────────────────────────────────────────────────────── */
+
+.tribora-citations {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tribora-citation {
+  font-size: 12px;
+  color: #6b7280;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.tribora-citation-idx {
+  font-weight: 600;
+  color: var(--tribora-primary, #6366f1);
+  flex-shrink: 0;
+}
+
+.tribora-citation-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Input area ──────────────────────────────────────────────────────── */
+
+.tribora-input-area {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #e5e7eb;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+.tribora-input {
+  flex: 1;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: none;
+  outline: none;
+  min-height: 40px;
+  max-height: 120px;
+  background: #fafafa;
+  color: #1f2937;
+  transition: border-color 120ms ease;
+}
+
+.tribora-input::placeholder {
+  color: #9ca3af;
+}
+
+.tribora-input:focus {
+  border-color: var(--tribora-primary, #6366f1);
+  background: #ffffff;
+}
+
+.tribora-send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: none;
+  background: var(--tribora-primary, #6366f1);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 120ms ease, transform 120ms ease;
+  outline: none;
+}
+
+.tribora-send-btn:hover {
+  filter: brightness(1.1);
+}
+
+.tribora-send-btn:active {
+  transform: scale(0.93);
+}
+
+.tribora-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tribora-send-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* ─── Error state ─────────────────────────────────────────────────────── */
+
+.tribora-error {
+  padding: 8px 12px;
+  margin: 0 16px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 13px;
+}

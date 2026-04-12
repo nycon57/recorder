@@ -51,6 +51,7 @@
   ],
   "exclude": [
     "node_modules",
-    "packages/extension"
+    "packages/extension",
+    "packages/sdk"
   ]
 }
