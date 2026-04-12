@@ -17,6 +17,7 @@ import { NavInsightsAurora } from "@/app/components/layout/nav-insights-aurora"
 import { NavIntelligenceAurora } from "@/app/components/layout/nav-intelligence-aurora"
 import { NavSettingsAurora } from "@/app/components/layout/nav-settings-aurora"
 import { NavAdminAurora } from "@/app/components/layout/nav-admin-aurora"
+import { NavVendorAurora } from "@/app/components/layout/nav-vendor-aurora"
 import { NavUserAurora } from "@/app/components/layout/nav-user-aurora"
 
 /**
@@ -135,6 +136,14 @@ export function AuroraSidebar({ role, isSystemAdmin = false, hasOnboardingPlan =
 
         {/* Settings */}
         <NavSettingsAurora />
+
+        {/* Vendor Admin section (conditional - org owners/admins) */}
+        {(role === "owner" || role === "admin") && (
+          <>
+            <SidebarSeparator className="mx-0" />
+            <NavVendorAurora />
+          </>
+        )}
 
         {/* System Admin section (conditional - platform operators only) */}
         {hasSystemAdminAccess && (
