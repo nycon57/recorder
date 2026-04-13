@@ -1,5 +1,5 @@
-# Kanban config (contains Linear team UUIDs)
-.agents/kanban/
+# Local agent scratch state (kanban, ralph, tasks) — not project code
+.agents/
 
 # Chrome extension build output (WXT)
 packages/extension/.output/

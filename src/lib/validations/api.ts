@@ -436,11 +436,6 @@ export const adminUpdateExperimentSchema = z.object({
 const roleEnum = z.enum(['owner', 'admin', 'contributor', 'reader']);
 
 /**
- * User status validation
- */
-const userStatusEnum = z.enum(['pending', 'active', 'suspended', 'deleted']);
-
-/**
  * Visibility levels
  */
 const visibilityEnum = z.enum(['private', 'department', 'org', 'public']);
@@ -548,19 +543,6 @@ export type UpdateUIPreferencesInput = z.infer<typeof updateUIPreferencesSchema>
 // ----------------------------------------------------------------------------
 // Organization Management Schemas
 // ----------------------------------------------------------------------------
-
-/**
- * Subscription status enum
- */
-const subscriptionStatusEnum = z.enum([
-  'active',
-  'cancelled',
-  'past_due',
-  'trialing',
-  'incomplete',
-  'incomplete_expired',
-  'unpaid',
-]);
 
 /**
  * Update organization details
@@ -1061,7 +1043,10 @@ export type UpdateCollectionInput = z.infer<typeof updateCollectionSchema>;
  * List collections query schema
  */
 export const listCollectionsQuerySchema = z.object({
-  parent_id: z.string().uuid().optional().nullable(),
+  parent_id: z.preprocess(
+    (value) => value === 'null' ? null : value,
+    z.string().uuid().optional().nullable()
+  ),
   search: z.string().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
   offset: z.coerce.number().int().min(0).optional().default(0),
@@ -1447,11 +1432,11 @@ export type RecommendationProgressInput = z.infer<typeof recommendationProgressS
 export type ApiError = {
   code: string;
   message: string;
-  details?: any;
+  details?: unknown;
   requestId?: string;
 };
 
-export type ApiSuccess<T = any> = {
+export type ApiSuccess<T = unknown> = {
   data: T;
   requestId?: string;
 };

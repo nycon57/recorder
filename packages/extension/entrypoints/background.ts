@@ -2,8 +2,9 @@ import { scheduleTokenRefresh } from "../utils/token-refresh.js";
 import { createTabRecorder } from "../utils/tab-recorder.js";
 import { uploadRecording } from "../utils/recording-uploader.js";
 import type { TabRecorder } from "../utils/tab-recorder.js";
-import { getStoredSession } from "../utils/api-client.js";
-import type { PageContext } from "@tribora/shared";
+import { getStoredSession, setStoredSession } from "../utils/api-client.js";
+import type { PageContext, AssistantState } from "@tribora/shared";
+import { ASSISTANT_STATE_KEY } from "@tribora/shared";
 
 // TRIB-65: backend base URL for the /api/extension/query fusion endpoint.
 // Matches the pattern used in utils/api-client.ts / utils/elevenlabs-client.ts.
@@ -140,9 +141,40 @@ async function handleSttFinal(args: {
     }
 
     // 3. POST to /api/extension/query
+    console.log("[Tribora pipeline] STT transcript:", transcript);
+    console.log("[Tribora pipeline] Page context:", pageContext.url, `(${pageContext.app}:${pageContext.screen})`);
+
+    // Broadcast "answering" state to popup
+    void chrome.storage.session.set({
+      [ASSISTANT_STATE_KEY]: {
+        status: "answering",
+        lastQuestion: transcript,
+        updatedAt: Date.now(),
+      } satisfies AssistantState,
+    });
+
+    // Capture screenshot for vision-based fallback (works on any page)
+    let screenshot: string | undefined;
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (tab.windowId) {
+        const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+          format: "jpeg",
+          quality: 70,
+        });
+        // Strip the data:image/jpeg;base64, prefix — backend expects raw base64
+        screenshot = dataUrl.replace(/^data:image\/\w+;base64,/, "");
+        console.log("[Tribora pipeline] Screenshot captured (" + Math.round(screenshot.length / 1024) + " KB base64)");
+      }
+    } catch (err) {
+      console.warn("[Tribora pipeline] Screenshot capture failed:", (err as Error).message);
+      // Non-fatal — query will still work via wiki layers
+    }
+
     const body = JSON.stringify({
       question: transcript,
       context: serializePageContext(pageContext),
+      screenshot,
     });
 
     const response = await fetch(`${API_BASE_URL}/api/extension/query`, {
@@ -232,9 +264,32 @@ async function handleSttFinal(args: {
     // 5. Speak the answer.
     const answer = accumulatedText.trim();
     if (answer) {
+      // Broadcast "speaking" state to popup
+      void chrome.storage.session.set({
+        [ASSISTANT_STATE_KEY]: {
+          status: "speaking",
+          lastQuestion: transcript,
+          lastAnswerPreview: answer.slice(0, 120),
+          updatedAt: Date.now(),
+        } satisfies AssistantState,
+      });
+
+      console.log("[Tribora pipeline] AI response:", answer.slice(0, 200) + (answer.length > 200 ? "..." : ""));
+      console.log("[Tribora pipeline] Dispatching TTS (" + answer.length + " chars)");
+
       void chrome.tabs.sendMessage(tabId, {
         type: "TTS_SPEAK",
         text: answer,
+      });
+    } else {
+      console.warn("[Tribora pipeline] No answer text from query stream");
+      // No answer — return to idle
+      void chrome.storage.session.set({
+        [ASSISTANT_STATE_KEY]: {
+          status: "idle",
+          lastQuestion: transcript,
+          updatedAt: Date.now(),
+        } satisfies AssistantState,
       });
     }
 
@@ -248,11 +303,84 @@ async function handleSttFinal(args: {
   }
 }
 
+const WIDGET_VISIBLE_KEY = "tribora_widget_visible";
+
+const BG = "[Tribora bg]";
+
 export default defineBackground(() => {
-  console.log("Tribora service worker started");
+  console.log(`${BG} ✅ Service worker started`);
 
   // TRIB-27: schedule token refresh 5 min before expiry on startup
   scheduleTokenRefresh();
+
+  // ── Widget toggle via extension icon ──────────────────────────────────────
+  void chrome.action.setPopup({ popup: "" });
+  console.log(`${BG} Popup disabled — icon click triggers onClicked`);
+
+  chrome.action.onClicked.addListener((tab) => {
+    console.log(`${BG} 🖱️ Extension icon clicked (tab ${tab.id}, ${tab.url?.slice(0, 60)})`);
+    void (async () => {
+      let session = await getStoredSession();
+      console.log(`${BG} Stored session: ${session?.status ?? "none"}`);
+
+      if (!session || session.status !== "authenticated") {
+        console.log(`${BG} Not authenticated — trying cookie refresh...`);
+        try {
+          const { refreshSession } = await import("../utils/auth-session.js");
+          session = await refreshSession();
+          console.log(`${BG} Cookie refresh result: ${session.status}`);
+        } catch (err) {
+          console.error(`${BG} Cookie refresh failed:`, (err as Error).message);
+        }
+      }
+
+      if (!session || session.status !== "authenticated") {
+        console.log(`${BG} Still not authenticated — opening sign-in page`);
+        await chrome.tabs.create({ url: `${API_BASE_URL}/sign-in?source=extension` });
+        return;
+      }
+
+      // Use the active tab's actual widget DOM state as source of truth.
+      // Storage drifts (page reloads destroy the widget DOM without updating
+      // storage), which caused "click the icon twice to show" — the stored
+      // value said visible, the DOM said hidden, and a naive toggle flipped
+      // storage to hidden on the first click with no visible change.
+      let currentlyVisible = false;
+      if (tab.id) {
+        try {
+          const resp = (await chrome.tabs.sendMessage(tab.id, {
+            type: "QUERY_WIDGET_STATE",
+          })) as { visible?: boolean } | undefined;
+          currentlyVisible = resp?.visible === true;
+        } catch {
+          // Content script not reachable (chrome://, extension gallery, etc.)
+          // Fall back to stored value.
+          const stored = await chrome.storage.session.get(WIDGET_VISIBLE_KEY);
+          currentlyVisible = stored[WIDGET_VISIBLE_KEY] === true;
+        }
+      }
+      const newState = !currentlyVisible;
+      await chrome.storage.session.set({ [WIDGET_VISIBLE_KEY]: newState });
+      console.log(`${BG} 🔄 Widget toggled: ${newState ? "ON" : "OFF"} (was ${currentlyVisible ? "visible" : "hidden"})`);
+
+      const tabs = await chrome.tabs.query({});
+      console.log(`${BG} Broadcasting TOGGLE_WIDGET to ${tabs.length} tabs`);
+      for (const t of tabs) {
+        if (t.id) {
+          chrome.tabs.sendMessage(t.id, { type: "TOGGLE_WIDGET", visible: newState }, () => {
+            void chrome.runtime.lastError;
+          });
+        }
+      }
+
+      if (newState && tab.id) {
+        console.log(`${BG} Requesting mic permissions on active tab`);
+        chrome.tabs.sendMessage(tab.id, { type: "REQUEST_PERMISSIONS" }, () => {
+          void chrome.runtime.lastError;
+        });
+      }
+    })();
+  });
 
   // TRIB-48: recording state (scoped to service worker lifetime)
   let activeRecorder: TabRecorder | null = null;
@@ -327,18 +455,14 @@ export default defineBackground(() => {
 
   // TRIB-23 / TRIB-27: existing page context + auth listeners
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    console.log("Tribora background received message:", message.type);
+    console.log(`${BG} 📨 Message received: ${message.type}`);
 
     switch (message.type) {
       case "GET_PAGE_CONTEXT":
-        // Relay to content script or return cached context
         sendResponse({ type: "PAGE_CONTEXT_RESPONSE", payload: null });
         break;
 
       case "PAGE_CONTEXT_UPDATED":
-        // Content script reports updated context on SPA navigation.
-        // Real handling (caching, forwarding to API) implemented in TRIB-25+.
-        console.log("[Tribora] PAGE_CONTEXT_UPDATED received:", message.context);
         break;
 
       case "QUERY_KNOWLEDGE":
@@ -346,20 +470,32 @@ export default defineBackground(() => {
         sendResponse({ type: "KNOWLEDGE_RESPONSE", payload: null });
         break;
 
-      // TRIB-27: handle auth state queries from popup or content script
+      case "AUTH_CALLBACK":
+        console.log(`${BG} 🔑 AUTH_CALLBACK: storing session`);
+        void (async () => {
+          if (message.session) {
+            await setStoredSession(message.session);
+            console.log(`${BG} 🔑 Session stored: ${message.session.user?.email}`);
+            sendResponse({ ok: true });
+          } else {
+            console.warn(`${BG} 🔑 AUTH_CALLBACK: no session data`);
+            sendResponse({ ok: false, error: "No session data" });
+          }
+        })();
+        return true;
+
       case "AUTH_STATE_REQUEST":
         void (async () => {
           const session = await getStoredSession();
+          console.log(`${BG} AUTH_STATE_REQUEST: ${session?.status ?? "none"}`);
           sendResponse(session);
         })();
-        return true; // keep channel open for async response
+        return true;
 
       default:
-        sendResponse({ error: "Unknown message type" });
+        // Don't respond to message types handled by other listeners
+        return false;
     }
-
-    // Return true to keep the message channel open for async responses
-    return true;
   });
 
   // TRIB-65: STT → /api/extension/query glue. Runs as its own listener so
@@ -388,5 +524,91 @@ export default defineBackground(() => {
     });
     sendResponse({ ok: true });
     return false;
+  });
+
+  // ── Signed URL fetch for agent sessions ─────────────────────────────────
+  // Content scripts on arbitrary origins can't make authenticated cross-origin
+  // requests to the Tribora API (no access to chrome.cookies, `Cookie` is a
+  // forbidden header, and CORS `*` can't carry credentials). The background
+  // worker has chrome.cookies access and can send the user's real website
+  // cookies via a plain `Cookie` header.
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== "GET_AGENT_SIGNED_URL") return false;
+    void (async () => {
+      try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        try {
+          const cookies = await chrome.cookies.getAll({ url: API_BASE_URL });
+          if (cookies.length > 0) {
+            headers["Cookie"] = cookies
+              .map((c) => `${c.name}=${c.value}`)
+              .join("; ");
+          }
+        } catch {
+          // cookies API unavailable — fall back to bearer token only
+        }
+        const session = await getStoredSession();
+        if (session?.token) {
+          headers["Authorization"] = `Bearer ${session.token}`;
+        }
+
+        const response = await fetch(
+          `${API_BASE_URL}/api/extension/agent-session`,
+          { method: "POST", headers },
+        );
+        if (!response.ok) {
+          sendResponse({
+            ok: false,
+            error: `HTTP ${response.status}`,
+            status: response.status,
+          });
+          return;
+        }
+        const data = (await response.json()) as {
+          signedUrl?: string;
+          conversationId?: string;
+        };
+        if (!data.signedUrl) {
+          sendResponse({ ok: false, error: "No signedUrl in response" });
+          return;
+        }
+        sendResponse({
+          ok: true,
+          signedUrl: data.signedUrl,
+          conversationId: data.conversationId,
+        });
+      } catch (err) {
+        sendResponse({ ok: false, error: (err as Error).message });
+      }
+    })();
+    return true;
+  });
+
+  // ── Screenshot capture for agent client tools ───────────────────────────
+  // Content scripts can't call chrome.tabs.captureVisibleTab directly —
+  // only the background service worker has that API. The agent-client's
+  // capture_screenshot tool sends this message to get the screenshot.
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type !== "CAPTURE_SCREENSHOT") return false;
+    console.log(`${BG} 📸 CAPTURE_SCREENSHOT request from tab ${sender.tab?.id}`);
+    void (async () => {
+      try {
+        const tab = sender.tab;
+        const windowId = tab?.windowId ?? (await chrome.windows.getCurrent()).id;
+        const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
+          format: "jpeg",
+          quality: 70,
+        });
+        const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
+        console.log(`${BG} 📸 Screenshot captured (${Math.round(base64.length / 1024)} KB)`);
+        sendResponse({ screenshot: base64 });
+      } catch (err) {
+        console.error(`${BG} 📸 Screenshot FAILED:`, (err as Error).message);
+        sendResponse({ screenshot: null });
+      }
+    })();
+    return true;
   });
 });

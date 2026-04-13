@@ -3,9 +3,28 @@
 import { useState } from 'react';
 import { signIn, signUp } from '@/lib/auth/auth-client';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowLeft, Zap, Search, Users, Brain, Loader2 } from 'lucide-react';
+import { ArrowLeft, Zap, Search, Users, Brain, Loader2, Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+
+function getSignUpErrorMessage(error: { code?: string; message?: string; status?: number }) {
+  switch (error.code) {
+    case 'USER_ALREADY_EXISTS':
+      return 'An account with this email already exists. Try signing in instead.';
+    case 'INVALID_EMAIL':
+      return 'Please enter a valid email address.';
+    case 'PASSWORD_TOO_SHORT':
+      return 'Password must be at least 8 characters long.';
+    case 'PASSWORD_TOO_LONG':
+      return 'Password must be no more than 128 characters long.';
+    case 'TOO_MANY_REQUESTS':
+      return 'Too many attempts. Please wait a moment and try again.';
+    default:
+      if (error.status === 422) return 'An account with this email already exists. Try signing in instead.';
+      if (error.status === 429) return 'Too many attempts. Please wait a moment and try again.';
+      return error.message || 'Sign up failed. Please try again.';
+  }
+}
 
 /**
  * Sign Up Page - "Begin Your Journey"
@@ -28,6 +47,7 @@ export default function SignUpPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const features = [
     {
@@ -58,7 +78,7 @@ export default function SignUpPage() {
     setError('');
     const { error } = await signUp.email({ email, password, name });
     if (error) {
-      setError(error.message || 'Sign up failed');
+      setError(getSignUpErrorMessage(error));
       setLoading(false);
     } else {
       router.push('/dashboard');
@@ -274,15 +294,28 @@ export default function SignUpPage() {
                   <label className="block text-sm font-medium mb-2" style={{ color: 'rgb(170, 203, 196)' }}>
                     Password
                   </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Create a password"
-                    required
-                    className={inputStyles}
-                    style={inputInlineStyles}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Create a password"
+                      required
+                      className={inputStyles}
+                      style={inputInlineStyles}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors duration-200"
+                      style={{ color: 'rgb(111, 125, 125)' }}
+                      onMouseOver={(e) => (e.currentTarget.style.color = 'rgb(170, 203, 196)')}
+                      onMouseOut={(e) => (e.currentTarget.style.color = 'rgb(111, 125, 125)')}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <button

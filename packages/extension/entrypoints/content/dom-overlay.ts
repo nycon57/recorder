@@ -129,8 +129,8 @@ export function createDomOverlay(): DomOverlay {
     width: "24px",
     height: "24px",
     // Start off-screen
-    transform: "translate(-9999px, -9999px) translate(-50%, -50%)",
-    transition: "transform 350ms cubic-bezier(0.22, 1, 0.36, 1)",
+    transform: "translate(-9999px, -9999px) translate(-50%, -50%) scale(1)",
+    transition: "transform 600ms cubic-bezier(0.22, 1, 0.36, 1)",
     display: "none",
     pointerEvents: "none",
   });
@@ -236,7 +236,7 @@ export function createDomOverlay(): DomOverlay {
 
     applyStyles(cursor, {
       display: "block",
-      transform: `translate(${cx}px, ${cy}px) translate(-50%, -50%)`,
+      transform: `translate(${cx}px, ${cy}px) translate(-50%, -50%) scale(1)`,
     });
 
     if (labelText) {
@@ -249,6 +249,51 @@ export function createDomOverlay(): DomOverlay {
     } else {
       applyStyles(labelEl, { display: "none" });
     }
+  }
+
+  /**
+   * Move the cursor to the center of the viewport (without animation).
+   * Used as the starting point for the first `pointAt` call so the
+   * subsequent transition animates visibly from center → target.
+   */
+  function seatCursorAtViewportCenter(): void {
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    // Disable the transition for this single move so the cursor
+    // "teleports" to center, then the next transform transitions normally.
+    applyStyles(cursor, {
+      display: "block",
+      transition: "none",
+      transform: `translate(${cx}px, ${cy}px) translate(-50%, -50%) scale(0.5)`,
+    });
+    // Force reflow so the new transform is committed before re-enabling
+    // transition. Reading offsetHeight flushes pending style changes.
+    void cursor.offsetHeight;
+    applyStyles(cursor, {
+      transition: "transform 600ms cubic-bezier(0.22, 1, 0.36, 1)",
+    });
+  }
+
+  /**
+   * Play a brief scale "landing" animation on arrival.
+   * Uses a short timeout so it runs after the fly-in transition completes.
+   */
+  function playArrivalBounce(rect: DOMRect): void {
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    // After the fly-in (600ms), briefly scale up and back down for "landing"
+    window.setTimeout(() => {
+      if (state.currentSelector === null) return;
+      applyStyles(cursor, {
+        transform: `translate(${cx}px, ${cy}px) translate(-50%, -50%) scale(1.25)`,
+      });
+      window.setTimeout(() => {
+        if (state.currentSelector === null) return;
+        applyStyles(cursor, {
+          transform: `translate(${cx}px, ${cy}px) translate(-50%, -50%) scale(1)`,
+        });
+      }, 180);
+    }, 600);
   }
 
   function positionHighlight(rect: DOMRect): void {
@@ -308,11 +353,25 @@ export function createDomOverlay(): DomOverlay {
     const rect = getTargetRect(selector);
     if (!rect) return; // graceful no-op
 
+    // If the cursor isn't visible yet (first call or after clear), seat it
+    // at viewport center so the fly-in animation is visible. Otherwise the
+    // existing CSS transition animates from its current position.
+    const cursorVisible = cursor.style.display === "block"
+      && !cursor.style.transform.includes("-9999px");
+    if (!cursorVisible) {
+      seatCursorAtViewportCenter();
+    }
+
     state.currentSelector = selector;
     state.currentLabel = labelText ?? null;
     state.mode = "cursor";
 
-    positionCursor(rect, labelText);
+    // Use requestAnimationFrame so the seat transform commits before
+    // we apply the target transform — guarantees the transition fires.
+    requestAnimationFrame(() => {
+      positionCursor(rect, labelText);
+      playArrivalBounce(rect);
+    });
 
     // Show a static highlight ring (no pulse)
     applyStyles(highlight, {
@@ -370,7 +429,7 @@ export function createDomOverlay(): DomOverlay {
 
     applyStyles(cursor, {
       display: "none",
-      transform: "translate(-9999px, -9999px) translate(-50%, -50%)",
+      transform: "translate(-9999px, -9999px) translate(-50%, -50%) scale(1)",
     });
     applyStyles(highlight, { display: "none", animation: "none" });
     applyStyles(labelEl, { display: "none" });

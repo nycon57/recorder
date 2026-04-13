@@ -103,6 +103,10 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
+    sendResetPassword: async ({ user, url }) => {
+      // Wire to Resend in Phase 5
+      console.log(`Password reset for ${user.email}: ${url}`);
+    },
   },
   databaseHooks: {
     user: {

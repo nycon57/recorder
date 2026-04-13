@@ -10,6 +10,19 @@ const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
+    '^better-auth$': '<rootDir>/__mocks__/better-auth.ts',
+    '^better-auth/next-js$': '<rootDir>/__mocks__/better-auth-next-js.ts',
+    '^better-auth/plugins$': '<rootDir>/__mocks__/better-auth-plugins.ts',
+    '^better-auth/plugins/access$': '<rootDir>/__mocks__/better-auth-plugins-access.ts',
+    '^better-auth/plugins/admin/access$': '<rootDir>/__mocks__/better-auth-plugins-admin-access.ts',
+    '^@upstash/redis$': '<rootDir>/__mocks__/upstash-redis.ts',
+    '^@/lib/auth/auth$': '<rootDir>/__mocks__/lib-auth-auth.ts',
+    '^@/lib/auth/permissions$': '<rootDir>/__mocks__/lib-auth-permissions.ts',
+    '^@/lib/rate-limit/redis$': '<rootDir>/__mocks__/lib-rate-limit-redis.ts',
+    '^@/__tests__/(.*)$': '<rootDir>/__tests__/$1',
+    '^@/__mocks__/(.*)$': '<rootDir>/__mocks__/$1',
+    '^@clerk/nextjs$': '<rootDir>/__mocks__/@clerk/nextjs.ts',
+    '^@clerk/nextjs/server$': '<rootDir>/__mocks__/@clerk/nextjs/server.ts',
     '^@/(.*)$': '<rootDir>/src/$1',
     '^components/(.*)$': '<rootDir>/src/app/components/$1',
     '^hooks/(.*)$': '<rootDir>/src/hooks/$1',
@@ -24,7 +37,7 @@ const customJestConfig = {
     '**/?(*.)+(spec|test).[jt]s?(x)',
   ],
   transformIgnorePatterns: [
-    'node_modules/(?!(@google/genai)/)',
+    'node_modules/(?!(@google/genai|better-auth|@better-auth)/)',
   ],
   collectCoverageFrom: [
     'src/**/*.{js,jsx,ts,tsx}',

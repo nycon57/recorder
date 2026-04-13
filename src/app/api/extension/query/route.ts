@@ -536,14 +536,18 @@ export async function POST(request: NextRequest) {
   // Parse request body
   let question: string;
   let context: PageContext;
+  let screenshot: string | undefined;
 
   try {
     const body = await request.json();
     question = body.question;
     context = body.context;
+    screenshot = body.screenshot; // base64 JPEG from extension
   } catch {
     return errors.badRequest('Invalid JSON body');
   }
+
+  console.log(`[extension/query] Question: "${question}" | App: ${context?.appSignature} | URL: ${context?.url?.slice(0, 80)}`);
 
   if (!question || typeof question !== 'string') {
     return errors.badRequest('question is required');
@@ -760,10 +764,56 @@ export async function POST(request: NextRequest) {
         }
 
         // ---- Step 5: early exit if all layers are empty -----------------
+        console.log(`[extension/query] Vendor page: ${vendorPage ? 'found' : 'none'} | Org pages: ${orgPages.length}`);
         if (!vendorPage && vendorTrainingPages.length === 0 && orgPages.length === 0) {
+          // No wiki knowledge — fall back to screenshot-based vision if available
+          if (screenshot) {
+            console.log(`[extension/query] No wiki knowledge — using screenshot vision fallback`);
+            try {
+              const genai = getGenAIClient();
+              const visionPrompt = `You are a helpful assistant looking at someone's screen. They are on ${context.url} and asked: "${question}"
+
+Look at the screenshot and provide a concise, actionable answer. If you can identify specific UI elements they should click or interact with, describe them clearly. Keep your response conversational and under 3 sentences.`;
+
+              const visionStream = await genai.models.generateContentStream({
+                model: 'gemini-flash-lite-latest',
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [
+                      { text: visionPrompt },
+                      { inlineData: { mimeType: 'image/jpeg', data: screenshot } },
+                    ],
+                  },
+                ],
+                config: {
+                  temperature: 0.4,
+                  maxOutputTokens: 1024,
+                },
+              });
+
+              for await (const chunk of visionStream) {
+                const text = chunk.text;
+                if (typeof text === 'string' && text.length > 0) {
+                  const textChunks = chunkText(text);
+                  for (const tc of textChunks) {
+                    emit({ type: 'text_chunk', text: tc });
+                  }
+                }
+              }
+
+              finish();
+              return;
+            } catch (visionError) {
+              console.error('[extension/query] Vision fallback failed:', visionError);
+              // Fall through to generic message
+            }
+          }
+
+          console.log(`[extension/query] No knowledge for ${app}:${screen} — returning fallback`);
           emit({
             type: 'text_chunk',
-            text: `I don't have specific documentation for ${app} ${screen} yet. Please check the vendor's help center for guidance.`,
+            text: `I can see you're on ${app !== 'unknown' ? app : 'this page'}, but I don't have specific documentation for it yet. Try asking me a specific question about what you see on screen.`,
           });
           finish();
           return;
@@ -915,9 +965,23 @@ export async function POST(request: NextRequest) {
 
         try {
           const genai = getGenAIClient();
+
+          // If we have a screenshot, use vision (multimodal) for richer context
+          const contents = screenshot
+            ? [
+                {
+                  role: 'user' as const,
+                  parts: [
+                    { text: fusionPrompt },
+                    { inlineData: { mimeType: 'image/jpeg' as const, data: screenshot } },
+                  ],
+                },
+              ]
+            : fusionPrompt;
+
           const stream = await genai.models.generateContentStream({
-            model: 'gemini-2.5-flash',
-            contents: fusionPrompt,
+            model: 'gemini-flash-lite-latest',
+            contents,
             config: {
               temperature: 0.4,
               maxOutputTokens: 2048,
