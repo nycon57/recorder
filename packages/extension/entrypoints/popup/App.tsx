@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import type { SessionState, RecordingState } from "@tribora/shared";
+import type { SessionState, AssistantState } from "@tribora/shared";
+import { ASSISTANT_STATE_KEY } from "@tribora/shared";
 import { getStoredSession } from "../../utils/api-client.js";
 import {
   initiateSignIn,
@@ -9,123 +10,100 @@ import {
 
 const VERSION = "0.0.1";
 
-const UPLOAD_STATE_KEY = "tribora_upload_state";
+function statusLabel(status: AssistantState["status"]): string {
+  switch (status) {
+    case "idle":
+      return "Ready";
+    case "listening":
+      return "Listening...";
+    case "transcribing":
+      return "Processing...";
+    case "answering":
+      return "Thinking...";
+    case "speaking":
+      return "Speaking...";
+    case "error":
+      return "Error";
+  }
+}
 
-function RecordingSection() {
-  const [recordingState, setRecordingState] = useState<RecordingState>({
+function AssistantPanel() {
+  const [assistantState, setAssistantState] = useState<AssistantState>({
     status: "idle",
   });
+  const [micPermission, setMicPermission] = useState<boolean | null>(null);
+  const isMac = navigator.platform.toLowerCase().includes("mac");
 
-  // TRIB-49: listen for upload progress from the background service worker
   useEffect(() => {
-    if (recordingState.status !== "uploading") return;
+    void (async () => {
+      const result = await chrome.storage.session.get(ASSISTANT_STATE_KEY);
+      if (result[ASSISTANT_STATE_KEY]) {
+        setAssistantState(result[ASSISTANT_STATE_KEY] as AssistantState);
+      }
+      const micResult = await chrome.storage.local.get("micPermissionGranted");
+      setMicPermission(micResult.micPermissionGranted ?? null);
+    })();
+  }, []);
 
+  useEffect(() => {
     const listener = (
       changes: { [key: string]: chrome.storage.StorageChange },
       area: string,
     ) => {
-      if (area !== "session" || !changes[UPLOAD_STATE_KEY]) return;
-      const newVal = changes[UPLOAD_STATE_KEY].newValue as
-        | RecordingState
-        | undefined;
-      if (newVal) {
-        setRecordingState((prev) => ({ ...prev, ...newVal }));
+      if (area === "session" && changes[ASSISTANT_STATE_KEY]) {
+        const newVal = changes[ASSISTANT_STATE_KEY].newValue as
+          | AssistantState
+          | undefined;
+        if (newVal) setAssistantState(newVal);
+      }
+      if (area === "local" && changes.micPermissionGranted) {
+        setMicPermission(changes.micPermissionGranted.newValue ?? null);
       }
     };
-
     chrome.storage.onChanged.addListener(listener);
     return () => chrome.storage.onChanged.removeListener(listener);
-  }, [recordingState.status]);
-
-  const startRecording = () => {
-    setRecordingState({ status: "requesting_capture" });
-    chrome.runtime.sendMessage(
-      { type: "RECORDING_START" },
-      (response: { ok: boolean; state?: RecordingState; error?: string }) => {
-        if (chrome.runtime.lastError || !response?.ok) {
-          setRecordingState({
-            status: "error",
-            error: chrome.runtime.lastError?.message ?? response?.error ?? "Failed to start",
-          });
-          return;
-        }
-        setRecordingState(response.state ?? { status: "recording", startedAt: Date.now() });
-      },
-    );
-  };
-
-  const stopRecording = () => {
-    setRecordingState({ status: "uploading", uploadProgress: 0 });
-    chrome.runtime.sendMessage(
-      { type: "RECORDING_STOP" },
-      (response: { ok: boolean; recordingId?: string; error?: string }) => {
-        if (chrome.runtime.lastError || !response?.ok) {
-          setRecordingState({
-            status: "error",
-            error: chrome.runtime.lastError?.message ?? response?.error ?? "Failed to stop",
-          });
-          return;
-        }
-        setRecordingState({ status: "idle", recordingId: response.recordingId });
-      },
-    );
-  };
-
-  const { status, error, recordingId, uploadProgress, retryAttempt, retryMax } = recordingState;
+  }, []);
 
   return (
-    <div className="recording-section">
-      {status === "idle" && (
-        <>
-          {recordingId && (
-            <p className="recording-success">Recording saved!</p>
-          )}
-          <button
-            className="popup-btn popup-btn-record"
-            onClick={startRecording}
-          >
-            Start Recording
-          </button>
-        </>
-      )}
-      {status === "requesting_capture" && (
-        <button className="popup-btn popup-btn-record" disabled>
-          Requesting capture…
-        </button>
-      )}
-      {status === "recording" && (
-        <button
-          className="popup-btn popup-btn-stop"
-          onClick={stopRecording}
-        >
-          Stop Recording
-        </button>
-      )}
-      {status === "uploading" && (
-        <div className="upload-progress-section">
-          <div className="upload-progress-bar-track">
-            <div
-              className="upload-progress-bar-fill"
-              style={{ width: `${uploadProgress ?? 0}%` }}
-            />
-          </div>
-          <p className="upload-progress-label">
-            {retryAttempt
-              ? `Retrying upload (attempt ${retryAttempt}/${retryMax ?? 3})…`
-              : `Uploading… ${uploadProgress ?? 0}%`}
-          </p>
+    <div className="assistant-panel">
+      <div className="assistant-hotkey">
+        <span className="hotkey-icon">🎤</span>
+        <span className="hotkey-label">
+          Hold{" "}
+          <kbd>{isMac ? "⌘" : "Ctrl"}+{isMac ? "⌥" : "Alt"}</kbd>{" "}
+          to ask a question
+        </span>
+      </div>
+
+      {micPermission === false && (
+        <div className="assistant-warning">
+          Microphone access denied. Allow mic access in your browser settings to
+          use voice commands.
         </div>
       )}
-      {status === "error" && (
-        <>
-          <p className="popup-error">{error}</p>
-          <button
-            className="popup-btn popup-btn-record"
-            onClick={() => setRecordingState({ status: "idle" })}
-          >
-            Start Recording
-          </button>
-        </>
+
+      <div
+        className={`assistant-status assistant-status-${assistantState.status}`}
+      >
+        <span className="assistant-status-dot" />
+        <span className="assistant-status-label">
+          {statusLabel(assistantState.status)}
+        </span>
+      </div>
+
+      {assistantState.error && assistantState.status === "error" && (
+        <p className="popup-error">{assistantState.error}</p>
+      )}
+
+      {assistantState.lastQuestion && (
+        <div className="assistant-last-qa">
+          <div className="qa-question">
+            &ldquo;{assistantState.lastQuestion}&rdquo;
+          </div>
+          {assistantState.lastAnswerPreview && (
+            <div className="qa-answer">{assistantState.lastAnswerPreview}</div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -138,18 +116,24 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       const stored = await getStoredSession();
-      setSession(stored);
-      setLoading(false);
 
-      // If stored but expired, refresh immediately
+      // If we have a valid, non-expired session, use it immediately
       if (
         stored?.status === "authenticated" &&
         stored.expiresAt &&
-        stored.expiresAt < Date.now()
+        stored.expiresAt > Date.now()
       ) {
-        const refreshed = await refreshSession();
-        setSession(refreshed);
+        setSession(stored);
+        setLoading(false);
+        return;
       }
+
+      // Otherwise, always try to refresh — this detects sessions from
+      // web sign-in, expired sessions, and first-time popup opens.
+      // Uses chrome.cookies to read the website's session cookie.
+      const refreshed = await refreshSession();
+      setSession(refreshed);
+      setLoading(false);
     })();
   }, []);
 
@@ -165,7 +149,7 @@ export default function App() {
           <span className="popup-version">v{VERSION}</span>
         </header>
         <main className="popup-main">
-          <p className="popup-description">Loading…</p>
+          <p className="popup-description">Loading...</p>
         </main>
       </div>
     );
@@ -188,7 +172,7 @@ export default function App() {
             <span className="status-label">Not connected</span>
           </div>
           <p className="popup-description">
-            Sign in to start capturing knowledge.
+            Sign in to start using the AI assistant.
           </p>
           {session?.lastError && (
             <p className="popup-error">{session.lastError}</p>
@@ -236,7 +220,7 @@ export default function App() {
             )}
           </div>
         </div>
-        <RecordingSection />
+        <AssistantPanel />
       </main>
       <footer className="popup-footer">
         <button

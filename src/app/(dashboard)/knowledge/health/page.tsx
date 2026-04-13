@@ -255,6 +255,21 @@ async function resolveVendorPageLinks(
   return byKey;
 }
 
+/**
+ * Load recently superseded wiki pages for the drilldown section.
+ * Shows pages that have been replaced, linking to their version history.
+ */
+async function loadRecentlySuperseded(orgId: string) {
+  const { data } = await supabaseAdmin
+    .from('org_wiki_pages')
+    .select('id, topic, app, screen, valid_until, confidence')
+    .eq('org_id', orgId)
+    .not('valid_until', 'is', null)
+    .order('valid_until', { ascending: false })
+    .limit(10);
+  return data ?? [];
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -268,10 +283,11 @@ export default async function KnowledgeHealthPage() {
     redirect('/dashboard');
   }
 
-  const [pageMetrics, lintResult, pendingContradictions] = await Promise.all([
+  const [pageMetrics, lintResult, pendingContradictions, recentlySuperseded] = await Promise.all([
     loadPageMetrics(orgId),
     getLatestLintResult(orgId),
     getPendingContradictionCount(orgId),
+    loadRecentlySuperseded(orgId),
   ]);
 
   const coverageMap = await loadCoverageMap(orgId, lintResult);
@@ -329,6 +345,11 @@ export default async function KnowledgeHealthPage() {
           stale={lintResult.details.stale}
           staleLinks={lintResult.details.stale_links}
         />
+      )}
+
+      {/* --- Row 5: Recently superseded --------------------------------- */}
+      {recentlySuperseded.length > 0 && (
+        <RecentlySupersededCard pages={recentlySuperseded} />
       )}
     </div>
   );
@@ -853,5 +874,74 @@ function DrilldownList({
         </ul>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card: Recently superseded
+// ---------------------------------------------------------------------------
+
+function RecentlySupersededCard({
+  pages,
+}: {
+  pages: Array<{
+    id: string;
+    topic: string;
+    app: string | null;
+    screen: string | null;
+    valid_until: string | null;
+    confidence: number;
+  }>;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <GitBranch className="h-5 w-5" />
+          Recently superseded
+        </CardTitle>
+        <CardDescription>
+          Pages that were recently replaced by a newer version. Click to view
+          full version history.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y rounded-md border bg-card/40">
+          {pages.map((page) => (
+            <li key={page.id}>
+              <Link
+                href={`/knowledge/wiki/${page.id}/history`}
+                className="flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-muted/40"
+              >
+                <div className="flex min-w-0 flex-col">
+                  <span className="truncate font-medium">{page.topic}</span>
+                  <div className="flex items-center gap-2">
+                    {page.app && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {page.app}
+                      </Badge>
+                    )}
+                    {page.screen && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {page.screen}
+                      </Badge>
+                    )}
+                    {page.valid_until && (
+                      <span className="text-xs text-muted-foreground">
+                        superseded{' '}
+                        {formatDistanceToNow(new Date(page.valid_until), {
+                          addSuffix: true,
+                        })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }

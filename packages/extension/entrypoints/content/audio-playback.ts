@@ -40,6 +40,9 @@ export interface AudioPlayer {
 
   /** Snapshot of the current playback state. */
   getState(): TtsState;
+
+  /** Returns the TTS AnalyserNode when playing, null otherwise. */
+  getAnalyserNode(): AnalyserNode | null;
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────────
@@ -58,6 +61,8 @@ export function createAudioPlayer(
   let currentAudio: HTMLAudioElement | null = null;
   let currentObjectUrl: string | null = null;
   let currentSession: { cleanup: () => void } | null = null;
+  let ttsAudioContext: AudioContext | null = null;
+  let ttsAnalyserNode: AnalyserNode | null = null;
   // Session token: every call to speak()/playUrl() gets a fresh token so
   // later-starting awaits from earlier calls can detect that they've been
   // superseded and bail out before clobbering state. Prevents the race where
@@ -78,15 +83,17 @@ export function createAudioPlayer(
       currentAudio = null;
     }
     if (currentObjectUrl) {
-      // Revoke the blob URL synchronously. Previously this only happened on
-      // audio.onended/onerror, which leaked the URL if a new speak() started
-      // mid-playback or the stream was aborted.
       URL.revokeObjectURL(currentObjectUrl);
       currentObjectUrl = null;
     }
     if (currentSession) {
       currentSession.cleanup();
       currentSession = null;
+    }
+    ttsAnalyserNode = null;
+    if (ttsAudioContext) {
+      void ttsAudioContext.close().catch(() => {});
+      ttsAudioContext = null;
     }
   };
 
@@ -147,6 +154,18 @@ export function createAudioPlayer(
 
         const audio = new Audio(objectUrl);
         currentAudio = audio;
+
+        // Create AnalyserNode for waveform visualization during playback
+        try {
+          ttsAudioContext = new AudioContext();
+          const source = ttsAudioContext.createMediaElementSource(audio);
+          ttsAnalyserNode = ttsAudioContext.createAnalyser();
+          ttsAnalyserNode.fftSize = 64;
+          source.connect(ttsAnalyserNode);
+          ttsAnalyserNode.connect(ttsAudioContext.destination);
+        } catch {
+          // Non-fatal — waveform just won't animate
+        }
 
         audio.onended = () => {
           if (token !== activeToken) return;
@@ -224,6 +243,10 @@ export function createAudioPlayer(
 
     getState(): TtsState {
       return state;
+    },
+
+    getAnalyserNode(): AnalyserNode | null {
+      return ttsAnalyserNode;
     },
   };
 }

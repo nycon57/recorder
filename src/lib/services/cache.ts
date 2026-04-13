@@ -11,7 +11,17 @@
  * - Request deduplication: Prevents concurrent identical requests
  */
 
-import { getRedis } from '@/lib/rate-limit/redis';
+import { getRedis, markRedisFailed } from '@/lib/rate-limit/redis';
+
+/** Check if an error is a DNS/network failure and activate the circuit breaker */
+function handleCacheError(label: string, error: unknown): void {
+  const cause = (error as { cause?: { code?: string } })?.cause;
+  if (cause?.code === 'ENOTFOUND' || cause?.code === 'ECONNREFUSED') {
+    markRedisFailed();
+    return; // circuit breaker logs once, no need to spam
+  }
+  console.error(`[Cache] ${label}:`, error);
+}
 
 /**
  * Cache key prefixes for different data types
@@ -130,9 +140,9 @@ export class CacheService {
       }
 
       // Redis returns string, parse JSON
-      return typeof cached === 'string' ? JSON.parse(cached) : cached;
+      return (typeof cached === 'string' ? JSON.parse(cached) : cached) as T;
     } catch (error) {
-      console.error('[Cache] Error getting cached value:', error);
+      handleCacheError('Error getting cached value', error);
       return null;
     }
   }
@@ -149,7 +159,7 @@ export class CacheService {
     try {
       await redis.setex(key, ttlSeconds, JSON.stringify(value));
     } catch (error) {
-      console.error('[Cache] Error setting cached value:', error);
+      handleCacheError('Error setting cached value', error);
     }
   }
 
@@ -165,7 +175,7 @@ export class CacheService {
     try {
       await redis.del(key);
     } catch (error) {
-      console.error('[Cache] Error deleting cached value:', error);
+      handleCacheError('Error deleting cached value', error);
     }
   }
 
@@ -209,7 +219,7 @@ export class CacheService {
         await redis.unlink(...keysToDelete);
       }
     } catch (error) {
-      console.error('[Cache] Error deleting pattern:', error);
+      handleCacheError('Error deleting pattern', error);
     }
   }
 
@@ -226,7 +236,7 @@ export class CacheService {
       const result = await redis.exists(key);
       return result === 1;
     } catch (error) {
-      console.error('[Cache] Error checking key existence:', error);
+      handleCacheError('Error checking key existence', error);
       return false;
     }
   }
@@ -270,7 +280,8 @@ export class UserCache {
   /**
    * Invalidate all users in an org (e.g., when org settings change)
    */
-  static async invalidateOrg(orgId: string): Promise<void> {
+  static async invalidateOrg(_orgId: string): Promise<void> {
+    void _orgId;
     // This is expensive - use sparingly
     await CacheService.deletePattern(`${CACHE_PREFIXES.USER}:*`);
   }
@@ -864,7 +875,7 @@ export const CacheInvalidation = {
 /**
  * Generate ETag for cache validation
  */
-export function generateETag(data: any): string {
+export function generateETag(data: unknown): string {
   // Simple hash based on stringified data
   const str = JSON.stringify(data);
   let hash = 0;

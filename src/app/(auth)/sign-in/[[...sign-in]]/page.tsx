@@ -1,11 +1,31 @@
 'use client';
 
 import { useState } from 'react';
-import { signIn } from '@/lib/auth/auth-client';
+import { signIn, authClient } from '@/lib/auth/auth-client';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowLeft, Sparkles, Loader2, Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+
+function getSignInErrorMessage(error: { code?: string; message?: string; status?: number }) {
+  switch (error.code) {
+    case 'INVALID_EMAIL_OR_PASSWORD':
+      return 'Incorrect email or password. Please try again.';
+    case 'EMAIL_NOT_VERIFIED':
+      return 'Please verify your email address before signing in.';
+    case 'USER_NOT_FOUND':
+      return 'No account found with this email address.';
+    case 'INVALID_PASSWORD':
+      return 'Incorrect password. Please try again.';
+    case 'TOO_MANY_REQUESTS':
+      return 'Too many sign-in attempts. Please wait a moment and try again.';
+    case 'USER_BANNED':
+      return 'This account has been suspended. Please contact support.';
+    default:
+      if (error.status === 429) return 'Too many sign-in attempts. Please wait a moment and try again.';
+      return error.message || 'Sign in failed. Please try again.';
+  }
+}
 
 
 /**
@@ -24,10 +44,44 @@ import { useRouter } from 'next/navigation';
 export default function SignInPage() {
   const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isExtension = searchParams.get('source') === 'extension';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const notifyExtension = async () => {
+    // Fetch the full session (with token) via getSession — the sign-in
+    // response only sets cookies, it doesn't return the session token.
+    try {
+      const { data } = await authClient.getSession();
+      if (!data?.session || !data?.user) {
+        console.warn('[Tribora] getSession returned no data after sign-in');
+        return;
+      }
+      const payload = {
+        type: 'TRIBORA_AUTH_SUCCESS',
+        session: {
+          status: 'authenticated' as const,
+          user: {
+            id: data.user.id,
+            email: data.user.email,
+            name: data.user.name,
+            image: data.user.image,
+          },
+          token: data.session.token,
+          expiresAt: new Date(data.session.expiresAt).getTime(),
+        },
+      };
+      window.postMessage(payload, window.location.origin);
+      // Give the content script a moment to relay the message
+      await new Promise((r) => setTimeout(r, 300));
+    } catch (err) {
+      console.error('[Tribora] Failed to fetch session for extension bridge:', err);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,17 +89,20 @@ export default function SignInPage() {
     setError('');
     const { error } = await signIn.email({ email, password });
     if (error) {
-      setError(error.message || 'Sign in failed');
+      setError(getSignInErrorMessage(error));
       setLoading(false);
     } else {
+      if (isExtension) await notifyExtension();
       router.push('/dashboard');
     }
   };
 
   const handleGoogleSignIn = async () => {
+    // For extension sign-in via OAuth, redirect to the callback page that
+    // bridges the session to the extension before going to dashboard.
     await signIn.social({
       provider: 'google',
-      callbackURL: '/dashboard',
+      callbackURL: isExtension ? '/auth/extension-callback' : '/dashboard',
     });
   };
 
@@ -231,18 +288,42 @@ export default function SignInPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: 'rgb(170, 203, 196)' }}>
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                  className={inputStyles}
-                  style={inputInlineStyles}
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium" style={{ color: 'rgb(170, 203, 196)' }}>
+                    Password
+                  </label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs font-medium transition-colors duration-200"
+                    style={{ color: '#00df82' }}
+                    onMouseOver={(e) => (e.currentTarget.style.color = '#2cc295')}
+                    onMouseOut={(e) => (e.currentTarget.style.color = '#00df82')}
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    required
+                    className={inputStyles}
+                    style={inputInlineStyles}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors duration-200"
+                    style={{ color: 'rgb(111, 125, 125)' }}
+                    onMouseOver={(e) => (e.currentTarget.style.color = 'rgb(170, 203, 196)')}
+                    onMouseOut={(e) => (e.currentTarget.style.color = 'rgb(111, 125, 125)')}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
+                </div>
               </div>
 
               <button

@@ -1,8 +1,66 @@
-// Learn more: https://github.com/testing-library/jest-dom
-import '@testing-library/jest-dom';
+import { Blob, File } from 'buffer';
+import { ReadableStream, TransformStream, WritableStream } from 'stream/web';
+import { TextDecoder, TextEncoder } from 'util';
+import { MessageChannel, MessagePort } from 'worker_threads';
 
-// Add OpenAI shims for Node environment (required for tests)
-import 'openai/shims/node';
+import '@testing-library/jest-dom';
+import { fetch, FormData, Headers, Request, Response } from 'undici';
+
+if (typeof globalThis.TextEncoder === 'undefined') {
+  globalThis.TextEncoder = TextEncoder;
+}
+
+if (typeof globalThis.TextDecoder === 'undefined') {
+  globalThis.TextDecoder = TextDecoder;
+}
+
+if (typeof globalThis.ReadableStream === 'undefined') {
+  globalThis.ReadableStream = ReadableStream;
+}
+
+if (typeof globalThis.WritableStream === 'undefined') {
+  globalThis.WritableStream = WritableStream;
+}
+
+if (typeof globalThis.TransformStream === 'undefined') {
+  globalThis.TransformStream = TransformStream;
+}
+
+if (typeof globalThis.Blob === 'undefined') {
+  globalThis.Blob = Blob;
+}
+
+if (typeof globalThis.File === 'undefined') {
+  globalThis.File = File;
+}
+
+if (typeof globalThis.MessageChannel === 'undefined') {
+  globalThis.MessageChannel = MessageChannel;
+}
+
+if (typeof globalThis.MessagePort === 'undefined') {
+  globalThis.MessagePort = MessagePort;
+}
+
+if (typeof globalThis.fetch === 'undefined') {
+  globalThis.fetch = fetch;
+}
+
+if (typeof globalThis.Headers === 'undefined') {
+  globalThis.Headers = Headers;
+}
+
+if (typeof globalThis.Request === 'undefined') {
+  globalThis.Request = Request;
+}
+
+if (typeof globalThis.Response === 'undefined') {
+  globalThis.Response = Response;
+}
+
+if (typeof globalThis.FormData === 'undefined') {
+  globalThis.FormData = FormData;
+}
 
 // Mock environment variables for tests
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';

@@ -39,6 +39,10 @@ const routeLabels: Record<string, string> = {
   jobs: "Jobs",
   alerts: "Alerts",
   quotas: "Quotas",
+  knowledge: "Knowledge",
+  wiki: "Wiki",
+  history: "Version History",
+  health: "Health",
 }
 
 /**

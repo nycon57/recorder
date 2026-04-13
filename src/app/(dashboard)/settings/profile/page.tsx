@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useSession } from '@/lib/auth/auth-client';
-import { User, ImageIcon, Settings2, Smartphone, Shield, AlertTriangle } from 'lucide-react';
+import { User, ImageIcon, Settings2, Smartphone, Shield, AlertTriangle, Brain } from 'lucide-react';
 
 import {
   Tabs,
@@ -18,6 +18,7 @@ import {
   SessionsList,
   SecuritySettings,
   DangerZone,
+  UserMemoryTab,
 } from '@/app/components/settings';
 import { cn } from '@/lib/utils';
 
@@ -33,6 +34,7 @@ export default function ProfilePage() {
     { value: 'general', label: 'General', icon: User, description: 'Personal details' },
     { value: 'avatar', label: 'Avatar', icon: ImageIcon, description: 'Profile picture' },
     { value: 'preferences', label: 'Preferences', icon: Settings2, description: 'App settings' },
+    { value: 'memory', label: 'AI Memory', icon: Brain, description: 'Learning history' },
     { value: 'sessions', label: 'Sessions', icon: Smartphone, description: 'Active devices' },
     { value: 'security', label: 'Security', icon: Shield, description: 'Authentication' },
     { value: 'danger', label: 'Danger', icon: AlertTriangle, description: 'Delete account' },
@@ -98,6 +100,10 @@ export default function ProfilePage() {
 
         <TabsContent value="preferences" className="space-y-4">
           <PreferencesForm />
+        </TabsContent>
+
+        <TabsContent value="memory" className="space-y-4">
+          <UserMemoryTab />
         </TabsContent>
 
         <TabsContent value="sessions" className="space-y-4">

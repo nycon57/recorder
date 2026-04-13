@@ -30,6 +30,10 @@ export type {
 } from "./tts.js";
 export { DEFAULT_VOICE_CONFIG } from "./tts.js";
 
+// Assistant lifecycle types
+export type { AssistantStatus, AssistantState } from "./assistant.js";
+export { ASSISTANT_STATE_KEY } from "./assistant.js";
+
 // TRIB-48 — Recording types
 export type {
   RecordingStatus,

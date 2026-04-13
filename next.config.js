@@ -109,7 +109,7 @@ const nextConfig = {
   reactStrictMode: true,
 
   // TODO: Re-enable TypeScript build checks - https://github.com/[org]/recorder/issues/[TBD]
-  // Current status: 1,249 type errors across multiple categories (as of 2025-10-19)
+  // Current status: repo-wide typecheck is still red and tracked separately.
   // Priority order for incremental fixes:
   //   1. Next.js 15 async params migration (~50 errors in page components)
   //   2. Test suite type safety (Supabase mock typing ~100 errors)
@@ -118,9 +118,6 @@ const nextConfig = {
   //   5. External library type definitions (~50 errors)
   // Target: Re-enable checks by end of Q1 2026 after incremental category fixes
   // Use `npm run type:check` to verify progress
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },

@@ -13,6 +13,7 @@ import {
   CreditCard,
   BarChart3,
   Bot,
+  Brain,
   Server,
   Zap,
 } from 'lucide-react';
@@ -75,6 +76,13 @@ const navItems: NavItem[] = [
     href: '/settings/organization/agents',
     icon: Bot,
     description: 'AI agent permissions',
+    requiredRole: 'admin',
+  },
+  {
+    title: 'Agent Memory',
+    href: '/settings/organization/memory',
+    icon: Brain,
+    description: 'AI memory entries',
     requiredRole: 'admin',
   },
   {

@@ -11,9 +11,13 @@
     "prepare": "wxt prepare"
   },
   "dependencies": {
+    "@alloc/quick-lru": "^5.2.0",
+    "@elevenlabs/client": "^1.2.0",
     "@tribora/shared": "*",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "tapable": "^2.3.2",
+    "tinyglobby": "^0.2.16"
   },
   "devDependencies": {
     "@types/react": "^19.2.2",

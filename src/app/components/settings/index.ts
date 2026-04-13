@@ -44,3 +44,4 @@ export { PreferencesForm } from './profile/PreferencesForm';
 export { SecuritySettings } from './profile/SecuritySettings';
 export { SessionsList } from './profile/SessionsList';
 export { DangerZone } from './profile/DangerZone';
+export { UserMemoryTab } from './profile/UserMemoryTab';

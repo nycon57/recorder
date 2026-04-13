@@ -1,6 +1,7 @@
 import type { SessionState } from "@tribora/shared";
 import {
   apiFetch,
+  getStoredSession,
   setStoredSession,
   clearStoredSession,
 } from "./api-client.js";
@@ -22,9 +23,6 @@ interface GetSessionResponse {
     token: string;
     expiresAt: string;
   } | null;
-  // Better Auth's organization plugin exposes this as `activeOrganization`
-  // on the /api/auth/get-session response. Keep `activeOrg` as an alias so
-  // older web-side code doesn't break if it switches back mid-rollout.
   activeOrganization?: {
     id: string;
     name: string;
@@ -38,23 +36,62 @@ interface GetSessionResponse {
 }
 
 /**
- * Open the Tribora sign-in page in a new tab. On success, the web app posts
- * a message back to the extension (via chrome.runtime.sendMessage from a
- * helper page) to persist the session.
+ * Open the Tribora sign-in page in a new tab.
  */
 export async function initiateSignIn(): Promise<void> {
   await chrome.tabs.create({ url: SIGN_IN_URL });
 }
 
 /**
+ * Read the website's cookies for the API base URL so we can include
+ * them in fetch requests from the extension context. This lets the
+ * extension detect sessions established via normal web sign-in.
+ *
+ * Requires the "cookies" permission in the manifest.
+ */
+async function getWebsiteCookieHeader(): Promise<string> {
+  try {
+    const cookies = await chrome.cookies.getAll({ url: API_BASE_URL });
+    if (cookies.length === 0) return "";
+    return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Fetches the current session from Better Auth via /api/auth/get-session.
- * Returns the SessionState shape expected by the popup.
+ *
+ * Uses the website's cookies (via chrome.cookies API) so it works
+ * regardless of how the user signed in — web, extension flow, or OAuth.
  */
 export async function refreshSession(): Promise<SessionState> {
   try {
-    const data = await apiFetch<GetSessionResponse>("/api/auth/get-session", {
-      skipAuth: false,
+    // Try with website cookies first — this covers web sign-in
+    const cookieHeader = await getWebsiteCookieHeader();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+
+    // Also include stored bearer token if we have one (covers extension sign-in)
+    const stored = await getStoredSession();
+    if (stored?.token) {
+      headers["Authorization"] = `Bearer ${stored.token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/auth/get-session`, {
+      method: "GET",
+      headers,
     });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = (await response.json()) as GetSessionResponse;
 
     if (!data?.user) {
       const state: SessionState = { status: "unauthenticated" };
@@ -62,8 +99,6 @@ export async function refreshSession(): Promise<SessionState> {
       return state;
     }
 
-    // Better Auth's org plugin uses `activeOrganization`; fall back to the
-    // legacy `activeOrg` key if the backend is still on the old shape.
     const org = data.activeOrganization ?? data.activeOrg ?? null;
     const state: SessionState = {
       status: "authenticated",
