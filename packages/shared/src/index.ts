@@ -1,11 +1,41 @@
 export type {
   InteractiveElement,
   PageContext,
+  SurfaceKind,
+  InteractiveGroup,
+  DetectionConfidence,
+  ContextHeading,
+  NavigationItem,
+  PageAction,
+  SelectedEntity,
+  WorkspaceContextItem,
+  WorkspaceContext,
+  FormField,
+  FormSurface,
+  TableSurface,
+  DialogSurface,
+  KnowledgeMatchBasis,
+  KnowledgeMatch,
+  KnowledgeAvailability,
+  LiveContextSourceRef,
+  LiveContextPack,
   ExtensionMessageType,
   ExtensionMessage,
-} from "./types.js";
+} from './types.js';
+export type {
+  ExtensionDebugSessionEventType,
+  ExtensionDebugSessionKnowledgeMode,
+  ExtensionDebugSessionMatchBasis,
+  ExtensionDebugSessionEventInput,
+  ExtensionDebugSessionStoredEvent,
+} from './extension-debug.js';
+export {
+  buildContextSemanticFingerprint,
+  sanitizePageContextLocation,
+} from './context-telemetry.js';
+export type { SanitizedPageContextLocation } from './context-telemetry.js';
 
-export type { SessionState, AuthMessage } from "./auth.js";
+export type { SessionState, AuthMessage } from './auth.js';
 
 export type {
   OverlayAction,
@@ -15,11 +45,11 @@ export type {
   OverlayHighlightMessage,
   OverlayPulseMessage,
   OverlayClearMessage,
-} from "./overlay.js";
+} from './overlay.js';
 
 // TRIB-25 — STT types and hotkey defaults
-export type { SttStatus, SttState, SttMessage, HotkeyConfig } from "./stt.js";
-export { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_WIN } from "./stt.js";
+export type { SttStatus, SttState, SttMessage, HotkeyConfig } from './stt.js';
+export { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_WIN } from './stt.js';
 
 // TRIB-26 — TTS types and ElevenLabs voice config
 export type {
@@ -27,8 +57,8 @@ export type {
   TtsState,
   TtsMessage,
   ElevenLabsVoiceConfig,
-} from "./tts.js";
-export { DEFAULT_VOICE_CONFIG } from "./tts.js";
+} from './tts.js';
+export { DEFAULT_VOICE_CONFIG } from './tts.js';
 
 // TRIB-48 — Recording types
 export type {
@@ -36,4 +66,4 @@ export type {
   RecordingState,
   RecordingMessage,
   RecordingUploadInit,
-} from "./recording.js";
+} from './recording.js';

@@ -10,6 +10,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // CORS preflight requests carry no credentials — let them reach each route's
+  // OPTIONS handler so it can return proper Access-Control-* headers. Extension
+  // and SDK routes are embedded cross-origin and must respond to preflight.
+  if (
+    request.method === "OPTIONS" &&
+    (pathname.startsWith("/api/extension/") || pathname.startsWith("/api/sdk/"))
+  ) {
+    return NextResponse.next();
+  }
+
   // Extension health check is public — skip auth
   if (pathname === "/api/extension/health") {
     return NextResponse.next();
@@ -108,7 +118,23 @@ export async function middleware(request: NextRequest) {
     if (!session) {
       // API routes get a 401; page routes redirect to login
       if (pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const isCrossOriginApi =
+          pathname.startsWith("/api/extension/") ||
+          pathname.startsWith("/api/sdk/");
+        return NextResponse.json(
+          { error: "Unauthorized" },
+          {
+            status: 401,
+            headers: isCrossOriginApi
+              ? {
+                  "Access-Control-Allow-Origin": "*",
+                  "Access-Control-Allow-Methods":
+                    "GET, POST, PUT, DELETE, OPTIONS",
+                  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+                }
+              : undefined,
+          }
+        );
       }
       return NextResponse.redirect(new URL("/login", request.url));
     }

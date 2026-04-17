@@ -1,286 +1,1219 @@
-import { scheduleTokenRefresh } from "../utils/token-refresh.js";
-import { createTabRecorder } from "../utils/tab-recorder.js";
-import { uploadRecording } from "../utils/recording-uploader.js";
-import type { TabRecorder } from "../utils/tab-recorder.js";
-import { getStoredSession } from "../utils/api-client.js";
-import type { PageContext } from "@tribora/shared";
+/**
+ * background.ts — Service worker for the Tribora extension.
+ *
+ * Responsibilities:
+ *   - Widget toggle via extension icon click
+ *   - Offscreen document lifecycle (one per extension)
+ *   - Signed URL fetch for agent sessions (attaches website cookies)
+ *   - Message routing between content script ↔ offscreen document
+ *   - Screenshot capture via chrome.tabs.captureVisibleTab
+ *   - Recording (tab capture + R2 upload)
+ *   - Token refresh + auth state
+ */
 
-// TRIB-65: backend base URL for the /api/extension/query fusion endpoint.
-// Matches the pattern used in utils/api-client.ts / utils/elevenlabs-client.ts.
+import { scheduleTokenRefresh } from '../utils/token-refresh.js';
+import { createTabRecorder } from '../utils/tab-recorder.js';
+import { uploadRecording } from '../utils/recording-uploader.js';
+import type { TabRecorder } from '../utils/tab-recorder.js';
+import {
+  apiFetch,
+  getStoredSession,
+  setStoredSession,
+} from '../utils/api-client.js';
+import {
+  advanceDebugTurn,
+  buildDebugEventInput,
+  buildPageContextDebugFields,
+  createDebugSessionState,
+  getDebugSessionLoggingEnabled,
+  postDebugSessionEvents,
+  summarizeToolCallArgs,
+  summarizeToolResult,
+} from '../utils/debug-session.js';
+import type { ActiveDebugSessionState } from '../utils/debug-session.js';
+import { shouldOpenMicPermissionBootstrap } from '../utils/session-startup.js';
+import { createTurnGuards } from '../utils/turn-guards.js';
+import type { LiveContextPack, PageContext } from '@tribora/shared';
+import { sanitizePageContextLocation } from '@tribora/shared';
+import { buildContextSemanticFingerprint } from '../utils/context-telemetry.js';
+
+const BG = '[Tribora bg]';
+const EXTENSION_ENABLED_KEY = 'tribora_extension_enabled';
+const LEGACY_WIDGET_VISIBLE_KEY = 'tribora_widget_visible';
+const MIC_PERMISSION_GRANTED_KEY = 'micPermissionGranted';
+const OFFSCREEN_URL = 'offscreen.html';
+const MIC_PERMISSION_URL = 'mic-permission.html';
+
 const API_BASE_URL =
   (import.meta.env as Record<string, string>).VITE_TRIBORA_API_URL ||
-  "http://localhost:3000";
+  'http://localhost:3000';
 
-/**
- * TRIB-65: SSE event shapes emitted by /api/extension/query.
- * Must stay in sync with src/app/api/extension/query/route.ts (`SseEvent`).
- */
-interface SseTextChunkEvent {
-  type: "text_chunk";
-  text: string;
-}
-interface SseElementRefEvent {
-  type: "element_ref";
-  selector: string;
-  label: string;
-  action: "highlight" | "point" | "pulse";
-}
-interface SseCitationEvent {
-  type: "citation";
-  sourceId: string;
-  title: string;
-  recordingUrl?: string;
-}
-interface SseDoneEvent {
-  type: "done";
-}
-type SseEvent =
-  | SseTextChunkEvent
-  | SseElementRefEvent
-  | SseCitationEvent
-  | SseDoneEvent;
+// ─── Offscreen document lifecycle ─────────────────────────────────────────────
 
-/**
- * TRIB-65: Transform the extension's `PageContext` into the shape
- * /api/extension/query expects. The route reads `url`, `appSignature`
- * (single "app:screen" string) and `elements` (lean `{selector, label}`
- * tuples), whereas the extension stores `app`, `screen`, and the richer
- * `interactiveElements` with type/ariaLabel/boundingRect.
- */
-function serializePageContext(ctx: PageContext): {
-  url: string;
-  appSignature: string;
-  elements: Array<{ selector: string; label: string }>;
+let offscreenCreating: Promise<void> | null = null;
+
+async function ensureOffscreen(): Promise<void> {
+  // @ts-expect-error — chrome.offscreen is MV3; types may lag
+  if (await chrome.offscreen.hasDocument?.()) return;
+  if (offscreenCreating) return offscreenCreating;
+
+  offscreenCreating = chrome.offscreen
+    .createDocument({
+      url: OFFSCREEN_URL,
+      reasons: [
+        chrome.offscreen.Reason.USER_MEDIA,
+        chrome.offscreen.Reason.AUDIO_PLAYBACK,
+      ],
+      justification:
+        'Maintain a persistent ElevenLabs voice session across page navigations.',
+    })
+    .finally(() => {
+      offscreenCreating = null;
+    });
+
+  await offscreenCreating;
+  console.log(`${BG} Offscreen document created`);
+}
+
+async function closeOffscreen(): Promise<void> {
+  try {
+    // @ts-expect-error — chrome.offscreen is MV3; types may lag
+    if (await chrome.offscreen.hasDocument?.()) {
+      await chrome.offscreen.closeDocument();
+      console.log(`${BG} Offscreen document closed`);
+    }
+  } catch (err) {
+    console.warn(`${BG} closeOffscreen error:`, (err as Error).message);
+  }
+}
+
+// ─── Signed URL fetch ─────────────────────────────────────────────────────────
+
+async function fetchSignedUrl(): Promise<string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  try {
+    const cookies = await chrome.cookies.getAll({ url: API_BASE_URL });
+    if (cookies.length > 0) {
+      headers['Cookie'] = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+    }
+  } catch {
+    // cookies API unavailable — try bearer-only
+  }
+
+  const session = await getStoredSession();
+  if (session?.token) {
+    headers['Authorization'] = `Bearer ${session.token}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/extension/agent-session`, {
+    method: 'POST',
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const data = (await response.json()) as { signedUrl?: string };
+  if (!data.signedUrl) throw new Error('No signedUrl in response');
+  return data.signedUrl;
+}
+
+// ─── Extension state + session bootstrap ─────────────────────────────────────
+
+let pendingSessionStartTabId: number | null = null;
+let pendingMicPermissionPageTabId: number | null = null;
+let activeDebugSession: ActiveDebugSessionState | null = null;
+let debugEventQueue: Promise<void> = Promise.resolve();
+const pendingDebugToolCalls = new Map<
+  string,
+  {
+    turnId: string | null;
+    name: string;
+    selector: string | null;
+    label: string | null;
+    action: string | null;
+    inputTextPreview: string | null;
+    inputTextLength: number | null;
+    urlHost: string | null;
+    urlPath: string | null;
+    app: string | null;
+    screen: string | null;
+    knowledgeMode: 'dom_only' | 'vendor_backed' | 'org_backed' | 'unknown';
+    vendorMatchBasis:
+      | 'exact'
+      | 'screen_alias'
+      | 'app_only'
+      | 'domain_alias'
+      | 'none'
+      | 'unknown';
+    orgMatchBasis:
+      | 'exact'
+      | 'screen_alias'
+      | 'app_only'
+      | 'domain_alias'
+      | 'none'
+      | 'unknown';
+    pageSummary: string | null;
+    selectedEntityTitle: string | null;
+    fingerprint: string | null;
+    tabId: number | null;
+    windowId: number | null;
+  }
+>();
+
+const latestContexts = new Map<number, PageContext>();
+const contextUpdateSeq = new Map<number, number>();
+const contextFingerprints = new Map<number, string>();
+const liveContextHashes = new Map<number, string>();
+
+async function getExtensionEnabled(): Promise<boolean> {
+  const stored = await chrome.storage.session.get([
+    EXTENSION_ENABLED_KEY,
+    LEGACY_WIDGET_VISIBLE_KEY,
+  ]);
+
+  if (typeof stored[EXTENSION_ENABLED_KEY] === 'boolean') {
+    return stored[EXTENSION_ENABLED_KEY] === true;
+  }
+
+  return stored[LEGACY_WIDGET_VISIBLE_KEY] === true;
+}
+
+async function setExtensionEnabled(enabled: boolean): Promise<void> {
+  await chrome.storage.session.set({
+    [EXTENSION_ENABLED_KEY]: enabled,
+    [LEGACY_WIDGET_VISIBLE_KEY]: enabled,
+  });
+}
+
+async function getMicPermissionGranted(): Promise<boolean> {
+  const stored = await chrome.storage.local.get(MIC_PERMISSION_GRANTED_KEY);
+  return stored[MIC_PERMISSION_GRANTED_KEY] === true;
+}
+
+async function setMicPermissionGranted(granted: boolean): Promise<void> {
+  await chrome.storage.local.set({ [MIC_PERMISSION_GRANTED_KEY]: granted });
+}
+
+function clearPendingMicPermissionFlow(): {
+  resumeTabId: number | null;
+  permissionTabId: number | null;
 } {
+  const resumeTabId = pendingSessionStartTabId;
+  const permissionTabId = pendingMicPermissionPageTabId;
+  pendingSessionStartTabId = null;
+  pendingMicPermissionPageTabId = null;
+  return { resumeTabId, permissionTabId };
+}
+
+function buildFallbackDebugLocation(url?: string | null): {
+  urlHost: string;
+  urlPath: string;
+} {
+  if (!url) {
+    return {
+      urlHost: 'unknown',
+      urlPath: '/',
+    };
+  }
+
+  const location = sanitizePageContextLocation(url);
   return {
-    url: ctx.url,
-    appSignature: `${ctx.app}:${ctx.screen}`,
-    elements: (ctx.interactiveElements ?? []).map((el) => ({
-      selector: el.selector,
-      label: el.label,
-    })),
+    urlHost: location.host,
+    urlPath: location.path,
   };
 }
 
-/**
- * TRIB-65: Parse a buffer of concatenated SSE frames into complete events.
- * SSE frames are delimited by `\n\n`. Each frame may contain a single
- * `data: <json>` line (the fusion route doesn't use named events or ids).
- * Returns the parsed events plus any trailing partial frame the caller
- * should keep for the next `reader.read()`.
- */
-function parseSseBuffer(buffer: string): {
-  events: SseEvent[];
-  remainder: string;
-} {
-  const events: SseEvent[] = [];
-  const frames = buffer.split("\n\n");
-  const remainder = frames.pop() ?? "";
+function getDebugContextFields(tabId: number):
+  | ReturnType<typeof buildPageContextDebugFields>
+  | {
+      urlHost: string;
+      urlPath: string;
+      app?: null;
+      screen?: null;
+      knowledgeMode?: 'unknown';
+      vendorMatchBasis?: 'unknown';
+      orgMatchBasis?: 'unknown';
+      pageSummary?: null;
+      selectedEntityTitle?: null;
+      fingerprint?: null;
+    } {
+  const context = latestContexts.get(tabId);
+  if (context) {
+    return buildPageContextDebugFields(context);
+  }
 
-  for (const frame of frames) {
-    const dataLine = frame
-      .split("\n")
-      .find((line) => line.startsWith("data: "));
-    if (!dataLine) continue;
+  return {
+    ...buildFallbackDebugLocation(null),
+    app: null,
+    screen: null,
+    knowledgeMode: 'unknown',
+    vendorMatchBasis: 'unknown',
+    orgMatchBasis: 'unknown',
+    pageSummary: null,
+    selectedEntityTitle: null,
+    fingerprint: null,
+  };
+}
+
+function queueDebugSessionEvent(
+  event: Parameters<typeof buildDebugEventInput>[1],
+): void {
+  if (!activeDebugSession) return;
+
+  const payload = buildDebugEventInput(activeDebugSession, event);
+  debugEventQueue = debugEventQueue
+    .catch(() => undefined)
+    .then(() => postDebugSessionEvents([payload]))
+    .catch((err) => {
+      console.warn(`${BG} Debug session event failed:`, (err as Error).message);
+    });
+}
+
+function finalizeDebugSession(
+  event?: Parameters<typeof buildDebugEventInput>[1],
+): void {
+  if (event) {
+    queueDebugSessionEvent(event);
+  }
+  activeDebugSession = null;
+  turnGuards.clear();
+}
+
+async function sendOffscreenContextualUpdate(payload: {
+  text: string;
+  hash?: string | null;
+  knowledgeMode?: string | null;
+  sourceCount?: number | null;
+  source?: 'live_context' | 'watchdog';
+  reason?: string | null;
+}): Promise<{ ok?: boolean; error?: string } | undefined> {
+  return (await chrome.runtime.sendMessage({
+    target: 'offscreen',
+    kind: 'CONTEXTUAL_UPDATE',
+    payload,
+  })) as { ok?: boolean; error?: string } | undefined;
+}
+
+function buildWatchdogNudge(
+  reason: 'user_message_timeout' | 'post_tool_timeout',
+): string {
+  if (reason === 'post_tool_timeout') {
+    return 'You have current tool results for this turn. Respond to the user now in one answer. Do not repeat earlier wording unless the page changed materially.';
+  }
+
+  return 'The user is still waiting for a response. Use the current page context and latest tool results to answer clearly once, without repeating yourself.';
+}
+
+const turnGuards = createTurnGuards({
+  onNoReplyWatchdog: ({ turnId, reason }) => {
+    if (!activeDebugSession || activeDebugSession.currentTurnId !== turnId) {
+      return;
+    }
+
+    queueDebugSessionEvent({
+      eventType: 'assistant_reply_watchdog_fired',
+      turnId,
+      tabId: activeDebugSession.tabId,
+      windowId: activeDebugSession.windowId,
+      conversationId: activeDebugSession.conversationId,
+      resultText:
+        reason === 'post_tool_timeout'
+          ? 'Tool completed but no assistant reply was observed.'
+          : 'User turn timed out before any assistant reply was observed.',
+      ...getDebugContextFields(activeDebugSession.tabId),
+    });
+
+    void sendOffscreenContextualUpdate({
+      text: buildWatchdogNudge(reason),
+      source: 'watchdog',
+      reason,
+    }).catch((err) => {
+      console.warn(`${BG} Watchdog nudge failed:`, (err as Error).message);
+    });
+  },
+});
+
+function mergePageContextWithPrevious(
+  previous: PageContext | undefined,
+  next: PageContext,
+): PageContext {
+  return {
+    ...previous,
+    ...next,
+    vendorKnowledgeMatch:
+      next.vendorKnowledgeMatch ?? previous?.vendorKnowledgeMatch ?? null,
+    orgKnowledgeMatch:
+      next.orgKnowledgeMatch ?? previous?.orgKnowledgeMatch ?? null,
+    knowledgeAvailability:
+      next.knowledgeAvailability ?? previous?.knowledgeAvailability,
+  };
+}
+
+async function sendWidgetVisibility(
+  tabId: number,
+  visible: boolean,
+): Promise<void> {
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: 'TOGGLE_WIDGET',
+      visible,
+    });
+  } catch {
+    // Ignore unsupported pages or tabs without a loaded content script.
+  }
+}
+
+async function hideWidgetsEverywhere(): Promise<void> {
+  const tabs = await chrome.tabs.query({});
+
+  await Promise.all(
+    tabs.map(async (tab) => {
+      if (!tab.id) return;
+      await sendWidgetVisibility(tab.id, false);
+    }),
+  );
+}
+
+function emitSessionErrorToTab(tabId: number, error: string): void {
+  chrome.tabs.sendMessage(
+    tabId,
+    {
+      type: 'SESSION_EVENT',
+      kind: 'error',
+      payload: { error },
+    },
+    () => void chrome.runtime.lastError,
+  );
+}
+
+async function openMicPermissionPage(tabId: number): Promise<void> {
+  pendingSessionStartTabId = tabId;
+
+  const url = chrome.runtime.getURL(
+    `${MIC_PERMISSION_URL}?resumeTabId=${encodeURIComponent(String(tabId))}`,
+  );
+
+  if (pendingMicPermissionPageTabId !== null) {
     try {
-      events.push(JSON.parse(dataLine.slice(6)) as SseEvent);
+      await chrome.tabs.update(pendingMicPermissionPageTabId, {
+        active: true,
+        url,
+      });
+      return;
     } catch {
-      console.warn("[Tribora STT] Failed to parse SSE frame:", dataLine);
+      pendingMicPermissionPageTabId = null;
     }
   }
 
-  return { events, remainder };
+  const permissionTab = await chrome.tabs.create({ url, active: true });
+  pendingMicPermissionPageTabId = permissionTab.id ?? null;
+
+  if (activeDebugSession && activeDebugSession.tabId === tabId) {
+    queueDebugSessionEvent({
+      eventType: 'mic_permission_opened',
+      turnId: null,
+      tabId,
+      windowId: permissionTab.windowId ?? activeDebugSession.windowId,
+      ...getDebugContextFields(tabId),
+    });
+  }
 }
 
-/**
- * TRIB-65: Handle a finalized STT transcript from the content script.
- *
- *   content/audio-capture → Deepgram → content/index.ts
- *     → chrome.runtime.sendMessage({type: "STT_FINAL", transcript, context})
- *     → background.ts (this function)
- *       → POST /api/extension/query (SSE)
- *         → dispatches OVERLAY_POINT/HIGHLIGHT/PULSE + TTS_SPEAK back to
- *           the same tab's content script
- *
- * All errors are logged and swallowed — the STT flow is best-effort and
- * should never crash the service worker.
- */
-async function handleSttFinal(args: {
-  transcript: string;
-  context: PageContext | undefined;
-  tabId: number;
-}): Promise<void> {
-  const { transcript, tabId } = args;
-  let pageContext = args.context;
+// ─── Active session tracking ──────────────────────────────────────────────────
+// The session's "home tab" is where the user started it. Tools route back to
+// this tab. On home-tab close we end the session.
+
+let sessionTabId: number | null = null;
+
+async function startAgentSession(
+  tabId: number,
+  options: { skipMicBootstrap?: boolean } = {},
+): Promise<{ pendingPermission?: boolean }> {
+  const sourceTab = await chrome.tabs.get(tabId);
+  const debugContextFields = {
+    ...getDebugContextFields(tabId),
+    ...buildFallbackDebugLocation(sourceTab.url),
+  };
+
+  if (sessionTabId !== null) {
+    console.log(`${BG} Session already active in tab ${sessionTabId}`);
+    // Still notify the caller tab that there's an existing session
+    void chrome.tabs.sendMessage(tabId, {
+      type: 'SESSION_ALREADY_ACTIVE',
+      homeTabId: sessionTabId,
+    });
+    return {};
+  }
+
+  if (pendingSessionStartTabId !== null) {
+    if (pendingSessionStartTabId !== tabId) {
+      console.log(
+        `${BG} Session start already pending for tab ${pendingSessionStartTabId}`,
+      );
+    }
+    return { pendingPermission: true };
+  }
+
+  if (activeDebugSession === null && (await getDebugSessionLoggingEnabled())) {
+    activeDebugSession = createDebugSessionState({
+      tabId,
+      windowId: sourceTab.windowId ?? null,
+    });
+    queueDebugSessionEvent({
+      eventType: 'session_start_requested',
+      turnId: null,
+      tabId,
+      windowId: sourceTab.windowId ?? null,
+      ...debugContextFields,
+    });
+  }
+
+  const micPermissionGranted = await getMicPermissionGranted();
+  if (
+    !options.skipMicBootstrap &&
+    shouldOpenMicPermissionBootstrap({ micPermissionGranted })
+  ) {
+    await openMicPermissionPage(tabId);
+    return { pendingPermission: true };
+  }
+
+  const signedUrl = await fetchSignedUrl();
+  await ensureOffscreen();
+  sessionTabId = tabId;
+  liveContextHashes.delete(tabId);
+
+  const response = (await chrome.runtime.sendMessage({
+    target: 'offscreen',
+    kind: 'START_SESSION',
+    payload: { signedUrl, tabId },
+  })) as { ok: boolean; error?: string } | undefined;
+
+  if (!response?.ok) {
+    sessionTabId = null;
+    if (
+      !options.skipMicBootstrap &&
+      shouldOpenMicPermissionBootstrap({
+        micPermissionGranted,
+        errorMessage: response?.error,
+      })
+    ) {
+      await setMicPermissionGranted(false);
+      await openMicPermissionPage(tabId);
+      return { pendingPermission: true };
+    }
+
+    finalizeDebugSession({
+      eventType: 'session_error',
+      turnId: null,
+      tabId,
+      windowId: sourceTab.windowId ?? null,
+      error: response?.error ?? 'Offscreen failed to start session',
+      ...debugContextFields,
+    });
+    throw new Error(response?.error ?? 'Offscreen failed to start session');
+  }
+
+  return {};
+}
+
+async function endAgentSession(): Promise<void> {
+  turnGuards.clear();
+  try {
+    await chrome.runtime.sendMessage({
+      target: 'offscreen',
+      kind: 'END_SESSION',
+    });
+  } catch (err) {
+    console.warn(`${BG} END_SESSION error:`, (err as Error).message);
+  }
+  if (sessionTabId !== null) {
+    liveContextHashes.delete(sessionTabId);
+  }
+  sessionTabId = null;
+}
+
+async function sendLiveContextUpdate(
+  tabId: number,
+  context: PageContext,
+): Promise<void> {
+  if (sessionTabId !== tabId) return;
 
   try {
-    // 1. Auth gate
-    const session = await getStoredSession();
-    if (!session || session.status !== "authenticated" || !session.token) {
-      console.warn("[Tribora STT] Not authenticated — dropping transcript");
-      return;
-    }
-
-    // 2. Page context — prefer the one riding along with STT_FINAL.
-    //    Fall back to GET_PAGE_CONTEXT if somehow absent (e.g. the content
-    //    script dispatched from an older build without context wiring).
-    if (!pageContext) {
-      try {
-        const response = (await chrome.tabs.sendMessage(tabId, {
-          type: "GET_PAGE_CONTEXT",
-        })) as { payload?: PageContext } | undefined;
-        pageContext = response?.payload ?? undefined;
-      } catch {
-        // Content script not loaded on this tab — give up gracefully.
-      }
-    }
-    if (!pageContext) {
-      console.warn("[Tribora STT] No page context for tab", tabId);
-      return;
-    }
-
-    // 3. POST to /api/extension/query
-    const body = JSON.stringify({
-      question: transcript,
-      context: serializePageContext(pageContext),
-    });
-
-    const response = await fetch(`${API_BASE_URL}/api/extension/query`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.token}`,
+    const pack = await apiFetch<LiveContextPack>(
+      '/api/extension/live-context',
+      {
+        method: 'POST',
+        body: JSON.stringify({ context }),
       },
-      credentials: "include",
-      body,
+    );
+
+    if (!pack.text) return;
+    if (liveContextHashes.get(tabId) === pack.hash) return;
+
+    const response = await sendOffscreenContextualUpdate({
+      text: pack.text,
+      hash: pack.hash,
+      knowledgeMode: pack.knowledgeMode,
+      sourceCount: pack.sources.length,
+      source: 'live_context',
     });
 
-    if (!response.ok) {
-      console.error(
-        `[Tribora STT] /api/extension/query returned HTTP ${response.status} ${response.statusText}`,
+    if (!response?.ok) {
+      console.warn(
+        `${BG} Contextual update failed:`,
+        response?.error ?? 'offscreen rejected update',
       );
       return;
     }
-    if (!response.body) {
-      console.error("[Tribora STT] Query response has no body");
-      return;
-    }
 
-    // 4. Parse the SSE stream. Text chunks are accumulated into a single
-    //    answer string (played via TTS after the stream closes). Element
-    //    refs are dispatched immediately to the content script so the user
-    //    sees the overlay land before the audio starts.
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let accumulatedText = "";
-    let dispatchedOverlay = false;
-    const citations: Array<{ sourceId: string; title: string }> = [];
-
-    const dispatchOverlay = (
-      selector: string,
-      label: string,
-      action: "highlight" | "point" | "pulse",
-    ) => {
-      const overlayType =
-        action === "highlight"
-          ? "OVERLAY_HIGHLIGHT"
-          : action === "pulse"
-            ? "OVERLAY_PULSE"
-            : "OVERLAY_POINT";
-      void chrome.tabs.sendMessage(tabId, {
-        type: overlayType,
-        selector,
-        label,
-      });
-    };
-
-    const consumeEvent = (event: SseEvent) => {
-      if (event.type === "text_chunk") {
-        accumulatedText +=
-          (accumulatedText.length > 0 ? " " : "") + event.text;
-      } else if (event.type === "element_ref") {
-        // First element_ref wins — subsequent refs would fight the overlay
-        // state machine. The answer text still references them by selector
-        // so the user can see which element each step mentions.
-        if (!dispatchedOverlay) {
-          dispatchedOverlay = true;
-          dispatchOverlay(event.selector, event.label, event.action);
-        }
-      } else if (event.type === "citation") {
-        citations.push({ sourceId: event.sourceId, title: event.title });
-      }
-      // `done` is a no-op; the reader loop exits naturally.
-    };
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const { events, remainder } = parseSseBuffer(buffer);
-      buffer = remainder;
-      for (const event of events) consumeEvent(event);
-    }
-
-    // Flush any trailing partial frame that didn't get a terminating `\n\n`
-    // (shouldn't happen with a well-formed stream, but be defensive).
-    if (buffer.trim()) {
-      const { events } = parseSseBuffer(`${buffer}\n\n`);
-      for (const event of events) consumeEvent(event);
-    }
-
-    // 5. Speak the answer.
-    const answer = accumulatedText.trim();
-    if (answer) {
-      void chrome.tabs.sendMessage(tabId, {
-        type: "TTS_SPEAK",
-        text: answer,
-      });
-    }
-
-    if (citations.length > 0) {
-      // Future work: surface these in an overlay toast. For now, log so they
-      // show up in the service worker console during smoke tests.
-      console.log("[Tribora STT] Citations:", citations);
-    }
+    liveContextHashes.set(tabId, pack.hash);
   } catch (err) {
-    console.error("[Tribora STT] Handler failed:", err);
+    console.warn(`${BG} Live context update failed:`, (err as Error).message);
   }
 }
 
-export default defineBackground(() => {
-  console.log("Tribora service worker started");
+async function handleMicPermissionResult(args: {
+  ok: boolean;
+  resumeTabId?: number;
+  error?: string;
+  permissionTabId?: number;
+}): Promise<void> {
+  const resumeTabId = args.resumeTabId ?? pendingSessionStartTabId;
 
-  // TRIB-27: schedule token refresh 5 min before expiry on startup
+  if (args.ok) {
+    await setMicPermissionGranted(true);
+    if (resumeTabId !== null) {
+      queueDebugSessionEvent({
+        eventType: 'mic_permission_granted',
+        turnId: null,
+        tabId: resumeTabId,
+        windowId: activeDebugSession?.windowId ?? null,
+        ...getDebugContextFields(resumeTabId),
+      });
+    }
+
+    const { permissionTabId } = clearPendingMicPermissionFlow();
+    if (permissionTabId !== null) {
+      try {
+        await chrome.tabs.remove(permissionTabId);
+      } catch {
+        // Ignore if the page already closed.
+      }
+    }
+
+    if (resumeTabId === null) return;
+
+    try {
+      queueDebugSessionEvent({
+        eventType: 'mic_permission_resumed',
+        turnId: null,
+        tabId: resumeTabId,
+        windowId: activeDebugSession?.windowId ?? null,
+        ...getDebugContextFields(resumeTabId),
+      });
+      await startAgentSession(resumeTabId, { skipMicBootstrap: true });
+    } catch (err) {
+      emitSessionErrorToTab(resumeTabId, (err as Error).message);
+    }
+    return;
+  }
+
+  await setMicPermissionGranted(false);
+
+  if (resumeTabId !== null) {
+    emitSessionErrorToTab(
+      resumeTabId,
+      args.error ?? 'Microphone permission is required to start Tribora.',
+    );
+  }
+
+  if (resumeTabId !== null) {
+    const errorMessage =
+      args.error ?? 'Microphone permission is required to start Tribora.';
+    queueDebugSessionEvent({
+      eventType: 'mic_permission_denied',
+      turnId: null,
+      tabId: resumeTabId,
+      windowId: activeDebugSession?.windowId ?? null,
+      error: errorMessage,
+      ...getDebugContextFields(resumeTabId),
+    });
+    finalizeDebugSession({
+      eventType: 'session_error',
+      turnId: null,
+      tabId: resumeTabId,
+      windowId: activeDebugSession?.windowId ?? null,
+      error: errorMessage,
+      ...getDebugContextFields(resumeTabId),
+    });
+  }
+
+  if (args.permissionTabId !== undefined && args.permissionTabId !== null) {
+    pendingMicPermissionPageTabId = args.permissionTabId;
+  }
+}
+
+// ─── Message routing ──────────────────────────────────────────────────────────
+
+// Offscreen → background: emit session events and tool calls.
+// Route events to the session's home tab; route tool calls the same way and
+// wait for TOOL_RESULT from the content script, forwarding to offscreen.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.target !== 'background') return false;
+
+  if (message.kind === 'SESSION_EVENT') {
+    const { kind, payload } = message.payload as {
+      kind: string;
+      payload: unknown;
+    };
+
+    if (kind === 'connected' && activeDebugSession) {
+      const conversationId =
+        typeof (payload as { conversationId?: unknown })?.conversationId ===
+        'string'
+          ? ((payload as { conversationId?: string }).conversationId ?? null)
+          : null;
+      if (conversationId) {
+        activeDebugSession.conversationId = conversationId;
+      }
+      queueDebugSessionEvent({
+        eventType: 'session_started',
+        turnId: null,
+        tabId: activeDebugSession.tabId,
+        windowId: activeDebugSession.windowId,
+        conversationId: activeDebugSession.conversationId,
+        ...getDebugContextFields(activeDebugSession.tabId),
+      });
+
+      const connectedContext = latestContexts.get(activeDebugSession.tabId);
+      if (connectedContext) {
+        void sendLiveContextUpdate(activeDebugSession.tabId, connectedContext);
+      }
+    }
+
+    if (kind === 'contextual_update' && activeDebugSession) {
+      const updatePayload =
+        typeof payload === 'object' && payload !== null
+          ? (payload as Record<string, unknown>)
+          : {};
+
+      queueDebugSessionEvent({
+        eventType: 'contextual_update_sent',
+        turnId: activeDebugSession.currentTurnId,
+        tabId: activeDebugSession.tabId,
+        windowId: activeDebugSession.windowId,
+        conversationId: activeDebugSession.conversationId,
+        resultText:
+          typeof updatePayload.knowledgeMode === 'string'
+            ? `knowledge=${updatePayload.knowledgeMode}; sources=${
+                typeof updatePayload.sourceCount === 'number'
+                  ? updatePayload.sourceCount
+                  : 0
+              }`
+            : 'contextual update sent',
+        ...getDebugContextFields(activeDebugSession.tabId),
+      });
+    }
+
+    if (kind === 'message' && activeDebugSession) {
+      const transcript = (payload as { message?: Record<string, unknown> })
+        ?.message as Record<string, unknown> | undefined;
+      const source =
+        typeof transcript?.source === 'string' ? transcript.source : null;
+      const messageText =
+        typeof transcript?.message === 'string' ? transcript.message : null;
+
+      if (messageText) {
+        const turnId =
+          source === 'user'
+            ? advanceDebugTurn(activeDebugSession)
+            : activeDebugSession.currentTurnId;
+
+        if (source === 'user' && turnId) {
+          turnGuards.startTurn(turnId);
+        }
+
+        if (source === 'assistant' && turnId) {
+          const assistantOutcome = turnGuards.recordAssistantMessage(turnId);
+          if (assistantOutcome.duplicateWithoutMaterialChange) {
+            queueDebugSessionEvent({
+              eventType: 'duplicate_assistant_reply',
+              turnId,
+              tabId: activeDebugSession.tabId,
+              windowId: activeDebugSession.windowId,
+              conversationId: activeDebugSession.conversationId,
+              messageText,
+              resultText:
+                'Assistant replied again in the same turn without a new material page or tool change.',
+              ...getDebugContextFields(activeDebugSession.tabId),
+            });
+
+            void sendOffscreenContextualUpdate({
+              text: 'You already answered this user turn and the page state has not changed materially. Do not repeat the same answer again unless a new tool result or page change occurs.',
+              source: 'watchdog',
+              reason: 'duplicate_assistant_reply',
+            }).catch((err) => {
+              console.warn(
+                `${BG} Duplicate-reply nudge failed:`,
+                (err as Error).message,
+              );
+            });
+          }
+        }
+
+        queueDebugSessionEvent({
+          eventType: source === 'user' ? 'user_message' : 'assistant_message',
+          turnId,
+          tabId: activeDebugSession.tabId,
+          windowId: activeDebugSession.windowId,
+          conversationId: activeDebugSession.conversationId,
+          messageText,
+          ...getDebugContextFields(activeDebugSession.tabId),
+        });
+      }
+    }
+
+    if (kind === 'error' && activeDebugSession) {
+      queueDebugSessionEvent({
+        eventType: 'session_error',
+        turnId: null,
+        tabId: activeDebugSession.tabId,
+        windowId: activeDebugSession.windowId,
+        conversationId: activeDebugSession.conversationId,
+        error:
+          typeof (payload as { error?: unknown })?.error === 'string'
+            ? ((payload as { error?: string }).error ?? 'Unknown session error')
+            : 'Unknown session error',
+        ...getDebugContextFields(activeDebugSession.tabId),
+      });
+    }
+
+    if (kind === 'disconnected' && activeDebugSession) {
+      finalizeDebugSession({
+        eventType: 'session_ended',
+        turnId: null,
+        tabId: activeDebugSession.tabId,
+        windowId: activeDebugSession.windowId,
+        conversationId: activeDebugSession.conversationId,
+        resultText:
+          typeof (payload as { reason?: unknown })?.reason === 'string'
+            ? `disconnected:${(payload as { reason?: string }).reason}`
+            : 'disconnected',
+        ...getDebugContextFields(activeDebugSession.tabId),
+      });
+    }
+
+    if (sessionTabId !== null) {
+      chrome.tabs.sendMessage(
+        sessionTabId,
+        { type: 'SESSION_EVENT', kind, payload },
+        () => void chrome.runtime.lastError,
+      );
+    }
+    if (kind === 'disconnected' || kind === 'error') {
+      if (sessionTabId !== null) {
+        liveContextHashes.delete(sessionTabId);
+      }
+      sessionTabId = null;
+    }
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (message.kind === 'TOOL_CALL') {
+    const { callId, name, args } = message.payload as {
+      callId: string;
+      name: string;
+      args: unknown;
+    };
+    const turnId = activeDebugSession?.currentTurnId ?? null;
+
+    // capture_screenshot is the only tool that runs in the background
+    // (needs chrome.tabs.captureVisibleTab). Everything else runs in the tab.
+    if (name === 'capture_screenshot') {
+      if (activeDebugSession) {
+        const contextFields = getDebugContextFields(activeDebugSession.tabId);
+        const toolArgs = summarizeToolCallArgs(name, args);
+        pendingDebugToolCalls.set(callId, {
+          turnId,
+          name,
+          ...toolArgs,
+          ...contextFields,
+          tabId: activeDebugSession.tabId,
+          windowId: activeDebugSession.windowId,
+        });
+        queueDebugSessionEvent({
+          eventType: 'tool_call_started',
+          turnId,
+          toolName: name,
+          tabId: activeDebugSession.tabId,
+          windowId: activeDebugSession.windowId,
+          conversationId: activeDebugSession.conversationId,
+          ...toolArgs,
+          ...contextFields,
+        });
+      }
+      void handleScreenshot(callId);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (name === 'get_page_context') {
+      void handleGetPageContextTool(callId, turnId);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (sessionTabId === null) {
+      void replyToolResult(callId, {
+        error: 'No active session tab',
+      });
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (activeDebugSession) {
+      const contextFields = getDebugContextFields(sessionTabId);
+      const toolArgs = summarizeToolCallArgs(name, args);
+      pendingDebugToolCalls.set(callId, {
+        turnId,
+        name,
+        ...toolArgs,
+        ...contextFields,
+        tabId: sessionTabId,
+        windowId: activeDebugSession.windowId,
+      });
+      queueDebugSessionEvent({
+        eventType: 'tool_call_started',
+        turnId,
+        toolName: name,
+        tabId: sessionTabId,
+        windowId: activeDebugSession.windowId,
+        conversationId: activeDebugSession.conversationId,
+        ...toolArgs,
+        ...contextFields,
+      });
+    }
+
+    chrome.tabs.sendMessage(
+      sessionTabId,
+      { type: 'TOOL_CALL', callId, name, args },
+      () => void chrome.runtime.lastError,
+    );
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  // Filter: ignore unrelated background-targeted messages
+  return false;
+});
+
+async function handleScreenshot(callId: string): Promise<void> {
+  try {
+    if (sessionTabId === null) {
+      return replyToolResult(callId, { error: 'No active session tab' });
+    }
+    const tab = await chrome.tabs.get(sessionTabId);
+    const windowId = tab.windowId;
+    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
+      format: 'jpeg',
+      quality: 70,
+    });
+    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+    await replyToolResult(callId, { result: base64 });
+  } catch (err) {
+    await replyToolResult(callId, { error: (err as Error).message });
+  }
+}
+
+async function handleGetPageContextTool(
+  callId: string,
+  turnId: string | null,
+): Promise<void> {
+  try {
+    if (sessionTabId === null) {
+      return await replyToolResult(callId, { error: 'No active session tab' });
+    }
+
+    const response = (await chrome.tabs.sendMessage(sessionTabId, {
+      type: 'GET_PAGE_CONTEXT',
+    })) as
+      | {
+          type?: 'PAGE_CONTEXT_RESPONSE';
+          payload?: PageContext | null;
+        }
+      | undefined;
+
+    const rawContext = response?.payload ?? null;
+    if (!rawContext) {
+      return await replyToolResult(callId, {
+        error: 'No page context available',
+      });
+    }
+
+    const mergedContext = mergePageContextWithPrevious(
+      latestContexts.get(sessionTabId),
+      rawContext,
+    );
+    latestContexts.set(sessionTabId, mergedContext);
+
+    const fingerprint = buildContextSemanticFingerprint(mergedContext);
+    const pageContextOutcome = turnId
+      ? turnGuards.recordToolCompletion({
+          turnId,
+          toolName: 'get_page_context',
+          pageContextFingerprint: fingerprint,
+        })
+      : {
+          repeatedPageContext: false,
+          unchangedPageContext: false,
+        };
+
+    const result = JSON.stringify({
+      ...mergedContext,
+      appSignature:
+        mergedContext.appSignature ??
+        `${mergedContext.app}:${mergedContext.screen}`,
+      interactiveElements: mergedContext.interactiveElements,
+      contextMeta: {
+        fingerprint,
+        repeatedInTurn: pageContextOutcome.repeatedPageContext,
+        unchangedSinceLastRequest: pageContextOutcome.unchangedPageContext,
+        guidance: pageContextOutcome.unchangedPageContext
+          ? 'Page state is unchanged since your last get_page_context call in this turn. Answer once from this context or take a different action. Do not repeat the same answer.'
+          : null,
+        retrievedAt: new Date().toISOString(),
+      },
+    });
+
+    await replyToolResult(callId, { result });
+  } catch (err) {
+    await replyToolResult(callId, { error: (err as Error).message });
+  }
+}
+
+async function replyToolResult(
+  callId: string,
+  body: { result?: string; error?: string },
+): Promise<void> {
+  const pendingTool = pendingDebugToolCalls.get(callId);
+  if (pendingTool && activeDebugSession) {
+    if (pendingTool.turnId) {
+      if (pendingTool.name === 'get_page_context') {
+        // get_page_context is recorded when we build the special tool payload,
+        // so we do not advance the turn guard a second time here.
+      } else {
+        turnGuards.recordToolCompletion({
+          turnId: pendingTool.turnId,
+          toolName: pendingTool.name,
+        });
+      }
+    }
+
+    pendingDebugToolCalls.delete(callId);
+    queueDebugSessionEvent({
+      eventType: 'tool_call_completed',
+      turnId: pendingTool.turnId,
+      toolName: pendingTool.name,
+      selector: pendingTool.selector,
+      label: pendingTool.label,
+      action: pendingTool.action,
+      inputTextPreview: pendingTool.inputTextPreview,
+      inputTextLength: pendingTool.inputTextLength,
+      tabId: pendingTool.tabId,
+      windowId: pendingTool.windowId,
+      conversationId: activeDebugSession.conversationId,
+      urlHost: pendingTool.urlHost,
+      urlPath: pendingTool.urlPath,
+      app: pendingTool.app,
+      screen: pendingTool.screen,
+      knowledgeMode: pendingTool.knowledgeMode,
+      vendorMatchBasis: pendingTool.vendorMatchBasis,
+      orgMatchBasis: pendingTool.orgMatchBasis,
+      pageSummary: pendingTool.pageSummary,
+      selectedEntityTitle: pendingTool.selectedEntityTitle,
+      fingerprint: pendingTool.fingerprint,
+      ...summarizeToolResult({
+        name: pendingTool.name,
+        result: body.result,
+        error: body.error,
+      }),
+    });
+  }
+
+  try {
+    await chrome.runtime.sendMessage({
+      target: 'offscreen',
+      kind: 'TOOL_RESULT',
+      payload: { callId, ...body },
+    });
+  } catch (err) {
+    console.warn(`${BG} replyToolResult error:`, (err as Error).message);
+  }
+}
+
+// Content script → background: session control + tool results.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'START_AGENT_SESSION') {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResponse({ ok: false, error: 'No sender tab' });
+      return false;
+    }
+    void startAgentSession(tabId)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch(async (err) => {
+        const tab = await chrome.tabs.get(tabId).catch(() => null);
+        const fallbackLocation = buildFallbackDebugLocation(tab?.url);
+        finalizeDebugSession({
+          eventType: 'session_error',
+          turnId: null,
+          tabId,
+          windowId: tab?.windowId ?? activeDebugSession?.windowId ?? null,
+          error: (err as Error).message,
+          ...getDebugContextFields(tabId),
+          ...fallbackLocation,
+        });
+        sendResponse({ ok: false, error: (err as Error).message });
+      });
+    return true;
+  }
+
+  if (message?.type === 'END_AGENT_SESSION') {
+    void endAgentSession().then(() => sendResponse({ ok: true }));
+    return true;
+  }
+
+  if (message?.type === 'WHICH_SESSION_ACTIVE') {
+    const tabId = sender.tab?.id;
+    sendResponse({
+      active: sessionTabId !== null,
+      isHomeTab: tabId !== undefined && tabId === sessionTabId,
+      homeTabId: sessionTabId,
+    });
+    return false;
+  }
+
+  if (message?.type === 'GET_EXTENSION_STATE') {
+    const tabId = sender.tab?.id;
+    void getExtensionEnabled()
+      .then((enabled) =>
+        sendResponse({
+          enabled,
+          active: sessionTabId !== null,
+          isHomeTab: tabId !== undefined && tabId === sessionTabId,
+          homeTabId: sessionTabId,
+        }),
+      )
+      .catch((err) =>
+        sendResponse({ ok: false, error: (err as Error).message }),
+      );
+    return true;
+  }
+
+  if (message?.type === 'TOOL_RESULT') {
+    const { callId, result, error } = message as {
+      callId: string;
+      result?: string;
+      error?: string;
+    };
+    void replyToolResult(callId, { result, error });
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  return false;
+});
+
+// ─── Widget toggle (extension icon) ───────────────────────────────────────────
+
+export default defineBackground(() => {
+  console.log(`${BG} Service worker started`);
   scheduleTokenRefresh();
 
-  // TRIB-48: recording state (scoped to service worker lifetime)
+  void chrome.action.setPopup({ popup: '' });
+
+  chrome.action.onClicked.addListener((tab) => {
+    void (async () => {
+      let session = await getStoredSession();
+      if (!session || session.status !== 'authenticated') {
+        try {
+          const { refreshSession } = await import('../utils/auth-session.js');
+          session = await refreshSession();
+        } catch (err) {
+          console.error(`${BG} Cookie refresh failed:`, (err as Error).message);
+        }
+      }
+      if (!session || session.status !== 'authenticated') {
+        await chrome.tabs.create({
+          url: `${API_BASE_URL}/sign-in?source=extension`,
+        });
+        return;
+      }
+
+      const currentlyEnabled = await getExtensionEnabled();
+      const nextEnabled = !currentlyEnabled;
+      await setExtensionEnabled(nextEnabled);
+      console.log(`${BG} Extension toggled: ${nextEnabled ? 'ON' : 'OFF'}`);
+
+      if (nextEnabled) {
+        if (tab.id) {
+          await sendWidgetVisibility(tab.id, true);
+        }
+        return;
+      }
+
+      const { permissionTabId } = clearPendingMicPermissionFlow();
+      if (permissionTabId !== null) {
+        try {
+          await chrome.tabs.remove(permissionTabId);
+        } catch {
+          // Ignore if the permission page is already gone.
+        }
+      }
+      await endAgentSession();
+      await closeOffscreen();
+      await hideWidgetsEverywhere();
+      if (tab.id) {
+        await sendWidgetVisibility(tab.id, false);
+      }
+    })();
+  });
+
+  // ── Recording (tab capture) ─────────────────────────────────────────────────
   let activeRecorder: TabRecorder | null = null;
 
-  // TRIB-48: recording message handler (separate listener — Chrome dispatches to all)
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'RECORDING_START') {
       void (async () => {
         try {
           activeRecorder = createTabRecorder();
           await activeRecorder.start();
-          sendResponse({ ok: true, state: { status: 'recording', startedAt: Date.now() } });
+          sendResponse({
+            ok: true,
+            state: { status: 'recording', startedAt: Date.now() },
+          });
         } catch (err) {
           sendResponse({ ok: false, error: (err as Error).message });
         }
       })();
-      return true; // keep channel open for async response
+      return true;
     }
     if (message?.type === 'RECORDING_STOP') {
       void (async () => {
         try {
-          if (!activeRecorder) return sendResponse({ ok: false, error: 'Not recording' });
+          if (!activeRecorder) {
+            return sendResponse({ ok: false, error: 'Not recording' });
+          }
           const blob = await activeRecorder.stop();
           activeRecorder = null;
 
-          // TRIB-49: relay upload progress + retry state to popup via storage
           const UPLOAD_STATE_KEY = 'tribora_upload_state';
-
           const broadcastUploadState = (patch: Record<string, unknown>) => {
             void chrome.storage.session.set({
               [UPLOAD_STATE_KEY]: { status: 'uploading', ...patch },
@@ -311,82 +1244,201 @@ export default defineBackground(() => {
             },
           );
 
-          // Clear upload state on success
           void chrome.storage.session.remove(UPLOAD_STATE_KEY);
           sendResponse({ ok: true, recordingId });
         } catch (err) {
-          // Clear upload state on failure
           void chrome.storage.session.remove('tribora_upload_state');
           sendResponse({ ok: false, error: (err as Error).message });
         }
       })();
-      return true; // keep channel open for async response
+      return true;
     }
     return false;
   });
 
-  // TRIB-23 / TRIB-27: existing page context + auth listeners
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    console.log("Tribora background received message:", message.type);
+  // ── Page context + auth listeners ───────────────────────────────────────────
+  async function enrichPageContext(
+    tabId: number,
+    context: PageContext,
+  ): Promise<void> {
+    const nextSeq = (contextUpdateSeq.get(tabId) ?? 0) + 1;
+    contextUpdateSeq.set(tabId, nextSeq);
+    const startedAt = Date.now();
 
-    switch (message.type) {
-      case "GET_PAGE_CONTEXT":
-        // Relay to content script or return cached context
-        sendResponse({ type: "PAGE_CONTEXT_RESPONSE", payload: null });
-        break;
+    try {
+      const enrichment = await apiFetch<{
+        app: string;
+        screen: string;
+        relevantWikiPages: string[];
+        vendorKnowledgeMatch?: PageContext['vendorKnowledgeMatch'];
+        orgKnowledgeMatch?: PageContext['orgKnowledgeMatch'];
+        knowledgeAvailability?: PageContext['knowledgeAvailability'];
+      }>('/api/extension/context', {
+        method: 'POST',
+        body: JSON.stringify({ context }),
+      });
 
-      case "PAGE_CONTEXT_UPDATED":
-        // Content script reports updated context on SPA navigation.
-        // Real handling (caching, forwarding to API) implemented in TRIB-25+.
-        console.log("[Tribora] PAGE_CONTEXT_UPDATED received:", message.context);
-        break;
+      if (contextUpdateSeq.get(tabId) !== nextSeq) return;
 
-      case "QUERY_KNOWLEDGE":
-        // Forward to Tribora backend API (implemented in TRIB-25+)
-        sendResponse({ type: "KNOWLEDGE_RESPONSE", payload: null });
-        break;
+      const mergedContext: PageContext = {
+        ...context,
+        app: enrichment.app ?? context.app,
+        screen: enrichment.screen ?? context.screen,
+        appSignature: `${enrichment.app ?? context.app}:${enrichment.screen ?? context.screen}`,
+        vendorKnowledgeMatch:
+          enrichment.vendorKnowledgeMatch ??
+          context.vendorKnowledgeMatch ??
+          null,
+        orgKnowledgeMatch:
+          enrichment.orgKnowledgeMatch ?? context.orgKnowledgeMatch ?? null,
+        knowledgeAvailability:
+          enrichment.knowledgeAvailability ?? context.knowledgeAvailability,
+      };
 
-      // TRIB-27: handle auth state queries from popup or content script
-      case "AUTH_STATE_REQUEST":
+      latestContexts.set(tabId, mergedContext);
+      console.log(
+        `${BG} Context check app=${mergedContext.app} screen=${mergedContext.screen} mode=${
+          mergedContext.knowledgeAvailability?.mode ?? 'unknown'
+        } vendor=${mergedContext.vendorKnowledgeMatch?.basis ?? 'none'} org=${
+          mergedContext.orgKnowledgeMatch?.basis ?? 'none'
+        } latencyMs=${Date.now() - startedAt}`,
+      );
+
+      if (activeDebugSession && activeDebugSession.tabId === tabId) {
+        queueDebugSessionEvent({
+          eventType: 'page_context_checked',
+          turnId: null,
+          tabId,
+          windowId: activeDebugSession.windowId,
+          conversationId: activeDebugSession.conversationId,
+          ...buildPageContextDebugFields(mergedContext),
+        });
+      }
+
+      chrome.tabs.sendMessage(
+        tabId,
+        { type: 'PAGE_CONTEXT_ENRICHED', context: mergedContext },
+        () => void chrome.runtime.lastError,
+      );
+
+      if (sessionTabId === tabId) {
+        void sendLiveContextUpdate(tabId, mergedContext);
+      }
+    } catch (err) {
+      // If enrichment fails, keep the local DOM context and let the agent
+      // answer from the page alone.
+      console.warn(`${BG} Context enrichment failed:`, (err as Error).message);
+    }
+  }
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    switch (message?.type) {
+      case 'PAGE_CONTEXT_UPDATED': {
+        const tabId = sender.tab?.id;
+        if (tabId !== undefined && message.context) {
+          const previous = latestContexts.get(tabId);
+          const rawContext = message.context as PageContext;
+          const context = mergePageContextWithPrevious(previous, rawContext);
+          latestContexts.set(tabId, context);
+
+          const fingerprint = buildContextSemanticFingerprint(context);
+          if (contextFingerprints.get(tabId) === fingerprint) {
+            return false;
+          }
+          contextFingerprints.set(tabId, fingerprint);
+          void enrichPageContext(tabId, context);
+        }
+        return false;
+      }
+
+      case 'GET_PAGE_CONTEXT': {
+        const tabId = sender.tab?.id;
+        const ctx = tabId !== undefined ? latestContexts.get(tabId) : null;
+        sendResponse({ type: 'PAGE_CONTEXT_RESPONSE', payload: ctx ?? null });
+        return false;
+      }
+
+      case 'AUTH_CALLBACK':
+        void (async () => {
+          if (message.session) {
+            await setStoredSession(message.session);
+            sendResponse({ ok: true });
+          } else {
+            sendResponse({ ok: false, error: 'No session data' });
+          }
+        })();
+        return true;
+
+      case 'AUTH_STATE_REQUEST':
         void (async () => {
           const session = await getStoredSession();
           sendResponse(session);
         })();
-        return true; // keep channel open for async response
+        return true;
+
+      case 'MIC_PERMISSION_RESULT':
+        void handleMicPermissionResult({
+          ok: message.ok === true,
+          resumeTabId:
+            typeof message.resumeTabId === 'number'
+              ? message.resumeTabId
+              : undefined,
+          error: typeof message.error === 'string' ? message.error : undefined,
+          permissionTabId: sender.tab?.id,
+        })
+          .then(() => sendResponse({ ok: true }))
+          .catch((err) =>
+            sendResponse({ ok: false, error: (err as Error).message }),
+          );
+        return true;
 
       default:
-        sendResponse({ error: "Unknown message type" });
+        return false;
     }
-
-    // Return true to keep the message channel open for async responses
-    return true;
   });
 
-  // TRIB-65: STT → /api/extension/query glue. Runs as its own listener so
-  // the fire-and-forget fetch + SSE parse can proceed without blocking
-  // either of the switch-based listeners above. The content script sends
-  // `{type: "STT_FINAL", transcript, context}` when the push-to-talk hotkey
-  // is released; we POST to the fusion endpoint, stream the answer, and
-  // dispatch OVERLAY_* / TTS_SPEAK back to the same tab.
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message?.type !== "STT_FINAL") return false;
-    if (typeof message.transcript !== "string" || !message.transcript.trim()) {
-      sendResponse({ ok: false, error: "Empty transcript" });
-      return false;
+  // ── End session if the home tab closes ──────────────────────────────────────
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    latestContexts.delete(tabId);
+    contextUpdateSeq.delete(tabId);
+    contextFingerprints.delete(tabId);
+    liveContextHashes.delete(tabId);
+    if (sessionTabId === tabId) {
+      turnGuards.clear();
     }
-    const tabId = sender.tab?.id;
-    if (!tabId) {
-      sendResponse({ ok: false, error: "No sender tab id" });
-      return false;
+
+    if (pendingMicPermissionPageTabId === tabId) {
+      const resumeTabId = pendingSessionStartTabId;
+      clearPendingMicPermissionFlow();
+      if (resumeTabId !== null) {
+        queueDebugSessionEvent({
+          eventType: 'mic_permission_denied',
+          turnId: null,
+          tabId: resumeTabId,
+          windowId: activeDebugSession?.windowId ?? null,
+          error:
+            'Microphone permission flow was closed before Tribora could start.',
+          ...getDebugContextFields(resumeTabId),
+        });
+        finalizeDebugSession({
+          eventType: 'session_error',
+          turnId: null,
+          tabId: resumeTabId,
+          windowId: activeDebugSession?.windowId ?? null,
+          error:
+            'Microphone permission flow was closed before Tribora could start.',
+          ...getDebugContextFields(resumeTabId),
+        });
+        emitSessionErrorToTab(
+          resumeTabId,
+          'Microphone permission flow was closed before Tribora could start.',
+        );
+      }
     }
-    // Ack synchronously so Chrome doesn't hold the channel open. The async
-    // work runs in the background and dispatches follow-up messages.
-    void handleSttFinal({
-      transcript: message.transcript,
-      context: (message.context as PageContext | undefined) ?? undefined,
-      tabId,
-    });
-    sendResponse({ ok: true });
-    return false;
+
+    if (sessionTabId === tabId) {
+      console.log(`${BG} Home tab ${tabId} closed — ending session`);
+      void endAgentSession().then(() => closeOffscreen());
+    }
   });
 });

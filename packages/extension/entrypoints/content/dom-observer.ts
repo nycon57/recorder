@@ -13,17 +13,21 @@
  * without triggering popstate).
  */
 
-import type { PageContext } from "@tribora/shared";
-import { buildPageContext } from "./context-engine";
+import type { PageContext } from '@tribora/shared';
+import { buildPageContext } from './context-engine';
 
 export interface DomObserverOptions {
   /** How long to wait after the last change before re-scanning (ms). Default: 250 */
   debounceMs?: number;
+  /** Test hook for supplying a custom context builder. */
+  buildContext?: typeof buildPageContext;
 }
 
 export interface DomObserver {
   start: () => void;
   stop: () => void;
+  flush: () => Promise<PageContext | null>;
+  forceRescan: () => Promise<PageContext>;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +67,7 @@ export function findSameOriginIframes(
   root: Document | ShadowRoot,
 ): HTMLIFrameElement[] {
   const iframes = Array.from(
-    root.querySelectorAll("iframe"),
+    root.querySelectorAll('iframe'),
   ) as HTMLIFrameElement[];
   return iframes.filter((iframe) => {
     try {
@@ -90,7 +94,7 @@ function isOverlayOnlyMutation(mutations: MutationRecord[]): boolean {
     const target = mutation.target;
     if (target.nodeType === Node.ELEMENT_NODE) {
       const el = target as Element;
-      if (el.id === "tribora-overlay" || el.closest?.("#tribora-overlay")) {
+      if (el.id === 'tribora-overlay' || el.closest?.('#tribora-overlay')) {
         // This mutation is inside the overlay — keep checking others
         continue;
       }
@@ -113,7 +117,7 @@ function isOverlayOnlyMutation(mutations: MutationRecord[]): boolean {
  * to setTimeout(fn, 0) to avoid blocking the main thread.
  */
 function scheduleIdle(fn: () => void): void {
-  if (typeof requestIdleCallback !== "undefined") {
+  if (typeof requestIdleCallback !== 'undefined') {
     requestIdleCallback(fn);
   } else {
     setTimeout(fn, 0);
@@ -138,10 +142,15 @@ export function createDomObserver(
   options: DomObserverOptions = {},
 ): DomObserver {
   const debounceMs = options.debounceMs ?? 250;
+  const buildContext = options.buildContext ?? buildPageContext;
 
   let lastUrl = window.location.href;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let mutationObserver: MutationObserver | null = null;
+  let rescanPromise: Promise<PageContext> | null = null;
+  let resolveRescanPromise: ((ctx: PageContext) => void) | null = null;
+  let idleRescanQueued = false;
+  let restoreHistory: (() => void) | null = null;
 
   /** Tracks shadow roots already being observed to avoid double-observation. */
   const observedShadowRoots = new WeakSet<ShadowRoot>();
@@ -155,24 +164,62 @@ export function createDomObserver(
   const observerOptions: MutationObserverInit = {
     subtree: true,
     childList: true,
+    attributes: true,
+    characterData: true,
   };
+
+  function ensureRescanPromise(): Promise<PageContext> {
+    if (!rescanPromise) {
+      rescanPromise = new Promise<PageContext>((resolve) => {
+        resolveRescanPromise = resolve;
+      });
+    }
+    return rescanPromise;
+  }
+
+  function finalizeRescan(ctx: PageContext): void {
+    resolveRescanPromise?.(ctx);
+    resolveRescanPromise = null;
+    rescanPromise = null;
+  }
+
+  function runRescan(): void {
+    if (idleRescanQueued) return;
+    idleRescanQueued = true;
+    scheduleIdle(() => {
+      idleRescanQueued = false;
+      const ctx = buildContext(document, window);
+      onNavigate(ctx);
+      observeNewShadowRoots();
+      observeNewIframes();
+      finalizeRescan(ctx);
+    });
+  }
 
   // -------------------------------------------------------------------------
   // Debounced scan trigger
   // -------------------------------------------------------------------------
-  function scheduleRescan() {
-    if (debounceTimer !== null) clearTimeout(debounceTimer);
+  function scheduleRescan(
+    args: { immediate?: boolean } = {},
+  ): Promise<PageContext> {
+    ensureRescanPromise();
+
+    if (debounceTimer !== null) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+
+    if (args.immediate) {
+      runRescan();
+      return rescanPromise!;
+    }
+
     debounceTimer = setTimeout(() => {
       debounceTimer = null;
-      scheduleIdle(() => {
-        const ctx = buildPageContext(document, window);
-        onNavigate(ctx);
-        // After every rescan, pick up any new shadow roots or iframes
-        // that may have been rendered since we last looked.
-        observeNewShadowRoots();
-        observeNewIframes();
-      });
+      runRescan();
     }, debounceMs);
+
+    return rescanPromise!;
   }
 
   // -------------------------------------------------------------------------
@@ -219,12 +266,12 @@ export function createDomObserver(
   // -------------------------------------------------------------------------
   function onPopstate() {
     checkUrlChange();
-    scheduleRescan();
+    void scheduleRescan();
   }
 
   function onHashchange() {
     checkUrlChange();
-    scheduleRescan();
+    void scheduleRescan();
   }
 
   function onWindowLoad() {
@@ -261,6 +308,44 @@ export function createDomObserver(
         }
       }
     }
+
+    void scheduleRescan();
+  }
+
+  function patchHistoryMethods(): () => void {
+    const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
+
+    const wrap = (original: History['pushState']) =>
+      function patchedHistory(
+        this: History,
+        ...args: Parameters<History['pushState']>
+      ): ReturnType<History['pushState']> {
+        const result = original.apply(this, args);
+        checkUrlChange();
+        void scheduleRescan({ immediate: true });
+        return result;
+      };
+
+    Object.defineProperty(window.history, 'pushState', {
+      configurable: true,
+      value: wrap(originalPushState),
+    });
+    Object.defineProperty(window.history, 'replaceState', {
+      configurable: true,
+      value: wrap(originalReplaceState),
+    });
+
+    return () => {
+      Object.defineProperty(window.history, 'pushState', {
+        configurable: true,
+        value: originalPushState,
+      });
+      Object.defineProperty(window.history, 'replaceState', {
+        configurable: true,
+        value: originalReplaceState,
+      });
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -296,17 +381,18 @@ export function createDomObserver(
   function start() {
     lastUrl = window.location.href;
 
-    window.addEventListener("popstate", onPopstate);
-    window.addEventListener("hashchange", onHashchange);
-    window.addEventListener("load", onWindowLoad);
+    window.addEventListener('popstate', onPopstate);
+    window.addEventListener('hashchange', onHashchange);
+    window.addEventListener('load', onWindowLoad);
+    restoreHistory = patchHistoryMethods();
 
     startObserving();
   }
 
   function stop() {
-    window.removeEventListener("popstate", onPopstate);
-    window.removeEventListener("hashchange", onHashchange);
-    window.removeEventListener("load", onWindowLoad);
+    window.removeEventListener('popstate', onPopstate);
+    window.removeEventListener('hashchange', onHashchange);
+    window.removeEventListener('load', onWindowLoad);
 
     if (debounceTimer !== null) {
       clearTimeout(debounceTimer);
@@ -317,7 +403,15 @@ export function createDomObserver(
       mutationObserver.disconnect();
       mutationObserver = null;
     }
+
+    restoreHistory?.();
+    restoreHistory = null;
   }
 
-  return { start, stop };
+  return {
+    start,
+    stop,
+    flush: async () => scheduleRescan({ immediate: true }),
+    forceRescan: () => scheduleRescan({ immediate: true }),
+  };
 }

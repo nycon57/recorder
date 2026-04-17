@@ -5,9 +5,18 @@
  *
  * Accepts:
  *   { url: string, appSignature: string }
+ *   or
+ *   { context: PageContext }
  *
  * Returns:
- *   { app: string, screen: string, relevantWikiPages: string[] }
+ *   {
+ *     app: string;
+ *     screen: string;
+ *     relevantWikiPages: string[];
+ *     vendorKnowledgeMatch: KnowledgeMatch | null;
+ *     orgKnowledgeMatch: KnowledgeMatch | null;
+ *     knowledgeAvailability: KnowledgeAvailability;
+ *   }
  *
  * The appSignature is a string produced by the extension's app-detector
  * (e.g. "salesforce:lead-detail"). If it contains a colon, the left part
@@ -15,12 +24,16 @@
  * is treated as the app and the screen is derived from the URL pathname.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
+import type { PageContext } from '@tribora/shared';
 
 import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
-import { supabaseAdmin } from '@/lib/supabase/admin';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
+import { resolveExtensionContextMatches } from '@/lib/services/extension-context';
+import { buildExtensionContextTelemetry } from '@/lib/services/extension-context-telemetry';
+import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import { logger } from '@/lib/monitoring/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,54 +57,119 @@ function screenFromUrl(url: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const requestStartedAt = Date.now();
+
     // TRIB-56: Accept API key auth (Bearer sk_live_...) alongside session auth.
-    await requireApiKeyOrSession(request, 'context');
+    const authCtx = await requireApiKeyOrSession(request, 'context');
 
     const body = await request.json();
-    const { url, appSignature } = body as {
+    const { url, appSignature, context } = body as {
       url?: string;
       appSignature?: string;
+      context?: PageContext;
     };
 
-    if (!url || typeof url !== 'string') {
+    const resolvedUrl = context?.url ?? url;
+    const resolvedAppSignature = context?.appSignature ?? appSignature;
+
+    if (!resolvedUrl || typeof resolvedUrl !== 'string') {
       return errors.badRequest('url is required');
     }
-    if (!appSignature || typeof appSignature !== 'string') {
+    if (!resolvedAppSignature || typeof resolvedAppSignature !== 'string') {
       return errors.badRequest('appSignature is required');
     }
 
     // Parse appSignature: "salesforce:lead-detail" → { app, screen }
-    const colonIdx = appSignature.indexOf(':');
+    const colonIdx = resolvedAppSignature.indexOf(':');
     const app =
-      colonIdx !== -1
-        ? appSignature.slice(0, colonIdx).toLowerCase()
-        : appSignature.toLowerCase();
+      context?.app?.toLowerCase() ??
+      (colonIdx !== -1
+        ? resolvedAppSignature.slice(0, colonIdx).toLowerCase()
+        : resolvedAppSignature.toLowerCase());
     const screen =
-      colonIdx !== -1
-        ? appSignature.slice(colonIdx + 1).toLowerCase()
-        : screenFromUrl(url);
+      context?.screen?.toLowerCase() ??
+      (colonIdx !== -1
+        ? resolvedAppSignature.slice(colonIdx + 1).toLowerCase()
+        : screenFromUrl(resolvedUrl));
 
-    // Look up relevant vendor wiki pages for this app + screen
-    const { data: wikiPages, error } = await supabaseAdmin
-      .from('vendor_wiki_pages')
-      .select('id, app, screen, content, element_selectors, source_url')
-      .eq('app', app)
-      .eq('screen', screen)
-      .order('updated_at', { ascending: false })
-      .limit(5) as {
-        data: Array<{ id: string; app: string; screen: string; content: string; element_selectors: unknown; source_url: string | null }> | null;
-        error: unknown;
-      };
+    const matches = await resolveExtensionContextMatches({
+      orgId: authCtx.orgId,
+      app,
+      screen,
+      url: resolvedUrl,
+    });
 
-    if (error) {
-      console.error('[extension/context] DB error:', error);
-      return errors.internalError();
-    }
+    const mergedContext: PageContext = {
+      app,
+      screen,
+      appSignature: resolvedAppSignature.includes(':')
+        ? resolvedAppSignature
+        : `${app}:${screen}`,
+      url: resolvedUrl,
+      title: context?.title ?? '',
+      interactiveElements: context?.interactiveElements ?? [],
+      detectionConfidence: context?.detectionConfidence,
+      pageSummary: context?.pageSummary,
+      headings: context?.headings ?? [],
+      navigation: context?.navigation ?? [],
+      primaryActions: context?.primaryActions ?? [],
+      selectedEntity: context?.selectedEntity,
+      workspaceContext: context?.workspaceContext,
+      forms: context?.forms ?? [],
+      tables: context?.tables ?? [],
+      dialogs: context?.dialogs ?? [],
+      vendorKnowledgeMatch: matches.vendorKnowledgeMatch,
+      orgKnowledgeMatch: matches.orgKnowledgeMatch,
+      knowledgeAvailability: matches.knowledgeAvailability,
+      breadcrumbs: context?.breadcrumbs ?? [],
+      visibleText: context?.visibleText,
+    };
+    const telemetry = buildExtensionContextTelemetry({
+      context: mergedContext,
+      latencyMs: Date.now() - requestStartedAt,
+      authMethod: authCtx.authMethod,
+      orgId: authCtx.orgId,
+      actorId:
+        authCtx.authMethod === 'session' ? authCtx.userId : authCtx.keyId,
+    });
 
-    const relevantWikiPages = (wikiPages ?? []).map((p) => p.id);
+    after(async () => {
+      try {
+        logger.info('Extension context checked', {
+          orgId: telemetry.orgId,
+          authMethod: telemetry.authMethod,
+          app: telemetry.app,
+          screen: telemetry.screen,
+          pageType: telemetry.pageType,
+          knowledgeMode: telemetry.knowledgeMode,
+          vendorMatchBasis: telemetry.vendorMatchBasis,
+          orgMatchBasis: telemetry.orgMatchBasis,
+          latencyMs: telemetry.latencyMs,
+          fingerprint: telemetry.fingerprint,
+        });
+
+        const supabase = createAdminClient();
+        await supabase.from('events').insert({
+          type: 'extension.context.checked',
+          payload: telemetry,
+        });
+      } catch (error) {
+        logger.warn('Failed to record extension context telemetry', {
+          orgId: authCtx.orgId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
 
     return NextResponse.json(
-      { app, screen, relevantWikiPages },
+      {
+        app,
+        screen,
+        relevantWikiPages: matches.relevantWikiPages,
+        vendorKnowledgeMatch: matches.vendorKnowledgeMatch,
+        orgKnowledgeMatch: matches.orgKnowledgeMatch,
+        knowledgeAvailability: matches.knowledgeAvailability,
+      },
       { headers: CORS_HEADERS },
     );
   } catch (error: any) {

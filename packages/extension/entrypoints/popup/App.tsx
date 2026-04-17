@@ -1,30 +1,30 @@
-import React, { useEffect, useState } from "react";
-import type { SessionState, RecordingState } from "@tribora/shared";
-import { getStoredSession } from "../../utils/api-client.js";
+import React, { useEffect, useState } from 'react';
+import type { SessionState, RecordingState } from '@tribora/shared';
+import { getStoredSession } from '../../utils/api-client.js';
 import {
   initiateSignIn,
   refreshSession,
   signOut,
-} from "../../utils/auth-session.js";
+} from '../../utils/auth-session.js';
 
-const VERSION = "0.0.1";
+const VERSION = '0.0.1';
 
-const UPLOAD_STATE_KEY = "tribora_upload_state";
+const UPLOAD_STATE_KEY = 'tribora_upload_state';
 
 function RecordingSection() {
   const [recordingState, setRecordingState] = useState<RecordingState>({
-    status: "idle",
+    status: 'idle',
   });
 
   // TRIB-49: listen for upload progress from the background service worker
   useEffect(() => {
-    if (recordingState.status !== "uploading") return;
+    if (recordingState.status !== 'uploading') return;
 
     const listener = (
       changes: { [key: string]: chrome.storage.StorageChange },
       area: string,
     ) => {
-      if (area !== "session" || !changes[UPLOAD_STATE_KEY]) return;
+      if (area !== 'session' || !changes[UPLOAD_STATE_KEY]) return;
       const newVal = changes[UPLOAD_STATE_KEY].newValue as
         | RecordingState
         | undefined;
@@ -38,48 +38,58 @@ function RecordingSection() {
   }, [recordingState.status]);
 
   const startRecording = () => {
-    setRecordingState({ status: "requesting_capture" });
+    setRecordingState({ status: 'requesting_capture' });
     chrome.runtime.sendMessage(
-      { type: "RECORDING_START" },
+      { type: 'RECORDING_START' },
       (response: { ok: boolean; state?: RecordingState; error?: string }) => {
         if (chrome.runtime.lastError || !response?.ok) {
           setRecordingState({
-            status: "error",
-            error: chrome.runtime.lastError?.message ?? response?.error ?? "Failed to start",
+            status: 'error',
+            error:
+              chrome.runtime.lastError?.message ??
+              response?.error ??
+              'Failed to start',
           });
           return;
         }
-        setRecordingState(response.state ?? { status: "recording", startedAt: Date.now() });
+        setRecordingState(
+          response.state ?? { status: 'recording', startedAt: Date.now() },
+        );
       },
     );
   };
 
   const stopRecording = () => {
-    setRecordingState({ status: "uploading", uploadProgress: 0 });
+    setRecordingState({ status: 'uploading', uploadProgress: 0 });
     chrome.runtime.sendMessage(
-      { type: "RECORDING_STOP" },
+      { type: 'RECORDING_STOP' },
       (response: { ok: boolean; recordingId?: string; error?: string }) => {
         if (chrome.runtime.lastError || !response?.ok) {
           setRecordingState({
-            status: "error",
-            error: chrome.runtime.lastError?.message ?? response?.error ?? "Failed to stop",
+            status: 'error',
+            error:
+              chrome.runtime.lastError?.message ??
+              response?.error ??
+              'Failed to stop',
           });
           return;
         }
-        setRecordingState({ status: "idle", recordingId: response.recordingId });
+        setRecordingState({
+          status: 'idle',
+          recordingId: response.recordingId,
+        });
       },
     );
   };
 
-  const { status, error, recordingId, uploadProgress, retryAttempt, retryMax } = recordingState;
+  const { status, error, recordingId, uploadProgress, retryAttempt, retryMax } =
+    recordingState;
 
   return (
     <div className="recording-section">
-      {status === "idle" && (
+      {status === 'idle' && (
         <>
-          {recordingId && (
-            <p className="recording-success">Recording saved!</p>
-          )}
+          {recordingId && <p className="recording-success">Recording saved!</p>}
           <button
             className="popup-btn popup-btn-record"
             onClick={startRecording}
@@ -88,20 +98,17 @@ function RecordingSection() {
           </button>
         </>
       )}
-      {status === "requesting_capture" && (
+      {status === 'requesting_capture' && (
         <button className="popup-btn popup-btn-record" disabled>
           Requesting capture…
         </button>
       )}
-      {status === "recording" && (
-        <button
-          className="popup-btn popup-btn-stop"
-          onClick={stopRecording}
-        >
+      {status === 'recording' && (
+        <button className="popup-btn popup-btn-stop" onClick={stopRecording}>
           Stop Recording
         </button>
       )}
-      {status === "uploading" && (
+      {status === 'uploading' && (
         <div className="upload-progress-section">
           <div className="upload-progress-bar-track">
             <div
@@ -116,12 +123,12 @@ function RecordingSection() {
           </p>
         </div>
       )}
-      {status === "error" && (
+      {status === 'error' && (
         <>
           <p className="popup-error">{error}</p>
           <button
             className="popup-btn popup-btn-record"
-            onClick={() => setRecordingState({ status: "idle" })}
+            onClick={() => setRecordingState({ status: 'idle' })}
           >
             Start Recording
           </button>
@@ -143,7 +150,7 @@ export default function App() {
 
       // If stored but expired, refresh immediately
       if (
-        stored?.status === "authenticated" &&
+        stored?.status === 'authenticated' &&
         stored.expiresAt &&
         stored.expiresAt < Date.now()
       ) {
@@ -154,7 +161,7 @@ export default function App() {
   }, []);
 
   const handleSignOut = () => {
-    void signOut().then(() => setSession({ status: "unauthenticated" }));
+    void signOut().then(() => setSession({ status: 'unauthenticated' }));
   };
 
   if (loading) {
@@ -173,8 +180,8 @@ export default function App() {
 
   if (
     !session ||
-    session.status === "unauthenticated" ||
-    session.status === "expired"
+    session.status === 'unauthenticated' ||
+    session.status === 'expired'
   ) {
     return (
       <div className="popup-container">
@@ -206,7 +213,7 @@ export default function App() {
     );
   }
 
-  const displayName = session.user?.name ?? session.user?.email ?? "Unknown";
+  const displayName = session.user?.name ?? session.user?.email ?? 'Unknown';
 
   return (
     <div className="popup-container">
@@ -237,6 +244,20 @@ export default function App() {
           </div>
         </div>
         <RecordingSection />
+        <div className="popup-section popup-debug-section">
+          <div className="popup-section-copy">
+            <div className="popup-section-title">Session debugging</div>
+            <p className="popup-description">
+              Prelaunch builds now store verbatim transcripts, tool activity,
+              and session events for every new Tribora voice session
+              automatically.
+            </p>
+          </div>
+          <div className="status-indicator status-connected">
+            <span className="status-dot" />
+            <span className="status-label">Always on</span>
+          </div>
+        </div>
       </main>
       <footer className="popup-footer">
         <button
