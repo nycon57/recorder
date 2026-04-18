@@ -69,19 +69,19 @@ const DEFAULT_WIKI_COMPILATION_SETTINGS: WikiCompilationSettings = {
   },
 };
 
-const WIKI_COMPILATION_POLICY_METADATA_KEY = 'wiki_compilation_review_policy';
-const HYBRID_MAX_CONTRADICTIONS_MIN = 1;
-const HYBRID_MAX_CONTRADICTIONS_MAX = 10;
-const HYBRID_MIN_CONFIDENCE_DELTA_MIN = -0.2;
-const HYBRID_MIN_CONFIDENCE_DELTA_MAX = 0.2;
+export const WIKI_COMPILATION_POLICY_METADATA_KEY = 'wiki_compilation_review_policy';
+export const HYBRID_MAX_CONTRADICTIONS_MIN = 1;
+export const HYBRID_MAX_CONTRADICTIONS_MAX = 10;
+export const HYBRID_MIN_CONFIDENCE_DELTA_MIN = -0.2;
+export const HYBRID_MIN_CONFIDENCE_DELTA_MAX = 0.2;
 
-interface WikiCompilationPolicyMetadata {
+export interface WikiCompilationPolicyMetadata {
   hybrid_auto_publish_enabled?: boolean;
   hybrid_max_contradictions_for_auto_publish?: number;
   hybrid_min_confidence_delta_for_auto_publish?: number;
 }
 
-function asObject(value: Json | null | undefined): Record<string, Json | undefined> {
+export function asObject(value: Json | null | undefined): Record<string, Json | undefined> {
   if (!value || Array.isArray(value) || typeof value !== 'object') {
     return {};
   }
@@ -327,6 +327,7 @@ export function shouldAutoApplyWikiContradiction(
   }
 
   return (
+    input.contradictionCount > 0 &&
     input.contradictionCount <= settings.hybridAutoPublish.maxContradictionsForAutoPublish &&
     input.confidenceDelta >= settings.hybridAutoPublish.minConfidenceDeltaForAutoPublish
   );

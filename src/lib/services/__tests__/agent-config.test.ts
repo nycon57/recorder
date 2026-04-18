@@ -96,5 +96,12 @@ describe('agent-config wiki compilation settings', () => {
         confidenceDelta: 0.01,
       }),
     ).toBe(false);
+
+    expect(
+      shouldAutoApplyWikiContradiction(hybridSettings, {
+        contradictionCount: 0,
+        confidenceDelta: 0.06,
+      }),
+    ).toBe(false);
   });
 });

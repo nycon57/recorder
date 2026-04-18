@@ -9,9 +9,16 @@ import {
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
-  getAgentSettings,
+  asObject,
   checkAgentPlanAccess,
+  getAgentSettings,
+  HYBRID_MAX_CONTRADICTIONS_MAX,
+  HYBRID_MAX_CONTRADICTIONS_MIN,
+  HYBRID_MIN_CONFIDENCE_DELTA_MAX,
+  HYBRID_MIN_CONFIDENCE_DELTA_MIN,
   resolveWikiCompilationSettings,
+  type WikiCompilationPolicyMetadata,
+  WIKI_COMPILATION_POLICY_METADATA_KEY,
   upgradePlanError,
 } from '@/lib/services/agent-config';
 import type { Json } from '@/lib/types/database';
@@ -38,25 +45,6 @@ const COLUMN_TO_AGENT: Partial<Record<(typeof BOOLEAN_FIELDS)[number], string>> 
 /** Bounds for the wiki stale threshold (days). Matches DB CHECK constraint. */
 const WIKI_STALE_THRESHOLD_MIN = 1;
 const WIKI_STALE_THRESHOLD_MAX = 365;
-const HYBRID_MAX_CONTRADICTIONS_MIN = 1;
-const HYBRID_MAX_CONTRADICTIONS_MAX = 10;
-const HYBRID_MIN_CONFIDENCE_DELTA_MIN = -0.2;
-const HYBRID_MIN_CONFIDENCE_DELTA_MAX = 0.2;
-const WIKI_COMPILATION_POLICY_METADATA_KEY = 'wiki_compilation_review_policy';
-
-interface WikiCompilationPolicyMetadata {
-  hybrid_auto_publish_enabled?: boolean;
-  hybrid_max_contradictions_for_auto_publish?: number;
-  hybrid_min_confidence_delta_for_auto_publish?: number;
-}
-
-function asObject(value: Json | null | undefined): Record<string, Json | undefined> {
-  if (!value || Array.isArray(value) || typeof value !== 'object') {
-    return {};
-  }
-  return value as Record<string, Json | undefined>;
-}
-
 /**
  * GET /api/organizations/agent-settings
  * Returns current agent settings for the authenticated user's org.
