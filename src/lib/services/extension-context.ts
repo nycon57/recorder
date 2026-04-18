@@ -140,16 +140,20 @@ export function buildKnowledgeMatchExplainability(args: {
 
   const subject =
     surface === 'vendor' ? 'the vendor baseline' : 'the org overlay';
-  const label = matchedLabel?.trim() || matchedScreen || matchedApp || 'this page';
+  const normalizedLabel = matchedLabel?.trim() || null;
+  const label = normalizedLabel || matchedScreen || matchedApp || 'this page';
   const requestedAppLabel = requestedApp || 'unknown';
   const requestedScreenLabel = requestedScreen || 'unknown';
+  const hasMatchedContext = Boolean(matchedApp || matchedScreen);
 
   switch (basis) {
     case 'exact':
       return {
         basisCategory: 'exact',
         basisLabel: 'Exact match',
-        basisExplanation: `Matched ${subject} because the detected app "${requestedAppLabel}" and screen "${requestedScreenLabel}" exactly matched "${label}".`,
+        basisExplanation: hasMatchedContext
+          ? `Matched ${subject} because the detected app "${requestedAppLabel}" and screen "${requestedScreenLabel}" exactly matched "${label}".`
+          : `Matched ${subject} because the detected context exactly matched the saved knowledge label "${label}".`,
       };
     case 'screen_alias':
       return {

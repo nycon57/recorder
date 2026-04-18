@@ -24,6 +24,26 @@ test('buildKnowledgeMatchExplainability describes exact vendor baseline matches'
   });
 });
 
+test('buildKnowledgeMatchExplainability describes exact org topic matches', () => {
+  const explanation = buildKnowledgeMatchExplainability({
+    surface: 'org',
+    basis: 'exact',
+    url: 'https://workspace.example.com/records/123',
+    requestedApp: 'workspace',
+    requestedScreen: 'record-view',
+    matchedApp: null,
+    matchedScreen: null,
+    matchedLabel: 'Contact record workflow',
+  });
+
+  assert.deepEqual(explanation, {
+    basisCategory: 'exact',
+    basisLabel: 'Exact match',
+    basisExplanation:
+      'Matched the org overlay because the detected context exactly matched the saved knowledge label "Contact record workflow".',
+  });
+});
+
 test('buildKnowledgeMatchExplainability describes alias-based screen fallback', () => {
   const explanation = buildKnowledgeMatchExplainability({
     surface: 'org',
@@ -65,6 +85,26 @@ test('buildKnowledgeMatchExplainability describes domain-based vendor matching',
     basisLabel: 'Domain match',
     basisExplanation:
       'Matched the vendor baseline by domain because the detected host "workspace.my.salesforce.com" maps to "salesforce", so Tribora mapped the page into that app\'s knowledge family.',
+  });
+});
+
+test('buildKnowledgeMatchExplainability describes app-level matches', () => {
+  const explanation = buildKnowledgeMatchExplainability({
+    surface: 'vendor',
+    basis: 'app_only',
+    url: 'https://workspace.salesforce.com/lightning/page/home',
+    requestedApp: 'salesforce',
+    requestedScreen: 'home',
+    matchedApp: 'salesforce',
+    matchedScreen: null,
+    matchedLabel: 'salesforce',
+  });
+
+  assert.deepEqual(explanation, {
+    basisCategory: 'app',
+    basisLabel: 'App-level match',
+    basisExplanation:
+      'Matched the vendor baseline at the app level because "salesforce" was recognized, but there was no exact screen baseline for "home".',
   });
 });
 

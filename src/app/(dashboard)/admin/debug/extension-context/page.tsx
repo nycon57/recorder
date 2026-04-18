@@ -24,7 +24,10 @@ import {
   parseExtensionContextDebugFilters,
   type ExtensionContextDebugKnowledgeMode,
 } from '@/lib/services/extension-context-debug';
-import type { ExtensionContextPageType } from '@/lib/services/extension-context-telemetry';
+import type {
+  ExtensionContextPageType,
+  ExtensionContextTelemetryPayload,
+} from '@/lib/services/extension-context-telemetry';
 import { requireAdmin } from '@/lib/utils/api';
 
 export const dynamic = 'force-dynamic';
@@ -86,7 +89,9 @@ function knowledgeModeVariant(mode: ExtensionContextDebugKnowledgeMode) {
   }
 }
 
-function matchCategoryVariant(category: 'exact' | 'alias' | 'app' | 'domain' | 'unknown') {
+function matchCategoryVariant(
+  category: ExtensionContextTelemetryPayload['vendorMatchCategory'],
+) {
   switch (category) {
     case 'exact':
       return 'aurora';
