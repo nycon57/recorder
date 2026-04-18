@@ -42,6 +42,15 @@ export interface KnowledgeChatTelemetryPayload {
   routingFailureReason: string | null;
 }
 
+export interface KnowledgeChatTelemetryInput
+  extends Omit<
+    KnowledgeChatTelemetryPayload,
+    'routingFailed' | 'routingFailureReason'
+  > {
+  routingFailed?: boolean;
+  routingFailureReason?: string | null;
+}
+
 export interface KnowledgeExtensionQueryTelemetryPayload {
   orgId: string;
   userId: string;
@@ -55,6 +64,11 @@ export interface KnowledgeExtensionQueryTelemetryPayload {
   asOf: string | null;
 }
 
+export interface KnowledgeExtensionQueryTelemetryInput
+  extends Omit<KnowledgeExtensionQueryTelemetryPayload, 'routingFailed'> {
+  routingFailed?: boolean;
+}
+
 export interface KnowledgeReviewTelemetryPayload {
   orgId: string;
   userId: string;
@@ -64,6 +78,12 @@ export interface KnowledgeReviewTelemetryPayload {
   outcome: KnowledgeReviewOutcome;
   contentLength: number | null;
   errorMessage: string | null;
+}
+
+export interface KnowledgeReviewTelemetryInput
+  extends Omit<KnowledgeReviewTelemetryPayload, 'contentLength' | 'errorMessage'> {
+  contentLength?: number | null;
+  errorMessage?: string | null;
 }
 
 export interface KnowledgeTelemetryEventRow {
@@ -84,6 +104,7 @@ export interface KnowledgeTelemetryFilters {
   orgId: string;
   since?: KnowledgeTelemetrySince;
   limit?: number;
+  type?: KnowledgeTelemetryEventType | null;
 }
 
 export interface KnowledgeTelemetrySummary {
@@ -176,7 +197,7 @@ function cutoffFromSince(since: KnowledgeTelemetrySince): string | null {
 }
 
 export function buildKnowledgeChatTelemetry(
-  args: KnowledgeChatTelemetryPayload,
+  args: KnowledgeChatTelemetryInput,
 ): KnowledgeChatTelemetryPayload {
   const shouldInferRoutingFailure =
     args.answerMode !== 'tool-discovery' &&
@@ -197,9 +218,10 @@ export function buildKnowledgeChatTelemetry(
 }
 
 export function buildKnowledgeExtensionQueryTelemetry(
-  args: KnowledgeExtensionQueryTelemetryPayload,
+  args: KnowledgeExtensionQueryTelemetryInput,
 ): KnowledgeExtensionQueryTelemetryPayload {
-  const routingFailed = !args.hadOrgKnowledge && !args.hadVendorKnowledge;
+  const routingFailed =
+    args.routingFailed ?? (!args.hadOrgKnowledge && !args.hadVendorKnowledge);
 
   return {
     ...args,
@@ -208,7 +230,7 @@ export function buildKnowledgeExtensionQueryTelemetry(
 }
 
 export function buildKnowledgeReviewTelemetry(
-  args: KnowledgeReviewTelemetryPayload,
+  args: KnowledgeReviewTelemetryInput,
 ): KnowledgeReviewTelemetryPayload {
   return {
     ...args,
@@ -354,13 +376,14 @@ export async function listKnowledgeTelemetryEvents(args: KnowledgeTelemetryFilte
   events: KnowledgeTelemetryEvent[];
   summary: KnowledgeTelemetrySummary;
 }> {
-  const { orgId, since = '24h', limit = 100 } = args;
+  const { orgId, since = '24h', limit = 100, type = null } = args;
   const cutoff = cutoffFromSince(since);
   const fetchLimit = clampLimit(limit);
 
   let query = supabaseAdmin
     .from('events')
     .select('id, type, payload, created_at')
+    .eq('payload->>orgId', orgId)
     .in('type', [
       'extension.context.checked',
       'knowledge.chat.outcome',
@@ -374,6 +397,10 @@ export async function listKnowledgeTelemetryEvents(args: KnowledgeTelemetryFilte
     query = query.gte('created_at', cutoff);
   }
 
+  if (type) {
+    query = query.eq('type', type);
+  }
+
   const { data, error } = await query;
   if (error) {
     throw new Error(`Failed to load knowledge telemetry events: ${error.message}`);
@@ -381,8 +408,7 @@ export async function listKnowledgeTelemetryEvents(args: KnowledgeTelemetryFilte
 
   const events = (data ?? [])
     .map((row) => normalizeKnowledgeTelemetryEvent(row as KnowledgeTelemetryEventRow))
-    .filter((event): event is KnowledgeTelemetryEvent => event !== null)
-    .filter((event) => readString(event.payload, 'orgId') === orgId);
+    .filter((event): event is KnowledgeTelemetryEvent => event !== null);
 
   const summary = summarizeKnowledgeTelemetryEvents(events);
 

@@ -57,10 +57,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
     orgId,
     since,
     limit,
+    type,
   });
 
-  const filteredEvents = type ? events.filter((event) => event.type === type) : events;
-  const summary = summarizeKnowledgeTelemetryEvents(filteredEvents);
+  const summary = summarizeKnowledgeTelemetryEvents(events);
 
   return successResponse({
     filters: {
@@ -69,6 +69,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
       type: type ?? 'all',
     },
     summary,
-    events: filteredEvents.slice(0, limit),
+    events: events.slice(0, limit),
   });
 });
