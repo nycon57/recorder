@@ -8,10 +8,8 @@ import {
   parseBody,
 } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
-import {
-  bulkUploadSchema,
-  type BulkUploadInput,
-} from '@/lib/validations/api';
+import { bulkUploadSchema, type BulkUploadInput } from '@/lib/validations/api';
+import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
 
 /**
  * POST /api/library/bulk-upload - Handle multiple file uploads
@@ -80,7 +78,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
           original_filename: item.file_name,
           mime_type: item.mime_type,
           file_size: item.file_size,
-          status: 'uploading',
+          status: SOURCE_STATUS.UPLOADING,
           metadata: item.metadata || {},
         })
         .select()
@@ -100,16 +98,22 @@ export const POST = apiHandler(async (request: NextRequest) => {
       // Add to collection if specified
       if (body.collection_id) {
         try {
-          const { error: collectionError } = await supabase.from('collection_items').insert({
-            collection_id: body.collection_id,
-            recording_id: recording.id,
-            added_by: userId,
-          });
+          const { error: collectionError } = await supabase
+            .from('collection_items')
+            .insert({
+              collection_id: body.collection_id,
+              recording_id: recording.id,
+              added_by: userId,
+            });
           if (collectionError) {
-            warnings.push(`Failed to add to collection: ${collectionError.message}`);
+            warnings.push(
+              `Failed to add to collection: ${collectionError.message}`,
+            );
           }
         } catch (collectionErr: any) {
-          warnings.push(`Failed to add to collection: ${collectionErr.message}`);
+          warnings.push(
+            `Failed to add to collection: ${collectionErr.message}`,
+          );
         }
       }
 
@@ -120,7 +124,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
             recording_id: recording.id,
             tag_id: tagId,
           }));
-          const { error: tagsError } = await supabase.from('content_tags').insert(tagInserts);
+          const { error: tagsError } = await supabase
+            .from('content_tags')
+            .insert(tagInserts);
           if (tagsError) {
             warnings.push(`Failed to apply tags: ${tagsError.message}`);
           }
@@ -144,7 +150,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
           },
         });
       } catch (activityErr) {
-        console.error('[POST /api/library/bulk-upload] Failed to log activity:', activityErr);
+        console.error(
+          '[POST /api/library/bulk-upload] Failed to log activity:',
+          activityErr,
+        );
         // Don't add to warnings as activity logging is non-critical
       }
 

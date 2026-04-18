@@ -19,6 +19,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { withRateLimit } from '@/lib/rate-limit/middleware';
 import { QuotaManager } from '@/lib/services/quotas/quota-manager';
 import { createLogger } from '@/lib/utils/logger';
+import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
 import {
   getContentTypeFromMimeType,
   getFileTypeFromMimeType,
@@ -43,7 +44,10 @@ const initUploadSchema = z.object({
   mimeType: z.string().min(1),
   fileSize: z.number().positive(),
   durationSec: z.number().positive().optional(),
-  analysisType: z.enum(['none', 'meeting', 'tutorial', 'sop', 'demo', 'general']).optional().default('general'),
+  analysisType: z
+    .enum(['none', 'meeting', 'tutorial', 'sop', 'demo', 'general'])
+    .optional()
+    .default('general'),
   skipAnalysis: z.boolean().optional().default(false),
 });
 
@@ -73,11 +77,18 @@ export const POST = withRateLimit(
         return errors.badRequest(
           'Invalid request data',
           { errors: validationResult.error.issues },
-          requestId
+          requestId,
         );
       }
 
-      const { filename, mimeType, fileSize, durationSec, analysisType, skipAnalysis } = validationResult.data;
+      const {
+        filename,
+        mimeType,
+        fileSize,
+        durationSec,
+        analysisType,
+        skipAnalysis,
+      } = validationResult.data;
 
       logger.info('Initializing upload', {
         context: { requestId, orgId, userId },
@@ -93,13 +104,23 @@ export const POST = withRateLimit(
 
       // Determine content type and file type from MIME type
       const fileType = getFileTypeFromMimeType(mimeType);
-      const contentType = fileType ? getContentTypeFromMimeType(mimeType) : null;
+      const contentType = fileType
+        ? getContentTypeFromMimeType(mimeType)
+        : null;
 
       if (!fileType || !contentType) {
         return errors.badRequest(
           `Unsupported file type: ${mimeType}`,
-          { supportedTypes: ['video/*', 'audio/*', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/*'] },
-          requestId
+          {
+            supportedTypes: [
+              'video/*',
+              'audio/*',
+              'application/pdf',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'text/*',
+            ],
+          },
+          requestId,
         );
       }
 
@@ -109,7 +130,7 @@ export const POST = withRateLimit(
         return errors.badRequest(
           `File size (${fileSize} bytes) exceeds limit for ${contentType} files`,
           { maxSize: maxSizeBytes },
-          requestId
+          requestId,
         );
       }
 
@@ -137,13 +158,16 @@ export const POST = withRateLimit(
             actualDuration: durationSec,
             suggestion: `${contentTypeLabel} files longer than 30 minutes cannot be processed due to AI transcription limits.`,
           },
-          requestId
+          requestId,
         );
       }
 
       // SECURITY: Atomically check and consume quota to prevent race conditions
       // This prevents multiple concurrent requests from exceeding quota limits
-      const quotaCheck = await QuotaManager.checkAndConsumeQuota(orgId, 'recording');
+      const quotaCheck = await QuotaManager.checkAndConsumeQuota(
+        orgId,
+        'recording',
+      );
       if (!quotaCheck.allowed) {
         logger.warn('Quota exceeded', {
           context: { requestId, orgId },
@@ -172,7 +196,7 @@ export const POST = withRateLimit(
           org_id: orgId,
           created_by: userId,
           title: sanitizedFilename, // Pre-fill title, user can edit in step 2
-          status: 'uploading', // Initial state - waiting for file upload and metadata
+          status: SOURCE_STATUS.UPLOADING, // Initial state - waiting for file upload and metadata
           content_type: contentType,
           file_type: fileType,
           original_filename: sanitizedFilename,
@@ -223,9 +247,8 @@ export const POST = withRateLimit(
       const thumbnailPath = `org_${orgId}/recordings/${recording.id}/thumbnail.jpg`;
 
       // Generate presigned upload URL for main file
-      const { data: fileUploadData, error: fileUploadError } = await supabase.storage
-        .from('content')
-        .createSignedUploadUrl(filePath, {
+      const { data: fileUploadData, error: fileUploadError } =
+        await supabase.storage.from('content').createSignedUploadUrl(filePath, {
           upsert: false,
         });
 
@@ -282,7 +305,7 @@ export const POST = withRateLimit(
           token: fileUploadData.token,
         },
         requestId,
-        201
+        201,
       );
     } catch (error: any) {
       logger.error('Upload init request error', {
@@ -298,12 +321,14 @@ export const POST = withRateLimit(
       const { orgId } = await requireOrg();
       return orgId;
     },
-  }
+  },
 );
 
 /**
  * GET not supported
  */
 export const GET = apiHandler(async () => {
-  return errors.badRequest('Method not allowed. Use POST to initialize upload.');
+  return errors.badRequest(
+    'Method not allowed. Use POST to initialize upload.',
+  );
 });

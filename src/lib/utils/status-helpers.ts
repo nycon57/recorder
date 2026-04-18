@@ -1,105 +1,205 @@
 /**
- * Status mapping utilities for consistent status display across the application
+ * Shared source lifecycle contract for content processing.
+ *
+ * Raw source lifecycle stays scoped to intake + processing only:
+ * uploading -> uploaded -> transcribing -> transcribed -> doc_generating -> completed/error
  */
 
-/**
- * Recording/Content status types
- */
+export const SOURCE_STATUS = {
+  UPLOADING: 'uploading',
+  UPLOADED: 'uploaded',
+  TRANSCRIBING: 'transcribing',
+  TRANSCRIBED: 'transcribed',
+  DOCUMENT_GENERATING: 'doc_generating',
+  COMPLETED: 'completed',
+  ERROR: 'error',
+} as const;
+
+export const SOURCE_STATUS_VALUES = Object.values(SOURCE_STATUS);
+
 export type RecordingStatus =
+  (typeof SOURCE_STATUS)[keyof typeof SOURCE_STATUS];
+export type SourceStatusInput = RecordingStatus | 'failed';
+export type SourceStatusDisplayState =
   | 'uploading'
-  | 'uploaded'
-  | 'transcribing'
-  | 'transcribed'
-  | 'doc_generating'
-  | 'completed'
-  | 'error'
+  | 'queued'
+  | 'processing'
+  | 'ready'
   | 'failed';
+export type SourceStatusBadgeVariant =
+  | 'default'
+  | 'secondary'
+  | 'destructive'
+  | 'outline';
+export type SourceLifecycleJobType =
+  | 'transcribe'
+  | 'extract_audio'
+  | 'extract_text_pdf'
+  | 'extract_text_docx'
+  | 'process_text_note'
+  | 'doc_generate'
+  | 'generate_embeddings';
+export type SourceLifecycleReprocessStep =
+  | 'transcribe'
+  | 'document'
+  | 'embeddings'
+  | 'all';
 
-/**
- * Maps recording status to display-friendly label
- * @param status - The recording status
- * @returns A human-readable status label
- */
+type SourceStatusConfig = {
+  label: string;
+  displayState: SourceStatusDisplayState;
+  color: string;
+  badgeColor: string;
+  badgeVariant: SourceStatusBadgeVariant;
+  active: boolean;
+};
+
+const SOURCE_STATUS_CONFIG: Record<RecordingStatus, SourceStatusConfig> = {
+  [SOURCE_STATUS.UPLOADING]: {
+    label: 'Uploading',
+    displayState: 'uploading',
+    color: 'bg-blue-500',
+    badgeColor: 'bg-blue-500/10 text-blue-700 border-blue-200',
+    badgeVariant: 'secondary',
+    active: true,
+  },
+  [SOURCE_STATUS.UPLOADED]: {
+    label: 'Uploaded',
+    displayState: 'queued',
+    color: 'bg-slate-500',
+    badgeColor: 'bg-slate-500/10 text-slate-700 border-slate-200',
+    badgeVariant: 'outline',
+    active: false,
+  },
+  [SOURCE_STATUS.TRANSCRIBING]: {
+    label: 'Processing',
+    displayState: 'processing',
+    color: 'bg-yellow-500',
+    badgeColor: 'bg-yellow-500/10 text-yellow-700 border-yellow-200',
+    badgeVariant: 'outline',
+    active: true,
+  },
+  [SOURCE_STATUS.TRANSCRIBED]: {
+    label: 'Processing',
+    displayState: 'processing',
+    color: 'bg-yellow-500',
+    badgeColor: 'bg-yellow-500/10 text-yellow-700 border-yellow-200',
+    badgeVariant: 'outline',
+    active: true,
+  },
+  [SOURCE_STATUS.DOCUMENT_GENERATING]: {
+    label: 'Processing',
+    displayState: 'processing',
+    color: 'bg-yellow-500',
+    badgeColor: 'bg-yellow-500/10 text-yellow-700 border-yellow-200',
+    badgeVariant: 'outline',
+    active: true,
+  },
+  [SOURCE_STATUS.COMPLETED]: {
+    label: 'Ready',
+    displayState: 'ready',
+    color: 'bg-green-500',
+    badgeColor: 'bg-green-500/10 text-green-700 border-green-200',
+    badgeVariant: 'default',
+    active: false,
+  },
+  [SOURCE_STATUS.ERROR]: {
+    label: 'Failed',
+    displayState: 'failed',
+    color: 'bg-red-500',
+    badgeColor: 'bg-red-500/10 text-red-700 border-red-200',
+    badgeVariant: 'destructive',
+    active: false,
+  },
+};
+
+function isCanonicalSourceStatus(status: string): status is RecordingStatus {
+  return SOURCE_STATUS_VALUES.includes(status as RecordingStatus);
+}
+
+function getSourceStatusConfig(status: string): SourceStatusConfig | null {
+  const normalized = normalizeSourceStatus(status);
+  return normalized ? SOURCE_STATUS_CONFIG[normalized] : null;
+}
+
+export function normalizeSourceStatus(status: string): RecordingStatus | null {
+  if (status === 'failed') {
+    return SOURCE_STATUS.ERROR;
+  }
+
+  return isCanonicalSourceStatus(status) ? status : null;
+}
+
+export function getStatusDisplayState(
+  status: string,
+): SourceStatusDisplayState | null {
+  return getSourceStatusConfig(status)?.displayState ?? null;
+}
+
 export function getStatusLabel(status: string): string {
-  const statusMap: Record<string, string> = {
-    uploading: 'Uploading',
-    uploaded: 'Uploaded',
-    transcribing: 'Processing',
-    transcribed: 'Processing',
-    doc_generating: 'Processing',
-    completed: 'Ready',
-    error: 'Failed',
-    failed: 'Failed',
-  };
-
-  return statusMap[status] || status;
+  return getSourceStatusConfig(status)?.label ?? status;
 }
 
-/**
- * Maps recording status to Tailwind CSS color classes
- * @param status - The recording status
- * @returns Tailwind CSS class string for status indicator
- */
 export function getStatusColor(status: string): string {
-  const colorMap: Record<string, string> = {
-    uploading: 'bg-blue-500',
-    uploaded: 'bg-blue-500',
-    transcribing: 'bg-yellow-500',
-    transcribed: 'bg-yellow-500',
-    doc_generating: 'bg-yellow-500',
-    completed: 'bg-green-500',
-    error: 'bg-red-500',
-    failed: 'bg-red-500',
-  };
-
-  return colorMap[status] || 'bg-gray-500';
+  return getSourceStatusConfig(status)?.color ?? 'bg-gray-500';
 }
 
-/**
- * Maps recording status to Tailwind CSS badge variant classes
- * @param status - The recording status
- * @returns Tailwind CSS classes for badge styling
- */
 export function getStatusBadgeColor(status: string): string {
-  const badgeColorMap: Record<string, string> = {
-    uploading: 'bg-blue-500/10 text-blue-700 border-blue-200',
-    uploaded: 'bg-blue-500/10 text-blue-700 border-blue-200',
-    transcribing: 'bg-yellow-500/10 text-yellow-700 border-yellow-200',
-    transcribed: 'bg-yellow-500/10 text-yellow-700 border-yellow-200',
-    doc_generating: 'bg-yellow-500/10 text-yellow-700 border-yellow-200',
-    completed: 'bg-green-500/10 text-green-700 border-green-200',
-    error: 'bg-red-500/10 text-red-700 border-red-200',
-    failed: 'bg-red-500/10 text-red-700 border-red-200',
-  };
-
-  return badgeColorMap[status] || 'bg-gray-500/10 text-gray-700 border-gray-200';
-}
-
-/**
- * Determines if a status represents a processing state
- * @param status - The recording status
- * @returns True if the status is a processing state
- */
-export function isProcessingStatus(status: string): boolean {
-  return ['uploading', 'uploaded', 'transcribing', 'transcribed', 'doc_generating'].includes(
-    status
+  return (
+    getSourceStatusConfig(status)?.badgeColor ??
+    'bg-gray-500/10 text-gray-700 border-gray-200'
   );
 }
 
-/**
- * Determines if a status represents a completed state
- * @param status - The recording status
- * @returns True if the status is completed
- */
-export function isCompletedStatus(status: string): boolean {
-  return status === 'completed';
+export function getStatusBadgeVariant(
+  status: string,
+): SourceStatusBadgeVariant {
+  return getSourceStatusConfig(status)?.badgeVariant ?? 'outline';
 }
 
-/**
- * Determines if a status represents an error state
- * @param status - The recording status
- * @returns True if the status is an error
- */
+export function isProcessingStatus(status: string): boolean {
+  return getSourceStatusConfig(status)?.active ?? false;
+}
+
+export function isCompletedStatus(status: string): boolean {
+  return normalizeSourceStatus(status) === SOURCE_STATUS.COMPLETED;
+}
+
 export function isErrorStatus(status: string): boolean {
-  return ['error', 'failed'].includes(status);
+  return normalizeSourceStatus(status) === SOURCE_STATUS.ERROR;
+}
+
+export function getQueuedSourceStatusForJob(
+  jobType: SourceLifecycleJobType,
+): RecordingStatus | null {
+  switch (jobType) {
+    case 'transcribe':
+    case 'extract_audio':
+    case 'extract_text_pdf':
+    case 'extract_text_docx':
+    case 'process_text_note':
+      return SOURCE_STATUS.TRANSCRIBING;
+    case 'doc_generate':
+      return SOURCE_STATUS.DOCUMENT_GENERATING;
+    case 'generate_embeddings':
+      return null;
+    default:
+      return null;
+  }
+}
+
+export function getQueuedSourceStatusForReprocessStep(
+  step: SourceLifecycleReprocessStep,
+): RecordingStatus | null {
+  switch (step) {
+    case 'transcribe':
+    case 'all':
+      return SOURCE_STATUS.TRANSCRIBING;
+    case 'document':
+      return SOURCE_STATUS.DOCUMENT_GENERATING;
+    case 'embeddings':
+      return null;
+    default:
+      return null;
+  }
 }

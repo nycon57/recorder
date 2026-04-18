@@ -12,6 +12,7 @@ import {
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createTextNoteSchema } from '@/lib/validations/library';
 import type { JobType } from '@/lib/types/database';
+import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
 
 /**
  * POST /api/library/text
@@ -78,7 +79,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
         created_by: userId,
         title,
         description: description || null,
-        status: 'uploaded', // Text notes skip upload phase
+        status: SOURCE_STATUS.UPLOADED, // Text notes skip upload phase
         content_type: 'text',
         file_type: fileType,
         original_filename: `${title}.${fileType}`,
@@ -114,10 +115,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       console.error('[Text Note] Transcript error:', transcriptError);
 
       // Clean up recording
-      await supabaseAdmin
-        .from('content')
-        .delete()
-        .eq('id', recording.id);
+      await supabaseAdmin.from('content').delete().eq('id', recording.id);
 
       return errors.internalError(requestId);
     }
@@ -125,7 +123,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     // Update recording status to transcribed
     await supabaseAdmin
       .from('content')
-      .update({ status: 'transcribed' })
+      .update({ status: SOURCE_STATUS.TRANSCRIBED })
       .eq('id', recording.id);
 
     // Enqueue processing job for document generation
@@ -144,7 +142,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     // Update status to indicate doc generation in progress
     await supabaseAdmin
       .from('content')
-      .update({ status: 'doc_generating' })
+      .update({ status: SOURCE_STATUS.DOCUMENT_GENERATING })
       .eq('id', recording.id);
 
     return successResponse(
@@ -153,12 +151,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
         title: recording.title,
         content_type: recording.content_type,
         file_type: recording.file_type,
-        status: 'doc_generating',
+        status: SOURCE_STATUS.DOCUMENT_GENERATING,
         file_size: contentSizeBytes,
         created_at: recording.created_at,
       },
       requestId,
-      201
+      201,
     );
   } catch (error: any) {
     console.error('[Text Note] Request error:', error);
@@ -178,5 +176,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
  * Not implemented - use /api/library to list all content including text notes
  */
 export const GET = apiHandler(async () => {
-  return errors.badRequest('Method not allowed. Use GET /api/library to list content.');
+  return errors.badRequest(
+    'Method not allowed. Use GET /api/library to list content.',
+  );
 });

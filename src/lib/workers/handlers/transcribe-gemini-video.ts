@@ -18,10 +18,20 @@ import OpenAI from 'openai';
 
 import type { Database } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
-import { getGoogleAI, getFileManager, FileState, GOOGLE_CONFIG } from '@/lib/google/client';
+import {
+  getGoogleAI,
+  getFileManager,
+  FileState,
+  GOOGLE_CONFIG,
+} from '@/lib/google/client';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
-import { streamTranscription, isStreamingAvailable, sendCompletionNotification, type VideoSource } from '@/lib/services/llm-streaming-helper';
+import {
+  streamTranscription,
+  isStreamingAvailable,
+  sendCompletionNotification,
+  type VideoSource,
+} from '@/lib/services/llm-streaming-helper';
 import {
   shouldSplitVideo,
   splitVideoIntoSegments,
@@ -35,6 +45,10 @@ import {
   calculateSegmentCount,
   estimateProcessingTime,
 } from '@/lib/types/content';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 
 // Size threshold for using Gemini File API vs inline base64
 const FILE_API_THRESHOLD_BYTES = 20 * 1024 * 1024; // 20MB
@@ -47,7 +61,7 @@ const MAX_SINGLE_PASS_DURATION = SPLIT_THRESHOLD_SECONDS;
  * Sleep helper for polling file processing status
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // PERF-AI-006: Lazy-initialized OpenAI client for fallback transcription
@@ -122,7 +136,7 @@ interface GeminiVideoResponse {
  */
 async function transcribeWithWhisperFallback(
   tempFilePath: string,
-  logger: ReturnType<typeof createLogger>
+  logger: ReturnType<typeof createLogger>,
 ): Promise<GeminiVideoResponse> {
   logger.info('Using Whisper fallback for transcription');
 
@@ -139,16 +153,21 @@ async function transcribeWithWhisperFallback(
 
   // Convert Whisper response to GeminiVideoResponse format
   const segments = (transcription as any).segments || [];
-  const audioTranscript: AudioSegment[] = segments.map((seg: any, index: number) => ({
-    timestamp: formatTimestamp(seg.start),
-    startTime: seg.start,
-    endTime: seg.end,
-    speaker: 'narrator',
-    text: seg.text.trim(),
-  }));
+  const audioTranscript: AudioSegment[] = segments.map(
+    (seg: any, index: number) => ({
+      timestamp: formatTimestamp(seg.start),
+      startTime: seg.start,
+      endTime: seg.end,
+      speaker: 'narrator',
+      text: seg.text.trim(),
+    }),
+  );
 
-  const fullText = (transcription as any).text || audioTranscript.map(s => s.text).join(' ');
-  const duration = (transcription as any).duration || (segments.length > 0 ? segments[segments.length - 1].end : 0);
+  const fullText =
+    (transcription as any).text || audioTranscript.map((s) => s.text).join(' ');
+  const duration =
+    (transcription as any).duration ||
+    (segments.length > 0 ? segments[segments.length - 1].end : 0);
 
   logger.info('Whisper fallback completed', {
     context: {
@@ -218,7 +237,11 @@ export async function transcribeRecording(job: Job): Promise<void> {
     // Ensure recording status is correct
     await supabase
       .from('content')
-      .update({ status: 'transcribed' })
+      .update({
+        status:
+          getQueuedSourceStatusForJob('doc_generate') ??
+          SOURCE_STATUS.DOCUMENT_GENERATING,
+      })
       .eq('id', recordingId);
 
     // Enqueue document generation job (in case pipeline was interrupted)
@@ -241,7 +264,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
         dedupe_key: `doc_generate:${recordingId}`,
       });
       console.log(
-        `[Transcribe-Video] Enqueued document generation job for existing transcript`
+        `[Transcribe-Video] Enqueued document generation job for existing transcript`,
       );
     }
 
@@ -266,7 +289,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
         priority: 1, // JOB_PRIORITY.HIGH — titles appear quickly
       });
       console.log(
-        `[Transcribe-Video] Enqueued metadata generation job for existing transcript`
+        `[Transcribe-Video] Enqueued metadata generation job for existing transcript`,
       );
     }
 
@@ -276,7 +299,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
   // Update recording status
   await supabase
     .from('content')
-    .update({ status: 'transcribing' })
+    .update({ status: SOURCE_STATUS.TRANSCRIBING })
     .eq('id', recordingId);
 
   let tempFilePath: string | null = null;
@@ -288,7 +311,12 @@ export async function transcribeRecording(job: Job): Promise<void> {
     });
 
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'transcribe', 10, 'Downloading video from storage...');
+      streamingManager.sendProgress(
+        recordingId,
+        'transcribe',
+        10,
+        'Downloading video from storage...',
+      );
     }
 
     const { data: videoBlob, error: downloadError } = await supabase.storage
@@ -297,7 +325,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     if (downloadError || !videoBlob) {
       throw new Error(
-        `Failed to download video: ${downloadError?.message || 'Unknown error'}`
+        `Failed to download video: ${downloadError?.message || 'Unknown error'}`,
       );
     }
 
@@ -310,7 +338,12 @@ export async function transcribeRecording(job: Job): Promise<void> {
     });
 
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'transcribe', 20, `Downloaded video (${fileSizeMB} MB)`);
+      streamingManager.sendProgress(
+        recordingId,
+        'transcribe',
+        20,
+        `Downloaded video (${fileSizeMB} MB)`,
+      );
     }
 
     // Stream video to temp file to reduce memory pressure
@@ -334,7 +367,12 @@ export async function transcribeRecording(job: Job): Promise<void> {
     });
 
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'transcribe', 25, 'Checking video duration...');
+      streamingManager.sendProgress(
+        recordingId,
+        'transcribe',
+        25,
+        'Checking video duration...',
+      );
     }
 
     // Get video duration to check if splitting is needed
@@ -350,28 +388,34 @@ export async function transcribeRecording(job: Job): Promise<void> {
         },
       });
     } catch (durationError) {
-      logger.warn('Could not determine video duration, proceeding without splitting', {
-        context: { error: (durationError as Error).message },
-      });
+      logger.warn(
+        'Could not determine video duration, proceeding without splitting',
+        {
+          context: { error: (durationError as Error).message },
+        },
+      );
       videoDuration = 0;
     }
 
     // Check if video needs splitting (>30 minutes)
     if (shouldSplitVideo(videoDuration)) {
-      logger.info('Video exceeds duration limit, initiating segmented processing', {
-        context: {
-          recordingId,
-          durationMinutes: Math.round(videoDuration / 60),
-          threshold: Math.round(SPLIT_THRESHOLD_SECONDS / 60),
+      logger.info(
+        'Video exceeds duration limit, initiating segmented processing',
+        {
+          context: {
+            recordingId,
+            durationMinutes: Math.round(videoDuration / 60),
+            threshold: Math.round(SPLIT_THRESHOLD_SECONDS / 60),
+          },
         },
-      });
+      );
 
       if (isStreaming) {
         streamingManager.sendProgress(
           recordingId,
           'transcribe',
           28,
-          `Video is ${Math.round(videoDuration / 60)} minutes, compressing before split...`
+          `Video is ${Math.round(videoDuration / 60)} minutes, compressing before split...`,
         );
       }
 
@@ -385,7 +429,12 @@ export async function transcribeRecording(job: Job): Promise<void> {
         onProgress: (percent, message) => {
           if (isStreaming) {
             // Compression takes 28-38% of progress
-            streamingManager.sendProgress(recordingId, 'transcribe', 28 + percent * 0.1, message);
+            streamingManager.sendProgress(
+              recordingId,
+              'transcribe',
+              28 + percent * 0.1,
+              message,
+            );
           }
         },
       });
@@ -397,20 +446,38 @@ export async function transcribeRecording(job: Job): Promise<void> {
         logger.info('Pre-split compression successful', {
           context: {
             recordingId,
-            originalSizeMB: (compressionResult.originalSize / 1024 / 1024).toFixed(2),
-            compressedSizeMB: (compressionResult.compressedSize / 1024 / 1024).toFixed(2),
-            savingsPercent: ((1 - compressionResult.compressedSize / compressionResult.originalSize) * 100).toFixed(1),
+            originalSizeMB: (
+              compressionResult.originalSize /
+              1024 /
+              1024
+            ).toFixed(2),
+            compressedSizeMB: (
+              compressionResult.compressedSize /
+              1024 /
+              1024
+            ).toFixed(2),
+            savingsPercent: (
+              (1 -
+                compressionResult.compressedSize /
+                  compressionResult.originalSize) *
+              100
+            ).toFixed(1),
             compressionTime: compressionResult.compressionTime.toFixed(1),
           },
         });
 
         if (isStreaming) {
-          const savings = ((1 - compressionResult.compressedSize / compressionResult.originalSize) * 100).toFixed(0);
+          const savings = (
+            (1 -
+              compressionResult.compressedSize /
+                compressionResult.originalSize) *
+            100
+          ).toFixed(0);
           streamingManager.sendProgress(
             recordingId,
             'transcribe',
             38,
-            `Compressed ${savings}% smaller, now splitting into segments...`
+            `Compressed ${savings}% smaller, now splitting into segments...`,
           );
         }
       } else {
@@ -427,7 +494,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
             recordingId,
             'transcribe',
             38,
-            `Splitting video into segments...`
+            `Splitting video into segments...`,
           );
         }
       }
@@ -437,7 +504,12 @@ export async function transcribeRecording(job: Job): Promise<void> {
         onProgress: (percent, message) => {
           if (isStreaming) {
             // Splitting takes 38-50% of progress
-            streamingManager.sendProgress(recordingId, 'transcribe', 38 + percent * 0.12, message);
+            streamingManager.sendProgress(
+              recordingId,
+              'transcribe',
+              38 + percent * 0.12,
+              message,
+            );
           }
         },
       });
@@ -462,7 +534,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
         context: {
           recordingId,
           segmentCount: splitResult.segments.length,
-          segments: splitResult.segments.map(s => ({
+          segments: splitResult.segments.map((s) => ({
             index: s.index,
             duration: Math.round(s.duration),
           })),
@@ -474,7 +546,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
           recordingId,
           'transcribe',
           50,
-          `Created ${splitResult.segments.length} segments, queueing transcription jobs...`
+          `Created ${splitResult.segments.length} segments, queueing transcription jobs...`,
         );
       }
 
@@ -505,7 +577,9 @@ export async function transcribeRecording(job: Job): Promise<void> {
         .single();
 
       if (mergeJobError || !mergeJob) {
-        throw new Error(`Failed to create merge job: ${mergeJobError?.message || 'Unknown error'}`);
+        throw new Error(
+          `Failed to create merge job: ${mergeJobError?.message || 'Unknown error'}`,
+        );
       }
 
       logger.info('Created merge transcripts job', {
@@ -544,41 +618,48 @@ export async function transcribeRecording(job: Job): Promise<void> {
             .single();
 
           if (jobError) {
-            throw new Error(`Failed to create segment job: ${jobError.message}`);
+            throw new Error(
+              `Failed to create segment job: ${jobError.message}`,
+            );
           }
 
           return segmentJob;
-        })
+        }),
       );
 
-      logger.info('Created segment transcription jobs with dependency tracking', {
-        context: {
-          recordingId,
-          mergeJobId: mergeJob.id,
-          jobCount: segmentJobs.length,
-          jobIds: segmentJobs.map(j => j.id),
+      logger.info(
+        'Created segment transcription jobs with dependency tracking',
+        {
+          context: {
+            recordingId,
+            mergeJobId: mergeJob.id,
+            jobCount: segmentJobs.length,
+            jobIds: segmentJobs.map((j) => j.id),
+          },
         },
-      });
+      );
 
       if (isStreaming) {
         streamingManager.sendProgress(
           recordingId,
           'transcribe',
           60,
-          `Processing ${splitResult.segments.length} segments - content will become searchable progressively`
+          `Processing ${splitResult.segments.length} segments - content will become searchable progressively`,
         );
       }
 
       // Get processing time estimate (use max for conservative estimate)
       const timeEstimate = estimateProcessingTime(splitResult.totalDuration);
       const estimatedMinutes = timeEstimate.maxMinutes;
-      const estimatedCompletionAt = new Date(Date.now() + estimatedMinutes * 60 * 1000);
+      const estimatedCompletionAt = new Date(
+        Date.now() + estimatedMinutes * 60 * 1000,
+      );
 
       // Update content with progressive processing fields
       await supabase
         .from('content')
         .update({
-          status: 'transcribing',
+          status: SOURCE_STATUS.TRANSCRIBING,
           processing_strategy: splitResult.processingStrategy,
           total_segments: splitResult.segments.length,
           completed_segments: 0,
@@ -587,21 +668,39 @@ export async function transcribeRecording(job: Job): Promise<void> {
             processing_method: 'segmented',
             segment_count: splitResult.segments.length,
             total_duration: splitResult.totalDuration,
-            segment_duration_minutes: Math.round(splitResult.segmentDuration / 60),
+            segment_duration_minutes: Math.round(
+              splitResult.segmentDuration / 60,
+            ),
             estimated_minutes: estimatedMinutes,
-            pre_split_compression: compressionResult.success ? {
-              original_size_mb: (compressionResult.originalSize / 1024 / 1024).toFixed(2),
-              compressed_size_mb: (compressionResult.compressedSize / 1024 / 1024).toFixed(2),
-              savings_percent: ((1 - compressionResult.compressedSize / compressionResult.originalSize) * 100).toFixed(1),
-              compression_time_seconds: compressionResult.compressionTime.toFixed(1),
-            } : null,
+            pre_split_compression: compressionResult.success
+              ? {
+                  original_size_mb: (
+                    compressionResult.originalSize /
+                    1024 /
+                    1024
+                  ).toFixed(2),
+                  compressed_size_mb: (
+                    compressionResult.compressedSize /
+                    1024 /
+                    1024
+                  ).toFixed(2),
+                  savings_percent: (
+                    (1 -
+                      compressionResult.compressedSize /
+                        compressionResult.originalSize) *
+                    100
+                  ).toFixed(1),
+                  compression_time_seconds:
+                    compressionResult.compressionTime.toFixed(1),
+                }
+              : null,
           },
         })
         .eq('id', recordingId);
 
       // Create initial segment_transcripts records with 'pending' status
       // This allows the progress UI to show all segments from the start
-      const segmentRecords = splitResult.segments.map(segment => ({
+      const segmentRecords = splitResult.segments.map((segment) => ({
         content_id: recordingId,
         parent_job_id: job.id,
         segment_index: segment.index,
@@ -658,7 +757,12 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     // Video doesn't need splitting, proceed with single-pass transcription
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'transcribe', 30, 'Preparing video for analysis...');
+      streamingManager.sendProgress(
+        recordingId,
+        'transcribe',
+        30,
+        'Preparing video for analysis...',
+      );
     }
 
     // Determine method based on file size
@@ -686,7 +790,12 @@ export async function transcribeRecording(job: Job): Promise<void> {
       });
 
       if (isStreaming) {
-        streamingManager.sendProgress(recordingId, 'transcribe', 35, 'Uploading large video to Gemini...');
+        streamingManager.sendProgress(
+          recordingId,
+          'transcribe',
+          35,
+          'Uploading large video to Gemini...',
+        );
       }
 
       const fileManager = getFileManager();
@@ -713,10 +822,13 @@ export async function transcribeRecording(job: Job): Promise<void> {
       while (file.state === FileState.PROCESSING) {
         pollCount++;
         if (pollCount > maxPolls) {
-          throw new Error('Gemini file processing timeout - video may be too long or complex');
+          throw new Error(
+            'Gemini file processing timeout - video may be too long or complex',
+          );
         }
 
-        if (pollCount % 6 === 0) { // Log every 30 seconds
+        if (pollCount % 6 === 0) {
+          // Log every 30 seconds
           logger.info('Waiting for Gemini file processing', {
             context: {
               fileName: file.name,
@@ -730,7 +842,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
               recordingId,
               'transcribe',
               35 + Math.min(pollCount / 2, 10), // Progress from 35-45%
-              `Processing video in Gemini (${Math.round(pollCount * 5 / 60)}m)...`
+              `Processing video in Gemini (${Math.round((pollCount * 5) / 60)}m)...`,
             );
           }
         }
@@ -757,7 +869,12 @@ export async function transcribeRecording(job: Job): Promise<void> {
       });
 
       if (isStreaming) {
-        streamingManager.sendProgress(recordingId, 'transcribe', 45, 'Video ready for analysis');
+        streamingManager.sendProgress(
+          recordingId,
+          'transcribe',
+          45,
+          'Video ready for analysis',
+        );
       }
     } else {
       // Use inline base64 for small files (<20MB)
@@ -849,19 +966,31 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
 
     // Build video source based on upload method
     const videoSource: VideoSource = geminiFileUri
-      ? { type: 'fileApi', fileUri: geminiFileUri, mimeType: geminiMimeType || 'video/webm' }
+      ? {
+          type: 'fileApi',
+          fileUri: geminiFileUri,
+          mimeType: geminiMimeType || 'video/webm',
+        }
       : { type: 'inline', base64: videoBase64 || '' };
 
     logger.info('Sending video to Gemini for analysis', {
       context: {
         promptLength: prompt.length,
         videoSourceType: videoSource.type,
-        videoDataSize: videoSource.type === 'inline' ? videoSource.base64.length : 'File API',
+        videoDataSize:
+          videoSource.type === 'inline'
+            ? videoSource.base64.length
+            : 'File API',
       },
     });
 
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'transcribe', 50, 'Analyzing video with Gemini AI...');
+      streamingManager.sendProgress(
+        recordingId,
+        'transcribe',
+        50,
+        'Analyzing video with Gemini AI...',
+      );
     }
 
     // PERF-AI-006: Track which provider was used for transcription
@@ -881,7 +1010,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
           chunkDelayMs: 100,
           punctuationChunking: true,
           progressUpdateInterval: 5,
-        }
+        },
       );
 
       const responseText = streamingResult.fullText;
@@ -897,7 +1026,12 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       });
 
       if (isStreaming) {
-        streamingManager.sendProgress(recordingId, 'transcribe', 70, 'Processing Gemini response...');
+        streamingManager.sendProgress(
+          recordingId,
+          'transcribe',
+          70,
+          'Processing Gemini response...',
+        );
       }
 
       // Parse JSON response (strip markdown if present)
@@ -919,7 +1053,11 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       });
     } catch (geminiError: any) {
       // PERF-AI-006: Check if we should fall back to Whisper
-      if (isRecoverableGeminiError(geminiError) && process.env.OPENAI_API_KEY && tempFilePath) {
+      if (
+        isRecoverableGeminiError(geminiError) &&
+        process.env.OPENAI_API_KEY &&
+        tempFilePath
+      ) {
         logger.warn('Gemini transcription failed, using Whisper fallback', {
           context: {
             geminiError: geminiError.message,
@@ -928,11 +1066,19 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
         });
 
         if (isStreaming) {
-          streamingManager.sendProgress(recordingId, 'transcribe', 55, 'Gemini unavailable, using Whisper fallback...');
+          streamingManager.sendProgress(
+            recordingId,
+            'transcribe',
+            55,
+            'Gemini unavailable, using Whisper fallback...',
+          );
         }
 
         try {
-          parsedResponse = await transcribeWithWhisperFallback(tempFilePath, logger);
+          parsedResponse = await transcribeWithWhisperFallback(
+            tempFilePath,
+            logger,
+          );
           transcriptionProvider = 'whisper';
           logger.info('Whisper fallback successful', {
             context: {
@@ -948,7 +1094,9 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
               recordingId,
             },
           });
-          throw new Error(`All transcription providers failed: Gemini (${geminiError.message}), Whisper (${whisperError.message})`);
+          throw new Error(
+            `All transcription providers failed: Gemini (${geminiError.message}), Whisper (${whisperError.message})`,
+          );
         }
       } else {
         // Not a recoverable error, or no fallback available
@@ -962,19 +1110,21 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
         'transcribe',
         80,
         `Extracted ${parsedResponse.audioTranscript.length} audio segments` +
-          (parsedResponse.visualEvents.length > 0 ? ` and ${parsedResponse.visualEvents.length} visual events` : '')
+          (parsedResponse.visualEvents.length > 0
+            ? ` and ${parsedResponse.visualEvents.length} visual events`
+            : ''),
       );
     }
 
     // Convert audio transcript to compatible format (similar to words_json structure)
     const fullTranscript = parsedResponse.audioTranscript
-      .map(seg => seg.text)
+      .map((seg) => seg.text)
       .join(' ')
       .trim();
 
     // Build words_json compatible structure
     const words_json = {
-      segments: parsedResponse.audioTranscript.map(seg => ({
+      segments: parsedResponse.audioTranscript.map((seg) => ({
         start: seg.startTime,
         end: seg.endTime,
         text: seg.text,
@@ -985,8 +1135,14 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
 
     // Prepare video metadata
     const video_metadata = {
-      model: transcriptionProvider === 'gemini' ? GOOGLE_CONFIG.DOCIFY_MODEL : 'whisper-1',
-      provider: transcriptionProvider === 'gemini' ? 'gemini-video' : 'whisper-fallback', // PERF-AI-006: Track provider
+      model:
+        transcriptionProvider === 'gemini'
+          ? GOOGLE_CONFIG.DOCIFY_MODEL
+          : 'whisper-1',
+      provider:
+        transcriptionProvider === 'gemini'
+          ? 'gemini-video'
+          : 'whisper-fallback', // PERF-AI-006: Track provider
       duration: parsedResponse.duration,
       file_size_mb: (fileSize / 1024 / 1024).toFixed(2),
       processed_at: new Date().toISOString(),
@@ -1014,7 +1170,10 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
         visual_events: parsedResponse.visualEvents,
         video_metadata,
         confidence: transcriptionProvider === 'gemini' ? 0.95 : 0.92, // Gemini 95%, Whisper 92%
-        provider: transcriptionProvider === 'gemini' ? 'gemini-video' : 'whisper-fallback', // PERF-AI-006
+        provider:
+          transcriptionProvider === 'gemini'
+            ? 'gemini-video'
+            : 'whisper-fallback', // PERF-AI-006
       })
       .select()
       .single();
@@ -1037,14 +1196,21 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
     });
 
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'transcribe', 90, 'Transcript saved successfully');
+      streamingManager.sendProgress(
+        recordingId,
+        'transcribe',
+        90,
+        'Transcript saved successfully',
+      );
     }
 
     // Update recording status (single-pass processing)
     await supabase
       .from('content')
       .update({
-        status: 'transcribed',
+        status:
+          getQueuedSourceStatusForJob('doc_generate') ??
+          SOURCE_STATUS.DOCUMENT_GENERATING,
         processing_strategy: 'single',
         total_segments: 1,
         completed_segments: 1,
@@ -1063,63 +1229,75 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
     // Build array of jobs to create in parallel
     const jobPromises: Promise<any>[] = [
       // Document generation job
-      Promise.resolve(supabase.from('jobs').insert({
-        type: 'doc_generate',
-        status: 'pending',
-        payload: {
-          recordingId,
-          transcriptId: transcript.id,
-          orgId,
-        },
-        dedupe_key: `doc_generate:${recordingId}`,
-      })).then(res => res.data),
+      Promise.resolve(
+        supabase.from('jobs').insert({
+          type: 'doc_generate',
+          status: 'pending',
+          payload: {
+            recordingId,
+            transcriptId: transcript.id,
+            orgId,
+          },
+          dedupe_key: `doc_generate:${recordingId}`,
+        }),
+      ).then((res) => res.data),
       // Embeddings generation job - can start in parallel with doc generation
-      Promise.resolve(supabase.from('jobs').insert({
-        type: 'generate_embeddings',
-        status: 'pending',
-        payload: {
-          recordingId,
-          transcriptId: transcript.id,
-          orgId,
-        },
-        dedupe_key: `generate_embeddings:${recordingId}`,
-      })).then(res => res.data),
+      Promise.resolve(
+        supabase.from('jobs').insert({
+          type: 'generate_embeddings',
+          status: 'pending',
+          payload: {
+            recordingId,
+            transcriptId: transcript.id,
+            orgId,
+          },
+          dedupe_key: `generate_embeddings:${recordingId}`,
+        }),
+      ).then((res) => res.data),
       // Metadata generation job - generates title, description, and tags
-      Promise.resolve(supabase.from('jobs').insert({
-        type: 'generate_metadata',
-        status: 'pending',
-        payload: {
-          recordingId,
-          transcriptId: transcript.id,
-          orgId,
-        },
-        dedupe_key: `generate_metadata:${recordingId}`,
-        priority: 1, // JOB_PRIORITY.HIGH — titles appear quickly
-      })).then(res => res.data),
+      Promise.resolve(
+        supabase.from('jobs').insert({
+          type: 'generate_metadata',
+          status: 'pending',
+          payload: {
+            recordingId,
+            transcriptId: transcript.id,
+            orgId,
+          },
+          dedupe_key: `generate_metadata:${recordingId}`,
+          priority: 1, // JOB_PRIORITY.HIGH — titles appear quickly
+        }),
+      ).then((res) => res.data),
     ];
 
     // Add compression job if applicable
     if (recording && recording.storage_path_raw) {
       const contentType = recording.content_type || 'recording';
-      const outputPath = recording.storage_path_raw.replace('/raw.', '/compressed.');
+      const outputPath = recording.storage_path_raw.replace(
+        '/raw.',
+        '/compressed.',
+      );
 
       // Only compress video/audio content types
       if (['recording', 'video', 'audio'].includes(contentType)) {
         jobPromises.push(
-          Promise.resolve(supabase.from('jobs').insert({
-            type: contentType === 'audio' ? 'compress_audio' : 'compress_video',
-            status: 'pending',
-            payload: {
-              recordingId,
-              orgId,
-              inputPath: recording.storage_path_raw,
-              outputPath,
-              profile: 'uploadedVideo', // Will be determined by classifier
-              contentType,
-              fileType: recording.file_type || 'mp4',
-            },
-            dedupe_key: `compress_${contentType}:${recordingId}`,
-          })).then(res => res.data)
+          Promise.resolve(
+            supabase.from('jobs').insert({
+              type:
+                contentType === 'audio' ? 'compress_audio' : 'compress_video',
+              status: 'pending',
+              payload: {
+                recordingId,
+                orgId,
+                inputPath: recording.storage_path_raw,
+                outputPath,
+                profile: 'uploadedVideo', // Will be determined by classifier
+                contentType,
+                fileType: recording.file_type || 'mp4',
+              },
+              dedupe_key: `compress_${contentType}:${recordingId}`,
+            }),
+          ).then((res) => res.data),
         );
       }
     }
@@ -1127,17 +1305,36 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
     // Execute all job creations in parallel
     await Promise.all(jobPromises);
 
+    await supabase
+      .from('content')
+      .update({
+        status:
+          getQueuedSourceStatusForJob('doc_generate') ??
+          SOURCE_STATUS.DOCUMENT_GENERATING,
+      })
+      .eq('id', recordingId);
+
     logger.info('Enqueued all dependent jobs in parallel', {
       context: {
         recordingId,
         transcriptId: transcript.id,
         jobCount: jobPromises.length,
-        jobs: ['doc_generate', 'generate_embeddings', 'generate_metadata', recording?.storage_path_raw ? 'compression' : null].filter(Boolean),
+        jobs: [
+          'doc_generate',
+          'generate_embeddings',
+          'generate_metadata',
+          recording?.storage_path_raw ? 'compression' : null,
+        ].filter(Boolean),
       },
     });
 
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'transcribe', 95, 'Processing complete, starting document generation');
+      streamingManager.sendProgress(
+        recordingId,
+        'transcribe',
+        95,
+        'Processing complete, starting document generation',
+      );
     }
 
     // Create event for notifications
@@ -1165,11 +1362,14 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
 
     if (isStreaming) {
       sendCompletionNotification(recordingId, 'Transcription', totalTime);
-      streamingManager.sendComplete(recordingId, `Transcription complete in ${Math.round(totalTime / 1000)}s`);
+      streamingManager.sendComplete(
+        recordingId,
+        `Transcription complete in ${Math.round(totalTime / 1000)}s`,
+      );
     }
-
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Video transcription failed';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Video transcription failed';
 
     logger.error('Video transcription failed', {
       context: {
@@ -1189,7 +1389,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
     await supabase
       .from('content')
       .update({
-        status: 'error',
+        status: SOURCE_STATUS.ERROR,
         metadata: {
           error: errorMessage,
           errorType: 'transcription',

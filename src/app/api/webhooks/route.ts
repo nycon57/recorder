@@ -17,6 +17,10 @@ import {
   verifyWebhook,
   markWebhookEventProcessed,
 } from '@/lib/utils/webhook-verification';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
 
@@ -37,14 +41,14 @@ export async function POST(request: NextRequest) {
       payload,
       { signature, timestamp, eventId },
       WEBHOOK_SECRET,
-      'custom'
+      'custom',
     );
 
     if (!verification.valid) {
       console.warn('[Webhook] Verification failed:', verification.error);
       return NextResponse.json(
         { error: verification.error || 'Invalid signature' },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -74,7 +78,7 @@ export async function POST(request: NextRequest) {
         console.warn(`[Webhook] Unknown event type: ${type}`);
         return NextResponse.json(
           { error: 'Unknown event type' },
-          { status: 400 }
+          { status: 400 },
         );
     }
 
@@ -84,12 +88,11 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-
   } catch (error) {
     console.error('[Webhook] Error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -108,7 +111,9 @@ async function handleTranscriptionCompleted(data: {
 }) {
   const supabase = createAdminClient();
 
-  console.log(`[Webhook] Transcription completed for recording ${data.recordingId}`);
+  console.log(
+    `[Webhook] Transcription completed for recording ${data.recordingId}`,
+  );
 
   // Update transcript in database
   const { error: updateError } = await supabase
@@ -124,18 +129,6 @@ async function handleTranscriptionCompleted(data: {
 
   if (updateError) {
     throw new Error(`Failed to update transcript: ${updateError.message}`);
-  }
-
-  // Update recording status
-  const { error: statusError } = await supabase
-    .from('content')
-    .update({ status: 'transcribed' })
-    .eq('id', data.recordingId);
-
-  if (statusError) {
-    throw new Error(
-      `Failed to update content status for recording ${data.recordingId}: ${statusError.message}`
-    );
   }
 
   // Get org_id for the recording
@@ -160,7 +153,24 @@ async function handleTranscriptionCompleted(data: {
     dedupe_key: `doc_generate:${data.recordingId}`,
   });
 
-  console.log(`[Webhook] Enqueued document generation for recording ${data.recordingId}`);
+  const { error: statusError } = await supabase
+    .from('content')
+    .update({
+      status:
+        getQueuedSourceStatusForJob('doc_generate') ??
+        SOURCE_STATUS.DOCUMENT_GENERATING,
+    })
+    .eq('id', data.recordingId);
+
+  if (statusError) {
+    throw new Error(
+      `Failed to update content status for recording ${data.recordingId}: ${statusError.message}`,
+    );
+  }
+
+  console.log(
+    `[Webhook] Enqueued document generation for recording ${data.recordingId}`,
+  );
 }
 
 /**
@@ -172,20 +182,22 @@ async function handleTranscriptionFailed(data: {
 }) {
   const supabase = createAdminClient();
 
-  console.log(`[Webhook] Transcription failed for recording ${data.recordingId}: ${data.error}`);
+  console.log(
+    `[Webhook] Transcription failed for recording ${data.recordingId}: ${data.error}`,
+  );
 
   // Update recording status
   const { error: statusError } = await supabase
     .from('content')
     .update({
-      status: 'error',
+      status: SOURCE_STATUS.ERROR,
       metadata: { error: data.error },
     })
     .eq('id', data.recordingId);
 
   if (statusError) {
     throw new Error(
-      `Failed to update content status for recording ${data.recordingId}: ${statusError.message}`
+      `Failed to update content status for recording ${data.recordingId}: ${statusError.message}`,
     );
   }
 }

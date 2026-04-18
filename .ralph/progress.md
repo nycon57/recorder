@@ -9,6 +9,28 @@ Started: 2026-02-11
 - Database types: `lib/types/database.ts` — manual `Database` interface with Row/Insert/Update per table
 
 ---
+Date: 2026-04-18 19:18 UTC
+Story: TRIB-94 - Normalize source lifecycle statuses across record, upload, document, and text flows
+Pass: Kanban Wave 1 build handoff
+- Guardrails reviewed: yes
+- Protected areas untouched: `src/app/(marketing)`, `src/app/(auth)`
+- Verification:
+  - `npm run build` -> PASS
+  - `npm test -- --runTestsByPath src/lib/utils/__tests__/status-helpers.test.ts` -> FAIL (pre-existing `jest.setup.js` blocker: missing `@clerk/nextjs`)
+  - `npm run type:check` -> FAIL (pre-existing repo-wide TypeScript failures across scripts, workers, dashboard, and marketing files)
+  - `npx eslint <changed files>` -> FAIL (repo is not on flat-config and direct ESLint invocation cannot resolve `eslint.config.*`)
+- Files changed:
+  - `src/lib/utils/status-helpers.ts`
+  - `src/lib/utils/__tests__/status-helpers.test.ts`
+  - source lifecycle API routes under `src/app/api/library`, `src/app/api/recordings`, `src/app/api/webhooks`, and `src/app/api/integrations/google-drive/import`
+  - source-processing handlers under `src/lib/workers/handlers`
+  - supporting read-model consumers: `src/lib/services/storage-metrics.ts`, `src/lib/validations/library.ts`
+- What was implemented:
+  - centralized raw source lifecycle constants and display-state helpers
+  - normalized lifecycle writes across upload, recording finalize/reprocess, text note, document generation, transcription, extraction, and import paths
+  - preserved TRIB-108 governance statuses as out-of-scope
+  - kept all work confined to backend/source-lifecycle paths
+---
 
 ## 2026-02-11T18:33Z - US-001: Create agent_memory table migration
 Thread: N/A

@@ -8,7 +8,11 @@
 import { openai, PROMPTS } from '@/lib/openai/client';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
-import { getAnalysisPrompt, type AnalysisType } from '@/lib/services/analysis-templates';
+import {
+  getAnalysisPrompt,
+  type AnalysisType,
+} from '@/lib/services/analysis-templates';
+import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -25,14 +29,16 @@ export async function generateDocument(job: Job): Promise<void> {
   const payload = job.payload as unknown as DocifyPayload;
   const { recordingId, transcriptId, orgId } = payload;
 
-  console.log(`[Docify] Starting document generation for recording ${recordingId}`);
+  console.log(
+    `[Docify] Starting document generation for recording ${recordingId}`,
+  );
 
   const supabase = createAdminClient();
 
   // Update recording status
   await supabase
     .from('content')
-    .update({ status: 'doc_generating' })
+    .update({ status: SOURCE_STATUS.DOCUMENT_GENERATING })
     .eq('id', recordingId);
 
   try {
@@ -44,7 +50,9 @@ export async function generateDocument(job: Job): Promise<void> {
       .single();
 
     if (transcriptError || !transcript) {
-      throw new Error(`Failed to fetch transcript: ${transcriptError?.message || 'Not found'}`);
+      throw new Error(
+        `Failed to fetch transcript: ${transcriptError?.message || 'Not found'}`,
+      );
     }
 
     console.log(`[Docify] Loaded transcript (${transcript.text.length} chars)`);
@@ -58,17 +66,20 @@ export async function generateDocument(job: Job): Promise<void> {
 
     const title = recording?.title || 'Untitled Recording';
     const metadata = (recording?.metadata || {}) as Record<string, any>;
-    const analysisType = (recording?.analysis_type as AnalysisType) || 'general';
+    const analysisType =
+      (recording?.analysis_type as AnalysisType) || 'general';
     const skipAnalysis = recording?.skip_analysis || false;
 
     // Check if we should skip analysis
     if (skipAnalysis || analysisType === 'none') {
-      console.log(`[Docify] Skipping document generation (skip_analysis: ${skipAnalysis}, analysis_type: ${analysisType})`);
+      console.log(
+        `[Docify] Skipping document generation (skip_analysis: ${skipAnalysis}, analysis_type: ${analysisType})`,
+      );
 
       // Mark recording as completed without generating document
       await supabase
         .from('content')
-        .update({ status: 'completed' })
+        .update({ status: SOURCE_STATUS.COMPLETED })
         .eq('id', recordingId);
 
       // Still enqueue embedding generation for raw transcript
@@ -83,7 +94,9 @@ export async function generateDocument(job: Job): Promise<void> {
         dedupe_key: `generate_embeddings:${recordingId}`,
       });
 
-      console.log(`[Docify] Skipped document generation, enqueued embedding generation for recording ${recordingId}`);
+      console.log(
+        `[Docify] Skipped document generation, enqueued embedding generation for recording ${recordingId}`,
+      );
       return;
     }
 
@@ -94,7 +107,8 @@ export async function generateDocument(job: Job): Promise<void> {
     const durationSeconds = wordsData.duration || 0;
 
     // Determine if content has visual context (screen recordings typically do)
-    const hasVisualContext = metadata.hasVisualContext || metadata.content_type === 'recording';
+    const hasVisualContext =
+      metadata.hasVisualContext || metadata.content_type === 'recording';
 
     // Get specialized prompt based on analysis type
     const analysisPrompt = getAnalysisPrompt(analysisType, {
@@ -117,7 +131,9 @@ export async function generateDocument(job: Job): Promise<void> {
       .join('\n');
 
     // Call GPT-5 Nano to generate document
-    console.log(`[Docify] Calling GPT-5 Nano for document generation with ${analysisType} template`);
+    console.log(
+      `[Docify] Calling GPT-5 Nano for document generation with ${analysisType} template`,
+    );
     const completion = await openai.chat.completions.create({
       model: 'gpt-5-nano-2025-08-07',
       messages: [
@@ -139,7 +155,9 @@ export async function generateDocument(job: Job): Promise<void> {
       throw new Error('GPT-5 Nano returned empty response');
     }
 
-    console.log(`[Docify] Generated document (${generatedContent.length} chars)`);
+    console.log(
+      `[Docify] Generated document (${generatedContent.length} chars)`,
+    );
 
     // Extract metadata from GPT-5 Nano response (if structured)
     const documentMetadata = {
@@ -173,7 +191,7 @@ export async function generateDocument(job: Job): Promise<void> {
     // Update recording status
     await supabase
       .from('content')
-      .update({ status: 'completed' })
+      .update({ status: SOURCE_STATUS.COMPLETED })
       .eq('id', recordingId);
 
     // Enqueue embedding generation job
@@ -189,7 +207,9 @@ export async function generateDocument(job: Job): Promise<void> {
       dedupe_key: `generate_embeddings:${recordingId}`,
     });
 
-    console.log(`[Docify] Enqueued embedding generation for recording ${recordingId}`);
+    console.log(
+      `[Docify] Enqueued embedding generation for recording ${recordingId}`,
+    );
 
     // Create event for notifications
     await supabase.from('events').insert({
@@ -200,7 +220,6 @@ export async function generateDocument(job: Job): Promise<void> {
         orgId,
       },
     });
-
   } catch (error) {
     console.error(`[Docify] Error:`, error);
 
@@ -208,9 +227,12 @@ export async function generateDocument(job: Job): Promise<void> {
     await supabase
       .from('content')
       .update({
-        status: 'error',
+        status: SOURCE_STATUS.ERROR,
         metadata: {
-          error: error instanceof Error ? error.message : 'Document generation failed',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Document generation failed',
         },
       })
       .eq('id', recordingId);

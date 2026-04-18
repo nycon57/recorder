@@ -5,7 +5,7 @@
  * saves transcript with word-level timestamps.
  */
 
-import { readFile, unlink , writeFile } from 'fs/promises';
+import { readFile, unlink, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
@@ -13,6 +13,10 @@ import { randomUUID } from 'crypto';
 import type { Database } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { getSpeechClient, GOOGLE_CONFIG } from '@/lib/google/client';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -36,7 +40,9 @@ export async function transcribeRecording(job: Job): Promise<void> {
   const payload = job.payload as unknown as TranscribePayload;
   const { recordingId, orgId, storagePath } = payload;
 
-  console.log(`[Transcribe] Starting transcription for recording ${recordingId}`);
+  console.log(
+    `[Transcribe] Starting transcription for recording ${recordingId}`,
+  );
 
   // Initialize Speech client (lazy, supports both file and base64 credentials)
   const speechClient = getSpeechClient();
@@ -45,7 +51,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
   // Update recording status
   await supabase
     .from('content')
-    .update({ status: 'transcribing' })
+    .update({ status: SOURCE_STATUS.TRANSCRIBING })
     .eq('id', recordingId);
 
   let tempFilePath: string | null = null;
@@ -58,7 +64,9 @@ export async function transcribeRecording(job: Job): Promise<void> {
       .download(storagePath);
 
     if (downloadError || !videoBlob) {
-      throw new Error(`Failed to download video: ${downloadError?.message || 'Unknown error'}`);
+      throw new Error(
+        `Failed to download video: ${downloadError?.message || 'Unknown error'}`,
+      );
     }
 
     // Save to temp file
@@ -90,18 +98,22 @@ export async function transcribeRecording(job: Job): Promise<void> {
       },
     });
 
-    console.log(`[Transcribe] Transcription operation started, waiting for completion...`);
+    console.log(
+      `[Transcribe] Transcription operation started, waiting for completion...`,
+    );
 
     // Wait for the operation to complete
     const [response] = await operation.promise();
 
     if (!response.results || response.results.length === 0) {
-      throw new Error('No transcription results returned from Google Speech-to-Text');
+      throw new Error(
+        'No transcription results returned from Google Speech-to-Text',
+      );
     }
 
     // Process results
     const fullTranscript = response.results
-      .map(result => result.alternatives?.[0]?.transcript || '')
+      .map((result) => result.alternatives?.[0]?.transcript || '')
       .join(' ')
       .trim();
 
@@ -120,7 +132,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
       const wordInfos = alternative.words || [];
 
       // Extract words with timestamps
-      wordInfos.forEach(wordInfo => {
+      wordInfos.forEach((wordInfo) => {
         const startSec = Number(wordInfo.startTime?.seconds || 0);
         const startNanos = Number(wordInfo.startTime?.nanos || 0);
         const endSec = Number(wordInfo.endTime?.seconds || 0);
@@ -155,12 +167,15 @@ export async function transcribeRecording(job: Job): Promise<void> {
     // Calculate duration from last word
     const duration = words.length > 0 ? words[words.length - 1].endTime : 0;
 
-    console.log(`[Transcribe] Transcription completed. Duration: ${duration}s, Words: ${words.length}`);
+    console.log(
+      `[Transcribe] Transcription completed. Duration: ${duration}s, Words: ${words.length}`,
+    );
 
     // Calculate average confidence
-    const avgConfidence = words.length > 0
-      ? words.reduce((sum, w) => sum + (w.confidence || 0), 0) / words.length
-      : 0;
+    const avgConfidence =
+      words.length > 0
+        ? words.reduce((sum, w) => sum + (w.confidence || 0), 0) / words.length
+        : 0;
 
     // Save transcript to database
     const { data: transcript, error: transcriptError } = await supabase
@@ -186,12 +201,6 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     console.log(`[Transcribe] Saved transcript ${transcript.id}`);
 
-    // Update recording status
-    await supabase
-      .from('content')
-      .update({ status: 'transcribed' })
-      .eq('id', recordingId);
-
     // Enqueue document generation job
     await supabase.from('jobs').insert({
       type: 'doc_generate',
@@ -204,7 +213,18 @@ export async function transcribeRecording(job: Job): Promise<void> {
       dedupe_key: `doc_generate:${recordingId}`,
     });
 
-    console.log(`[Transcribe] Enqueued document generation job for recording ${recordingId}`);
+    await supabase
+      .from('content')
+      .update({
+        status:
+          getQueuedSourceStatusForJob('doc_generate') ??
+          SOURCE_STATUS.DOCUMENT_GENERATING,
+      })
+      .eq('id', recordingId);
+
+    console.log(
+      `[Transcribe] Enqueued document generation job for recording ${recordingId}`,
+    );
 
     // Create event for notifications
     await supabase.from('events').insert({
@@ -215,7 +235,6 @@ export async function transcribeRecording(job: Job): Promise<void> {
         orgId,
       },
     });
-
   } catch (error) {
     console.error(`[Transcribe] Error:`, error);
 
@@ -223,9 +242,10 @@ export async function transcribeRecording(job: Job): Promise<void> {
     await supabase
       .from('content')
       .update({
-        status: 'error',
+        status: SOURCE_STATUS.ERROR,
         metadata: {
-          error: error instanceof Error ? error.message : 'Transcription failed',
+          error:
+            error instanceof Error ? error.message : 'Transcription failed',
         },
       })
       .eq('id', recordingId);

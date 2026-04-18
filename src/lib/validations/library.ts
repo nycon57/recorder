@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { ContentType } from '@/lib/types/database';
+import { SOURCE_STATUS_VALUES } from '@/lib/utils/status-helpers';
 
 /**
  * Library API Validation Schemas
@@ -30,16 +31,21 @@ export type UploadFileInput = z.infer<typeof uploadFileSchema>;
  * For batch uploads (future enhancement)
  */
 export const uploadMultipleFilesSchema = z.object({
-  files: z.array(
-    z.object({
-      title: z.string().min(1).max(200).optional(),
-      description: z.string().max(2000).optional(),
-      metadata: z.record(z.any()).optional(),
-    })
-  ).min(1).max(10), // Max 10 files per batch
+  files: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(200).optional(),
+        description: z.string().max(2000).optional(),
+        metadata: z.record(z.any()).optional(),
+      }),
+    )
+    .min(1)
+    .max(10), // Max 10 files per batch
 });
 
-export type UploadMultipleFilesInput = z.infer<typeof uploadMultipleFilesSchema>;
+export type UploadMultipleFilesInput = z.infer<
+  typeof uploadMultipleFilesSchema
+>;
 
 // ============================================================================
 // Text Note Creation Schemas
@@ -84,9 +90,18 @@ export const libraryQuerySchema = z.object({
   type: z.enum(['recording', 'video', 'audio', 'document', 'text']).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
-  sort: z.enum(['recent', 'oldest', 'name_asc', 'name_desc', 'size_desc', 'size_asc']).default('recent'),
+  sort: z
+    .enum([
+      'recent',
+      'oldest',
+      'name_asc',
+      'name_desc',
+      'size_desc',
+      'size_asc',
+    ])
+    .default('recent'),
   search: z.string().max(200).optional(),
-  status: z.enum(['uploading', 'uploaded', 'transcribing', 'transcribed', 'doc_generating', 'completed', 'error']).optional(),
+  status: z.enum(SOURCE_STATUS_VALUES).optional(),
   dateFrom: z.string().datetime().optional(),
   dateTo: z.string().datetime().optional(),
 });
@@ -134,10 +149,14 @@ export type SoftDeleteInput = z.infer<typeof softDeleteSchema>;
  */
 export const dashboardRecentQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(8),
-  types: z.array(z.enum(['recording', 'video', 'audio', 'document', 'text'])).optional(),
+  types: z
+    .array(z.enum(['recording', 'video', 'audio', 'document', 'text']))
+    .optional(),
 });
 
-export type DashboardRecentQueryInput = z.infer<typeof dashboardRecentQuerySchema>;
+export type DashboardRecentQueryInput = z.infer<
+  typeof dashboardRecentQuerySchema
+>;
 
 /**
  * Dashboard stats query schema
@@ -148,7 +167,9 @@ export const dashboardStatsQuerySchema = z.object({
   includeBreakdown: z.boolean().default(true),
 });
 
-export type DashboardStatsQueryInput = z.infer<typeof dashboardStatsQuerySchema>;
+export type DashboardStatsQueryInput = z.infer<
+  typeof dashboardStatsQuerySchema
+>;
 
 // ============================================================================
 // Batch Operations Schemas
@@ -183,13 +204,16 @@ export type BatchUpdateInput = z.infer<typeof batchUpdateSchema>;
 /**
  * Validate file size against content type limits
  */
-export function validateFileSize(sizeBytes: number, contentType: ContentType): boolean {
+export function validateFileSize(
+  sizeBytes: number,
+  contentType: ContentType,
+): boolean {
   const limits: Record<ContentType, number> = {
     recording: 500 * 1024 * 1024, // 500 MB
-    video: 500 * 1024 * 1024,     // 500 MB
-    audio: 100 * 1024 * 1024,     // 100 MB
-    document: 50 * 1024 * 1024,   // 50 MB
-    text: 1 * 1024 * 1024,        // 1 MB
+    video: 500 * 1024 * 1024, // 500 MB
+    audio: 100 * 1024 * 1024, // 100 MB
+    document: 50 * 1024 * 1024, // 50 MB
+    text: 1 * 1024 * 1024, // 1 MB
   };
 
   return sizeBytes <= limits[contentType];
@@ -221,7 +245,7 @@ export function generateStoragePath(
   orgId: string,
   contentType: ContentType,
   recordingId: string,
-  fileExtension: string
+  fileExtension: string,
 ): string {
   const basePath = `${orgId}`;
 

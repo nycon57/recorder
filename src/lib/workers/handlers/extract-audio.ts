@@ -16,6 +16,10 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 
 import type { ProgressCallback } from '../job-processor';
 
@@ -43,7 +47,7 @@ interface ExtractAudioPayload {
  */
 export async function handleExtractAudio(
   job: Job,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const payload = job.payload as unknown as ExtractAudioPayload;
   const { recordingId, orgId, videoPath } = payload;
@@ -64,7 +68,11 @@ export async function handleExtractAudio(
   // Update recording status
   await supabase
     .from('content')
-    .update({ status: 'transcribing' })
+    .update({
+      status:
+        getQueuedSourceStatusForJob('extract_audio') ??
+        SOURCE_STATUS.TRANSCRIBING,
+    })
     .eq('id', recordingId);
 
   progressCallback?.(5, 'Downloading video file...');
@@ -72,7 +80,7 @@ export async function handleExtractAudio(
     recordingId,
     'all',
     5,
-    'Downloading video file for audio extraction...'
+    'Downloading video file for audio extraction...',
   );
 
   let tempVideoPath: string | null = null;
@@ -90,7 +98,7 @@ export async function handleExtractAudio(
 
     if (downloadError || !videoBlob) {
       throw new Error(
-        `Failed to download video: ${downloadError?.message || 'Unknown error'}`
+        `Failed to download video: ${downloadError?.message || 'Unknown error'}`,
       );
     }
 
@@ -111,7 +119,7 @@ export async function handleExtractAudio(
       recordingId,
       'all',
       20,
-      'Extracting audio track from video...'
+      'Extracting audio track from video...',
     );
 
     // Extract audio using FFmpeg
@@ -138,13 +146,13 @@ export async function handleExtractAudio(
             const currentProgress = Math.min(20 + progress.percent * 0.5, 70);
             progressCallback?.(
               currentProgress,
-              `Extracting audio: ${Math.round(progress.percent)}%`
+              `Extracting audio: ${Math.round(progress.percent)}%`,
             );
             streamingManager.sendProgress(
               recordingId,
               'all',
               currentProgress,
-              `Extracting audio: ${Math.round(progress.percent)}%`
+              `Extracting audio: ${Math.round(progress.percent)}%`,
             );
           }
         })
@@ -154,9 +162,7 @@ export async function handleExtractAudio(
         })
         .on('error', (err) => {
           logger.error('FFmpeg error', { error: err });
-          reject(
-            new Error(`FFmpeg audio extraction failed: ${err.message}`)
-          );
+          reject(new Error(`FFmpeg audio extraction failed: ${err.message}`));
         })
         .run();
     });
@@ -166,7 +172,7 @@ export async function handleExtractAudio(
       recordingId,
       'all',
       75,
-      'Uploading extracted audio to storage...'
+      'Uploading extracted audio to storage...',
     );
 
     // Upload audio to Supabase Storage
@@ -209,12 +215,15 @@ export async function handleExtractAudio(
       })
       .eq('id', recordingId);
 
-    progressCallback?.(85, 'Audio extraction complete, queuing transcription...');
+    progressCallback?.(
+      85,
+      'Audio extraction complete, queuing transcription...',
+    );
     streamingManager.sendProgress(
       recordingId,
       'all',
       85,
-      'Audio extraction complete, queuing transcription...'
+      'Audio extraction complete, queuing transcription...',
     );
 
     // Enqueue transcription job
@@ -238,7 +247,7 @@ export async function handleExtractAudio(
       recordingId,
       'all',
       100,
-      'Audio extraction complete'
+      'Audio extraction complete',
     );
 
     // Create event for notifications
@@ -250,7 +259,6 @@ export async function handleExtractAudio(
         orgId,
       },
     });
-
   } catch (error) {
     logger.error('Audio extraction failed', {
       context: { recordingId, videoPath },
@@ -259,7 +267,7 @@ export async function handleExtractAudio(
 
     streamingManager.sendError(
       recordingId,
-      `Audio extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Audio extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
 
     // Fetch existing metadata to preserve it
@@ -275,11 +283,13 @@ export async function handleExtractAudio(
     await supabase
       .from('content')
       .update({
-        status: 'error',
-        error_message: error instanceof Error ? error.message : 'Audio extraction failed',
+        status: SOURCE_STATUS.ERROR,
+        error_message:
+          error instanceof Error ? error.message : 'Audio extraction failed',
         metadata: {
           ...existingMetadata,
-          error: error instanceof Error ? error.message : 'Audio extraction failed',
+          error:
+            error instanceof Error ? error.message : 'Audio extraction failed',
           errorType: 'audio_extraction',
           timestamp: new Date().toISOString(),
         },

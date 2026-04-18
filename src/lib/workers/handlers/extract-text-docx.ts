@@ -16,6 +16,10 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 
 import type { ProgressCallback } from '../job-processor';
 
@@ -34,7 +38,7 @@ const MAX_TEXT_LENGTH = 500000; // Maximum characters to process (approximately 
  */
 export async function handleExtractTextDocx(
   job: Job,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const payload = job.payload as unknown as ExtractTextDocxPayload;
   const { recordingId, orgId, docxPath } = payload;
@@ -55,7 +59,7 @@ export async function handleExtractTextDocx(
   // Update recording status
   await supabase
     .from('content')
-    .update({ status: 'transcribing' })
+    .update({ status: SOURCE_STATUS.TRANSCRIBING })
     .eq('id', recordingId);
 
   progressCallback?.(5, 'Downloading document from storage...');
@@ -63,7 +67,7 @@ export async function handleExtractTextDocx(
     recordingId,
     'all',
     5,
-    'Downloading document from storage...'
+    'Downloading document from storage...',
   );
 
   let tempDocxPath: string | null = null;
@@ -80,7 +84,7 @@ export async function handleExtractTextDocx(
 
     if (downloadError || !docxBlob) {
       throw new Error(
-        `Failed to download DOCX: ${downloadError?.message || 'Unknown error'}`
+        `Failed to download DOCX: ${downloadError?.message || 'Unknown error'}`,
       );
     }
 
@@ -89,7 +93,7 @@ export async function handleExtractTextDocx(
       recordingId,
       'all',
       15,
-      'Download complete, preparing file...'
+      'Download complete, preparing file...',
     );
 
     // Save DOCX to temp file
@@ -106,7 +110,7 @@ export async function handleExtractTextDocx(
       recordingId,
       'all',
       25,
-      'Parsing document structure...'
+      'Parsing document structure...',
     );
 
     // Extract text using mammoth
@@ -119,7 +123,7 @@ export async function handleExtractTextDocx(
       recordingId,
       'all',
       45,
-      'Reading document content...'
+      'Reading document content...',
     );
 
     const extractedText = result.value;
@@ -136,14 +140,14 @@ export async function handleExtractTextDocx(
     // Log warnings if any
     if (warnings.length > 0) {
       logger.warn('Mammoth extraction warnings', {
-        context: { warnings: warnings.map(w => w.message) },
+        context: { warnings: warnings.map((w) => w.message) },
       });
     }
 
     // Check if document is empty
     if (!extractedText || extractedText.trim().length < 10) {
       throw new Error(
-        'DOCX document appears to be empty or contains no extractable text.'
+        'DOCX document appears to be empty or contains no extractable text.',
       );
     }
 
@@ -152,7 +156,7 @@ export async function handleExtractTextDocx(
       recordingId,
       'all',
       55,
-      'Cleaning and formatting text...'
+      'Cleaning and formatting text...',
     );
 
     // Clean and normalize text
@@ -167,7 +171,7 @@ export async function handleExtractTextDocx(
       recordingId,
       'all',
       65,
-      'Validating extracted content...'
+      'Validating extracted content...',
     );
 
     // Truncate if too long
@@ -188,7 +192,7 @@ export async function handleExtractTextDocx(
       recordingId,
       'all',
       75,
-      'Saving extracted text to database...'
+      'Saving extracted text to database...',
     );
 
     // Save transcript to database
@@ -218,18 +222,15 @@ export async function handleExtractTextDocx(
       context: { transcriptId: transcript.id },
     });
 
-    // Update recording status
-    await supabase
-      .from('content')
-      .update({ status: 'transcribed' })
-      .eq('id', recordingId);
-
-    progressCallback?.(85, 'Text extraction complete, queuing document generation...');
+    progressCallback?.(
+      85,
+      'Text extraction complete, queuing document generation...',
+    );
     streamingManager.sendProgress(
       recordingId,
       'all',
       85,
-      'Text extraction complete, queuing document generation...'
+      'Text extraction complete, queuing document generation...',
     );
 
     // Enqueue document generation and metadata generation jobs
@@ -258,10 +259,23 @@ export async function handleExtractTextDocx(
     ]);
 
     if (docGenResult.error) {
-      throw new Error(`Failed to enqueue doc_generate job for ${recordingId}: ${docGenResult.error.message}`);
+      throw new Error(
+        `Failed to enqueue doc_generate job for ${recordingId}: ${docGenResult.error.message}`,
+      );
     }
+
+    await supabase
+      .from('content')
+      .update({
+        status:
+          getQueuedSourceStatusForJob('doc_generate') ??
+          SOURCE_STATUS.DOCUMENT_GENERATING,
+      })
+      .eq('id', recordingId);
     if (metadataGenResult.error) {
-      throw new Error(`Failed to enqueue generate_metadata job for ${recordingId}: ${metadataGenResult.error.message}`);
+      throw new Error(
+        `Failed to enqueue generate_metadata job for ${recordingId}: ${metadataGenResult.error.message}`,
+      );
     }
 
     logger.info('Enqueued document generation and metadata generation jobs', {
@@ -273,7 +287,7 @@ export async function handleExtractTextDocx(
       recordingId,
       'all',
       100,
-      'DOCX text extraction complete'
+      'DOCX text extraction complete',
     );
 
     // Create event for notifications
@@ -286,7 +300,6 @@ export async function handleExtractTextDocx(
         orgId,
       },
     });
-
   } catch (error) {
     logger.error('DOCX text extraction failed', {
       context: { recordingId, docxPath },
@@ -295,17 +308,23 @@ export async function handleExtractTextDocx(
 
     streamingManager.sendError(
       recordingId,
-      `DOCX text extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `DOCX text extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
 
     // Update recording status to error
     await supabase
       .from('content')
       .update({
-        status: 'error',
-        error_message: error instanceof Error ? error.message : 'DOCX text extraction failed',
+        status: SOURCE_STATUS.ERROR,
+        error_message:
+          error instanceof Error
+            ? error.message
+            : 'DOCX text extraction failed',
         metadata: {
-          error: error instanceof Error ? error.message : 'DOCX text extraction failed',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'DOCX text extraction failed',
           errorType: 'docx_extraction',
           timestamp: new Date().toISOString(),
         },

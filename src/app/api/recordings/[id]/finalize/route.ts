@@ -7,10 +7,17 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 
 // POST /api/recordings/[id]/finalize - Finalize upload and start processing
 export const POST = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const { orgId } = await requireOrg();
     // Use admin client to bypass RLS - auth already validated via requireOrg()
     const supabase = supabaseAdmin;
@@ -38,17 +45,21 @@ export const POST = apiHandler(
     }
 
     // Get file info
-    const file = fileData.find(f => f.name === 'raw.webm');
+    const file = fileData.find((f) => f.name === 'raw.webm');
     if (!file) {
       return errors.badRequest('raw.webm file not found');
     }
 
     // Update content status and metadata
+    const queuedStatus = startProcessing
+      ? getQueuedSourceStatusForJob('transcribe')
+      : null;
+
     const { data: recording, error: updateError } = await supabase
       .from('content')
       .update({
         storage_path_raw: storagePath,
-        status: startProcessing ? 'uploaded' : 'uploaded',
+        status: queuedStatus ?? SOURCE_STATUS.UPLOADED,
         metadata: {
           sizeBytes: file.metadata?.size || 0,
           uploadedAt: new Date().toISOString(),
@@ -90,5 +101,5 @@ export const POST = apiHandler(
         ? 'Upload finalized. Transcription will begin shortly.'
         : 'Upload finalized.',
     });
-  }
+  },
 );
