@@ -6,7 +6,7 @@
  * queries to the owning org, and returns structured JSON.
  *
  * Tools:
- *   searchRecordings      — Semantic search across content
+ *   searchRecordings      — Raw-evidence discovery across content
  *   searchConcepts        — Knowledge graph concept search
  *   exploreKnowledgeGraph — Depth-based graph traversal
  *   getDocument           — Retrieve document by content ID
@@ -111,7 +111,7 @@ function registerTools(
 ): void {
   server.tool(
     'searchRecordings',
-    'Semantic search across recordings, transcripts, and documents. Returns matching items with snippets and similarity scores.',
+    'Discovery-mode search across recordings, transcripts, and documents. Use it for raw evidence lookup and audit trails, not canonical compiled-memory answers. Returns matching items with snippets and similarity scores.',
     {
       query: z.string().min(1).max(500).describe('Search query'),
       limit: z

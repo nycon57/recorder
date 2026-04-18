@@ -135,6 +135,8 @@ export const POST = withRateLimit(
       return successResponse({
         query: multimodalResult.query,
         mode: multimodalResult.mode,
+        retrievalMode: 'discovery',
+        evidenceLayer: 'raw',
         results: multimodalResult.combinedResults || multimodalResult.audioResults,
         audioResults: multimodalResult.audioResults,
         visualResults: multimodalResult.visualResults,
@@ -182,6 +184,8 @@ export const POST = withRateLimit(
 
     return successResponse({
       query,
+      retrievalMode: 'discovery',
+      evidenceLayer: 'raw',
       results: agenticResult.finalResults,
       count: agenticResult.finalResults.length,
       mode: 'agentic',
@@ -313,6 +317,8 @@ export const POST = withRateLimit(
 
   return successResponse({
     query,
+    retrievalMode: 'discovery',
+    evidenceLayer: 'raw',
     results: cachedResult.results,
     count: cachedResult.results.length,
     mode: (mode || 'semantic') as 'semantic' | 'keyword' | 'agentic',
