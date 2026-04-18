@@ -106,7 +106,7 @@ test('resolveCompiledMemoryAnswerContext passes the default chat scope into the 
     {
       generateEmbedding: async () => ({
         embedding: [0.1, 0.2, 0.3],
-        provider: 'test',
+        provider: 'google',
       }),
       resolveCompiledMemory: async (args) => {
         receivedArgs = args;
