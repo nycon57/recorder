@@ -78,7 +78,15 @@ function formatDuration(seconds: number): string {
  * Returns relevant excerpts with source citations.
  */
 export async function executeSearchRecordings(
-  { query, limit, contentIds, includeTranscripts, includeDocuments, minRelevance }: any,
+  {
+    query,
+    limit,
+    contentIds,
+    recordingIds,
+    includeTranscripts,
+    includeDocuments,
+    minRelevance,
+  }: any,
   { orgId }: ToolContext
 ): Promise<ToolResponse> {
     try {
@@ -96,7 +104,7 @@ export async function executeSearchRecordings(
         minRelevance: minRelevance || 0.7,
         includeTranscripts: includeTranscripts !== false,
         includeDocuments: includeDocuments !== false,
-        contentIds,
+        contentIds: recordingIds ?? contentIds,
         useHierarchical: true,
         enableCache: true,
       });
@@ -106,9 +114,13 @@ export async function executeSearchRecordings(
         return {
           success: true,
           data: {
-            message: 'No relevant content found for your query. Try different keywords or check if you have any content.',
+            message: 'No raw evidence found for your discovery query. Try different keywords or broaden the search.',
             results: [],
-            searchMetadata: ragContext.metadata,
+            searchMetadata: {
+              retrievalMode: 'discovery',
+              evidenceLayer: 'raw',
+              ...ragContext.metadata,
+            },
           },
           sources: [],
         };
@@ -130,9 +142,11 @@ export async function executeSearchRecordings(
       return {
         success: true,
         data: {
-          message: `Found ${ragContext.sources.length} relevant result(s)`,
+          message: `Found ${ragContext.sources.length} raw evidence result(s)`,
           results: formattedResults,
           searchMetadata: {
+            retrievalMode: 'discovery',
+            evidenceLayer: 'raw',
             searchMode: ragContext.metadata?.searchMode,
             searchTimeMs: ragContext.metadata?.searchTimeMs,
             cacheHit: ragContext.metadata?.cacheHit,
@@ -920,9 +934,9 @@ export async function executeExploreKnowledgeGraph(
  */
 export const toolDescriptions = {
   searchRecordings:
-    'Search through recordings and transcripts to find relevant information. ' +
-    'Use this when the user asks about specific topics, wants to find recordings, ' +
-    'or needs information from their recorded content. Returns relevant excerpts with timestamps.',
+    'Search raw transcript and document evidence in discovery mode. ' +
+    'Use this when the user explicitly wants to audit exact snippets, verify whether recordings mention something, ' +
+    'or inspect raw evidence rather than the canonical compiled-memory answer layer. Returns relevant excerpts with timestamps.',
   getDocument:
     'Retrieve the full content of a specific document or summary. ' +
     'Use this when the user asks to see a complete document, wants to read a full summary, ' +

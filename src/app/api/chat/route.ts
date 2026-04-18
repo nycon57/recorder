@@ -14,6 +14,10 @@ import { checkBotId } from 'botid/server';
 
 import { requireOrg } from '@/lib/utils/api';
 import { retrieveContext } from '@/lib/services/rag-google';
+import {
+  resolveCompiledMemoryAnswerContext,
+  type CompiledMemoryAnswerContext,
+} from '@/lib/services/compiled-memory-answer-context';
 import { preprocessQuery } from '@/lib/services/query-preprocessor';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { routeQuery, getRetrievalConfig, explainRoute, type QueryRoute } from '@/lib/services/query-router';
@@ -40,7 +44,6 @@ import {
   exploreKnowledgeGraphInputSchema,
 } from '@/lib/validations/chat';
 import { searchMonitor } from '@/lib/services/search-monitoring';
-import { assignVariant, getExperimentConfig, logExperimentResult } from '@/lib/services/ab-testing';
 import { nanoid } from 'nanoid';
 
 // Allow streaming responses up to 30 seconds
@@ -54,7 +57,6 @@ const ENABLE_AGENTIC_RAG = process.env.ENABLE_AGENTIC_RAG !== 'false';
 const ENABLE_RERANKING = process.env.ENABLE_RERANKING !== 'false';
 const ENABLE_CHAT_TOOLS = process.env.ENABLE_CHAT_TOOLS !== 'false';
 const ENABLE_SEARCH_MONITORING = process.env.ENABLE_SEARCH_MONITORING === 'true';
-const AB_TESTING_ENABLED = process.env.ENABLE_SEARCH_AB_TESTING === 'true';
 
 // Store sources temporarily (keyed by timestamp for retrieval)
 // This is a workaround since AI SDK v5 doesn't support custom data in streaming responses
@@ -238,19 +240,22 @@ export async function POST(req: Request) {
       });
     }
 
-    // Retrieve RAG context if there's a query
+    // Retrieve answer context if there's a query
     let ragContext;
+    let compiledAnswerContext: CompiledMemoryAnswerContext | undefined;
     let route: QueryRoute | undefined;
     let retrievalAttempts = 0;
     let selectedStrategy = 'none';
-    let finalThreshold = 0;
+    let finalThreshold: number | null = null;
     let averageSimilarity = 0;
+    let actualRecordingsCount = 0;
+    let answerMode: 'compiled-memory' | 'discovery' | 'tool-discovery' | 'empty' = 'empty';
+    let isMetaDiscoveryQuery = false;
+    let isScopedDiscoveryMode = Array.isArray(recordingIds) && recordingIds.length > 0;
+    let useToolDiscovery = false;
 
     if (userQuery) {
-      console.log('[Chat API] Retrieving RAG context for org:', orgId);
-
-      // Track request start time for telemetry
-      const requestStartTime = Date.now();
+      console.log('[Chat API] Retrieving answer context for org:', orgId);
 
       // Get recording count and summaries status for routing
       const { count: recordingsCount } = await supabaseAdmin
@@ -264,7 +269,7 @@ export async function POST(req: Request) {
         .select('id', { count: 'exact', head: true })
         .eq('org_id', orgId);
 
-      const actualRecordingsCount = recordingsCount || 0;
+      actualRecordingsCount = recordingsCount || 0;
       const hasSummaries = (summariesCount || 0) > 0;
       const hasReranking = ENABLE_RERANKING && isCohereConfigured();
 
@@ -286,58 +291,27 @@ export async function POST(req: Request) {
       console.log('[Chat API] Query routing:');
       console.log(explainRoute(route));
 
-      // IMPORTANT: If query was preprocessed from a meta-question, force standard_search
-      // Meta-questions like "Do I have recordings about X?" should always search content, not list recordings
-      if (preprocessed.wasTransformed && (route.strategy === 'direct_listing' || route.strategy === 'topic_overview')) {
-        console.log('[Chat API] Overriding route: Meta-question preprocessed, forcing standard_search');
-        route = {
-          strategy: 'standard_search',
-          intent: route.intent,
-          reasoning: 'Meta-question preprocessed to content query. Using standard vector search.',
-          config: {
-            useAgentic: false,
-            useHierarchical: false,
-            useReranking: hasReranking,
-            maxChunks: 10,
-            threshold: 0.7,
-          },
-        };
-      }
+      isMetaDiscoveryQuery =
+        preprocessed.wasTransformed &&
+        preprocessed.transformation === 'meta-question-extraction-and-expansion';
+      useToolDiscovery =
+        isMetaDiscoveryQuery ||
+        route.strategy === 'direct_listing' ||
+        route.strategy === 'topic_overview';
 
-      // For direct_listing or topic_overview strategies, let tools handle it
-      if (route.strategy === 'direct_listing' || route.strategy === 'topic_overview') {
+      if (useToolDiscovery) {
+        answerMode = 'tool-discovery';
+        selectedStrategy = isMetaDiscoveryQuery ? 'tool_discovery_meta' : 'tool_discovery';
         console.log('[Chat API] Using tool-based discovery strategy');
-        // Don't retrieve RAG context for these - let the LLM use tools instead
-      } else {
+      } else if (isScopedDiscoveryMode) {
         // Get retrieval configuration from route
-        let retrievalConfig = getRetrievalConfig(route);
+        const retrievalConfig = getRetrievalConfig(route);
 
         // Track retrieval attempts for logging
         retrievalAttempts = 1;
-        selectedStrategy = route.strategy;
+        answerMode = 'discovery';
+        selectedStrategy = `${route.strategy}:discovery`;
         finalThreshold = retrievalConfig.threshold || 0.7;
-
-        // Optional A/B testing override
-        if (AB_TESTING_ENABLED && userQuery) {
-          const variant = assignVariant(userId, orgId);
-          const experimentConfig = getExperimentConfig(variant);
-
-          console.log('[Chat API] A/B Test variant assigned:', {
-            variant,
-            userId: userId.substring(0, 8),
-            orgId: orgId.substring(0, 8),
-          });
-
-          // Override config with experiment settings
-          retrievalConfig = {
-            ...retrievalConfig,
-            threshold: experimentConfig.threshold,
-            useAgentic: ENABLE_AGENTIC_RAG && experimentConfig.useAgentic,
-            maxChunks: experimentConfig.maxChunks,
-          };
-
-          finalThreshold = experimentConfig.threshold;
-        }
 
         // Update monitoring with configuration
         if (ENABLE_SEARCH_MONITORING && userQuery) {
@@ -348,34 +322,28 @@ export async function POST(req: Request) {
           });
         }
 
-        // Wrap retrieval in try-catch for error handling
         try {
-          // Use searchable query for RAG context retrieval
           ragContext = await retrieveContext(searchableQuery, orgId, {
             ...retrievalConfig,
             contentIds: recordingIds,
-            // Force disable agentic if globally disabled
             useAgentic: ENABLE_AGENTIC_RAG && retrievalConfig.useAgentic,
             rerank: ENABLE_RERANKING && retrievalConfig.rerank,
           });
 
-          console.log('[Chat API] Initial RAG retrieval:', {
+          console.log('[Chat API] Initial discovery retrieval:', {
             sourcesFound: ragContext?.sources?.length || 0,
             totalChunks: ragContext?.totalChunks || 0,
-            strategy: route.strategy,
+            strategy: selectedStrategy,
             agenticUsed: ragContext?.agenticMetadata !== undefined,
           });
 
-          // Retry logic if no results found
           if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
-            console.log('[Chat API] No RAG results - attempting retry strategies');
+            console.log('[Chat API] No discovery results - attempting retry strategies');
 
-            // Strategy 1: Retry with lower threshold (0.5)
             if (retrievalConfig.threshold && retrievalConfig.threshold > 0.5) {
               console.log('[Chat API] Retry attempt 1: Lowering threshold to 0.5');
               retrievalAttempts++;
 
-              // Record retry in monitoring
               if (ENABLE_SEARCH_MONITORING && userQuery) {
                 searchMonitor.recordRetry(queryId, 'lowerThreshold');
               }
@@ -393,22 +361,19 @@ export async function POST(req: Request) {
                   sourcesFound: ragContext?.sources?.length || 0,
                 });
               } catch (error) {
-                console.error('[Chat API] Retry 1 failed:', error);
+                console.error('[Chat API] Discovery retry 1 failed:', error);
               }
             }
 
-            // Strategy 2: Force hybrid search if still no results
             if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
               console.log('[Chat API] Retry attempt 2: Forcing hybrid search');
               retrievalAttempts++;
 
-              // Record retry in monitoring
               if (ENABLE_SEARCH_MONITORING && userQuery) {
                 searchMonitor.recordRetry(queryId, 'hybrid');
               }
 
               try {
-                // Import hybrid search function
                 const { hybridSearch } = await import('@/lib/services/vector-search-google');
                 const hybridResults = await hybridSearch(searchableQuery, {
                   orgId,
@@ -463,18 +428,15 @@ export async function POST(req: Request) {
               }
             }
 
-            // Strategy 3: Try keyword-only search as last resort
             if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
               console.log('[Chat API] Retry attempt 3: Trying keyword-only search');
               retrievalAttempts++;
 
-              // Record retry in monitoring
               if (ENABLE_SEARCH_MONITORING && userQuery) {
                 searchMonitor.recordRetry(queryId, 'keyword');
               }
 
               try {
-                // Import keyword search function (it's not exported, so we'll use hybridSearch which includes it)
                 const { hybridSearch } = await import('@/lib/services/vector-search-google');
                 const keywordResults = await hybridSearch(searchableQuery, {
                   orgId,
@@ -530,7 +492,6 @@ export async function POST(req: Request) {
             }
           }
 
-          // Calculate average similarity for diagnostics
           if (ragContext?.sources && ragContext.sources.length > 0) {
             const similarities = ragContext.sources
               .map(s => s.similarity)
@@ -539,7 +500,6 @@ export async function POST(req: Request) {
               ? similarities.reduce((a, b) => a + b, 0) / similarities.length
               : 0;
 
-            // Update monitoring with search results
             if (ENABLE_SEARCH_MONITORING && userQuery && similarities.length > 0) {
               const minSimilarity = Math.min(...similarities);
               const maxSimilarity = Math.max(...similarities);
@@ -553,21 +513,9 @@ export async function POST(req: Request) {
                 searchTimeMs: Date.now() - requestStartTime,
               });
             }
-
-            // Log experiment result if A/B testing is enabled
-            if (AB_TESTING_ENABLED && userQuery) {
-              const variant = assignVariant(userId, orgId);
-              await logExperimentResult(variant, userQuery, orgId, userId, {
-                sourcesFound: ragContext.sources.length,
-                retrievalAttempts,
-                avgSimilarity: averageSimilarity,
-                timeMs: Date.now() - requestStartTime,
-              });
-            }
           }
 
-          // Log final retrieval outcome
-          console.log('[Chat API] Final RAG retrieval:', {
+          console.log('[Chat API] Final discovery retrieval:', {
             attempts: retrievalAttempts,
             sourcesFound: ragContext?.sources?.length || 0,
             finalStrategy: selectedStrategy,
@@ -575,12 +523,10 @@ export async function POST(req: Request) {
             averageSimilarity: averageSimilarity.toFixed(3),
           });
 
-          // Alert on search failure if user has content
           if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
             await alertSearchFailure(searchableQuery, orgId, retrievalAttempts, retrievalConfig, actualRecordingsCount);
           }
 
-          // Log search quality metrics
           console.log('[Chat API] Search quality metrics:', {
             timestamp: new Date().toISOString(),
             orgId,
@@ -596,11 +542,9 @@ export async function POST(req: Request) {
             rerankingUsed: retrievalConfig.rerank || false,
             retrievalTimeMs: Date.now() - requestStartTime,
           });
-
         } catch (error) {
-          console.error('[Chat API] RAG retrieval error:', error);
+          console.error('[Chat API] Discovery retrieval error:', error);
 
-          // Log detailed error information
           console.error('[Chat API] Error details:', {
             query: searchableQuery,
             orgId,
@@ -609,7 +553,6 @@ export async function POST(req: Request) {
             errorStack: error instanceof Error ? error.stack : undefined,
           });
 
-          // Set empty context and continue (will use tool fallback)
           ragContext = {
             query: searchableQuery,
             context: '',
@@ -617,27 +560,56 @@ export async function POST(req: Request) {
             totalChunks: 0,
           };
         }
+      } else {
+        retrievalAttempts = 1;
+        answerMode = 'compiled-memory';
+        selectedStrategy = 'compiled_memory';
+
+        if (ENABLE_SEARCH_MONITORING && userQuery) {
+          searchMonitor.updateConfig(queryId, {
+            strategy: selectedStrategy,
+            threshold: undefined,
+            useAgentic: false,
+          });
+        }
+
+        compiledAnswerContext = await resolveCompiledMemoryAnswerContext({
+          orgId,
+          userId,
+          question: searchableQuery,
+        });
+
+        console.log('[Chat API] Compiled memory retrieval:', {
+          sourcesFound: compiledAnswerContext.sources.length,
+          priorTopics: compiledAnswerContext.priorTopics.length,
+        });
       }
     }
 
     // Build system prompt based on strategy
     let systemPrompt: string;
 
-    if (route?.strategy === 'direct_listing' || route?.strategy === 'topic_overview') {
-      // For exploratory queries, instruct LLM to use tools
+    if (useToolDiscovery) {
       systemPrompt = `You are a helpful AI assistant that helps users explore and discover content in their recordings library.
 
+**Important mode boundary:**
+- The canonical answer layer is compiled memory.
+- Raw transcript/document snippets are DISCOVERY evidence only.
+- Use raw evidence tools only when the user is explicitly browsing, auditing, or asking whether recordings mention something.
+
 **Your Role:**
-When users ask exploratory questions like "what can you help me with?" or "what topics do you know about?", you should:
+When users ask exploratory questions like "what can you help me with?", "what topics do you know about?", or "do I have recordings about X?", you should:
 
 1. **Use the listRecordings tool** to browse their available recordings
 2. **Use the exploreKnowledgeGraph tool** to see concepts and topics across their content
-3. **Organize findings by topic or category** when presenting results
-4. **Be conversational and helpful** in explaining what's available
+3. **Use the searchRecordings tool** when the user explicitly wants raw evidence, transcript snippets, or confirmation that recordings mention a topic
+4. **Organize findings by topic or category** when presenting results
+5. **Be conversational and helpful** in explaining what's available
 
 **Guidelines:**
 - Call listRecordings to see what recordings are available
 - Call exploreKnowledgeGraph to discover key concepts, tools, and topics mentioned across recordings
+- Call searchRecordings when the user wants discovery evidence from transcripts/documents instead of compiled knowledge
 - Group related recordings by topic (e.g., "Cloud Infrastructure", "Real Estate", "Authentication")
 - Present information in an organized, easy-to-scan format
 - Use emojis to make topics more visually distinctive
@@ -668,43 +640,21 @@ What would you like to know more about?
 \`\`\`
 
 Remember: You're helping users discover what knowledge is available in their library!`;
-    } else if (ragContext) {
-      // For standard queries with RAG context
-      // Build different prompts based on whether this was a meta-question
-      const isMetaQuestion = preprocessed.wasTransformed &&
-        preprocessed.transformation === 'meta-question-extraction-and-expansion';
+    } else if (answerMode === 'compiled-memory' && compiledAnswerContext && compiledAnswerContext.sources.length > 0) {
+      const priorTopicInstruction =
+        compiledAnswerContext.priorTopics.length > 0
+          ? `\n**USER MEMORY:**\nThe user has previously been shown information about: ${compiledAnswerContext.priorTopics.join(', ')}. Avoid repeating basics when the answer already covers those topics.\n`
+          : '';
 
-      if (isMetaQuestion) {
-        // User asked "Do I have recordings about X?" - confirm and summarize
-        const contextContent = ragContext && ragContext.context && ragContext.context.trim().length > 0
-          ? ragContext.context
-          : 'No context available';
-
-        systemPrompt = `You are a helpful AI assistant. The user asked whether they have recordings about a specific topic.
-
-**Your Task:**
-Based on the Context below, confirm that recordings exist and provide a brief summary of what's covered.
-
-**Response Format:**
-"Yes, I have recordings about [topic]. Here's what they cover: [summary from context]"
-
-**CITATION FORMAT:**
-Use citation numbers [1], [2], [3] to reference sources.
-
-**Context from User's Recordings:**
-${contextContent}
-
-Answer based ONLY on the Context above.`;
-      } else {
-        // Normal query - answer the question directly
-        systemPrompt = `You are a helpful AI assistant. Answer the user's question using ONLY the information provided in the Context section below.
+      systemPrompt = `You are a helpful AI assistant. Answer the user's question using ONLY the compiled memory below.
 
 **CRITICAL RULES:**
-1. ONLY use information explicitly stated in the Context below
-2. If the answer is not in the Context, respond with: "I don't have information about that in your recordings."
-3. NEVER mention products, platforms, or concepts not present in the Context
-4. Answer questions directly and naturally based on what they asked
-5. If you're uncertain, say "The context doesn't provide enough information to answer this."
+1. ONLY use information explicitly stated in the compiled memory below
+2. Compiled memory is the canonical answer layer for this chat
+3. Do NOT fall back to raw transcript or document evidence unless the user explicitly asks to search the raw evidence
+4. If the answer is not in the compiled memory, respond with: "I don't have compiled knowledge about that yet. I can search the raw recordings if you'd like."
+5. NEVER mention products, platforms, or concepts not present in the compiled memory
+6. Answer questions directly and naturally based on what they asked
 
 **CITATION FORMAT:**
 When referencing sources from the Context, use ONLY the citation numbers in brackets, like [1], [2], [3].
@@ -713,21 +663,50 @@ DO NOT include the recording title before the citation number.
 Example: "The login process involves navigating to the URL [1] and entering credentials [2]."
 NOT: "The login process involves navigating to the URL (Recording Title [1]) and entering credentials (Recording Title [2])."
 
-**Context from User's Recordings:**
-${ragContext.context}
+${priorTopicInstruction}
+**COMPILED MEMORY:**
+${compiledAnswerContext.context}
 
 **Your Task:**
-Answer the user's question using ONLY the above Context. Do not invent or assume anything. Use citation numbers [1], [2], etc. to reference sources.`;
-      }
+Answer the user's question using ONLY the compiled memory above. Do not invent or assume anything. Use citation numbers [1], [2], etc. to reference sources.`;
+    } else if (answerMode === 'discovery' && ragContext) {
+      systemPrompt = `You are a helpful AI assistant. The user explicitly asked to work against selected recordings, so you are in discovery mode.
+
+**Mode boundary:**
+- Discovery mode uses RAW evidence from transcripts/documents.
+- Raw evidence is useful for audit, verification, and scoped investigation.
+- Do not present discovery-mode findings as the canonical compiled-memory answer layer.
+
+**CRITICAL RULES:**
+1. ONLY use information explicitly stated in the raw evidence below
+2. If the answer is not in the evidence, respond with: "I couldn't find that in the selected recordings."
+3. Make it clear you are summarizing raw evidence from the selected recordings
+4. Use citation numbers [1], [2], [3] for every factual claim
+
+**RAW EVIDENCE FROM SELECTED RECORDINGS:**
+${ragContext.context}
+
+Answer using ONLY the evidence above.`;
+    } else if (actualRecordingsCount > 0) {
+      systemPrompt = `You are a helpful AI assistant. The organization has recordings, but I could not find compiled knowledge for this question yet.
+
+Tell the user that you don't have compiled knowledge about that yet and offer to search the raw recordings if they want discovery evidence, transcript snippets, or document excerpts. Do not guess.`;
     } else {
-      // No recordings or no route determined
       systemPrompt = 'You are a helpful AI assistant. The user has no recordings yet. Let them know they need to create recordings first before you can answer questions about them.';
     }
 
-    // Log the actual context being sent to the LLM (for debugging)
-    if (ragContext && ragContext.sources && Array.isArray(ragContext.sources)) {
-      console.log('[Chat API] ===== RAG CONTEXT DEBUG =====');
-      console.log('[Chat API] Sources:');
+    if (answerMode === 'compiled-memory' && compiledAnswerContext) {
+      console.log('[Chat API] ===== COMPILED MEMORY DEBUG =====');
+      compiledAnswerContext.sources.forEach((source, idx) => {
+        console.log(`  [${idx + 1}] ${source.title}`);
+        console.log(`      Layer: ${source.layer}`);
+        console.log(`      Preview: ${source.excerpt.substring(0, 100)}...`);
+      });
+      console.log('[Chat API] Full context length:', compiledAnswerContext.context.length);
+      console.log('[Chat API] Context preview:', compiledAnswerContext.context.substring(0, 500));
+      console.log('[Chat API] ===============================');
+    } else if (ragContext && ragContext.sources && Array.isArray(ragContext.sources)) {
+      console.log('[Chat API] ===== DISCOVERY EVIDENCE DEBUG =====');
       ragContext.sources.forEach((source, idx) => {
         console.log(`  [${idx + 1}] ${source.contentTitle}`);
         console.log(`      Content ID: ${source.contentId}`);
@@ -736,9 +715,7 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
       });
       console.log('[Chat API] Full context length:', ragContext.context.length);
       console.log('[Chat API] Context preview:', ragContext.context.substring(0, 500));
-      console.log('[Chat API] ===========================');
-    } else if (ragContext) {
-      console.log('[Chat API] RAG context exists but sources is not an array:', typeof ragContext.sources);
+      console.log('[Chat API] ===============================');
     }
 
     // Create tools with bound context
@@ -803,14 +780,14 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
       }),
     } : undefined;
 
-    // Determine if this is an exploratory query that should use tools
-    const isExploratoryQuery = route?.strategy === 'direct_listing' || route?.strategy === 'topic_overview';
+    const shouldPreferTools = useToolDiscovery;
 
     console.log('[Chat API] Streaming configuration:', {
       strategy: route?.strategy,
-      isExploratoryQuery,
+      answerMode,
+      shouldPreferTools,
       toolsEnabled: !!toolsWithContext,
-      toolChoice: isExploratoryQuery ? 'auto (exploratory)' : 'auto',
+      toolChoice: shouldPreferTools ? 'auto (discovery)' : 'auto',
     });
 
     // Convert messages to model format manually
@@ -943,25 +920,42 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
       },
     });
 
-    // Return streaming response (AI SDK v5) with sources metadata
-    // Convert sources to SourceCitation format for frontend
-    const sourceCitations = ragContext?.sources?.map((source, index) => ({
-      id: `source-${index + 1}`,
-      recordingId: source.contentId,
-      title: source.contentTitle,
-      url: source.url || `/library/${source.contentId}`,
-      snippet: source.chunkText.substring(0, 200),
-      relevanceScore: source.similarity,
-      timestamp: source.timestampRange || (source.timestamp ? `${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')}` : undefined),
-      metadata: {
-        chunkId: source.chunkId,
-        hasVisualContext: source.hasVisualContext,
-        contentType: source.contentType,
-      },
-    })) || [];
+    const sourceCitations =
+      answerMode === 'compiled-memory'
+        ? compiledAnswerContext?.sources?.map((source, index) => ({
+            id: `source-${index + 1}`,
+            recordingId: source.sourceId,
+            title: source.title,
+            url: source.url || '/dashboard/knowledge',
+            snippet: source.excerpt,
+            relevanceScore: source.confidence,
+            timestamp: undefined,
+            metadata: {
+              sourceId: source.sourceId,
+              layer: source.layer,
+              sourceType: 'compiled_memory',
+            },
+          })) || []
+        : ragContext?.sources?.map((source, index) => ({
+            id: `source-${index + 1}`,
+            recordingId: source.contentId,
+            title: source.contentTitle,
+            url: source.url || `/library/${source.contentId}`,
+            snippet: source.chunkText.substring(0, 200),
+            relevanceScore: source.similarity,
+            timestamp: source.timestampRange || (source.timestamp ? `${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')}` : undefined),
+            metadata: {
+              chunkId: source.chunkId,
+              hasVisualContext: source.hasVisualContext,
+              contentType: source.contentType,
+              sourceType: 'raw_evidence',
+            },
+          })) || [];
+
+    const sourcesCount = sourceCitations.length;
 
     console.log('[Chat API] Attaching sources to response:', {
-      sourcesCount: sourceCitations.length,
+      sourcesCount,
       firstSourceUrl: sourceCitations[0]?.url,
     });
 
@@ -987,16 +981,21 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
     response.headers.set('X-Sources-Cache-Key', cacheKey);
 
     // Add diagnostic headers for debugging and monitoring
+    response.headers.set('X-Answer-Mode', answerMode);
     response.headers.set('X-Search-Strategy', selectedStrategy);
-    response.headers.set('X-Sources-Count', String(ragContext?.sources?.length || 0));
+    response.headers.set('X-Sources-Count', String(sourcesCount));
     response.headers.set('X-Retrieval-Attempts', String(retrievalAttempts));
-    response.headers.set('X-Threshold-Used', String(finalThreshold));
-    response.headers.set('X-Similarity-Avg', averageSimilarity > 0 ? averageSimilarity.toFixed(3) : 'N/A');
+    response.headers.set('X-Threshold-Used', finalThreshold != null ? String(finalThreshold) : 'N/A');
+    response.headers.set(
+      'X-Similarity-Avg',
+      answerMode === 'discovery' && averageSimilarity > 0 ? averageSimilarity.toFixed(3) : 'N/A',
+    );
 
     console.log('[Chat API] Response headers:', {
       contentType: response.headers.get('Content-Type'),
       cacheKey: response.headers.get('X-Sources-Cache-Key'),
       transferEncoding: response.headers.get('Transfer-Encoding'),
+      answerMode: response.headers.get('X-Answer-Mode'),
       searchStrategy: response.headers.get('X-Search-Strategy'),
       sourcesCount: response.headers.get('X-Sources-Count'),
       retrievalAttempts: response.headers.get('X-Retrieval-Attempts'),
@@ -1008,10 +1007,10 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
     // Complete monitoring if enabled (declare userQuery as needed for this scope)
     const userQueryForMonitoring = userQuery || '';
     if (ENABLE_SEARCH_MONITORING && userQueryForMonitoring) {
-      const toolCallsUsed = route?.strategy === 'direct_listing' || route?.strategy === 'topic_overview';
+      const toolCallsUsed = useToolDiscovery;
 
       searchMonitor.endSearch(queryId, {
-        success: (ragContext?.sources?.length || 0) > 0,
+        success: sourcesCount > 0,
         usedToolFallback: toolCallsUsed,
         totalTimeMs: Date.now() - requestStartTime,
       });
@@ -1051,4 +1050,3 @@ Answer the user's question using ONLY the above Context. Do not invent or assume
     );
   }
 }
-
