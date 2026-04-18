@@ -13,6 +13,7 @@ import {
 import { RelatedContent } from '@/app/components/content/RelatedContent';
 import { ContentChatWidget } from '@/app/components/content/ContentChatWidget';
 import { OnboardingViewTracker } from '@/app/components/onboarding/OnboardingViewTracker';
+import { fetchKnowledgeStatusForSource } from '@/lib/services/knowledge-status';
 import type { WorkflowStep } from '@/lib/types/database';
 import WorkflowViewer from '@/app/components/workflow/WorkflowViewer';
 
@@ -134,6 +135,11 @@ export default async function LibraryItemDetailPage({
   const document = Array.isArray(item.documents)
     ? item.documents[0]
     : item.documents || null;
+  const knowledgeStatus = await fetchKnowledgeStatusForSource({
+    orgId,
+    sourceId: id,
+    sourceStatus: item.status,
+  });
 
   const { data: itemTags } = await supabaseAdmin
     .from('content_tags')
@@ -199,6 +205,7 @@ export default async function LibraryItemDetailPage({
     recording: item,
     transcript,
     document,
+    knowledgeStatus,
     initialTags: tags,
     sourceKey,
     initialHighlightId: highlight,

@@ -33,6 +33,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
 import type { Tag } from '@/lib/types/database';
+import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
 interface Transcript {
   id: string;
@@ -81,6 +82,7 @@ export interface TextNoteDetailViewProps {
   recording: Recording;
   transcript: Transcript | null; // For text notes, the content is stored in transcript.text
   document: Document | null; // AI-enhanced summary/document
+  knowledgeStatus: KnowledgeStatus;
   initialTags: Tag[];
   /** Cache key for fetching highlight sources */
   sourceKey?: string;
@@ -92,6 +94,7 @@ export default function TextNoteDetailView({
   recording,
   transcript,
   document,
+  knowledgeStatus,
   initialTags,
 }: TextNoteDetailViewProps) {
   const router = useRouter();
@@ -441,6 +444,7 @@ export default function TextNoteDetailView({
                 contentType={recording.content_type}
                 fileType={recording.file_type}
                 status={recording.status}
+                knowledgeStatus={knowledgeStatus}
                 fileSize={recording.file_size}
                 duration={recording.duration_sec}
                 createdAt={recording.created_at}

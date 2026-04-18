@@ -6,6 +6,10 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import {
+  fetchKnowledgeStatusSummary,
+  type KnowledgeStatusSummary,
+} from '@/lib/services/knowledge-status';
 
 export interface KnowledgeHealthData {
   curatorEnabled: boolean;
@@ -18,6 +22,7 @@ export interface KnowledgeHealthData {
   freshItems: number;
   healthScore: number;
   hasContent: boolean;
+  knowledgeStatus: KnowledgeStatusSummary;
 }
 
 /**
@@ -63,6 +68,7 @@ export async function fetchKnowledgeHealth(orgId: string): Promise<KnowledgeHeal
     { count: staleAlerts },
     { count: uniqueConcepts },
     { data: agentSettings },
+    knowledgeStatus,
   ] = await Promise.all([
     supabaseAdmin
       .from('content')
@@ -113,6 +119,8 @@ export async function fetchKnowledgeHealth(orgId: string): Promise<KnowledgeHeal
       .select('curator_enabled, global_agent_enabled')
       .eq('org_id', orgId)
       .maybeSingle(),
+
+    fetchKnowledgeStatusSummary(orgId),
   ]);
 
   // Curator is enabled only when both the global toggle and the curator toggle are on.
@@ -136,5 +144,6 @@ export async function fetchKnowledgeHealth(orgId: string): Promise<KnowledgeHeal
     freshItems: fresh,
     healthScore: computeHealthScore(total, fresh, dupes, concepts),
     hasContent: total > 0,
+    knowledgeStatus,
   };
 }
