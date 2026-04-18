@@ -86,6 +86,22 @@ function knowledgeModeVariant(mode: ExtensionContextDebugKnowledgeMode) {
   }
 }
 
+function matchCategoryVariant(category: 'exact' | 'alias' | 'app' | 'domain' | 'unknown') {
+  switch (category) {
+    case 'exact':
+      return 'aurora';
+    case 'alias':
+      return 'secondary';
+    case 'domain':
+      return 'outline';
+    case 'app':
+      return 'outline';
+    case 'unknown':
+    default:
+      return 'outline';
+  }
+}
+
 export default async function ExtensionContextDebugPage({
   searchParams,
 }: PageProps) {
@@ -354,11 +370,23 @@ export default async function ExtensionContextDebugPage({
                           >
                             {event.telemetry.knowledgeMode}
                           </Badge>
-                          <Badge variant="outline">
-                            vendor:{event.telemetry.vendorMatchBasis}
+                          <Badge
+                            variant={matchCategoryVariant(
+                              event.telemetry.vendorMatchCategory,
+                            )}
+                          >
+                            Vendor:{' '}
+                            {event.telemetry.vendorMatchLabel ??
+                              event.telemetry.vendorMatchBasis}
                           </Badge>
-                          <Badge variant="outline">
-                            org:{event.telemetry.orgMatchBasis}
+                          <Badge
+                            variant={matchCategoryVariant(
+                              event.telemetry.orgMatchCategory,
+                            )}
+                          >
+                            Org:{' '}
+                            {event.telemetry.orgMatchLabel ??
+                              event.telemetry.orgMatchBasis}
                           </Badge>
                         </div>
                       </TableCell>
@@ -403,6 +431,46 @@ export default async function ExtensionContextDebugPage({
                           {event.telemetry.detectionConfidence.screen ?? 'n/a'}{' '}
                           / overall{' '}
                           {event.telemetry.detectionConfidence.overall ?? 'n/a'}
+                        </div>
+                        <div className="grid gap-3 pt-1 md:grid-cols-2">
+                          <div className="rounded-md border border-border/60 bg-background p-3">
+                            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              Vendor baseline
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Badge
+                                variant={matchCategoryVariant(
+                                  event.telemetry.vendorMatchCategory,
+                                )}
+                              >
+                                {event.telemetry.vendorMatchLabel ??
+                                  event.telemetry.vendorMatchBasis}
+                              </Badge>
+                            </div>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                              {event.telemetry.vendorMatchExplanation ??
+                                'No vendor baseline explanation was recorded for this check.'}
+                            </p>
+                          </div>
+                          <div className="rounded-md border border-border/60 bg-background p-3">
+                            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              Org overlay
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Badge
+                                variant={matchCategoryVariant(
+                                  event.telemetry.orgMatchCategory,
+                                )}
+                              >
+                                {event.telemetry.orgMatchLabel ??
+                                  event.telemetry.orgMatchBasis}
+                              </Badge>
+                            </div>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                              {event.telemetry.orgMatchExplanation ??
+                                'No org overlay explanation was recorded for this check.'}
+                            </p>
+                          </div>
                         </div>
                       </div>
                       <div className="rounded-md bg-background p-3 text-xs text-muted-foreground">

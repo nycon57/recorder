@@ -15,6 +15,7 @@ export type {
   TableSurface,
   DialogSurface,
   KnowledgeMatchBasis,
+  KnowledgeMatchCategory,
   KnowledgeMatch,
   KnowledgeAvailability,
   LiveContextSourceRef,

@@ -80,6 +80,14 @@ function extractDomainAppAlias(url: string): string | null {
   }
 }
 
+function extractHostname(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 function buildScreenAliases(screen: string): string[] {
   const normalized = screen.trim().toLowerCase();
   if (!normalized) return [];
@@ -100,6 +108,70 @@ function extractSelectorHints(value: unknown): string[] {
   return uniqueStrings(
     value.map((entry) => (typeof entry === 'string' ? entry : null)),
   );
+}
+
+type KnowledgeMatchSurface = 'vendor' | 'org';
+
+type KnowledgeMatchExplainability = Pick<
+  KnowledgeMatch,
+  'basisCategory' | 'basisLabel' | 'basisExplanation'
+>;
+
+export function buildKnowledgeMatchExplainability(args: {
+  surface: KnowledgeMatchSurface;
+  basis: Exclude<KnowledgeMatchBasis, 'none'>;
+  url: string;
+  requestedApp: string;
+  requestedScreen: string;
+  matchedApp: string | null;
+  matchedScreen: string | null;
+  matchedLabel?: string | null;
+}): KnowledgeMatchExplainability {
+  const {
+    surface,
+    basis,
+    url,
+    requestedApp,
+    requestedScreen,
+    matchedApp,
+    matchedScreen,
+    matchedLabel,
+  } = args;
+
+  const subject =
+    surface === 'vendor' ? 'the vendor baseline' : 'the org overlay';
+  const label = matchedLabel?.trim() || matchedScreen || matchedApp || 'this page';
+  const requestedAppLabel = requestedApp || 'unknown';
+  const requestedScreenLabel = requestedScreen || 'unknown';
+
+  switch (basis) {
+    case 'exact':
+      return {
+        basisCategory: 'exact',
+        basisLabel: 'Exact match',
+        basisExplanation: `Matched ${subject} because the detected app "${requestedAppLabel}" and screen "${requestedScreenLabel}" exactly matched "${label}".`,
+      };
+    case 'screen_alias':
+      return {
+        basisCategory: 'alias',
+        basisLabel: 'Alias match',
+        basisExplanation: `Matched ${subject} by screen alias because the detected screen "${requestedScreenLabel}" was routed to "${matchedScreen ?? label}" inside "${matchedApp ?? requestedAppLabel}".`,
+      };
+    case 'app_only':
+      return {
+        basisCategory: 'app',
+        basisLabel: 'App-level match',
+        basisExplanation: `Matched ${subject} at the app level because "${matchedApp ?? requestedAppLabel}" was recognized, but there was no exact screen baseline for "${requestedScreenLabel}".`,
+      };
+    case 'domain_alias': {
+      const hostname = extractHostname(url) ?? 'unknown host';
+      return {
+        basisCategory: 'domain',
+        basisLabel: 'Domain match',
+        basisExplanation: `Matched ${subject} by domain because the detected host "${hostname}" maps to "${matchedApp ?? requestedAppLabel}", so Tribora mapped the page into that app's knowledge family.`,
+      };
+    }
+  }
 }
 
 export function chooseKnowledgeMatch(
@@ -152,10 +224,32 @@ export function summarizeKnowledgeAvailability(
   };
 }
 
-function toKnowledgeMatch(
-  candidate: KnowledgeMatchCandidate | null,
-): KnowledgeMatch | null {
+function toKnowledgeMatch(args: {
+  candidate: KnowledgeMatchCandidate | null;
+  surface: KnowledgeMatchSurface;
+  requestedApp: string;
+  requestedScreen: string;
+  url: string;
+}): KnowledgeMatch | null {
+  const {
+    candidate,
+    surface,
+    requestedApp,
+    requestedScreen,
+    url,
+  } = args;
   if (!candidate) return null;
+
+  const explainability = buildKnowledgeMatchExplainability({
+    surface,
+    basis: candidate.basis,
+    url,
+    requestedApp,
+    requestedScreen,
+    matchedApp: candidate.app,
+    matchedScreen: candidate.screen,
+    matchedLabel: candidate.label,
+  });
 
   return {
     matched: true,
@@ -166,6 +260,7 @@ function toKnowledgeMatch(
     label: candidate.label,
     pageIds: candidate.pageIds,
     selectorHints: candidate.selectorHints,
+    ...explainability,
   };
 }
 
@@ -380,8 +475,20 @@ export async function resolveExtensionContextMatches(
   );
 
   return {
-    vendorKnowledgeMatch: toKnowledgeMatch(vendorMatch),
-    orgKnowledgeMatch: toKnowledgeMatch(orgMatch),
+    vendorKnowledgeMatch: toKnowledgeMatch({
+      candidate: vendorMatch,
+      surface: 'vendor',
+      requestedApp: args.app,
+      requestedScreen: args.screen,
+      url: args.url,
+    }),
+    orgKnowledgeMatch: toKnowledgeMatch({
+      candidate: orgMatch,
+      surface: 'org',
+      requestedApp: args.app,
+      requestedScreen: args.screen,
+      url: args.url,
+    }),
     knowledgeAvailability: summarizeKnowledgeAvailability(
       vendorMatch,
       orgMatch,
