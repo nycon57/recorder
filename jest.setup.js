@@ -1,8 +1,13 @@
 // Learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
 
-// Add OpenAI shims for Node environment (required for tests)
-import 'openai/shims/node';
+// Add OpenAI shims when the package is available in the current install.
+try {
+  require('openai/shims/node');
+} catch {
+  // Some lightweight worktrees omit optional OpenAI shims; tests that do not
+  // exercise the SDK should still be able to run.
+}
 
 // Mock environment variables for tests
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
@@ -27,16 +32,20 @@ jest.mock('next/navigation', () => ({
 }));
 
 // Mock Clerk
-jest.mock('@clerk/nextjs', () => ({
-  auth: () => ({
-    userId: 'test-user-id',
-    orgId: 'test-org-id',
+jest.mock(
+  '@clerk/nextjs',
+  () => ({
+    auth: () => ({
+      userId: 'test-user-id',
+      orgId: 'test-org-id',
+    }),
+    useAuth: () => ({
+      userId: 'test-user-id',
+      orgId: 'test-org-id',
+      isLoaded: true,
+      isSignedIn: true,
+    }),
+    ClerkProvider: ({ children }) => children,
   }),
-  useAuth: () => ({
-    userId: 'test-user-id',
-    orgId: 'test-org-id',
-    isLoaded: true,
-    isSignedIn: true,
-  }),
-  ClerkProvider: ({ children }) => children,
-}));
+  { virtual: true }
+);
