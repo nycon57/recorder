@@ -1,0 +1,383 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   TRIBORA HOMEPAGE DESIGN SYSTEM
+   Warm off-dark foundation · paper-white ink · Warm Amber signal accent.
+   Scoped to `.tribora` so the rest of the app (Aurora green palette)
+   remains untouched.
+   ──────────────────────────────────────────────────────────────────────── */
+
+.tribora {
+  /* ─── Surfaces (warm-charcoal, chroma drops as lightness drops) ───────── */
+  --trb-surface-0: oklch(0.135 0.008 60);      /* page base — near black, umber-tinted */
+  --trb-surface-1: oklch(0.172 0.008 60);      /* lifted band (logo wall, proof strip) */
+  --trb-surface-2: oklch(0.215 0.010 62);      /* interactive / hover lift */
+  --trb-surface-3: oklch(0.268 0.012 64);      /* command-palette panel */
+
+  /* ─── Ink (paper-white, not pure, warm-tinted) ────────────────────────── */
+  --trb-ink: oklch(0.965 0.005 80);            /* primary text */
+  --trb-ink-muted: oklch(0.745 0.010 72);      /* secondary text, metadata */
+  --trb-ink-dim: oklch(0.538 0.012 70);        /* tertiary, specimen labels */
+  --trb-ink-faint: oklch(0.398 0.010 68);      /* hairlines, dividers */
+
+  /* ─── Lines (hairlines tinted warm-charcoal) ──────────────────────────── */
+  --trb-line: oklch(0.262 0.010 64 / 0.72);
+  --trb-line-strong: oklch(0.328 0.012 64);
+  --trb-line-faint: oklch(0.22 0.008 62 / 0.55);
+
+  /* ─── Signal accent: WARM AMBER (locked) ──────────────────────────────── */
+  --trb-signal: oklch(0.78 0.155 72);
+  --trb-signal-ink: oklch(0.145 0.020 70);     /* ink ON amber CTA */
+  --trb-signal-soft: oklch(0.78 0.155 72 / 0.14);
+  --trb-signal-edge: oklch(0.78 0.155 72 / 0.42);
+
+  /* ─── Status (data/status contexts only — never hero) ─────────────────── */
+  --trb-live: oklch(0.76 0.155 148);           /* green pip — recording/live */
+  --trb-warn: oklch(0.80 0.150 52);            /* amber-2, reserved */
+
+  /* ─── Type stack ──────────────────────────────────────────────────────── */
+  --trb-font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --trb-font-body: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --trb-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ─── Fluid display scale (clamp for marketing hero) ──────────────────── */
+  --trb-size-display-xl: clamp(3.4rem, 0.9rem + 7.6vw, 7.25rem);   /* hero line */
+  --trb-size-display-l:  clamp(2.5rem, 1.1rem + 4.2vw, 4.75rem);   /* section headline */
+  --trb-size-display-m:  clamp(1.75rem, 1.1rem + 2vw, 2.5rem);     /* case-study quote */
+  --trb-size-body-l:     clamp(1.0625rem, 0.95rem + 0.4vw, 1.1875rem);
+  --trb-size-body-m:     0.9375rem;                                /* 15px */
+  --trb-size-body-s:     0.8125rem;                                /* 13px */
+  --trb-size-mono:       0.75rem;                                  /* 12px — specimen labels */
+  --trb-size-mono-s:     0.6875rem;                                /* 11px — micro-metadata */
+
+  /* ─── Spacing (4pt scale, semantic) ───────────────────────────────────── */
+  --trb-space-1: 0.25rem;   --trb-space-2: 0.5rem;   --trb-space-3: 0.75rem;
+  --trb-space-4: 1rem;      --trb-space-5: 1.5rem;   --trb-space-6: 2rem;
+  --trb-space-7: 3rem;      --trb-space-8: 4rem;     --trb-space-9: 6rem;
+  --trb-space-10: 8rem;     --trb-space-11: 10rem;
+
+  /* ─── Motion ──────────────────────────────────────────────────────────── */
+  --trb-ease: cubic-bezier(0.16, 1, 0.3, 1);          /* ease-out-quint */
+  --trb-ease-in: cubic-bezier(0.6, 0, 0.9, 0.15);     /* exit */
+  --trb-dur-fast: 150ms;
+  --trb-dur-med: 260ms;
+  --trb-dur-slow: 420ms;
+
+  /* ─── Layout ──────────────────────────────────────────────────────────── */
+  --trb-page-max: 1320px;
+  --trb-gutter: clamp(1.25rem, 0.5rem + 3vw, 3rem);
+  --trb-rail: 2.5rem;       /* left rail width for specimen markers on wide viewports */
+}
+
+/* Root wrapper: set everything to the warm off-dark foundation */
+.tribora {
+  background-color: var(--trb-surface-0);
+  color: var(--trb-ink);
+  font-family: var(--trb-font-body);
+  font-size: var(--trb-size-body-m);
+  line-height: 1.55;
+  letter-spacing: 0.005em;
+  font-feature-settings: "ss01", "cv11", "calt";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Root-level bg override (prevents Aurora teal leaking through) ────
+   globals.css declares `.dark body { background-color: rgb(3,14,16) !important }`
+   inside @layer base. For !important rules, Chrome prioritizes layered over
+   unlayered — so we enter the same @layer base and win on specificity
+   (html.dark:has + body = 0,3,2 vs .dark body = 0,1,1). `:has()` keeps the
+   override scoped: only fires while the Tribora route is mounted. */
+@layer base {
+  html.dark:has(> body > .tribora) {
+    background-color: oklch(0.135 0.008 60);
+    color-scheme: dark;
+  }
+  html.dark:has(> body > .tribora) body {
+    background-color: oklch(0.135 0.008 60) !important;
+  }
+}
+
+.tribora ::selection {
+  background: var(--trb-signal-edge);
+  color: var(--trb-ink);
+}
+
+/* ─── Typography primitives ───────────────────────────────────────────── */
+.tribora .trb-mono {
+  font-family: var(--trb-font-mono);
+  font-feature-settings: "zero", "ss01";
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--trb-size-mono);
+  font-weight: 500;
+  color: var(--trb-ink-dim);
+}
+
+.tribora .trb-mono-sm {
+  font-family: var(--trb-font-mono);
+  font-size: var(--trb-size-mono-s);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--trb-ink-dim);
+  font-weight: 500;
+}
+
+.tribora .trb-display {
+  font-family: var(--trb-font-display);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 0.98;
+  color: var(--trb-ink);
+  font-feature-settings: "ss02", "ss03";
+}
+
+.tribora .trb-section-label {
+  font-family: var(--trb-font-mono);
+  font-size: var(--trb-size-mono-s);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--trb-ink-dim);
+  font-weight: 500;
+}
+
+/* ─── Specimen rail / section markers ─────────────────────────────────── */
+.tribora .trb-rail {
+  position: fixed;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  width: var(--trb-rail);
+  display: none;
+  flex-direction: column;
+  gap: var(--trb-space-4);
+  padding-left: 1.25rem;
+  z-index: 30;
+  pointer-events: none;
+}
+
+@media (min-width: 1100px) {
+  .tribora .trb-rail { display: flex; }
+}
+
+.tribora .trb-rail-tick {
+  font-family: var(--trb-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--trb-ink-faint);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  transition: color var(--trb-dur-med) var(--trb-ease);
+}
+
+.tribora .trb-rail-tick[data-active="true"] {
+  color: var(--trb-signal);
+}
+
+/* ─── Primary CTA (the one place amber lives loud) ────────────────────── */
+.tribora .trb-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--trb-space-3);
+  padding: 0.75rem 1.25rem 0.8125rem;
+  font-family: var(--trb-font-display);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  letter-spacing: -0.005em;
+  color: var(--trb-signal-ink);
+  background: var(--trb-signal);
+  border: 1px solid var(--trb-signal);
+  border-radius: 2px;
+  cursor: pointer;
+  transition:
+    background-color var(--trb-dur-fast) var(--trb-ease),
+    transform var(--trb-dur-fast) var(--trb-ease),
+    box-shadow var(--trb-dur-med) var(--trb-ease);
+  box-shadow: 0 0 0 0 var(--trb-signal-soft);
+}
+
+.tribora .trb-cta:hover {
+  background: oklch(0.83 0.14 72);
+  box-shadow: 0 0 24px -4px var(--trb-signal-edge);
+}
+
+.tribora .trb-cta:active { transform: translateY(1px); }
+
+.tribora .trb-cta:focus-visible {
+  outline: 2px solid var(--trb-signal);
+  outline-offset: 3px;
+}
+
+.tribora .trb-cta .trb-cta-glyph {
+  font-family: var(--trb-font-mono);
+  font-weight: 500;
+  font-size: 0.8125rem;
+  opacity: 0.82;
+}
+
+/* Ghost button — secondary action */
+.tribora .trb-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--trb-space-3);
+  padding: 0.6875rem 1.125rem;
+  font-family: var(--trb-font-display);
+  font-weight: 500;
+  font-size: 0.9375rem;
+  color: var(--trb-ink);
+  background: transparent;
+  border: 1px solid var(--trb-line-strong);
+  border-radius: 2px;
+  cursor: pointer;
+  transition:
+    border-color var(--trb-dur-fast) var(--trb-ease),
+    background-color var(--trb-dur-fast) var(--trb-ease);
+}
+
+.tribora .trb-ghost:hover {
+  background: var(--trb-surface-2);
+  border-color: var(--trb-ink-faint);
+}
+
+.tribora .trb-ghost:focus-visible {
+  outline: 2px solid var(--trb-signal);
+  outline-offset: 2px;
+}
+
+/* ─── Kbd chip (keyboard shortcut pill — mono, bordered) ──────────────── */
+.tribora .trb-kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1875rem 0.4375rem 0.25rem;
+  font-family: var(--trb-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--trb-ink-muted);
+  background: var(--trb-surface-1);
+  border: 1px solid var(--trb-line);
+  border-radius: 3px;
+  line-height: 1;
+}
+
+/* ─── Link w/ specimen underline on hover ─────────────────────────────── */
+.tribora .trb-link {
+  position: relative;
+  color: var(--trb-ink);
+  font-family: var(--trb-font-display);
+  font-weight: 500;
+  font-size: 0.875rem;
+  letter-spacing: -0.005em;
+  transition: color var(--trb-dur-fast) var(--trb-ease);
+}
+
+.tribora .trb-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 1px;
+  background: var(--trb-signal);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--trb-dur-med) var(--trb-ease);
+}
+
+.tribora .trb-link:hover::after,
+.tribora .trb-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.tribora .trb-link:focus-visible {
+  outline: none;
+  color: var(--trb-signal);
+}
+
+/* ─── Hairline utilities ──────────────────────────────────────────────── */
+.tribora .trb-hline {
+  height: 1px;
+  width: 100%;
+  background: var(--trb-line);
+  border: 0;
+}
+
+.tribora .trb-vline {
+  width: 1px;
+  background: var(--trb-line);
+  flex-shrink: 0;
+}
+
+/* ─── Section container ───────────────────────────────────────────────── */
+.tribora .trb-section {
+  width: 100%;
+  padding-inline: var(--trb-gutter);
+}
+
+.tribora .trb-inner {
+  max-width: var(--trb-page-max);
+  margin-inline: auto;
+  position: relative;
+}
+
+/* ─── Specimen grid overlay (subtle dotted cadence on hero) ───────────── */
+.tribora .trb-grid-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--trb-line-faint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--trb-line-faint) 1px, transparent 1px);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse at 60% 40%, #000 0%, transparent 72%);
+  opacity: 0.6;
+}
+
+/* ─── Reveal animation hook (IntersectionObserver adds .is-in) ────────── */
+.tribora [data-reveal] {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 420ms var(--trb-ease),
+    transform 420ms var(--trb-ease);
+  transition-delay: var(--trb-reveal-delay, 0ms);
+}
+
+.tribora [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* ─── Live pip (recording dot; used on product-surface) ───────────────── */
+.tribora .trb-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--trb-live);
+  box-shadow: 0 0 0 3px oklch(0.76 0.155 148 / 0.18);
+}
+
+.tribora .trb-pip.is-signal {
+  background: var(--trb-signal);
+  box-shadow: 0 0 0 3px var(--trb-signal-soft);
+}
+
+/* ─── Tabular numerics for metric values ──────────────────────────────── */
+.tribora .trb-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "zero";
+}
+
+/* ─── Reduced motion: respect the user ────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .tribora [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .tribora * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -91,7 +91,7 @@ const DEFAULT_SOCIALS: SocialLink[] = [
 
 export default function Footer({
   brandName = 'Tribora',
-  tagline = 'The Knowledge Intelligence Layer — illuminate your team\'s expertise.',
+  tagline = 'An always-on tutor trained on your team — so the same question never gets asked twice.',
   nav = DEFAULT_NAV,
   socials = DEFAULT_SOCIALS,
   showNewsletter = true,

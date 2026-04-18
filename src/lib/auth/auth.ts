@@ -141,9 +141,13 @@ export const auth = betterAuth({
       },
     },
   },
-  trustedOrigins: [
-    process.env.NEXT_PUBLIC_DOMAIN || "http://localhost:3000",
-  ],
+  // In dev, trust any localhost port so `npm run dev` works on :3000, :3001,
+  // etc. In prod, trust only the configured domain. Better Auth supports
+  // wildcards in origin patterns.
+  trustedOrigins:
+    process.env.NODE_ENV === "production"
+      ? [process.env.NEXT_PUBLIC_DOMAIN].filter(Boolean) as string[]
+      : ["http://localhost:*", "http://127.0.0.1:*"],
 });
 
 export type Session = typeof auth.$Infer.Session;

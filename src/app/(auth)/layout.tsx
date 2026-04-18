@@ -1,137 +1,186 @@
-'use client';
+import "@/app/components/marketing/tribora.css";
+import { Reveal } from "@/app/components/marketing/homepage/reveal";
 
-import { motion, useReducedMotion } from 'motion/react';
+export const dynamic = "force-dynamic";
 
 /**
- * Auth Layout - "Aurora Gateway"
+ * Auth routes layout — specimen-sheet frame.
  *
- * Creates an immersive dark-mode native authentication experience
- * with animated aurora effects representing knowledge illumination.
- *
- * Design: Full-screen dark background with animated glow orbs
- * that float and pulse, creating depth and visual interest.
+ * The auth surface is a quiet instrument panel: warm off-dark ground,
+ * a masked dotted grid, a single hairline-bracketed column, and corner
+ * markers that match the marketing catalog. No orbs, no gradient text,
+ * no aurora glow — the signal color (Warm Amber) is reserved for the
+ * primary action and focus rings only.
  */
 export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const shouldReduceMotion = useReducedMotion();
-
   return (
-    <div className="relative min-h-screen bg-[rgb(3,14,16)] overflow-hidden">
-      {/* Aurora Background Layer */}
-      <div className="absolute inset-0 overflow-hidden">
-        {/* Primary glow orb - top right */}
-        <motion.div
-          className="absolute -top-32 -right-32 w-[600px] h-[600px] rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(0,223,130,0.15) 0%, rgba(0,223,130,0.05) 40%, transparent 70%)',
-          }}
-          animate={shouldReduceMotion ? {} : {
-            scale: [1, 1.1, 1],
-            opacity: [0.6, 0.8, 0.6],
-          }}
-          transition={{
-            duration: 8,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-        />
+    <div
+      className="tribora relative min-h-dvh overflow-hidden"
+      style={{ backgroundColor: "var(--trb-surface-0)" }}
+    >
+      {/* Dotted specimen grid — masked radially so it fades at the edges */}
+      <div
+        aria-hidden
+        className="trb-grid-overlay"
+        style={{ position: "fixed", inset: 0, zIndex: 0 }}
+      />
 
-        {/* Secondary glow orb - bottom left */}
-        <motion.div
-          className="absolute -bottom-48 -left-48 w-[700px] h-[700px] rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(44,194,149,0.12) 0%, rgba(44,194,149,0.04) 40%, transparent 70%)',
-          }}
-          animate={shouldReduceMotion ? {} : {
-            scale: [1, 1.15, 1],
-            opacity: [0.5, 0.7, 0.5],
-          }}
-          transition={{
-            duration: 10,
-            repeat: Infinity,
-            ease: 'easeInOut',
-            delay: 2,
-          }}
-        />
+      {/* Single surgical amber radial — the "signal reception" cue.
+          Scarce by design; sits behind the form at roughly 20% intensity. */}
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 0,
+          pointerEvents: "none",
+          background:
+            "radial-gradient(ellipse 60% 45% at 50% 42%, oklch(0.78 0.155 72 / 0.08), transparent 65%)",
+        }}
+      />
 
-        {/* Accent glow orb - center floating */}
-        <motion.div
-          className="absolute top-1/2 left-1/3 w-[400px] h-[400px] rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(3,98,76,0.2) 0%, rgba(3,98,76,0.05) 50%, transparent 70%)',
-          }}
-          animate={shouldReduceMotion ? {} : {
-            x: [0, 100, 0],
-            y: [0, -50, 0],
-            scale: [1, 1.2, 1],
-            opacity: [0.4, 0.6, 0.4],
-          }}
-          transition={{
-            duration: 15,
-            repeat: Infinity,
-            ease: 'easeInOut',
-            delay: 1,
-          }}
-        />
+      {/* Top corner markers — catalog identity, matches hero chrome */}
+      <FrameTopBar />
 
-        {/* Small floating particles */}
-        {!shouldReduceMotion && (
-          <>
-            <motion.div
-              className="absolute top-1/4 right-1/4 w-2 h-2 rounded-full bg-accent/40"
-              animate={{
-                y: [0, -20, 0],
-                opacity: [0.4, 0.8, 0.4],
-              }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-            />
-            <motion.div
-              className="absolute top-2/3 right-1/3 w-1.5 h-1.5 rounded-full bg-secondary/30"
-              animate={{
-                y: [0, -15, 0],
-                opacity: [0.3, 0.6, 0.3],
-              }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-            />
-            <motion.div
-              className="absolute top-1/3 left-1/4 w-1 h-1 rounded-full bg-accent/50"
-              animate={{
-                y: [0, -10, 0],
-                opacity: [0.5, 0.9, 0.5],
-              }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
-            />
-          </>
-        )}
+      {/* Bottom corner markers — specimen revision line */}
+      <FrameBottomBar />
 
-        {/* Subtle grid pattern overlay */}
-        <div
-          className="absolute inset-0 opacity-[0.02]"
-          style={{
-            backgroundImage: `
-              linear-gradient(rgba(0,223,130,0.5) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(0,223,130,0.5) 1px, transparent 1px)
-            `,
-            backgroundSize: '60px 60px',
-          }}
-        />
-
-        {/* Radial vignette for depth */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background: 'radial-gradient(ellipse at center, transparent 0%, rgba(3,14,16,0.4) 100%)',
-          }}
-        />
-      </div>
-
-      {/* Content Layer */}
-      <div className="relative z-10">
+      {/* Content */}
+      <div
+        style={{ position: "relative", zIndex: 1 }}
+        className="min-h-dvh"
+      >
         {children}
       </div>
+
+      <Reveal />
     </div>
+  );
+}
+
+function FrameTopBar() {
+  return (
+    <div
+      aria-hidden
+      className="trb-section"
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 2,
+        paddingTop: "1.125rem",
+        paddingBottom: "0.75rem",
+        borderBottom: "1px solid var(--trb-line-faint)",
+      }}
+    >
+      <div
+        className="trb-inner"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "1rem",
+        }}
+      >
+        <TriboraMark />
+        <span
+          className="trb-mono-sm"
+          style={{ color: "var(--trb-ink-faint)" }}
+        >
+          v2.4.1
+        </span>
+        <span style={{ flex: 1, height: 1, background: "var(--trb-line-faint)" }} />
+        <span
+          className="trb-mono-sm"
+          style={{ color: "var(--trb-ink-faint)" }}
+        >
+          AUTH · SECURE CHANNEL
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function FrameBottomBar() {
+  return (
+    <div
+      aria-hidden
+      className="trb-section"
+      style={{
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 2,
+        paddingTop: "0.75rem",
+        paddingBottom: "1.125rem",
+        borderTop: "1px solid var(--trb-line-faint)",
+      }}
+    >
+      <div
+        className="trb-inner"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "1rem",
+        }}
+      >
+        <span
+          className="trb-mono-sm"
+          style={{ color: "var(--trb-ink-faint)" }}
+        >
+          TRIBORA · AUTH · REV 2026-04-18
+        </span>
+        <span style={{ flex: 1, height: 1, background: "var(--trb-line-faint)" }} />
+        <span
+          className="trb-mono-sm"
+          style={{ color: "var(--trb-ink-faint)" }}
+        >
+          TLS 1.3 · AES-256 · ZERO-LOG
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function TriboraMark() {
+  return (
+    <span
+      aria-label="Tribora"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.625rem",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          display: "inline-flex",
+          alignItems: "flex-end",
+          gap: 3,
+          height: 18,
+        }}
+      >
+        <span style={{ width: 2, height: 6, background: "var(--trb-ink-muted)" }} />
+        <span style={{ width: 2, height: 14, background: "var(--trb-signal)" }} />
+        <span style={{ width: 2, height: 10, background: "var(--trb-ink-muted)" }} />
+      </span>
+      <span
+        style={{
+          fontFamily: "var(--trb-font-display)",
+          fontSize: 17,
+          fontWeight: 600,
+          letterSpacing: "-0.01em",
+          color: "var(--trb-ink)",
+        }}
+      >
+        Tribora
+      </span>
+    </span>
   );
 }

@@ -203,7 +203,7 @@ const AuroraCTA = () => {
           >
             <HugeiconsIcon icon={SparklesIcon} size={16} className="text-accent" />
             <span className="text-sm font-medium text-accent">
-              Start capturing knowledge today
+              See it answer a question from your data
             </span>
           </motion.div>
 
@@ -213,14 +213,14 @@ const AuroraCTA = () => {
             className="font-outfit text-4xl sm:text-5xl lg:text-6xl xl:text-7xl
               font-light leading-tight tracking-tight mb-6"
           >
-            Ready to{' '}
+            Stop answering the{' '}
             <span
               className="relative inline-block
                 bg-gradient-to-r from-accent via-secondary to-accent
                 bg-clip-text text-transparent
                 bg-[length:200%_auto] animate-gradient-x"
             >
-              illuminate
+              same question
               {/* Glow effect behind text */}
               <span
                 className="absolute inset-0 blur-2xl opacity-50
@@ -229,7 +229,7 @@ const AuroraCTA = () => {
               />
             </span>
             <br className="hidden sm:block" />
-            your team's knowledge?
+            forty times.
           </motion.h2>
 
           {/* Subheadline */}
@@ -238,8 +238,9 @@ const AuroraCTA = () => {
             className="text-lg sm:text-xl lg:text-2xl text-muted-foreground
               font-light max-w-2xl mx-auto mb-10"
           >
-            Join thousands of teams transforming tacit expertise into
-            searchable, AI-powered intelligence.
+            Thirty minutes. Your team. Your data. We'll record one of the
+            questions your senior rep gets asked every week — and show you
+            Tribora answering it back, with a citation.
           </motion.p>
 
           {/* CTA Buttons */}

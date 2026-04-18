@@ -117,13 +117,13 @@ const menuItems: MenuItem[] = [
       },
       {
         title: 'Documentation',
-        description: 'Learn how to capture and transform knowledge',
+        description: 'Setup, integrations, and how the pipeline works end-to-end',
         icon: <BookOpen className="size-5 shrink-0" />,
         url: '/docs',
       },
       {
         title: 'About',
-        description: 'Our mission to illuminate team knowledge',
+        description: 'Why we built Tribora and who we built it for',
         icon: <Sparkles className="size-5 shrink-0" />,
         url: '/about',
       },

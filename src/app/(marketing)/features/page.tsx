@@ -1,1130 +1,903 @@
-'use client';
+import Link from "next/link";
 
-import { useState } from 'react';
-import * as motion from 'motion/react-client';
-import { HugeiconsIcon } from '@hugeicons/react';
-import type { IconSvgElement } from '@hugeicons/react';
-import {
-  Mic01Icon,
-  AiBrain01Icon,
-  AiSearchIcon,
-  MessageMultiple01Icon,
-  File01Icon,
-  UserGroupIcon,
-  AiNetworkIcon,
-  Tick02Icon,
-  ArrowRight01Icon,
-  SparklesIcon,
-  PlayCircleIcon,
-  SecurityCheckIcon,
-  Globe02Icon,
-  ZapIcon,
-  Clock01Icon,
-  TrendingUp01Icon,
-  Layers01Icon,
-} from '@hugeicons/core-free-icons';
-import Image from 'next/image';
-import Link from 'next/link';
+/* ─────────────────────────────────────────────────────────────────────────
+   DATA
+   ──────────────────────────────────────────────────────────────────────── */
 
-import { cn } from '@/lib/utils';
-import { Badge } from '@/app/components/ui/badge';
-import { Button } from '@/app/components/ui/button';
-import { Card, CardContent } from '@/app/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
-import { AuroraCTA } from '@/app/components/sections';
-
-// Spring configuration for natural feel (brand-compliant: max 500ms perceived duration)
-const springTransition = {
-  type: 'spring' as const,
-  stiffness: 400,
-  damping: 30,
-};
-
-// Stagger configuration for children
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.1,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: springTransition,
-  },
-};
-
-// Card variants for bento grid
-const cardVariants = {
-  hidden: { opacity: 0, y: 30, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: springTransition,
-  },
-};
-
-// Feature section variants
-const featureSectionVariants = {
-  hidden: { opacity: 0, y: 40 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      type: 'spring' as const,
-      stiffness: 300,
-      damping: 25,
-    },
-  },
-};
-
-/**
- * Features Page - Aurora Design System
- *
- * Comprehensive features showcase with:
- * - Hero section with flowing aurora gradients
- * - Bento grid feature highlights
- * - Deep-dive alternating feature sections
- * - Comparison matrix
- * - Aurora CTA
- */
-
-// ============================================================================
-// DATA
-// ============================================================================
-
-interface Stat {
-  icon: IconSvgElement;
-  value: string;
-  label: string;
-}
-
-const HERO_STATS: Stat[] = [
-  { icon: Tick02Icon, value: '95%', label: 'Transcription Accuracy' },
-  { icon: Clock01Icon, value: '<2min', label: 'Average Processing' },
-  { icon: Globe02Icon, value: '50+', label: 'Languages Supported' },
-  { icon: SecurityCheckIcon, value: '100%', label: 'SOC 2 Compliant' },
+const HERO_STATS = [
+  { label: "ACCURACY", value: "95%", caption: "TRANSCRIPTION" },
+  { label: "LATENCY", value: "< 2m", caption: "PROCESSING" },
+  { label: "LANGUAGES", value: "50+", caption: "SUPPORTED" },
+  { label: "COMPLIANCE", value: "100%", caption: "SOC 2 TYPE II" },
 ];
 
-interface FeatureHighlight {
-  icon: IconSvgElement;
-  title: string;
-  description: string;
-  size?: 'normal' | 'large';
-  badge?: string;
-}
-
-const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
+const FEATURE_HIGHLIGHTS = [
   {
-    icon: Mic01Icon,
-    title: 'Browser Recording',
-    description: 'Capture screen, camera, and audio instantly. No downloads or plugins required.',
-    size: 'large',
-    badge: 'Core Feature',
+    mark: "F-01",
+    title: "Browser Recording",
+    description:
+      "Screen, camera, audio, straight from the tab. No download, no plugin, no IT ticket.",
   },
   {
-    icon: AiBrain01Icon,
-    title: 'AI Transcription',
-    description: 'Whisper-powered with 95%+ accuracy across 50+ languages.',
+    mark: "F-02",
+    title: "AI Transcription",
+    description:
+      "Whisper-backed, 95%+ accuracy, word-level timestamps across 50+ languages.",
   },
   {
-    icon: AiSearchIcon,
-    title: 'Semantic Search',
-    description: 'Find anything with context-aware AI that understands meaning.',
+    mark: "F-03",
+    title: "Semantic Search",
+    description:
+      "Context-aware retrieval that understands the question, not just the keywords.",
   },
   {
-    icon: MessageMultiple01Icon,
-    title: 'RAG Assistant',
-    description: 'Get instant answers with exact citations from your knowledge base.',
-    size: 'large',
-    badge: 'AI Powered',
+    mark: "F-04",
+    title: "RAG Assistant",
+    description:
+      "Answer desks, cited back to the exact second of the exact clip. No hallucination.",
   },
   {
-    icon: File01Icon,
-    title: 'Auto Documentation',
-    description: 'Transform recordings into structured docs automatically.',
+    mark: "F-05",
+    title: "Auto Documentation",
+    description:
+      "Structured docs generated from the recording, editable in place, exportable.",
   },
   {
-    icon: AiNetworkIcon,
-    title: 'Knowledge Graph',
-    description: 'Cross-recording concept linking that compounds value over time.',
+    mark: "F-06",
+    title: "Knowledge Graph",
+    description:
+      "Cross-clip concept linking. Every answer pulls from every recording that touches it.",
   },
 ];
 
-interface DeepDiveFeature {
-  id: string;
-  icon: IconSvgElement;
-  title: string;
-  subtitle: string;
-  description: string;
-  bullets: string[];
-  badge?: string;
-}
-
-const DEEP_DIVE_FEATURES: DeepDiveFeature[] = [
+const DEEP_DIVE = [
   {
-    id: 'recording',
-    icon: Mic01Icon,
-    title: 'Browser-Based Recording',
-    subtitle: 'Zero friction capture',
+    id: "recording",
+    mark: "§A",
+    suffix: "/ CAPTURE",
+    title: "Browser-based recording",
+    subtitle: "Zero-friction capture.",
     description:
-      'Start recording in seconds directly from your browser. Capture your screen, camera, and microphone with professional quality—no downloads, no plugins, no complications.',
+      "Start recording in seconds, straight from the browser. Screen, camera, mic — captured at studio fidelity with no plugin and no reinstall.",
     bullets: [
-      'Screen share with system audio capture',
-      'Picture-in-picture webcam overlay',
-      'High-fidelity microphone recording',
-      'Live preview with device selection',
-      'Automatic quality optimization',
-      'Resume interrupted recordings',
-    ],
-    badge: 'Most Popular',
-  },
-  {
-    id: 'transcription',
-    icon: AiBrain01Icon,
-    title: 'AI-Powered Transcription',
-    subtitle: 'Words become searchable',
-    description:
-      'Your spoken words transform into accurate, timestamped text. Powered by OpenAI Whisper, supporting 50+ languages with industry-leading accuracy.',
-    bullets: [
-      'Word-level timestamps for precise navigation',
-      'Multi-language support (50+ languages)',
-      'Speaker detection and labeling',
-      'Editable transcripts with auto-save',
-      'Export to TXT, SRT, VTT formats',
-      'Real-time transcription preview',
-    ],
-    badge: 'AI Powered',
-  },
-  {
-    id: 'search',
-    icon: AiSearchIcon,
-    title: 'Semantic Search',
-    subtitle: 'Find what you mean',
-    description:
-      'Search by meaning, not just keywords. Our AI understands context, synonyms, and intent—find exactly what you\'re looking for even when you don\'t remember the exact words.',
-    bullets: [
-      'Context-aware semantic understanding',
-      'Search across all recordings at once',
-      'Jump to exact moments in videos',
-      'Filter by date, speaker, or topic',
-      'Natural language query support',
-      'Relevance-ranked results',
+      "Screen share with system audio",
+      "Picture-in-picture webcam overlay",
+      "High-fidelity microphone path",
+      "Live preview, device selection",
+      "Automatic quality optimization",
+      "Resume interrupted recordings",
     ],
   },
   {
-    id: 'assistant',
-    icon: MessageMultiple01Icon,
-    title: 'RAG AI Assistant',
-    subtitle: 'Your knowledge, conversational',
+    id: "transcription",
+    mark: "§B",
+    suffix: "/ TRANSCRIBE",
+    title: "AI-powered transcription",
+    subtitle: "Spoken words become searchable text.",
     description:
-      'Ask questions about your recordings and get instant answers with citations. Like having a knowledgeable colleague who remembers everything you\'ve ever recorded.',
+      "Whisper under the hood, word-level timestamps on top. Accurate across 50+ languages with editable, auto-saved transcripts.",
     bullets: [
-      'Natural conversation interface',
-      'Answers with exact source citations',
-      'Cross-recording knowledge synthesis',
-      'Follow-up question support',
-      'Conversation history tracking',
-      'Per-recording and workspace-wide chat',
-    ],
-    badge: 'New',
-  },
-  {
-    id: 'documentation',
-    icon: File01Icon,
-    title: 'Auto Documentation',
-    subtitle: 'Recordings become documents',
-    description:
-      'Transform any recording into structured, professional documentation automatically. AI analyzes your content and generates organized docs with headings, summaries, and key points.',
-    bullets: [
-      'Automatic structure and formatting',
-      'Executive summaries generated',
-      'Key points and action items extracted',
-      'Fully editable and customizable',
-      'Export to Markdown, PDF, HTML',
-      'Template support for consistency',
+      "Word-level timestamps",
+      "50+ language support",
+      "Speaker detection and labeling",
+      "Editable transcripts, auto-saved",
+      "Export to TXT, SRT, VTT",
+      "Real-time transcription preview",
     ],
   },
   {
-    id: 'collaboration',
-    icon: UserGroupIcon,
-    title: 'Team Collaboration',
-    subtitle: 'Knowledge multiplied',
+    id: "search",
+    mark: "§C",
+    suffix: "/ SEARCH",
+    title: "Semantic search",
+    subtitle: "Find what you meant, not what you typed.",
     description:
-      'Share expertise across your organization. Build a centralized knowledge base where everyone can access, contribute, and learn from collective team wisdom.',
+      "pgvector + embeddings that understand synonyms, intent, and context. Results rank by relevance, jump you straight to the moment.",
     bullets: [
-      'Organization and department management',
-      'Role-based access control (RBAC)',
-      'Public, private, and link sharing',
-      'Comments and annotations',
-      'Usage analytics dashboard',
-      'SSO and SAML integration',
+      "Context-aware retrieval",
+      "Search across all recordings at once",
+      "Jump to exact timestamp",
+      "Filter by date, speaker, topic",
+      "Natural language queries",
+      "Relevance-ranked results",
+    ],
+  },
+  {
+    id: "assistant",
+    mark: "§D",
+    suffix: "/ ANSWER",
+    title: "RAG AI assistant",
+    subtitle: "Your knowledge base, in conversation.",
+    description:
+      "Ask a question in natural language. Get an answer cited back to the exact clip, the exact timestamp. Follow-up questions stay in-thread.",
+    bullets: [
+      "Natural-language chat interface",
+      "Answers with source citations",
+      "Cross-recording synthesis",
+      "Follow-up question threading",
+      "Conversation history per user",
+      "Per-recording and workspace scopes",
+    ],
+  },
+  {
+    id: "documentation",
+    mark: "§E",
+    suffix: "/ DOCUMENT",
+    title: "Auto documentation",
+    subtitle: "Recordings become structured docs.",
+    description:
+      "AI parses the clip, extracts structure, and produces an editable document with summary, key points, and action items — ready to ship.",
+    bullets: [
+      "Automatic headings and structure",
+      "Executive summaries generated",
+      "Key points and action items",
+      "Fully editable and customizable",
+      "Export to Markdown, PDF, HTML",
+      "Templates for consistency",
+    ],
+  },
+  {
+    id: "collaboration",
+    mark: "§F",
+    suffix: "/ SHARE",
+    title: "Team collaboration",
+    subtitle: "Knowledge multiplied across the org.",
+    description:
+      "Role-based access, org hierarchy, SSO. The senior rep’s knowledge stays reachable after they’re off the clock — or off the payroll.",
+    bullets: [
+      "Organization and department management",
+      "Role-based access control (RBAC)",
+      "Public, private, link sharing",
+      "Comments and annotations",
+      "Usage analytics dashboard",
+      "SSO and SAML integration",
     ],
   },
 ];
 
-interface ComparisonRow {
-  feature: string;
-  tribora: string | boolean;
-  competitorA: string | boolean;
-  competitorB: string | boolean;
-}
-
-const COMPARISON_DATA: ComparisonRow[] = [
-  { feature: 'Recording Quality', tribora: 'Up to 4K', competitorA: '1080p', competitorB: '720p' },
-  { feature: 'Transcription Accuracy', tribora: '95%+', competitorA: '85%', competitorB: '80%' },
-  { feature: 'AI Documentation', tribora: true, competitorA: false, competitorB: false },
-  { feature: 'Semantic Search', tribora: true, competitorA: 'Basic', competitorB: false },
-  { feature: 'RAG AI Assistant', tribora: true, competitorA: false, competitorB: false },
-  { feature: 'Knowledge Graph', tribora: true, competitorA: false, competitorB: false },
-  { feature: 'Bidirectional Sync', tribora: true, competitorA: false, competitorB: false },
-  { feature: 'Team Members', tribora: 'Unlimited', competitorA: 'Up to 10', competitorB: 'Up to 5' },
-  { feature: 'Storage', tribora: 'Unlimited', competitorA: '100GB', competitorB: '50GB' },
-  { feature: 'Languages', tribora: '50+', competitorA: '20', competitorB: '10' },
+const COMPARISON_DATA = [
+  { feature: "Recording quality", tribora: "up to 4K", competitorA: "1080p", competitorB: "720p" },
+  { feature: "Transcription accuracy", tribora: "95%+", competitorA: "85%", competitorB: "80%" },
+  { feature: "AI documentation", tribora: true, competitorA: false, competitorB: false },
+  { feature: "Semantic search", tribora: true, competitorA: "basic", competitorB: false },
+  { feature: "RAG AI assistant", tribora: true, competitorA: false, competitorB: false },
+  { feature: "Knowledge graph", tribora: true, competitorA: false, competitorB: false },
+  { feature: "Bidirectional sync", tribora: true, competitorA: false, competitorB: false },
+  { feature: "Team members", tribora: "unlimited", competitorA: "up to 10", competitorB: "up to 5" },
+  { feature: "Storage", tribora: "unlimited", competitorA: "100 GB", competitorB: "50 GB" },
+  { feature: "Languages", tribora: "50+", competitorA: "20", competitorB: "10" },
 ];
 
-// ============================================================================
-// COMPONENTS
-// ============================================================================
+/* ─────────────────────────────────────────────────────────────────────────
+   PAGE
+   ──────────────────────────────────────────────────────────────────────── */
 
-/**
- * Features Hero Section
- */
-function FeaturesHero() {
+export default function FeaturesPage() {
   return (
-    <section className="relative pt-24 pb-16 sm:pt-32 sm:pb-20 lg:pt-40 lg:pb-24 overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 pointer-events-none">
-        {/* Aurora orbs */}
-        <div
-          className="absolute top-[10%] right-[10%] w-[600px] h-[600px] rounded-full
-            bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.12)_0%,transparent_70%)]
-            blur-[100px] animate-float"
-        />
-        <div
-          className="absolute bottom-[20%] left-[5%] w-[500px] h-[500px] rounded-full
-            bg-[radial-gradient(ellipse_at_center,rgba(44,194,149,0.08)_0%,transparent_70%)]
-            blur-[80px] animate-float"
-          style={{ animationDelay: '2s' }}
-        />
+    <>
+      <Hero />
+      <Bento />
+      <DeepDive />
+      <Compare />
+      <Closing />
+    </>
+  );
+}
 
-        {/* Grid pattern */}
-        <div
-          className="absolute inset-0 opacity-[0.02]"
+/* ─────────────────────────────────────────────────────────────────────────
+   HERO
+   ──────────────────────────────────────────────────────────────────────── */
+
+function Hero() {
+  return (
+    <section
+      className="trb-section"
+      aria-labelledby="features-head"
+      style={{
+        position: "relative",
+        paddingTop: "clamp(2.5rem, 3vw + 1rem, 4.5rem)",
+        paddingBottom: "clamp(3rem, 4vw + 1rem, 5rem)",
+      }}
+    >
+      <div
+        aria-hidden
+        className="trb-grid-overlay"
+        style={{ inset: 0, position: "absolute", zIndex: 0 }}
+      />
+
+      <div className="trb-inner" style={{ position: "relative", zIndex: 1 }}>
+        <SectionMarkerRow mark="§01" label="/ FEATURES" index="PAGE 04 OF 07" />
+
+        <h1
+          id="features-head"
+          className="trb-display"
+          data-reveal
           style={{
-            backgroundImage: `
-              linear-gradient(to right, rgba(0,223,130,0.5) 1px, transparent 1px),
-              linear-gradient(to bottom, rgba(0,223,130,0.5) 1px, transparent 1px)
-            `,
-            backgroundSize: '80px 80px',
+            fontSize: "var(--trb-size-display-l)",
+            marginTop: "1.25rem",
+            marginBottom: "1.5rem",
+            maxWidth: "16ch",
           }}
-        />
-      </div>
-
-      <div className="container px-4 sm:px-6 lg:px-8 relative z-10">
-        <motion.div
-          className="max-w-4xl mx-auto text-center"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
         >
-          {/* Badge */}
-          <motion.div variants={itemVariants}>
-            <Badge
-              variant="outline"
-              className="mb-6 px-4 py-2 rounded-full
-                bg-accent/5 backdrop-blur-sm
-                border-accent/30"
+          Record it once.{" "}
+          <span style={{ color: "var(--trb-ink-muted)" }}>
+            Answer it forever.
+          </span>
+          <span style={{ color: "var(--trb-signal)" }}>.</span>
+        </h1>
+
+        <p
+          data-reveal
+          style={{
+            maxWidth: "58ch",
+            fontSize: "var(--trb-size-body-l)",
+            lineHeight: 1.55,
+            color: "var(--trb-ink-muted)",
+            marginBottom: "2.5rem",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "80ms",
+          }}
+        >
+          A ninety-second screen share becomes a cited, searchable answer your
+          whole team can find &mdash; in the exact tool where they got stuck.
+        </p>
+
+        <div
+          data-reveal
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: 0,
+            borderLeft: "1px solid var(--trb-line)",
+            borderTop: "1px solid var(--trb-line)",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "160ms",
+          }}
+        >
+          {HERO_STATS.map((stat) => (
+            <div
+              key={stat.label}
+              style={{
+                borderRight: "1px solid var(--trb-line)",
+                borderBottom: "1px solid var(--trb-line)",
+                padding: "1rem 1.125rem 1.25rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.25rem",
+              }}
             >
-              <HugeiconsIcon icon={SparklesIcon} size={16} className="mr-2 text-accent" />
-              <span className="text-sm font-medium text-accent">
-                Powerful Features
+              <span
+                className="trb-mono-sm"
+                style={{ color: "var(--trb-ink-faint)" }}
+              >
+                {stat.label}
               </span>
-            </Badge>
-          </motion.div>
-
-          {/* Headline */}
-          <motion.h1
-            className="font-outfit text-4xl sm:text-5xl lg:text-6xl xl:text-7xl
-              font-light leading-[1.1] tracking-tight mb-6"
-            variants={itemVariants}
-          >
-            Everything you need to{' '}
-            <span
-              className="bg-gradient-to-r from-accent via-secondary to-primary
-                bg-clip-text text-transparent"
-            >
-              capture knowledge
-            </span>
-          </motion.h1>
-
-          {/* Subheadline */}
-          <motion.p
-            className="text-lg sm:text-xl text-muted-foreground font-light
-              max-w-2xl mx-auto mb-12"
-            variants={itemVariants}
-          >
-            From recording to AI-powered answers, transform tacit expertise into
-            searchable intelligence that compounds over time.
-          </motion.p>
-
-          {/* Stats */}
-          <motion.div
-            className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8
-              pt-8 border-t border-border/30"
-            variants={itemVariants}
-          >
-            {HERO_STATS.map((stat, index) => (
-              <motion.div
-                key={index}
-                className={cn(
-                  'group flex flex-col items-center p-4 rounded-xl',
-                  'transition-all duration-300',
-                  'hover:bg-accent/5'
-                )}
-                whileHover={{ scale: 1.05 }}
-                transition={springTransition}
+              <span
+                className="trb-display trb-num"
+                style={{
+                  fontSize: "clamp(1.75rem, 1.2rem + 1.5vw, 2.25rem)",
+                  color: "var(--trb-ink)",
+                }}
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <HugeiconsIcon
-                    icon={stat.icon}
-                    size={20}
-                    className={cn(
-                      'text-accent',
-                      'transition-transform duration-300',
-                      'group-hover:scale-110'
-                    )}
-                  />
-                  <span className="text-2xl sm:text-3xl font-light text-foreground">
-                    {stat.value}
-                  </span>
-                </div>
-                <span className="text-sm text-muted-foreground">
-                  {stat.label}
+                {stat.value}
+              </span>
+              <span
+                className="trb-mono-sm"
+                style={{ color: "var(--trb-ink-dim)" }}
+              >
+                {stat.caption}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <CornerMarkers fig="FIG-01" caption="FEATURES / INDEX" />
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   BENTO / HIGHLIGHT GRID
+   ──────────────────────────────────────────────────────────────────────── */
+
+function Bento() {
+  return (
+    <section
+      className="trb-section"
+      aria-labelledby="highlights-head"
+      style={{
+        paddingTop: "clamp(4rem, 6vw, 6rem)",
+        paddingBottom: "clamp(4rem, 6vw, 6rem)",
+        borderTop: "1px solid var(--trb-line)",
+      }}
+    >
+      <div className="trb-inner">
+        <SectionMarkerRow mark="§02" label="/ HIGHLIGHTS" index="6 MODULES" />
+
+        <h2
+          id="highlights-head"
+          className="trb-display"
+          data-reveal
+          style={{
+            fontSize: "clamp(1.75rem, 1.2rem + 1.5vw, 2.5rem)",
+            marginTop: "1.25rem",
+            marginBottom: "2.5rem",
+            maxWidth: "28ch",
+          }}
+        >
+          Six modules.{" "}
+          <span style={{ color: "var(--trb-ink-muted)" }}>
+            One knowledge layer.
+          </span>
+        </h2>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: 0,
+            border: "1px solid var(--trb-line)",
+          }}
+        >
+          {FEATURE_HIGHLIGHTS.map((f, i) => (
+            <article
+              key={f.mark}
+              data-reveal
+              style={{
+                padding: "1.5rem 1.25rem 1.75rem",
+                borderRight: "1px solid var(--trb-line)",
+                borderBottom: "1px solid var(--trb-line)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.875rem",
+                /* @ts-expect-error custom CSS var */
+                "--trb-reveal-delay": `${i * 60}ms`,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  paddingBottom: "0.75rem",
+                  borderBottom: "1px solid var(--trb-line-faint)",
+                }}
+              >
+                <span
+                  className="trb-mono-sm"
+                  style={{ color: "var(--trb-signal)" }}
+                >
+                  {f.mark}
                 </span>
-              </motion.div>
-            ))}
-          </motion.div>
-        </motion.div>
-      </div>
-    </section>
-  );
-}
-
-/**
- * Feature Highlights Bento Grid
- * Direct adaptation of shadcnblocks Feature261 pattern with Aurora styling
- */
-function FeatureHighlights() {
-  return (
-    <section className="relative py-16 sm:py-20 lg:py-24 overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div
-          className="absolute top-[30%] left-[50%] -translate-x-1/2 w-[800px] h-[400px]
-            bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.06)_0%,transparent_70%)]
-            blur-[100px]"
-        />
-        <div
-          className="absolute bottom-[20%] right-[10%] w-[400px] h-[400px] rounded-full
-            bg-[radial-gradient(ellipse_at_center,rgba(44,194,149,0.05)_0%,transparent_70%)]
-            blur-[80px]"
-        />
-      </div>
-
-      <div className="container px-4 sm:px-6 lg:px-8 relative z-10">
-        {/* Header */}
-        <motion.div
-          className="text-center max-w-3xl mx-auto mb-12 sm:mb-16"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-100px' }}
-          variants={containerVariants}
-        >
-          <motion.h2
-            className="font-outfit text-3xl sm:text-4xl lg:text-5xl font-light
-              leading-tight tracking-tight mb-4"
-            variants={itemVariants}
-          >
-            Feature{' '}
-            <span
-              className="bg-gradient-to-r from-accent to-secondary
-                bg-clip-text text-transparent"
-            >
-              highlights
-            </span>
-          </motion.h2>
-          <motion.p className="text-lg text-muted-foreground font-light" variants={itemVariants}>
-            Six core capabilities that transform how teams capture and share knowledge.
-          </motion.p>
-        </motion.div>
-
-        {/* === BENTO GRID (Feature261 Pattern) === */}
-        <motion.div
-          className="grid grid-cols-1 gap-4 md:grid-cols-6 lg:grid-cols-12 max-w-7xl mx-auto"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-50px' }}
-          variants={containerVariants}
-        >
-          {/* Image Card - Recording Visual (tall, left) */}
-          <motion.div
-            className="relative h-60 overflow-hidden rounded-3xl md:col-span-2 md:row-span-2 md:h-[400px] lg:col-span-4 lg:h-full group"
-            variants={cardVariants}
-          >
-            <img
-              src="https://images.unsplash.com/photo-1551434678-e076c223a692?q=80&w=2070&auto=format&fit=crop"
-              alt="Team using Tribora for knowledge capture"
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
-            <div className="absolute bottom-6 left-6 z-10">
-              <p className="text-lg font-medium text-foreground">
-                Capture expertise instantly.
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Record screen, camera & audio in one click
-              </p>
-            </div>
-            <div className="absolute right-6 top-6 z-10">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/20 backdrop-blur-sm border border-accent/30 transition-all duration-300 group-hover:scale-110 group-hover:bg-accent/30">
-                <HugeiconsIcon icon={Mic01Icon} size={24} className="text-accent" />
+                <span
+                  className="trb-mono-sm"
+                  style={{ color: "var(--trb-ink-faint)" }}
+                >
+                  MOD / {String(i + 1).padStart(2, "0")}
+                </span>
               </div>
-            </div>
-          </motion.div>
-
-          {/* Image Card - AI Visual */}
-          <motion.div
-            className="relative h-60 overflow-hidden rounded-3xl border border-border/50 md:col-span-2 md:row-span-2 md:h-[400px] lg:col-span-4 lg:h-full group"
-            variants={cardVariants}
-          >
-            <img
-              src="https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=2070&auto=format&fit=crop"
-              alt="AI-powered transcription"
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/40 to-background/20" />
-            <div className="absolute bottom-6 left-6 right-6 z-10">
-              <h3 className="text-sm font-medium leading-tight md:text-base lg:text-xl text-foreground">
-                AI transforms your words into searchable, structured knowledge.
+              <h3 className="trb-display" style={{ fontSize: "1.25rem" }}>
+                {f.title}
               </h3>
-            </div>
-          </motion.div>
-
-          {/* Stats Card - Accuracy */}
-          <motion.div variants={cardVariants} className="col-span-1 md:col-span-2 md:row-span-1 lg:col-span-2">
-            <Card className="h-full rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:h-[192px] group hover:border-accent/30 hover:shadow-[0_0_40px_rgba(0,223,130,0.1)] transition-all duration-500">
-              <CardContent className="flex h-full flex-col justify-center p-4 md:p-6">
-                <div className="mb-2 text-4xl font-bold md:text-4xl lg:text-6xl">
-                  <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
-                    95
-                  </span>
-                  <span className="align-top text-2xl md:text-xl lg:text-3xl text-accent">
-                    %
-                  </span>
-                </div>
-                <p className="text-sm leading-tight text-muted-foreground md:text-sm">
-                  Transcription accuracy
-                  <br />
-                  powered by Whisper AI
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Image Card - Small */}
-          <motion.div
-            className="relative col-span-1 h-60 overflow-hidden rounded-3xl border border-border/50 md:col-span-2 md:row-span-1 md:h-[192px] lg:col-span-2 group"
-            variants={cardVariants}
-          >
-            <img
-              src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=2070&auto=format&fit=crop"
-              alt="Team collaboration"
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
-          </motion.div>
-
-          {/* Feature Card - RAG Assistant (large) */}
-          <motion.div variants={cardVariants} className="col-span-1 md:col-span-4 lg:col-span-4">
-            <Card className="h-full bg-gradient-to-br from-accent/10 via-card/80 to-secondary/10 rounded-3xl border-border/50 backdrop-blur-sm md:h-[300px] group hover:border-accent/30 hover:shadow-[0_0_50px_rgba(0,223,130,0.15)] transition-all duration-500">
-              <CardContent className="h-full p-4 md:p-6">
-                <div className="flex h-full flex-col justify-end">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/20 transition-all duration-300 group-hover:scale-110 group-hover:bg-accent/30">
-                        <HugeiconsIcon icon={MessageMultiple01Icon} size={20} className="text-accent" />
-                      </div>
-                      <Badge variant="outline" className="bg-accent/10 border-accent/30 text-accent text-xs">
-                        <HugeiconsIcon icon={SparklesIcon} size={12} className="mr-1" />
-                        AI Powered
-                      </Badge>
-                    </div>
-                    <div className="text-2xl font-medium md:text-3xl lg:text-4xl text-foreground">
-                      RAG Assistant
-                    </div>
-                    <div className="text-muted-foreground text-sm">
-                      Ask questions, get answers with exact citations
-                    </div>
-                    <Button asChild className="rounded-full bg-gradient-to-r from-accent to-secondary text-accent-foreground hover:shadow-[0_0_30px_rgba(0,223,130,0.4)] transition-all duration-300">
-                      <Link href="/features/assistant">
-                        Try Assistant
-                        <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="ml-2" />
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Stats Card - Languages */}
-          <motion.div variants={cardVariants} className="col-span-1 md:col-span-2 lg:col-span-3">
-            <Card className="h-full rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:h-[300px] group hover:border-accent/30 hover:shadow-[0_0_40px_rgba(0,223,130,0.1)] transition-all duration-500">
-              <CardContent className="flex h-full flex-col justify-center p-4 md:p-5">
-                <div className="mb-3">
-                  <span className="text-4xl font-bold md:text-3xl lg:text-6xl bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
-                    50
-                  </span>
-                  <span className="align-top text-2xl font-bold md:text-xl lg:text-3xl text-accent">
-                    +
-                  </span>
-                </div>
-                <p className="mb-4 text-sm text-muted-foreground md:text-sm">
-                  Languages supported worldwide
-                </p>
-                <div className="flex -space-x-2">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Avatar
-                      key={i}
-                      className="border-background h-8 w-8 border-2 md:h-8 md:w-8 lg:h-10 lg:w-10 ring-2 ring-accent/20"
-                    >
-                      <AvatarImage src={`https://i.pravatar.cc/100?img=${i + 20}`} />
-                      <AvatarFallback className="bg-accent/20 text-accent text-xs">
-                        {['EN', 'ES', 'FR', 'DE', 'JP'][i - 1]}
-                      </AvatarFallback>
-                    </Avatar>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Image Card - Wide */}
-          <motion.div variants={cardVariants} className="col-span-1 md:col-span-3 lg:col-span-5">
-            <Card className="h-full relative overflow-hidden rounded-3xl border-border/50 md:h-[300px] group">
-              <img
-                src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=2015&auto=format&fit=crop"
-                alt="Analytics dashboard"
-                className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/40 to-transparent" />
-              <div className="absolute bottom-6 left-6 z-10">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary/20 backdrop-blur-sm">
-                    <HugeiconsIcon icon={AiSearchIcon} size={16} className="text-secondary" />
-                  </div>
-                  <span className="text-sm font-medium text-foreground">
-                    Semantic Search
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground max-w-xs">
-                  Find anything instantly with AI that understands meaning
-                </p>
-              </div>
-            </Card>
-          </motion.div>
-
-          {/* Image Card with Overlay - Knowledge Graph */}
-          <motion.div variants={cardVariants} className="col-span-1 md:col-span-3 lg:col-span-4">
-            <Card className="h-full relative overflow-hidden rounded-3xl border-border/50 md:h-[300px] group">
-              <img
-                src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2034&auto=format&fit=crop"
-                alt="Knowledge connections"
-                className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
-              <div className="absolute inset-0 z-10 flex items-center justify-start p-4 md:p-6">
-                <div>
-                  <div className="mb-3 flex items-center gap-2 md:gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent/20 backdrop-blur-sm md:h-10 md:w-10 transition-all duration-300 group-hover:scale-110">
-                      <HugeiconsIcon icon={AiNetworkIcon} size={20} className="text-accent" />
-                    </div>
-                    <span className="text-base font-semibold md:text-lg text-foreground">
-                      Knowledge Graph
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground md:text-sm max-w-xs">
-                    Concepts link across recordings
-                    <br />
-                    <span className="text-sm font-medium text-accent">
-                      compounding value over time
-                    </span>
-                  </p>
-                </div>
-              </div>
-            </Card>
-          </motion.div>
-
-          {/* Stats Card - Processing */}
-          <motion.div variants={cardVariants} className="col-span-1 md:col-span-3 lg:col-span-6">
-            <Card className="h-full rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:h-[200px] group hover:border-accent/30 hover:shadow-[0_0_40px_rgba(0,223,130,0.1)] transition-all duration-500">
-              <CardContent className="flex h-full flex-row items-center gap-6 p-4 md:p-6">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent/20">
-                  <HugeiconsIcon icon={Clock01Icon} size={28} className="text-accent" />
-                </div>
-                <div>
-                  <div className="mb-1 text-3xl font-bold md:text-4xl lg:text-5xl">
-                    <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
-                      &lt;2
-                    </span>
-                    <span className="text-lg md:text-xl lg:text-2xl text-accent ml-1">
-                      min
-                    </span>
-                  </div>
-                  <p className="text-sm leading-tight text-muted-foreground">
-                    Average processing time for any recording
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Feature Card - Auto Docs */}
-          <motion.div variants={cardVariants} className="col-span-1 md:col-span-3 lg:col-span-6">
-            <Card className="h-full rounded-3xl border-border/50 bg-card/50 backdrop-blur-sm md:h-[200px] group hover:border-secondary/30 hover:shadow-[0_0_40px_rgba(44,194,149,0.1)] transition-all duration-500">
-              <CardContent className="flex h-full flex-row items-center gap-6 p-4 md:p-6">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-secondary/20 transition-all duration-300 group-hover:scale-110 group-hover:bg-secondary/30">
-                  <HugeiconsIcon icon={File01Icon} size={28} className="text-secondary" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-medium mb-1 group-hover:text-secondary transition-colors">
-                    Auto Documentation
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Recordings transform into structured, searchable docs instantly
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </motion.div>
-      </div>
-    </section>
-  );
-}
-
-/**
- * Deep Dive Feature Sections
- */
-function DeepDiveFeatures() {
-  const [hoveredFeature, setHoveredFeature] = useState<string | null>(null);
-
-  return (
-    <section className="relative py-16 sm:py-20 lg:py-24">
-      <div className="container px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <motion.div
-          className="text-center max-w-3xl mx-auto mb-16 sm:mb-20"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-100px' }}
-          variants={containerVariants}
-        >
-          <motion.div variants={itemVariants}>
-            <Badge
-              variant="outline"
-              className="mb-6 px-4 py-2 rounded-full
-                bg-accent/5 backdrop-blur-sm border-accent/30"
-            >
-              <HugeiconsIcon icon={Layers01Icon} size={16} className="mr-2 text-accent" />
-              <span className="text-sm font-medium text-accent">Deep Dive</span>
-            </Badge>
-          </motion.div>
-
-          <motion.h2
-            className="font-outfit text-3xl sm:text-4xl lg:text-5xl font-light
-              leading-tight tracking-tight mb-4"
-            variants={itemVariants}
-          >
-            Explore every{' '}
-            <span
-              className="bg-gradient-to-r from-accent to-secondary
-                bg-clip-text text-transparent"
-            >
-              capability
-            </span>
-          </motion.h2>
-          <motion.p className="text-lg text-muted-foreground font-light" variants={itemVariants}>
-            Detailed look at how each feature helps you capture and leverage knowledge.
-          </motion.p>
-        </motion.div>
-
-        {/* Feature Sections */}
-        <div className="max-w-6xl mx-auto space-y-24 sm:space-y-32">
-          {DEEP_DIVE_FEATURES.map((feature, index) => {
-            const isEven = index % 2 === 0;
-
-            return (
-              <motion.div
-                key={feature.id}
-                className={cn(
-                  'grid lg:grid-cols-2 gap-12 lg:gap-16 items-center'
-                )}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, margin: '-50px' }}
-                variants={featureSectionVariants}
-                onMouseEnter={() => setHoveredFeature(feature.id)}
-                onMouseLeave={() => setHoveredFeature(null)}
-                onFocus={() => setHoveredFeature(feature.id)}
-                onBlur={() => setHoveredFeature(null)}
-                tabIndex={0}
+              <p
+                style={{
+                  fontSize: "var(--trb-size-body-s)",
+                  lineHeight: 1.6,
+                  color: "var(--trb-ink-muted)",
+                }}
               >
-                {/* Content */}
-                <div className={cn(isEven ? 'lg:order-1' : 'lg:order-2')}>
-                  {/* Badge */}
-                  {feature.badge && (
-                    <Badge
-                      variant="outline"
-                      className="mb-4 px-3 py-1 rounded-full
-                        bg-accent/10 border-accent/30 text-accent text-xs"
-                    >
-                      <HugeiconsIcon icon={SparklesIcon} size={12} className="mr-1" />
-                      {feature.badge}
-                    </Badge>
-                  )}
-
-                  {/* Icon + Title */}
-                  <div className="flex items-center gap-4 mb-4">
-                    <div
-                      className={cn(
-                        'w-14 h-14 rounded-2xl',
-                        'bg-accent/10',
-                        'flex items-center justify-center',
-                        'transition-all duration-300',
-                        hoveredFeature === feature.id && 'bg-accent/20 scale-110'
-                      )}
-                    >
-                      <HugeiconsIcon icon={feature.icon} size={28} className="text-accent" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-accent font-medium">
-                        {feature.subtitle}
-                      </p>
-                      <h3 className="font-outfit text-2xl sm:text-3xl font-medium">
-                        {feature.title}
-                      </h3>
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  <p className="text-lg text-muted-foreground leading-relaxed mb-6">
-                    {feature.description}
-                  </p>
-
-                  {/* Bullets */}
-                  <ul className="space-y-3 mb-8">
-                    {feature.bullets.map((bullet, i) => (
-                      <li key={i} className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'shrink-0 mt-1 w-5 h-5 rounded-full',
-                            'bg-accent/10',
-                            'flex items-center justify-center'
-                          )}
-                        >
-                          <HugeiconsIcon icon={Tick02Icon} size={12} className="text-accent" />
-                        </div>
-                        <span className="text-foreground/80">{bullet}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    asChild
-                    variant="outline"
-                    className={cn(
-                      'rounded-full group/btn',
-                      'border-accent/30 hover:border-accent/50',
-                      'hover:bg-accent/5 hover:text-accent'
-                    )}
-                  >
-                    <Link href={`/features/${feature.id}`}>
-                      Learn more
-                      <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="ml-2 transition-transform group-hover/btn:translate-x-1" />
-                    </Link>
-                  </Button>
-                </div>
-
-                {/* Visual */}
-                <div className={cn(isEven ? 'lg:order-2' : 'lg:order-1')}>
-                  <div
-                    className={cn(
-                      'relative aspect-[4/3] rounded-2xl overflow-hidden',
-                      'bg-card/50 backdrop-blur-sm',
-                      'border border-border/50',
-                      'transition-all duration-500',
-                      hoveredFeature === feature.id &&
-                        'border-accent/30 shadow-[0_0_60px_rgba(0,223,130,0.15)]'
-                    )}
-                  >
-                    {/* Background gradient */}
-                    <div
-                      className={cn(
-                        'absolute inset-0',
-                        'bg-gradient-to-br from-accent/10 via-transparent to-secondary/10'
-                      )}
-                    />
-
-                    {/* Floating aurora orb */}
-                    <div
-                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-                        w-[300px] h-[300px] rounded-full
-                        bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.15)_0%,transparent_70%)]
-                        blur-[60px] animate-pulse-slow"
-                    />
-
-                    {/* Content placeholder */}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="text-center p-8">
-                        <div
-                          className={cn(
-                            'w-20 h-20 rounded-2xl mx-auto mb-4',
-                            'bg-accent/20',
-                            'flex items-center justify-center',
-                            'transition-all duration-500',
-                            hoveredFeature === feature.id && 'scale-110'
-                          )}
-                        >
-                          <HugeiconsIcon icon={feature.icon} size={40} className="text-accent" />
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          [{feature.title} Demo]
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Play overlay on hover */}
-                    <div
-                      className={cn(
-                        'absolute inset-0 flex items-center justify-center',
-                        'bg-background/60 backdrop-blur-sm',
-                        'opacity-0 transition-opacity duration-300',
-                        hoveredFeature === feature.id && 'opacity-100'
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          'w-16 h-16 rounded-full',
-                          'bg-accent/90',
-                          'flex items-center justify-center',
-                          'shadow-[0_0_30px_rgba(0,223,130,0.5)]'
-                        )}
-                      >
-                        <HugeiconsIcon icon={PlayCircleIcon} size={32} className="text-accent-foreground ml-1" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
+                {f.description}
+              </p>
+            </article>
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-/**
- * Comparison Matrix
- */
-function ComparisonMatrix() {
+/* ─────────────────────────────────────────────────────────────────────────
+   DEEP DIVE
+   ──────────────────────────────────────────────────────────────────────── */
+
+function DeepDive() {
   return (
-    <section className="relative py-16 sm:py-20 lg:py-24 overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div
-          className="absolute top-0 left-0 right-0 h-px
-            bg-gradient-to-r from-transparent via-accent/20 to-transparent"
-        />
-        <div
-          className="absolute bottom-[30%] right-[10%] w-[500px] h-[500px] rounded-full
-            bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.06)_0%,transparent_70%)]
-            blur-[100px]"
-        />
-      </div>
+    <section
+      className="trb-section"
+      aria-labelledby="deepdive-head"
+      style={{
+        paddingTop: "clamp(4rem, 6vw, 6rem)",
+        paddingBottom: "clamp(4rem, 6vw, 6rem)",
+        borderTop: "1px solid var(--trb-line)",
+        background: "var(--trb-surface-1)",
+      }}
+    >
+      <div className="trb-inner">
+        <SectionMarkerRow mark="§03" label="/ DEEP DIVE" index="§A–F" />
 
-      <div className="container px-4 sm:px-6 lg:px-8 relative z-10">
-        {/* Header */}
-        <motion.div
-          className="text-center max-w-3xl mx-auto mb-12 sm:mb-16"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-100px' }}
-          variants={containerVariants}
+        <h2
+          id="deepdive-head"
+          className="trb-display"
+          data-reveal
+          style={{
+            fontSize: "clamp(1.75rem, 1.2rem + 1.5vw, 2.5rem)",
+            marginTop: "1.25rem",
+            marginBottom: "3rem",
+            maxWidth: "28ch",
+          }}
         >
-          <motion.div variants={itemVariants}>
-            <Badge
-              variant="outline"
-              className="mb-6 px-4 py-2 rounded-full
-                bg-accent/5 backdrop-blur-sm border-accent/30"
-            >
-              <HugeiconsIcon icon={ZapIcon} size={16} className="mr-2 text-accent" />
-              <span className="text-sm font-medium text-accent">Comparison</span>
-            </Badge>
-          </motion.div>
+          Every surface,{" "}
+          <span style={{ color: "var(--trb-ink-muted)" }}>
+            with the wires showing.
+          </span>
+        </h2>
 
-          <motion.h2
-            className="font-outfit text-3xl sm:text-4xl lg:text-5xl font-light
-              leading-tight tracking-tight mb-4"
-            variants={itemVariants}
-          >
-            How Tribora{' '}
-            <span
-              className="bg-gradient-to-r from-accent to-secondary
-                bg-clip-text text-transparent"
-            >
-              compares
-            </span>
-          </motion.h2>
-          <motion.p className="text-lg text-muted-foreground font-light" variants={itemVariants}>
-            See why knowledge-driven teams choose Tribora over alternatives.
-          </motion.p>
-        </motion.div>
-
-        {/* Table */}
-        <motion.div
-          className="max-w-5xl mx-auto"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-50px' }}
-          variants={cardVariants}
-        >
-          <div
-            className={cn(
-              'rounded-2xl overflow-hidden',
-              'bg-card/50 backdrop-blur-sm',
-              'border border-border/50',
-              'shadow-[0_0_60px_rgba(0,223,130,0.05)]'
-            )}
-          >
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border/50">
-                    <th className="text-left p-4 sm:p-6 font-medium text-sm text-muted-foreground w-[30%]">
-                      Feature
-                    </th>
-                    <th className="text-center p-4 sm:p-6 font-medium text-sm w-[23%]">
-                      <div className="flex items-center justify-center gap-2">
-                        <div
-                          className="w-6 h-6 rounded-lg bg-gradient-to-br from-accent to-secondary
-                            flex items-center justify-center"
-                        >
-                          <span className="text-accent-foreground font-bold text-xs">T</span>
-                        </div>
-                        <span className="text-accent">Tribora</span>
-                      </div>
-                    </th>
-                    <th className="text-center p-4 sm:p-6 font-medium text-sm text-muted-foreground w-[23%]">
-                      Competitor A
-                    </th>
-                    <th className="text-center p-4 sm:p-6 font-medium text-sm text-muted-foreground w-[23%]">
-                      Competitor B
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {COMPARISON_DATA.map((row, index) => (
-                    <tr
-                      key={index}
-                      className={cn(
-                        'border-b border-border/30 last:border-0',
-                        'transition-colors duration-300',
-                        'hover:bg-accent/5'
-                      )}
-                    >
-                      <td className="p-4 sm:p-6 text-sm font-medium">
-                        {row.feature}
-                      </td>
-                      <td className="p-4 sm:p-6 text-center">
-                        {typeof row.tribora === 'boolean' ? (
-                          row.tribora ? (
-                            <div className="flex justify-center">
-                              <div
-                                className="w-6 h-6 rounded-full bg-accent/20
-                                  flex items-center justify-center"
-                              >
-                                <HugeiconsIcon icon={Tick02Icon} size={16} className="text-accent" />
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground/50">—</span>
-                          )
-                        ) : (
-                          <span className="text-sm font-semibold text-accent">
-                            {row.tribora}
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4 sm:p-6 text-center">
-                        {typeof row.competitorA === 'boolean' ? (
-                          row.competitorA ? (
-                            <HugeiconsIcon icon={Tick02Icon} size={16} className="text-muted-foreground mx-auto" />
-                          ) : (
-                            <span className="text-muted-foreground/50">—</span>
-                          )
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            {row.competitorA}
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4 sm:p-6 text-center">
-                        {typeof row.competitorB === 'boolean' ? (
-                          row.competitorB ? (
-                            <HugeiconsIcon icon={Tick02Icon} size={16} className="text-muted-foreground mx-auto" />
-                          ) : (
-                            <span className="text-muted-foreground/50">—</span>
-                          )
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            {row.competitorB}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </motion.div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {DEEP_DIVE.map((d, i) => (
+            <DeepDiveRow key={d.id} item={d} reverse={i % 2 === 1} index={i} />
+          ))}
+        </div>
       </div>
     </section>
   );
 }
 
-// ============================================================================
-// PAGE
-// ============================================================================
-
-export default function FeaturesPage() {
+function DeepDiveRow({
+  item,
+  reverse,
+  index,
+}: {
+  item: (typeof DEEP_DIVE)[number];
+  reverse: boolean;
+  index: number;
+}) {
   return (
-    <div className="flex flex-col">
-      <FeaturesHero />
-      <FeatureHighlights />
-      <DeepDiveFeatures />
-      <ComparisonMatrix />
-      <AuroraCTA />
+    <article
+      data-reveal
+      style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.1fr)",
+        gap: "clamp(2rem, 5vw, 4rem)",
+        alignItems: "start",
+        padding: "clamp(2rem, 4vw, 3rem) 0",
+        borderTop: index === 0 ? "1px solid var(--trb-line)" : "none",
+        borderBottom: "1px solid var(--trb-line)",
+        direction: reverse ? "rtl" : "ltr",
+        /* @ts-expect-error custom CSS var */
+        "--trb-reveal-delay": `${index * 60}ms`,
+      }}
+    >
+      <div style={{ direction: "ltr", minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.625rem",
+            paddingBottom: "0.625rem",
+            borderBottom: "1px solid var(--trb-line)",
+            marginBottom: "1.25rem",
+          }}
+        >
+          <span className="trb-mono-sm" style={{ color: "var(--trb-signal)" }}>
+            {item.mark}
+          </span>
+          <span className="trb-mono-sm" style={{ color: "var(--trb-ink-dim)" }}>
+            {item.suffix}
+          </span>
+        </div>
+
+        <h3
+          className="trb-display"
+          style={{
+            fontSize: "clamp(1.5rem, 1.1rem + 1vw, 2rem)",
+            marginBottom: "0.5rem",
+          }}
+        >
+          {item.title}
+        </h3>
+        <p
+          className="trb-mono-sm"
+          style={{
+            color: "var(--trb-ink-muted)",
+            letterSpacing: "0.08em",
+            marginBottom: "1rem",
+          }}
+        >
+          {item.subtitle}
+        </p>
+        <p
+          style={{
+            fontSize: "var(--trb-size-body-m)",
+            lineHeight: 1.65,
+            color: "var(--trb-ink-muted)",
+            maxWidth: "52ch",
+          }}
+        >
+          {item.description}
+        </p>
+      </div>
+
+      <ul
+        style={{
+          direction: "ltr",
+          listStyle: "none",
+          padding: 0,
+          margin: 0,
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr)",
+          borderLeft: "1px solid var(--trb-line)",
+          borderTop: "1px solid var(--trb-line)",
+          background: "var(--trb-surface-0)",
+          minWidth: 0,
+        }}
+      >
+        {item.bullets.map((b, bi) => (
+          <li
+            key={bi}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "4rem 1fr",
+              alignItems: "baseline",
+              gap: "0.75rem",
+              padding: "0.75rem 1rem",
+              borderRight: "1px solid var(--trb-line)",
+              borderBottom: "1px solid var(--trb-line)",
+              fontSize: "var(--trb-size-body-s)",
+              lineHeight: 1.5,
+            }}
+          >
+            <span
+              className="trb-mono-sm"
+              style={{ color: "var(--trb-ink-faint)" }}
+            >
+              {String(bi + 1).padStart(2, "0")}
+            </span>
+            <span style={{ color: "var(--trb-ink)" }}>{b}</span>
+          </li>
+        ))}
+      </ul>
+    </article>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   COMPARE
+   ──────────────────────────────────────────────────────────────────────── */
+
+function Compare() {
+  return (
+    <section
+      className="trb-section"
+      aria-labelledby="compare-head"
+      style={{
+        paddingTop: "clamp(4rem, 6vw, 6rem)",
+        paddingBottom: "clamp(4rem, 6vw, 6rem)",
+        borderTop: "1px solid var(--trb-line)",
+      }}
+    >
+      <div className="trb-inner">
+        <SectionMarkerRow mark="§04" label="/ MATRIX" index="3 COLUMNS" />
+
+        <h2
+          id="compare-head"
+          className="trb-display"
+          data-reveal
+          style={{
+            fontSize: "clamp(1.75rem, 1.2rem + 1.5vw, 2.5rem)",
+            marginTop: "1.25rem",
+            marginBottom: "2.5rem",
+            maxWidth: "28ch",
+          }}
+        >
+          How we stack up{" "}
+          <span style={{ color: "var(--trb-ink-muted)" }}>
+            against the usual suspects.
+          </span>
+        </h2>
+
+        <div
+          data-reveal
+          style={{
+            border: "1px solid var(--trb-line)",
+            overflowX: "auto",
+          }}
+        >
+          <table
+            style={{
+              width: "100%",
+              minWidth: 620,
+              borderCollapse: "collapse",
+              fontFamily: "var(--trb-font-body)",
+              fontSize: "var(--trb-size-body-s)",
+            }}
+          >
+            <thead>
+              <tr
+                style={{
+                  borderBottom: "1px solid var(--trb-line)",
+                  background: "var(--trb-surface-1)",
+                }}
+              >
+                <th style={headerCellStyle("left")}>FEATURE</th>
+                <th
+                  style={{
+                    ...headerCellStyle("center"),
+                    color: "var(--trb-signal)",
+                    background: "var(--trb-signal-soft)",
+                  }}
+                >
+                  TRIBORA
+                </th>
+                <th style={headerCellStyle("center")}>COMPETITOR A</th>
+                <th style={headerCellStyle("center")}>COMPETITOR B</th>
+              </tr>
+            </thead>
+            <tbody>
+              {COMPARISON_DATA.map((row, i) => (
+                <tr
+                  key={i}
+                  style={{ borderBottom: "1px solid var(--trb-line-faint)" }}
+                >
+                  <td
+                    style={{
+                      padding: "0.875rem 1rem",
+                      color: "var(--trb-ink)",
+                    }}
+                  >
+                    {row.feature}
+                  </td>
+                  <td
+                    style={{
+                      ...cellStyle("center"),
+                      background: "var(--trb-signal-soft)",
+                    }}
+                  >
+                    <CompareValue value={row.tribora} isHighlighted />
+                  </td>
+                  <td style={cellStyle("center")}>
+                    <CompareValue value={row.competitorA} />
+                  </td>
+                  <td style={cellStyle("center")}>
+                    <CompareValue value={row.competitorB} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CLOSING
+   ──────────────────────────────────────────────────────────────────────── */
+
+function Closing() {
+  return (
+    <section
+      className="trb-section"
+      aria-labelledby="features-closing"
+      style={{
+        paddingTop: "clamp(5rem, 8vw, 8rem)",
+        paddingBottom: "clamp(5rem, 8vw, 8rem)",
+        borderTop: "1px solid var(--trb-line)",
+        position: "relative",
+        textAlign: "center",
+      }}
+    >
+      <div
+        aria-hidden
+        className="trb-grid-overlay"
+        style={{ inset: 0, position: "absolute", opacity: 0.45 }}
+      />
+
+      <div
+        className="trb-inner"
+        style={{
+          position: "relative",
+          zIndex: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "clamp(1.5rem, 3vw, 2.5rem)",
+        }}
+      >
+        <div data-reveal className="flex items-center gap-3">
+          <span className="trb-mono-sm" style={{ color: "var(--trb-signal)" }}>
+            §05
+          </span>
+          <span className="trb-mono-sm" style={{ color: "var(--trb-ink-dim)" }}>
+            / TRY IT
+          </span>
+        </div>
+
+        <h2
+          id="features-closing"
+          className="trb-display"
+          data-reveal
+          style={{
+            fontSize: "clamp(2.25rem, 1.5rem + 3vw, 4rem)",
+            lineHeight: 1,
+            maxWidth: "20ch",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "80ms",
+          }}
+        >
+          Stop reading the feature list.{" "}
+          <span style={{ color: "var(--trb-ink-muted)" }}>
+            Record the first clip.
+          </span>
+        </h2>
+
+        <div
+          data-reveal
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            gap: "0.75rem",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "240ms",
+          }}
+        >
+          <Link
+            href="/sign-up"
+            className="trb-cta"
+            style={{ padding: "0.9375rem 1.625rem 1rem", fontSize: "1rem" }}
+          >
+            Start free
+            <span className="trb-cta-glyph">→</span>
+          </Link>
+          <Link
+            href="/contact?type=demo"
+            className="trb-ghost"
+            style={{ padding: "0.875rem 1.5rem" }}
+          >
+            Book a demo
+            <span className="trb-mono-sm" style={{ color: "var(--trb-ink-dim)" }}>
+              →
+            </span>
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SHARED
+   ──────────────────────────────────────────────────────────────────────── */
+
+function SectionMarkerRow({
+  mark,
+  label,
+  index,
+}: {
+  mark: string;
+  label: string;
+  index: string;
+}) {
+  return (
+    <div
+      data-reveal
+      className="flex items-center gap-3"
+      style={{
+        borderTop: "1px solid var(--trb-line)",
+        paddingTop: "0.625rem",
+        paddingBottom: "0.25rem",
+      }}
+    >
+      <span className="trb-mono-sm" style={{ color: "var(--trb-signal)" }}>
+        {mark}
+      </span>
+      <span className="trb-mono-sm" style={{ color: "var(--trb-ink-dim)" }}>
+        {label}
+      </span>
+      <span
+        style={{
+          flex: 1,
+          height: 1,
+          background: "var(--trb-line)",
+        }}
+      />
+      <span className="trb-mono-sm" style={{ color: "var(--trb-ink-faint)" }}>
+        {index}
+      </span>
     </div>
   );
+}
+
+function CornerMarkers({ fig, caption }: { fig: string; caption: string }) {
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute",
+        top: "1.25rem",
+        right: "var(--trb-gutter)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        alignItems: "flex-end",
+        pointerEvents: "none",
+        zIndex: 0,
+      }}
+    >
+      <span className="trb-mono-sm" style={{ color: "var(--trb-ink-faint)" }}>
+        {fig} / {caption}
+      </span>
+      <span className="trb-mono-sm" style={{ color: "var(--trb-ink-faint)" }}>
+        REV 2026-04-17
+      </span>
+    </div>
+  );
+}
+
+function CompareValue({
+  value,
+  isHighlighted,
+}: {
+  value: string | boolean;
+  isHighlighted?: boolean;
+}) {
+  if (typeof value === "boolean") {
+    if (value) {
+      return (
+        <span
+          className="trb-mono-sm"
+          style={{
+            color: isHighlighted ? "var(--trb-signal)" : "var(--trb-ink)",
+            letterSpacing: "0.14em",
+          }}
+        >
+          ✓
+        </span>
+      );
+    }
+    return (
+      <span
+        className="trb-mono-sm"
+        style={{ color: "var(--trb-ink-faint)" }}
+      >
+        —
+      </span>
+    );
+  }
+  return (
+    <span
+      style={{
+        fontFamily: "var(--trb-font-mono)",
+        fontSize: 12,
+        letterSpacing: "0.04em",
+        color: isHighlighted ? "var(--trb-signal)" : "var(--trb-ink-muted)",
+      }}
+    >
+      {value}
+    </span>
+  );
+}
+
+function headerCellStyle(align: "left" | "center"): React.CSSProperties {
+  return {
+    fontFamily: "var(--trb-font-mono)",
+    fontSize: 11,
+    fontWeight: 500,
+    letterSpacing: "0.14em",
+    textAlign: align,
+    color: "var(--trb-ink-dim)",
+    padding: "0.75rem 1rem",
+    textTransform: "uppercase",
+  };
+}
+
+function cellStyle(align: "left" | "center"): React.CSSProperties {
+  return {
+    padding: "0.875rem 1rem",
+    textAlign: align,
+    verticalAlign: "middle",
+    color: "var(--trb-ink-muted)",
+  };
 }

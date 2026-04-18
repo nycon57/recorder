@@ -1,77 +1,14 @@
-'use client';
+"use client";
 
-import * as motion from 'motion/react-client';
-import { useState } from 'react';
-import { HugeiconsIcon } from '@hugeicons/react';
-import {
-  Tick02Icon,
-  SparklesIcon,
-  ArrowRight01Icon,
-  Cancel01Icon,
-  MinusSignIcon,
-  ZapIcon,
-  HelpCircleIcon,
-  SecurityCheckIcon,
-} from '@hugeicons/core-free-icons';
-import Link from 'next/link';
+import { useState } from "react";
+import Link from "next/link";
 
-import { cn } from '@/lib/utils';
-import { Badge } from '@/app/components/ui/badge';
-import { Button } from '@/app/components/ui/button';
-import { Switch } from '@/app/components/ui/switch';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/app/components/ui/accordion';
-import { AuroraCTA } from '@/app/components/sections';
-
-// ============================================================================
-// ANIMATION VARIANTS
-// ============================================================================
-
-const fadeInUp = {
-  hidden: { opacity: 0, y: 30 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { type: 'spring', stiffness: 400, damping: 30 },
-  },
-};
-
-const staggerContainer = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1, delayChildren: 0.1 },
-  },
-};
-
-const cardVariants = {
-  hidden: { opacity: 0, y: 30, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: { type: 'spring', stiffness: 400, damping: 25 },
-  },
-};
-
-const scaleIn = {
-  hidden: { opacity: 0, scale: 0.9 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { type: 'spring', stiffness: 400, damping: 25 },
-  },
-};
-
-// ============================================================================
-// DATA
-// ============================================================================
+/* ─────────────────────────────────────────────────────────────────────────
+   DATA
+   ──────────────────────────────────────────────────────────────────────── */
 
 interface PricingTier {
+  mark: string;
   name: string;
   description: string;
   monthlyPrice: number;
@@ -81,64 +18,74 @@ interface PricingTier {
   badge?: string;
   cta: string;
   ctaHref: string;
+  ctaStyle: "primary" | "ghost";
 }
 
 const PRICING_TIERS: PricingTier[] = [
   {
-    name: 'Starter',
-    description: 'Perfect for individuals exploring AI-powered knowledge capture',
+    mark: "T-01",
+    name: "Starter",
+    description:
+      "One senior rep, a handful of clips, see if the rest of the team asks it questions.",
     monthlyPrice: 0,
     annualPrice: 0,
     features: [
-      '5 recordings per month',
-      'AI transcription (Whisper)',
-      'Basic search',
-      'Personal workspace',
-      '1GB storage',
-      'Community support',
+      "5 recordings per month",
+      "AI transcription (Whisper)",
+      "Basic search",
+      "Personal workspace",
+      "1 GB storage",
+      "Community support",
     ],
-    cta: 'Get Started Free',
-    ctaHref: '/sign-up',
+    cta: "Start free",
+    ctaHref: "/sign-up",
+    ctaStyle: "ghost",
   },
   {
-    name: 'Pro',
-    description: 'For teams that need advanced AI capabilities at scale',
+    mark: "T-02",
+    name: "Pro",
+    description:
+      "Support and ops teams who want every new hire trained on the same answers.",
     monthlyPrice: 29,
     annualPrice: 290,
     features: [
-      'Unlimited recordings',
-      'AI transcription (95%+ accuracy)',
-      'Semantic search',
-      'Auto documentation',
-      'AI RAG assistant',
-      'Knowledge graph',
-      'Team sharing (up to 10)',
-      '50GB storage',
-      'Priority support',
+      "Unlimited recordings",
+      "AI transcription · 95%+ accuracy",
+      "Semantic search",
+      "Auto documentation",
+      "AI RAG assistant",
+      "Knowledge graph",
+      "Team sharing · up to 10",
+      "50 GB storage",
+      "Priority support",
     ],
     highlighted: true,
-    badge: 'Most Popular',
-    cta: 'Start Pro Trial',
-    ctaHref: '/sign-up',
+    badge: "MOST ADOPTED",
+    cta: "Start Pro trial",
+    ctaHref: "/sign-up",
+    ctaStyle: "primary",
   },
   {
-    name: 'Enterprise',
-    description: 'Advanced features for large organizations with security needs',
+    mark: "T-03",
+    name: "Enterprise",
+    description:
+      "Larger teams with SSO, data-residency, and IT-review requirements.",
     monthlyPrice: 99,
     annualPrice: 990,
     features: [
-      'Everything in Pro',
-      'Unlimited team members',
-      'Advanced RBAC',
-      'SSO & SAML',
-      'Bidirectional sync',
-      'Custom integrations',
-      'On-premise option',
-      'Dedicated support',
-      '99.9% SLA guarantee',
+      "Everything in Pro",
+      "Unlimited team members",
+      "Advanced RBAC",
+      "SSO · SAML",
+      "Bidirectional sync",
+      "Custom integrations",
+      "On-premise option",
+      "Dedicated support",
+      "99.9% SLA guarantee",
     ],
-    cta: 'Contact Sales',
-    ctaHref: '/contact',
+    cta: "Contact sales",
+    ctaHref: "/contact",
+    ctaStyle: "ghost",
   },
 ];
 
@@ -153,664 +100,1181 @@ interface ComparisonRow {
 }
 
 const COMPARISON_DATA: ComparisonRow[] = [
-  { feature: 'Knowledge Capture', category: true, sharepoint: false, google: false, manual: false, tribora: false },
-  { feature: 'Visual/Screen Recording', sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
-  { feature: 'AI Transcription', sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
-  { feature: 'Workflow Extraction', sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
-  { feature: 'Auto Documentation', sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
-  { feature: 'Intelligence Layer', category: true, sharepoint: false, google: false, manual: false, tribora: false },
-  { feature: 'Semantic Search', sharepoint: 'Basic', google: 'Basic', manual: false, tribora: 'Advanced AI', triboraHighlight: true },
-  { feature: 'Knowledge Graph', sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
-  { feature: 'AI Assistant (RAG)', sharepoint: 'Copilot ($)', google: 'Gemini ($)', manual: false, tribora: 'Included', triboraHighlight: true },
-  { feature: 'Cross-Source Linking', sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
-  { feature: 'Integration', category: true, sharepoint: false, google: false, manual: false, tribora: false },
-  { feature: 'Bidirectional Sync', sharepoint: 'One-way', google: 'One-way', manual: false, tribora: 'Full sync', triboraHighlight: true },
-  { feature: 'Publish Back to Source', sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
+  { feature: "Knowledge Capture", category: true, sharepoint: false, google: false, manual: false, tribora: false },
+  { feature: "Visual / screen recording", sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
+  { feature: "AI transcription", sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
+  { feature: "Workflow extraction", sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
+  { feature: "Auto documentation", sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
+  { feature: "Search & Answers", category: true, sharepoint: false, google: false, manual: false, tribora: false },
+  { feature: "Semantic search", sharepoint: "basic", google: "basic", manual: false, tribora: "advanced AI", triboraHighlight: true },
+  { feature: "Knowledge graph", sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
+  { feature: "AI assistant (RAG)", sharepoint: "Copilot ($)", google: "Gemini ($)", manual: false, tribora: "included", triboraHighlight: true },
+  { feature: "Cross-source linking", sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
+  { feature: "Integration", category: true, sharepoint: false, google: false, manual: false, tribora: false },
+  { feature: "Bidirectional sync", sharepoint: "one-way", google: "one-way", manual: false, tribora: "full sync", triboraHighlight: true },
+  { feature: "Publish back to source", sharepoint: false, google: false, manual: false, tribora: true, triboraHighlight: true },
 ];
 
 interface FaqItem {
   id: string;
+  mark: string;
   question: string;
   answer: string;
 }
 
 const FAQ_ITEMS: FaqItem[] = [
   {
-    id: 'faq-1',
-    question: "What's included in the free plan?",
-    answer: "The free plan includes 5 recordings per month, AI-powered transcription, 1GB of storage, and basic search functionality. It's perfect for individuals who want to explore how Tribora can help capture and organize their knowledge before committing to a paid plan.",
+    id: "faq-1",
+    mark: "Q-01",
+    question: "What's in the free plan?",
+    answer:
+      "Five recordings a month, AI transcription, 1 GB of storage, basic search. A fine way for one senior rep to record a handful of clips and see if the rest of the team actually asks them questions before moving up a tier.",
   },
   {
-    id: 'faq-2',
-    question: 'How does the 14-day free trial work?',
-    answer: "When you sign up for Pro, you get full access to all Pro features for 14 days with no credit card required. At the end of the trial, you can choose to subscribe or continue with the free plan. All your recordings and data will be preserved either way.",
+    id: "faq-2",
+    mark: "Q-02",
+    question: "How does the 14-day Pro trial work?",
+    answer:
+      "Sign up for Pro, get everything Pro has for 14 days, no credit card. At the end you either subscribe or drop back to free. Your recordings and data stay put either way.",
   },
   {
-    id: 'faq-3',
-    question: 'Can I upgrade or downgrade at any time?',
-    answer: "Yes! You can upgrade your plan at any time, and the new features will be available immediately. If you downgrade, the change will take effect at the end of your current billing period. Your data is always safe and accessible regardless of plan changes.",
+    id: "faq-3",
+    mark: "Q-03",
+    question: "Can I change plans later?",
+    answer:
+      "Upgrade any time — new features are live immediately. Downgrade takes effect at the end of your billing period. Your data stays accessible through both.",
   },
   {
-    id: 'faq-4',
-    question: 'What payment methods do you accept?',
-    answer: 'We accept all major credit cards (Visa, Mastercard, American Express) and can also accommodate invoicing for Enterprise customers. All payments are processed securely through Stripe with bank-level encryption.',
+    id: "faq-4",
+    mark: "Q-04",
+    question: "Payment methods?",
+    answer:
+      "Visa, Mastercard, Amex. Enterprise can be invoiced. Payments run through Stripe with bank-level encryption.",
   },
   {
-    id: 'faq-5',
-    question: 'Is my data secure?',
-    answer: 'Absolutely. All data is encrypted at rest (AES-256) and in transit (TLS 1.3). We comply with SOC 2 Type II standards and are GDPR ready. Enterprise customers can also opt for on-premise deployment for complete data sovereignty.',
+    id: "faq-5",
+    mark: "Q-05",
+    question: "Is my data secure?",
+    answer:
+      "AES-256 at rest, TLS 1.3 in transit, SOC 2 Type II, GDPR-ready. Enterprise can self-host on-premise for full data sovereignty.",
   },
   {
-    id: 'faq-6',
-    question: 'What integrations are available?',
-    answer: "Tribora integrates with Google Drive, Microsoft SharePoint, OneDrive, Notion, and more. Our unique bidirectional sync allows you to publish enriched content back to your connected services—we're not just another silo.",
+    id: "faq-6",
+    mark: "Q-06",
+    question: "Which integrations are live?",
+    answer:
+      "Google Drive, Microsoft SharePoint, OneDrive, Notion — more on the roadmap. Sync runs both directions: enriched content can publish back to source. It's not a silo.",
   },
   {
-    id: 'faq-7',
-    question: 'Do you offer discounts for nonprofits or education?',
-    answer: 'Yes! We offer 50% off for qualifying nonprofits, educational institutions, and open source projects. Contact our sales team with proof of status to learn more about our discount programs.',
+    id: "faq-7",
+    mark: "Q-07",
+    question: "Nonprofit / education discounts?",
+    answer:
+      "Fifty percent off for qualifying nonprofits, educational institutions, and open-source projects. Email sales with proof of status.",
   },
 ];
 
-// ============================================================================
-// PRICING PAGE
-// ============================================================================
+const TRUST_STRIP = [
+  { label: "CARD", value: "NOT REQUIRED" },
+  { label: "TRIAL", value: "14 DAYS" },
+  { label: "CANCEL", value: "ANY TIME" },
+  { label: "ANNUAL", value: "-20% VS MONTHLY" },
+];
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PAGE
+   ──────────────────────────────────────────────────────────────────────── */
 
 export default function PricingPage() {
   const [isAnnual, setIsAnnual] = useState(true);
 
   return (
-    <div className="relative overflow-hidden">
-      {/* ================================================================== */}
-      {/* GLOBAL BACKGROUND */}
-      {/* ================================================================== */}
-      <div className="fixed inset-0 pointer-events-none -z-10">
-        {/* Flowing aurora orbs */}
-        <div
-          className="absolute top-[10%] right-[5%] w-[600px] h-[600px] rounded-full
-            bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.08)_0%,transparent_70%)]
-            blur-[100px] animate-float"
-          style={{ animationDelay: '0s' }}
-        />
-        <div
-          className="absolute top-[50%] left-[5%] w-[500px] h-[500px] rounded-full
-            bg-[radial-gradient(ellipse_at_center,rgba(44,194,149,0.06)_0%,transparent_70%)]
-            blur-[80px] animate-float"
-          style={{ animationDelay: '3s' }}
-        />
-        <div
-          className="absolute bottom-[20%] right-[20%] w-[400px] h-[400px] rounded-full
-            bg-[radial-gradient(ellipse_at_center,rgba(3,98,76,0.08)_0%,transparent_70%)]
-            blur-[60px] animate-float"
-          style={{ animationDelay: '6s' }}
-        />
+    <>
+      <Hero isAnnual={isAnnual} onToggle={setIsAnnual} />
+      <TierGrid isAnnual={isAnnual} />
+      <Compare />
+      <Faq />
+      <Closing />
+    </>
+  );
+}
 
-        {/* Subtle grid pattern */}
-        <div
-          className="absolute inset-0 opacity-[0.012]"
+/* ─────────────────────────────────────────────────────────────────────────
+   HERO
+   ──────────────────────────────────────────────────────────────────────── */
+
+function Hero({
+  isAnnual,
+  onToggle,
+}: {
+  isAnnual: boolean;
+  onToggle: (v: boolean) => void;
+}) {
+  return (
+    <section
+      className="trb-section"
+      aria-labelledby="pricing-head"
+      style={{
+        position: "relative",
+        paddingTop: "clamp(2.5rem, 3vw + 1rem, 4.5rem)",
+        paddingBottom: "clamp(3rem, 4vw + 1rem, 5rem)",
+      }}
+    >
+      <div
+        aria-hidden
+        className="trb-grid-overlay"
+        style={{ inset: 0, position: "absolute", zIndex: 0 }}
+      />
+
+      <div className="trb-inner" style={{ position: "relative", zIndex: 1 }}>
+        <SectionMarkerRow mark="§01" label="/ PRICING" index="PAGE 02 OF 07" />
+
+        <h1
+          id="pricing-head"
+          className="trb-display"
+          data-reveal
           style={{
-            backgroundImage: `
-              linear-gradient(to right, rgba(0,223,130,0.5) 1px, transparent 1px),
-              linear-gradient(to bottom, rgba(0,223,130,0.5) 1px, transparent 1px)
-            `,
-            backgroundSize: '80px 80px',
+            fontSize: "var(--trb-size-display-l)",
+            marginTop: "1.25rem",
+            marginBottom: "1.25rem",
+            maxWidth: "18ch",
           }}
-        />
+        >
+          Priced per team{" "}
+          <span style={{ color: "var(--trb-ink-muted)" }}>
+            that actually records
+          </span>
+          <span style={{ color: "var(--trb-signal)" }}>.</span>
+        </h1>
+
+        <p
+          data-reveal
+          style={{
+            maxWidth: "58ch",
+            fontSize: "var(--trb-size-body-l)",
+            lineHeight: 1.55,
+            color: "var(--trb-ink-muted)",
+            marginBottom: "2rem",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "80ms",
+          }}
+        >
+          Start free &mdash; one senior rep, a handful of clips. Move up a tier
+          when the rest of the team starts asking it questions.
+        </p>
+
+        <BillingToggle isAnnual={isAnnual} onToggle={onToggle} />
+
+        <div
+          data-reveal
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(140px, max-content))",
+            gap: "0.25rem 2rem",
+            borderTop: "1px solid var(--trb-line)",
+            borderBottom: "1px solid var(--trb-line)",
+            padding: "0.75rem 0",
+            marginTop: "2.25rem",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "240ms",
+          }}
+        >
+          {TRUST_STRIP.map((item) => (
+            <div
+              key={item.label}
+              style={{ display: "flex", flexDirection: "column", gap: 2 }}
+            >
+              <span
+                className="trb-mono-sm"
+                style={{ color: "var(--trb-ink-faint)" }}
+              >
+                {item.label}
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--trb-font-mono)",
+                  fontSize: 12,
+                  letterSpacing: "0.04em",
+                  color: "var(--trb-ink-muted)",
+                }}
+              >
+                {item.value}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* ================================================================== */}
-      {/* HERO SECTION */}
-      {/* ================================================================== */}
-      <section className="relative pt-24 pb-16 sm:pt-32 sm:pb-20 lg:pt-40 lg:pb-24">
-        <div className="container px-4 sm:px-6 lg:px-8">
-          <motion.div
-            className="text-center max-w-4xl mx-auto"
-            initial="hidden"
-            animate="visible"
-            variants={staggerContainer}
-          >
-            {/* Badge */}
-            <motion.div variants={scaleIn}>
-              <Badge
-                variant="outline"
-                className="mb-6 px-4 py-2 rounded-full
-                  bg-accent/5 backdrop-blur-sm border-accent/30"
-              >
-                <HugeiconsIcon icon={SparklesIcon} size={14} className="mr-2 text-accent" />
-                <span className="text-sm font-medium text-accent">
-                  Simple, Transparent Pricing
-                </span>
-              </Badge>
-            </motion.div>
+      <CornerMarkers fig="FIG-01" caption="PRICING / INDEX" />
+    </section>
+  );
+}
 
-            {/* Headline */}
-            <motion.h1
-              className="font-outfit text-4xl sm:text-5xl lg:text-6xl xl:text-7xl
-                font-light leading-tight tracking-tight mb-6"
-              variants={fadeInUp}
-            >
-              Choose your{' '}
-              <span
-                className="bg-gradient-to-r from-accent via-secondary to-primary
-                  bg-clip-text text-transparent"
-              >
-                knowledge plan
-              </span>
-            </motion.h1>
-
-            {/* Subheadline */}
-            <motion.p
-              className="text-lg sm:text-xl lg:text-2xl text-muted-foreground
-                font-light max-w-2xl mx-auto mb-10"
-              variants={fadeInUp}
-            >
-              Start free. Scale as you grow. No credit card required.
-            </motion.p>
-
-            {/* Billing Toggle */}
-            <motion.div
-              className="flex items-center justify-center gap-4"
-              variants={fadeInUp}
-            >
-              <span
-                className={cn(
-                  'text-sm font-medium transition-colors',
-                  !isAnnual ? 'text-foreground' : 'text-muted-foreground'
-                )}
-              >
-                Monthly
-              </span>
-              <Switch
-                checked={isAnnual}
-                onCheckedChange={setIsAnnual}
-                className="data-[state=checked]:bg-accent"
-              />
-              <span
-                className={cn(
-                  'text-sm font-medium transition-colors',
-                  isAnnual ? 'text-foreground' : 'text-muted-foreground'
-                )}
-              >
-                Annual
-              </span>
-              {isAnnual && (
-                <Badge
-                  variant="outline"
-                  className="ml-2 px-3 py-1 text-xs font-medium
-                    bg-accent/10 border-accent/30 text-accent"
-                >
-                  Save 20%
-                </Badge>
-              )}
-            </motion.div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ================================================================== */}
-      {/* PRICING CARDS */}
-      {/* ================================================================== */}
-      <section className="relative py-8 sm:py-12">
-        <div className="container px-4 sm:px-6 lg:px-8">
-          <motion.div
-            className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 max-w-6xl mx-auto"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.2 }}
-            variants={staggerContainer}
-          >
-            {PRICING_TIERS.map((tier, index) => {
-              const price = isAnnual ? tier.annualPrice : tier.monthlyPrice;
-              const monthlyEquivalent = isAnnual && tier.annualPrice > 0
-                ? Math.round(tier.annualPrice / 12)
-                : tier.monthlyPrice;
-              const isHighlighted = tier.highlighted;
-
-              return (
-                <motion.div
-                  key={index}
-                  variants={cardVariants}
-                  whileHover={{ y: -8, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
-                  className={cn(
-                    'group relative rounded-2xl overflow-hidden',
-                    'bg-card/50 backdrop-blur-sm',
-                    'border transition-all duration-500',
-                    isHighlighted
-                      ? 'border-accent/50 shadow-[0_0_50px_rgba(0,223,130,0.15)]'
-                      : 'border-border/50 hover:border-accent/30',
-                    'hover:shadow-[0_0_60px_rgba(0,223,130,0.12)]'
-                  )}
-                >
-                  {/* Highlighted tier badge */}
-                  {tier.badge && (
-                    <div className="absolute top-0 left-0 right-0 flex justify-center">
-                      <div
-                        className="px-4 py-1.5 text-xs font-semibold
-                          bg-gradient-to-r from-accent to-secondary
-                          text-accent-foreground rounded-b-xl"
-                      >
-                        {tier.badge}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Card gradient background */}
-                  <div
-                    className={cn(
-                      'absolute inset-0 opacity-0 transition-opacity duration-500',
-                      'bg-gradient-to-br from-accent/5 via-transparent to-secondary/5',
-                      isHighlighted ? 'opacity-100' : 'group-hover:opacity-100'
-                    )}
-                  />
-
-                  {/* Content */}
-                  <div className="relative z-10 p-6 sm:p-8">
-                    {/* Tier Name */}
-                    <h3 className="font-outfit text-xl font-medium mb-2">
-                      {tier.name}
-                    </h3>
-
-                    {/* Description */}
-                    <p className="text-sm text-muted-foreground mb-6 min-h-[40px]">
-                      {tier.description}
-                    </p>
-
-                    {/* Price */}
-                    <div className="mb-6">
-                      {price === 0 ? (
-                        <>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-5xl font-light text-foreground">$0</span>
-                          </div>
-                          <span className="text-sm text-muted-foreground">Free forever</span>
-                        </>
-                      ) : tier.name === 'Enterprise' ? (
-                        <>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-4xl font-light text-foreground">Custom</span>
-                          </div>
-                          <span className="text-sm text-muted-foreground">Contact for pricing</span>
-                        </>
-                      ) : (
-                        <>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-5xl font-light text-foreground">
-                              ${monthlyEquivalent}
-                            </span>
-                            <span className="text-muted-foreground text-sm">/month</span>
-                          </div>
-                          {isAnnual && (
-                            <span className="text-sm text-muted-foreground">
-                              ${price}/year, billed annually
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-
-                    {/* CTA Button */}
-                    <Link href={tier.ctaHref}>
-                      <Button
-                        className={cn(
-                          'w-full rounded-full group/btn h-12',
-                          'transition-all duration-300',
-                          isHighlighted
-                            ? 'bg-gradient-to-r from-accent to-secondary text-accent-foreground hover:shadow-[0_0_30px_rgba(0,223,130,0.4)]'
-                            : 'bg-card hover:bg-accent/10 border border-border/50 hover:border-accent/30'
-                        )}
-                      >
-                        {tier.cta}
-                        <HugeiconsIcon
-                          icon={ArrowRight01Icon}
-                          size={16}
-                          className="ml-2 transition-transform group-hover/btn:translate-x-1"
-                        />
-                      </Button>
-                    </Link>
-
-                    {/* Features List */}
-                    <ul className="mt-8 space-y-3">
-                      {tier.features.map((feature, featureIndex) => (
-                        <li key={featureIndex} className="flex items-start gap-3">
-                          <div
-                            className="shrink-0 mt-0.5 w-5 h-5 rounded-full
-                              flex items-center justify-center bg-accent/10"
-                          >
-                            <HugeiconsIcon icon={Tick02Icon} size={12} className="text-accent" />
-                          </div>
-                          <span className="text-sm text-muted-foreground">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Bottom glow line for highlighted tier */}
-                  {isHighlighted && (
-                    <div
-                      className="absolute bottom-0 left-0 right-0 h-px
-                        bg-gradient-to-r from-transparent via-accent/50 to-transparent"
-                    />
-                  )}
-                </motion.div>
-              );
-            })}
-          </motion.div>
-
-          {/* Trust Badges */}
-          <motion.div
-            className="mt-12 text-center"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.4 }}
-          >
-            <div className="inline-flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-sm text-muted-foreground">
-              <span className="flex items-center gap-2">
-                <HugeiconsIcon icon={SecurityCheckIcon} size={16} className="text-accent" />
-                No credit card required
-              </span>
-              <span className="hidden sm:block w-1 h-1 rounded-full bg-border" />
-              <span className="flex items-center gap-2">
-                <HugeiconsIcon icon={ZapIcon} size={16} className="text-accent" />
-                14-day free trial
-              </span>
-              <span className="hidden sm:block w-1 h-1 rounded-full bg-border" />
-              <span className="flex items-center gap-2">
-                <HugeiconsIcon icon={SparklesIcon} size={16} className="text-accent" />
-                Cancel anytime
-              </span>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ================================================================== */}
-      {/* COMPARISON TABLE */}
-      {/* ================================================================== */}
-      <section className="relative py-20 sm:py-28 lg:py-32 overflow-hidden">
-        {/* Background aurora */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div
-            className="absolute top-0 left-0 right-0 h-px
-              bg-gradient-to-r from-transparent via-accent/20 to-transparent"
-          />
-          <div
-            className="absolute bottom-[30%] right-[5%] w-[500px] h-[500px] rounded-full
-              bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.06)_0%,transparent_70%)]
-              blur-[100px]"
-          />
-        </div>
-
-        <div className="container px-4 sm:px-6 lg:px-8 relative z-10">
-          {/* Section Header */}
-          <motion.div
-            className="text-center max-w-3xl mx-auto mb-12 sm:mb-16"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.3 }}
-            variants={staggerContainer}
-          >
-            <motion.div variants={fadeInUp}>
-              <Badge
-                variant="outline"
-                className="mb-6 px-4 py-2 rounded-full
-                  bg-accent/5 backdrop-blur-sm border-accent/30"
-              >
-                <HugeiconsIcon icon={ZapIcon} size={14} className="mr-2 text-accent" />
-                <span className="text-sm font-medium text-accent">
-                  Why Tribora?
-                </span>
-              </Badge>
-            </motion.div>
-
-            <motion.h2
-              className="font-outfit text-3xl sm:text-4xl lg:text-5xl font-light
-                leading-tight tracking-tight mb-4 sm:mb-6"
-              variants={fadeInUp}
-            >
-              The{' '}
-              <span className="bg-gradient-to-r from-accent via-secondary to-primary bg-clip-text text-transparent">
-                intelligence layer
-              </span>{' '}
-              above your tools
-            </motion.h2>
-
-            <motion.p
-              className="text-lg sm:text-xl text-muted-foreground font-light"
-              variants={fadeInUp}
-            >
-              We don't replace your storage—we make it smarter
-            </motion.p>
-          </motion.div>
-
-          {/* Comparison Table */}
-          <motion.div
-            className="max-w-5xl mx-auto"
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <div
-              className="rounded-2xl overflow-hidden border border-border/50
-                bg-card/30 backdrop-blur-sm"
-            >
-              {/* Table Header */}
-              <div className="border-b border-border/50 bg-muted/20">
-                <div className="grid grid-cols-5 gap-2 sm:gap-4 px-4 sm:px-6 py-4">
-                  <div className="text-sm font-medium text-muted-foreground">
-                    Feature
-                  </div>
-                  <div className="text-center text-sm font-medium text-muted-foreground hidden sm:block">
-                    SharePoint
-                  </div>
-                  <div className="text-center text-sm font-medium text-muted-foreground hidden sm:block">
-                    Google Drive
-                  </div>
-                  <div className="text-center text-sm font-medium text-muted-foreground hidden sm:block">
-                    Manual
-                  </div>
-                  <div className="text-center text-sm font-semibold text-accent col-span-4 sm:col-span-1">
-                    Tribora
-                  </div>
-                </div>
-              </div>
-
-              {/* Table Body */}
-              {COMPARISON_DATA.map((row, index) => {
-                if (row.category) {
-                  return (
-                    <div
-                      key={index}
-                      className="border-b border-border/30 bg-muted/10"
-                    >
-                      <div className="px-4 sm:px-6 py-3">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          {row.feature}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div
-                    key={index}
-                    className="group border-b border-border/30 last:border-b-0
-                      transition-colors hover:bg-accent/5"
-                  >
-                    <div className="grid grid-cols-5 items-center gap-2 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4">
-                      <div className="text-sm font-medium text-foreground col-span-4 sm:col-span-1">
-                        {row.feature}
-                      </div>
-                      <div className="text-center hidden sm:block">
-                        <CompareValue value={row.sharepoint} />
-                      </div>
-                      <div className="text-center hidden sm:block">
-                        <CompareValue value={row.google} />
-                      </div>
-                      <div className="text-center hidden sm:block">
-                        <CompareValue value={row.manual} />
-                      </div>
-                      <div
-                        className={cn(
-                          'text-center rounded-lg py-1.5 -mx-2 px-2',
-                          row.triboraHighlight && 'bg-accent/10'
-                        )}
-                      >
-                        <CompareValue value={row.tribora} isHighlighted={row.triboraHighlight} />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Table Footer */}
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-sm text-muted-foreground text-center sm:text-left">
-                Tribora integrates with your existing tools. Connect Google Drive, SharePoint, Notion, and more.
-              </p>
-              <Link href="/sign-up">
-                <Button className="rounded-full px-6 group bg-gradient-to-r from-accent to-secondary text-accent-foreground hover:shadow-[0_0_30px_rgba(0,223,130,0.4)] transition-all duration-300">
-                  Get started free
-                  <HugeiconsIcon
-                    icon={ArrowRight01Icon}
-                    size={16}
-                    className="ml-2 transition-transform group-hover:translate-x-1"
-                  />
-                </Button>
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ================================================================== */}
-      {/* FAQ SECTION */}
-      {/* ================================================================== */}
-      <section className="relative py-20 sm:py-28 lg:py-32 overflow-hidden">
-        {/* Background aurora */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div
-            className="absolute top-[20%] left-[10%] w-[400px] h-[400px] rounded-full
-              bg-[radial-gradient(ellipse_at_center,rgba(44,194,149,0.05)_0%,transparent_70%)]
-              blur-[80px] animate-float"
-            style={{ animationDelay: '1s' }}
-          />
-        </div>
-
-        <div className="container px-4 sm:px-6 lg:px-8 relative z-10">
-          {/* Section Header */}
-          <motion.div
-            className="text-center max-w-3xl mx-auto mb-12 sm:mb-16"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.3 }}
-            variants={staggerContainer}
-          >
-            <motion.div variants={fadeInUp}>
-              <Badge
-                variant="outline"
-                className="mb-6 px-4 py-2 rounded-full
-                  bg-accent/5 backdrop-blur-sm border-accent/30"
-              >
-                <HugeiconsIcon icon={HelpCircleIcon} size={14} className="mr-2 text-accent" />
-                <span className="text-sm font-medium text-accent">
-                  FAQ
-                </span>
-              </Badge>
-            </motion.div>
-
-            <motion.h2
-              className="font-outfit text-3xl sm:text-4xl lg:text-5xl font-light
-                leading-tight tracking-tight mb-4 sm:mb-6"
-              variants={fadeInUp}
-            >
-              Frequently asked{' '}
-              <span className="bg-gradient-to-r from-accent via-secondary to-primary bg-clip-text text-transparent">
-                questions
-              </span>
-            </motion.h2>
-
-            <motion.p
-              className="text-lg sm:text-xl text-muted-foreground font-light"
-              variants={fadeInUp}
-            >
-              Everything you need to know about Tribora pricing
-            </motion.p>
-          </motion.div>
-
-          {/* FAQ Accordion */}
-          <motion.div
-            className="max-w-3xl mx-auto"
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <Accordion type="single" collapsible className="space-y-4">
-              {FAQ_ITEMS.map((item, index) => (
-                <AccordionItem
-                  key={item.id}
-                  value={item.id}
-                  className={cn(
-                    'rounded-xl overflow-hidden border border-border/50',
-                    'bg-card/30 backdrop-blur-sm',
-                    'transition-all duration-300',
-                    'data-[state=open]:border-accent/30',
-                    'data-[state=open]:shadow-[0_0_30px_rgba(0,223,130,0.08)]'
-                  )}
-                >
-                  <AccordionTrigger
-                    className="px-6 py-5 hover:no-underline group
-                      text-left transition-colors hover:bg-accent/5"
-                  >
-                    <span className="font-medium text-base sm:text-lg pr-4 group-hover:text-accent transition-colors">
-                      {item.question}
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-6 pb-5">
-                    <p className="text-muted-foreground leading-relaxed">
-                      {item.answer}
-                    </p>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-
-            {/* Still have questions? */}
-            <motion.div
-              className="mt-12 text-center"
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.3 }}
-            >
-              <p className="text-muted-foreground mb-4">
-                Still have questions? We're here to help.
-              </p>
-              <Link href="/contact">
-                <Button variant="outline" className="rounded-full px-6 border-accent/30 hover:border-accent/50 hover:bg-accent/5 transition-all duration-300">
-                  Contact Support
-                </Button>
-              </Link>
-            </motion.div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ================================================================== */}
-      {/* CTA SECTION - Using shared AuroraCTA component */}
-      {/* ================================================================== */}
-      <AuroraCTA />
+function BillingToggle({
+  isAnnual,
+  onToggle,
+}: {
+  isAnnual: boolean;
+  onToggle: (v: boolean) => void;
+}) {
+  return (
+    <div
+      data-reveal
+      role="tablist"
+      aria-label="Billing cadence"
+      style={{
+        display: "inline-flex",
+        alignItems: "stretch",
+        border: "1px solid var(--trb-line-strong)",
+        borderRadius: 2,
+        overflow: "hidden",
+        background: "var(--trb-surface-1)",
+        /* @ts-expect-error custom CSS var */
+        "--trb-reveal-delay": "160ms",
+      }}
+    >
+      <ToggleSegment
+        active={!isAnnual}
+        onClick={() => onToggle(false)}
+        label="MONTHLY"
+        mark="M-01"
+      />
+      <span
+        aria-hidden
+        style={{ width: 1, background: "var(--trb-line-strong)" }}
+      />
+      <ToggleSegment
+        active={isAnnual}
+        onClick={() => onToggle(true)}
+        label="ANNUAL"
+        mark="A-20"
+        suffix="−20%"
+      />
     </div>
   );
 }
 
-// ============================================================================
-// HELPER COMPONENTS
-// ============================================================================
+function ToggleSegment({
+  active,
+  onClick,
+  label,
+  mark,
+  suffix,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  mark: string;
+  suffix?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.5rem",
+        padding: "0.6875rem 1.125rem",
+        fontFamily: "var(--trb-font-mono)",
+        fontSize: 12,
+        letterSpacing: "0.12em",
+        textTransform: "uppercase",
+        background: active ? "var(--trb-signal-soft)" : "transparent",
+        color: active ? "var(--trb-signal)" : "var(--trb-ink-muted)",
+        border: "none",
+        cursor: "pointer",
+        transition:
+          "color var(--trb-dur-fast) var(--trb-ease), background-color var(--trb-dur-fast) var(--trb-ease)",
+      }}
+    >
+      <span
+        style={{
+          color: active ? "var(--trb-signal)" : "var(--trb-ink-faint)",
+          fontSize: 10,
+        }}
+      >
+        {mark}
+      </span>
+      <span>{label}</span>
+      {suffix ? (
+        <span
+          style={{
+            color: active ? "var(--trb-signal)" : "var(--trb-ink-dim)",
+            fontSize: 11,
+            letterSpacing: "0.04em",
+          }}
+        >
+          {suffix}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   TIER GRID
+   ──────────────────────────────────────────────────────────────────────── */
+
+function TierGrid({ isAnnual }: { isAnnual: boolean }) {
+  return (
+    <section
+      className="trb-section"
+      aria-labelledby="tiers-head"
+      style={{
+        position: "relative",
+        paddingTop: "clamp(3rem, 5vw, 5rem)",
+        paddingBottom: "clamp(3rem, 5vw, 5rem)",
+      }}
+    >
+      <div className="trb-inner">
+        <SectionMarkerRow mark="§02" label="/ TIERS" index="3 PLANS" />
+
+        <h2
+          id="tiers-head"
+          className="trb-display"
+          data-reveal
+          style={{
+            fontSize: "clamp(1.75rem, 1.2rem + 1.5vw, 2.375rem)",
+            marginTop: "1.25rem",
+            marginBottom: "2.5rem",
+            maxWidth: "32ch",
+          }}
+        >
+          Three plans.{" "}
+          <span style={{ color: "var(--trb-ink-muted)" }}>
+            One of them probably fits.
+          </span>
+        </h2>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: 0,
+            border: "1px solid var(--trb-line)",
+          }}
+        >
+          {PRICING_TIERS.map((tier, i) => (
+            <TierColumn
+              key={tier.name}
+              tier={tier}
+              isAnnual={isAnnual}
+              delay={i * 80}
+              isLast={i === PRICING_TIERS.length - 1}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TierColumn({
+  tier,
+  isAnnual,
+  delay,
+  isLast,
+}: {
+  tier: PricingTier;
+  isAnnual: boolean;
+  delay: number;
+  isLast: boolean;
+}) {
+  const price = isAnnual ? tier.annualPrice : tier.monthlyPrice;
+  const monthlyEq =
+    isAnnual && tier.annualPrice > 0
+      ? Math.round(tier.annualPrice / 12)
+      : tier.monthlyPrice;
+  const isEnterprise = tier.name === "Enterprise";
+  const isFree = price === 0;
+
+  return (
+    <div
+      data-reveal
+      style={{
+        padding: "1.75rem 1.5rem 2rem",
+        borderRight: isLast ? "none" : "1px solid var(--trb-line)",
+        background: tier.highlighted
+          ? "var(--trb-signal-soft)"
+          : "transparent",
+        display: "flex",
+        flexDirection: "column",
+        gap: "1.25rem",
+        position: "relative",
+        /* @ts-expect-error custom CSS var */
+        "--trb-reveal-delay": `${delay}ms`,
+      }}
+    >
+      {/* Tier header row */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingBottom: "0.75rem",
+          borderBottom: "1px solid var(--trb-line)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span
+            className="trb-mono-sm"
+            style={{
+              color: tier.highlighted
+                ? "var(--trb-signal)"
+                : "var(--trb-ink-faint)",
+            }}
+          >
+            {tier.mark}
+          </span>
+          <span
+            className="trb-mono-sm"
+            style={{
+              color: "var(--trb-ink-dim)",
+              letterSpacing: "0.14em",
+            }}
+          >
+            / {tier.name.toUpperCase()}
+          </span>
+        </div>
+        {tier.badge ? (
+          <span
+            className="trb-mono-sm"
+            style={{
+              color: "var(--trb-signal)",
+              fontSize: 10,
+              letterSpacing: "0.14em",
+            }}
+          >
+            {tier.badge}
+          </span>
+        ) : null}
+      </div>
+
+      {/* Description */}
+      <p
+        style={{
+          fontSize: "var(--trb-size-body-s)",
+          lineHeight: 1.55,
+          color: "var(--trb-ink-muted)",
+          minHeight: "4.4em",
+        }}
+      >
+        {tier.description}
+      </p>
+
+      {/* Price block */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {isEnterprise ? (
+          <>
+            <span
+              className="trb-display trb-num"
+              style={{
+                fontSize: "clamp(2rem, 1.4rem + 1.5vw, 2.75rem)",
+                lineHeight: 1,
+              }}
+            >
+              Custom
+            </span>
+            <span
+              className="trb-mono-sm"
+              style={{ color: "var(--trb-ink-faint)" }}
+            >
+              CONTACT FOR QUOTE
+            </span>
+          </>
+        ) : isFree ? (
+          <>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: "0.375rem",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--trb-font-mono)",
+                  fontSize: 14,
+                  color: "var(--trb-ink-faint)",
+                }}
+              >
+                $
+              </span>
+              <span
+                className="trb-display trb-num"
+                style={{
+                  fontSize: "clamp(2.25rem, 1.6rem + 2vw, 3.25rem)",
+                  lineHeight: 1,
+                }}
+              >
+                0
+              </span>
+            </div>
+            <span
+              className="trb-mono-sm"
+              style={{ color: "var(--trb-ink-faint)" }}
+            >
+              FREE · FOREVER
+            </span>
+          </>
+        ) : (
+          <>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: "0.375rem",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--trb-font-mono)",
+                  fontSize: 14,
+                  color: "var(--trb-ink-faint)",
+                }}
+              >
+                $
+              </span>
+              <span
+                className="trb-display trb-num"
+                style={{
+                  fontSize: "clamp(2.25rem, 1.6rem + 2vw, 3.25rem)",
+                  lineHeight: 1,
+                }}
+              >
+                {monthlyEq}
+              </span>
+              <span
+                className="trb-mono-sm"
+                style={{
+                  color: "var(--trb-ink-muted)",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                / MONTH
+              </span>
+            </div>
+            <span
+              className="trb-mono-sm"
+              style={{ color: "var(--trb-ink-faint)" }}
+            >
+              {isAnnual ? `$${price} / YEAR · BILLED ANNUALLY` : "BILLED MONTHLY"}
+            </span>
+          </>
+        )}
+      </div>
+
+      {/* CTA */}
+      <Link
+        href={tier.ctaHref}
+        className={tier.ctaStyle === "primary" ? "trb-cta" : "trb-ghost"}
+        style={{
+          justifyContent: "space-between",
+          width: "100%",
+          padding: "0.75rem 1rem 0.8125rem",
+          fontSize: "0.875rem",
+        }}
+      >
+        {tier.cta}
+        <span className={tier.ctaStyle === "primary" ? "trb-cta-glyph" : "trb-mono-sm"}>
+          →
+        </span>
+      </Link>
+
+      {/* Features list */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.125rem" }}>
+        <div
+          className="trb-mono-sm"
+          style={{
+            color: "var(--trb-ink-faint)",
+            paddingBottom: "0.5rem",
+            borderBottom: "1px solid var(--trb-line-faint)",
+            marginBottom: "0.5rem",
+          }}
+        >
+          INCLUDES
+        </div>
+        <ul
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.625rem",
+            listStyle: "none",
+            padding: 0,
+            margin: 0,
+          }}
+        >
+          {tier.features.map((feat, idx) => (
+            <li
+              key={idx}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "2.5rem 1fr",
+                alignItems: "baseline",
+                gap: "0.5rem",
+                fontSize: "var(--trb-size-body-s)",
+                lineHeight: 1.45,
+              }}
+            >
+              <span
+                className="trb-mono-sm"
+                style={{
+                  color: tier.highlighted
+                    ? "var(--trb-signal)"
+                    : "var(--trb-ink-faint)",
+                }}
+              >
+                {String(idx + 1).padStart(2, "0")}
+              </span>
+              <span style={{ color: "var(--trb-ink)" }}>{feat}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   COMPARISON TABLE
+   ──────────────────────────────────────────────────────────────────────── */
+
+function Compare() {
+  return (
+    <section
+      className="trb-section"
+      aria-labelledby="compare-head"
+      style={{
+        position: "relative",
+        paddingTop: "clamp(4rem, 6vw, 6rem)",
+        paddingBottom: "clamp(4rem, 6vw, 6rem)",
+        borderTop: "1px solid var(--trb-line)",
+      }}
+    >
+      <div className="trb-inner">
+        <SectionMarkerRow mark="§03" label="/ COMPARE" index="4 COLUMNS" />
+
+        <h2
+          id="compare-head"
+          className="trb-display"
+          data-reveal
+          style={{
+            fontSize: "clamp(1.75rem, 1.2rem + 1.5vw, 2.375rem)",
+            marginTop: "1.25rem",
+            marginBottom: "0.75rem",
+            maxWidth: "30ch",
+          }}
+        >
+          An always-on tutor{" "}
+          <span style={{ color: "var(--trb-ink-muted)" }}>
+            trained on your team.
+          </span>
+        </h2>
+
+        <p
+          data-reveal
+          style={{
+            maxWidth: "60ch",
+            fontSize: "var(--trb-size-body-m)",
+            color: "var(--trb-ink-muted)",
+            marginBottom: "2.5rem",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "80ms",
+          }}
+        >
+          We don&rsquo;t replace your docs. We answer from them, with citations.
+        </p>
+
+        <div
+          data-reveal
+          style={{
+            border: "1px solid var(--trb-line)",
+            overflowX: "auto",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "140ms",
+          }}
+        >
+          <table
+            style={{
+              width: "100%",
+              minWidth: 720,
+              borderCollapse: "collapse",
+              fontFamily: "var(--trb-font-body)",
+              fontSize: "var(--trb-size-body-s)",
+            }}
+          >
+            <thead>
+              <tr
+                style={{
+                  borderBottom: "1px solid var(--trb-line)",
+                  background: "var(--trb-surface-1)",
+                }}
+              >
+                <th style={headerCellStyle("left")}>FEATURE</th>
+                <th style={headerCellStyle("center")}>SHAREPOINT</th>
+                <th style={headerCellStyle("center")}>GOOGLE DRIVE</th>
+                <th style={headerCellStyle("center")}>MANUAL</th>
+                <th
+                  style={{
+                    ...headerCellStyle("center"),
+                    color: "var(--trb-signal)",
+                    background: "var(--trb-signal-soft)",
+                  }}
+                >
+                  TRIBORA
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {COMPARISON_DATA.map((row, i) => {
+                if (row.category) {
+                  return (
+                    <tr
+                      key={i}
+                      style={{
+                        background: "var(--trb-surface-1)",
+                        borderBottom: "1px solid var(--trb-line)",
+                      }}
+                    >
+                      <td
+                        colSpan={5}
+                        className="trb-mono-sm"
+                        style={{
+                          padding: "0.625rem 1rem",
+                          color: "var(--trb-ink-dim)",
+                          letterSpacing: "0.14em",
+                        }}
+                      >
+                        / {row.feature.toUpperCase()}
+                      </td>
+                    </tr>
+                  );
+                }
+                return (
+                  <tr
+                    key={i}
+                    style={{ borderBottom: "1px solid var(--trb-line-faint)" }}
+                  >
+                    <td
+                      style={{
+                        padding: "0.875rem 1rem",
+                        color: "var(--trb-ink)",
+                        verticalAlign: "middle",
+                      }}
+                    >
+                      {row.feature}
+                    </td>
+                    <td style={cellStyle("center")}>
+                      <CompareValue value={row.sharepoint} />
+                    </td>
+                    <td style={cellStyle("center")}>
+                      <CompareValue value={row.google} />
+                    </td>
+                    <td style={cellStyle("center")}>
+                      <CompareValue value={row.manual} />
+                    </td>
+                    <td
+                      style={{
+                        ...cellStyle("center"),
+                        background: row.triboraHighlight
+                          ? "var(--trb-signal-soft)"
+                          : "transparent",
+                      }}
+                    >
+                      <CompareValue
+                        value={row.tribora}
+                        isHighlighted={row.triboraHighlight}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div
+          data-reveal
+          style={{
+            marginTop: "1.5rem",
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "1rem",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "200ms",
+          }}
+        >
+          <span
+            className="trb-mono-sm"
+            style={{ color: "var(--trb-ink-faint)" }}
+          >
+            INTEGRATES · GOOGLE DRIVE · SHAREPOINT · NOTION · MORE
+          </span>
+          <Link
+            href="/sign-up"
+            className="trb-ghost"
+            style={{ padding: "0.6875rem 1.125rem" }}
+          >
+            Get started free
+            <span className="trb-mono-sm" style={{ color: "var(--trb-ink-dim)" }}>
+              →
+            </span>
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   FAQ
+   ──────────────────────────────────────────────────────────────────────── */
+
+function Faq() {
+  return (
+    <section
+      className="trb-section"
+      aria-labelledby="faq-head"
+      style={{
+        position: "relative",
+        paddingTop: "clamp(4rem, 6vw, 6rem)",
+        paddingBottom: "clamp(4rem, 6vw, 6rem)",
+        borderTop: "1px solid var(--trb-line)",
+      }}
+    >
+      <div className="trb-inner">
+        <SectionMarkerRow
+          mark="§04"
+          label="/ QUESTIONS"
+          index={`${FAQ_ITEMS.length} ENTRIES`}
+        />
+
+        <h2
+          id="faq-head"
+          className="trb-display"
+          data-reveal
+          style={{
+            fontSize: "clamp(1.75rem, 1.2rem + 1.5vw, 2.375rem)",
+            marginTop: "1.25rem",
+            marginBottom: "2.5rem",
+            maxWidth: "28ch",
+          }}
+        >
+          Everything you&rsquo;d ask{" "}
+          <span style={{ color: "var(--trb-ink-muted)" }}>
+            before you swipe a card.
+          </span>
+        </h2>
+
+        <div
+          data-reveal
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr)",
+            borderTop: "1px solid var(--trb-line)",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "80ms",
+          }}
+        >
+          {FAQ_ITEMS.map((item) => (
+            <FaqRow key={item.id} item={item} />
+          ))}
+        </div>
+
+        <div
+          data-reveal
+          style={{
+            marginTop: "2rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "160ms",
+          }}
+        >
+          <span
+            className="trb-mono-sm"
+            style={{ color: "var(--trb-ink-faint)" }}
+          >
+            STILL HAVE QUESTIONS?
+          </span>
+          <Link href="/contact" className="trb-link">
+            Talk to us
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FaqRow({ item }: { item: FaqItem }) {
+  return (
+    <details
+      style={{
+        borderBottom: "1px solid var(--trb-line)",
+        padding: "1.25rem 0",
+      }}
+    >
+      <summary
+        style={{
+          display: "grid",
+          gridTemplateColumns: "auto 1fr auto",
+          alignItems: "baseline",
+          gap: "1rem",
+          cursor: "pointer",
+          listStyle: "none",
+          userSelect: "none",
+        }}
+      >
+        <span
+          className="trb-mono-sm"
+          style={{
+            color: "var(--trb-ink-faint)",
+            letterSpacing: "0.14em",
+          }}
+        >
+          {item.mark}
+        </span>
+        <span
+          style={{
+            fontFamily: "var(--trb-font-display)",
+            fontSize: "clamp(1.0625rem, 0.95rem + 0.4vw, 1.1875rem)",
+            fontWeight: 500,
+            letterSpacing: "-0.005em",
+            color: "var(--trb-ink)",
+          }}
+        >
+          {item.question}
+        </span>
+        <span
+          aria-hidden
+          className="trb-mono-sm"
+          style={{
+            color: "var(--trb-ink-dim)",
+            transition: "transform var(--trb-dur-fast) var(--trb-ease)",
+          }}
+        >
+          +
+        </span>
+      </summary>
+      <p
+        style={{
+          marginTop: "0.875rem",
+          marginLeft: "calc(3ch + 1rem)",
+          fontSize: "var(--trb-size-body-m)",
+          lineHeight: 1.6,
+          color: "var(--trb-ink-muted)",
+          maxWidth: "70ch",
+        }}
+      >
+        {item.answer}
+      </p>
+    </details>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CLOSING
+   ──────────────────────────────────────────────────────────────────────── */
+
+function Closing() {
+  return (
+    <section
+      className="trb-section"
+      aria-labelledby="pricing-closing"
+      style={{
+        paddingTop: "clamp(5rem, 8vw, 8rem)",
+        paddingBottom: "clamp(5rem, 8vw, 8rem)",
+        borderTop: "1px solid var(--trb-line)",
+        position: "relative",
+        textAlign: "center",
+      }}
+    >
+      <div
+        aria-hidden
+        className="trb-grid-overlay"
+        style={{ inset: 0, position: "absolute", opacity: 0.45 }}
+      />
+
+      <div
+        className="trb-inner"
+        style={{
+          position: "relative",
+          zIndex: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "clamp(1.5rem, 3vw, 2.5rem)",
+        }}
+      >
+        <div data-reveal className="flex items-center gap-3">
+          <span className="trb-mono-sm" style={{ color: "var(--trb-signal)" }}>
+            §05
+          </span>
+          <span className="trb-mono-sm" style={{ color: "var(--trb-ink-dim)" }}>
+            / BOOK A DEMO
+          </span>
+        </div>
+
+        <h2
+          id="pricing-closing"
+          className="trb-display"
+          data-reveal
+          style={{
+            fontSize: "clamp(2.25rem, 1.5rem + 3vw, 4rem)",
+            lineHeight: 1,
+            maxWidth: "22ch",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "80ms",
+          }}
+        >
+          Thirty minutes,{" "}
+          <span style={{ color: "var(--trb-ink-muted)" }}>
+            your team, your data.
+          </span>
+        </h2>
+
+        <p
+          data-reveal
+          style={{
+            color: "var(--trb-ink-muted)",
+            fontSize: "var(--trb-size-body-l)",
+            lineHeight: 1.55,
+            maxWidth: "58ch",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "160ms",
+          }}
+        >
+          We&rsquo;ll record one of the questions your senior rep gets every
+          week, watch it land in your knowledge base, then pull the answer out
+          &mdash; citation included.
+        </p>
+
+        <div
+          data-reveal
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            gap: "0.75rem",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "240ms",
+          }}
+        >
+          <Link
+            href="/contact?type=demo"
+            className="trb-cta"
+            style={{ padding: "0.9375rem 1.625rem 1rem", fontSize: "1rem" }}
+          >
+            Book a demo
+            <span className="trb-cta-glyph">→</span>
+          </Link>
+          <Link
+            href="/sign-up"
+            className="trb-ghost"
+            style={{ padding: "0.875rem 1.5rem" }}
+          >
+            Start free instead
+            <span className="trb-mono-sm" style={{ color: "var(--trb-ink-dim)" }}>
+              →
+            </span>
+          </Link>
+        </div>
+
+        <div
+          data-reveal
+          style={{
+            marginTop: "0.5rem",
+            /* @ts-expect-error custom CSS var */
+            "--trb-reveal-delay": "320ms",
+          }}
+        >
+          <span
+            className="trb-mono-sm"
+            style={{ color: "var(--trb-ink-faint)" }}
+          >
+            NO MQL GAUNTLET · NO SLIDES · ONE HONEST HOUR
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SHARED FRAGMENTS
+   ──────────────────────────────────────────────────────────────────────── */
+
+function SectionMarkerRow({
+  mark,
+  label,
+  index,
+}: {
+  mark: string;
+  label: string;
+  index: string;
+}) {
+  return (
+    <div
+      data-reveal
+      className="flex items-center gap-3"
+      style={{
+        borderTop: "1px solid var(--trb-line)",
+        paddingTop: "0.625rem",
+        paddingBottom: "0.25rem",
+      }}
+    >
+      <span className="trb-mono-sm" style={{ color: "var(--trb-signal)" }}>
+        {mark}
+      </span>
+      <span className="trb-mono-sm" style={{ color: "var(--trb-ink-dim)" }}>
+        {label}
+      </span>
+      <span
+        style={{
+          flex: 1,
+          height: 1,
+          background: "var(--trb-line)",
+        }}
+      />
+      <span className="trb-mono-sm" style={{ color: "var(--trb-ink-faint)" }}>
+        {index}
+      </span>
+    </div>
+  );
+}
+
+function CornerMarkers({ fig, caption }: { fig: string; caption: string }) {
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute",
+        top: "1.25rem",
+        right: "var(--trb-gutter)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        alignItems: "flex-end",
+        pointerEvents: "none",
+        zIndex: 0,
+      }}
+    >
+      <span className="trb-mono-sm" style={{ color: "var(--trb-ink-faint)" }}>
+        {fig} / {caption}
+      </span>
+      <span className="trb-mono-sm" style={{ color: "var(--trb-ink-faint)" }}>
+        REV 2026-04-17
+      </span>
+    </div>
+  );
+}
 
 function CompareValue({
   value,
@@ -819,38 +1283,61 @@ function CompareValue({
   value: string | boolean;
   isHighlighted?: boolean;
 }) {
-  if (typeof value === 'boolean') {
+  if (typeof value === "boolean") {
     if (value) {
       return (
-        <div className={cn('flex items-center justify-center', isHighlighted ? 'text-accent' : 'text-foreground')}>
-          <HugeiconsIcon icon={Tick02Icon} size={18} />
-        </div>
+        <span
+          className="trb-mono-sm"
+          style={{
+            color: isHighlighted ? "var(--trb-signal)" : "var(--trb-ink)",
+            letterSpacing: "0.14em",
+          }}
+        >
+          ✓
+        </span>
       );
     }
     return (
-      <div className="flex items-center justify-center text-muted-foreground/40">
-        <HugeiconsIcon icon={Cancel01Icon} size={18} />
-      </div>
+      <span
+        className="trb-mono-sm"
+        style={{ color: "var(--trb-ink-faint)" }}
+      >
+        —
+      </span>
     );
   }
-
-  if (value.includes('One-way')) {
-    return (
-      <div className="flex items-center justify-center gap-1 text-muted-foreground text-xs sm:text-sm">
-        <HugeiconsIcon icon={MinusSignIcon} size={14} />
-        <span>{value}</span>
-      </div>
-    );
-  }
-
   return (
     <span
-      className={cn(
-        'text-xs sm:text-sm font-medium',
-        isHighlighted ? 'text-accent' : 'text-muted-foreground'
-      )}
+      style={{
+        fontFamily: "var(--trb-font-mono)",
+        fontSize: 12,
+        letterSpacing: "0.04em",
+        color: isHighlighted ? "var(--trb-signal)" : "var(--trb-ink-muted)",
+      }}
     >
       {value}
     </span>
   );
+}
+
+function headerCellStyle(align: "left" | "center"): React.CSSProperties {
+  return {
+    fontFamily: "var(--trb-font-mono)",
+    fontSize: 11,
+    fontWeight: 500,
+    letterSpacing: "0.14em",
+    textAlign: align,
+    color: "var(--trb-ink-dim)",
+    padding: "0.75rem 1rem",
+    textTransform: "uppercase",
+  };
+}
+
+function cellStyle(align: "left" | "center"): React.CSSProperties {
+  return {
+    padding: "0.875rem 1rem",
+    textAlign: align,
+    verticalAlign: "middle",
+    color: "var(--trb-ink-muted)",
+  };
 }
