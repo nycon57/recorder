@@ -11,6 +11,7 @@
 import { streamText, UIMessage, tool, stepCountIs } from 'ai';
 import { google } from '@ai-sdk/google';
 import { checkBotId } from 'botid/server';
+import { after } from 'next/server';
 
 import { requireOrg } from '@/lib/utils/api';
 import { retrieveContext } from '@/lib/services/rag-google';
@@ -44,6 +45,11 @@ import {
   exploreKnowledgeGraphInputSchema,
 } from '@/lib/validations/chat';
 import { searchMonitor } from '@/lib/services/search-monitoring';
+import {
+  buildKnowledgeChatTelemetry,
+  recordKnowledgeTelemetryEvent,
+  type KnowledgeChatTelemetryPayload,
+} from '@/lib/services/knowledge-telemetry';
 import { nanoid } from 'nanoid';
 
 // Allow streaming responses up to 30 seconds
@@ -163,6 +169,7 @@ export async function POST(req: Request) {
   // Declare variables in outer scope so they're accessible in error handler
   let queryId: string | undefined;
   let requestStartTime: number | undefined;
+  let chatTelemetry: KnowledgeChatTelemetryPayload | null = null;
 
   try {
     const { orgId, userId } = await requireOrg();
@@ -1016,6 +1023,35 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
       });
     }
 
+    chatTelemetry = buildKnowledgeChatTelemetry({
+      orgId,
+      userId,
+      queryId: queryId ?? 'unknown',
+      query: userQuery,
+      queryLength: userQuery.length,
+      queryWordCount: userQuery.trim() ? userQuery.trim().split(/\s+/).length : 0,
+      answerMode,
+      routeStrategy: route?.strategy ?? null,
+      selectedStrategy,
+      recordingsCount: actualRecordingsCount,
+      sourcesCount,
+      retrievalAttempts,
+      finalThreshold,
+      averageSimilarity,
+      totalTimeMs: Date.now() - requestStartTime,
+      routingFailed: false,
+      routingFailureReason: null,
+    });
+
+    after(async () => {
+      if (!chatTelemetry) return;
+
+      await recordKnowledgeTelemetryEvent({
+        type: 'knowledge.chat.outcome',
+        payload: chatTelemetry,
+      });
+    });
+
     return response;
   } catch (error: any) {
     console.error('[Chat API] Error:', error);
@@ -1033,6 +1069,17 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
         // Log but don't throw - monitoring failures shouldn't affect error response
         console.error('[Chat API] Failed to complete monitoring:', monitoringError);
       }
+    }
+
+    if (chatTelemetry) {
+      await recordKnowledgeTelemetryEvent({
+        type: 'knowledge.chat.outcome',
+        payload: buildKnowledgeChatTelemetry({
+          ...chatTelemetry,
+          routingFailed: true,
+          routingFailureReason: chatTelemetry.routingFailureReason ?? 'route_error',
+        }),
+      });
     }
     return new Response(
       JSON.stringify({
