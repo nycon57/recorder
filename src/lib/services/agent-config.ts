@@ -11,7 +11,7 @@
  *   enterprise   → all agents
  */
 
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export type OrgAgentSettings = Database['public']['Tables']['org_agent_settings']['Row'];
@@ -50,12 +50,120 @@ const DEFAULT_SETTINGS: Omit<OrgAgentSettings, 'id' | 'org_id' | 'created_at' | 
 export interface WikiCompilationSettings {
   wikiAutoPublish: boolean;
   wikiStaleThresholdDays: number;
+  contradictionReviewMode: 'manual' | 'auto' | 'hybrid';
+  hybridAutoPublish: {
+    enabled: boolean;
+    maxContradictionsForAutoPublish: number;
+    minConfidenceDeltaForAutoPublish: number;
+  };
 }
 
 const DEFAULT_WIKI_COMPILATION_SETTINGS: WikiCompilationSettings = {
   wikiAutoPublish: false,
   wikiStaleThresholdDays: 90,
+  contradictionReviewMode: 'manual',
+  hybridAutoPublish: {
+    enabled: false,
+    maxContradictionsForAutoPublish: 1,
+    minConfidenceDeltaForAutoPublish: 0,
+  },
 };
+
+export const WIKI_COMPILATION_POLICY_METADATA_KEY = 'wiki_compilation_review_policy';
+export const HYBRID_MAX_CONTRADICTIONS_MIN = 1;
+export const HYBRID_MAX_CONTRADICTIONS_MAX = 10;
+export const HYBRID_MIN_CONFIDENCE_DELTA_MIN = -0.2;
+export const HYBRID_MIN_CONFIDENCE_DELTA_MAX = 0.2;
+
+export interface WikiCompilationPolicyMetadata {
+  hybrid_auto_publish_enabled?: boolean;
+  hybrid_max_contradictions_for_auto_publish?: number;
+  hybrid_min_confidence_delta_for_auto_publish?: number;
+}
+
+export function asObject(value: Json | null | undefined): Record<string, Json | undefined> {
+  if (!value || Array.isArray(value) || typeof value !== 'object') {
+    return {};
+  }
+  return value as Record<string, Json | undefined>;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function readWikiCompilationPolicyMetadata(
+  metadata: Json | null | undefined
+): WikiCompilationPolicyMetadata {
+  const root = asObject(metadata);
+  const raw = root[WIKI_COMPILATION_POLICY_METADATA_KEY];
+  const policy = asObject(raw);
+
+  const hybridEnabled =
+    typeof policy.hybrid_auto_publish_enabled === 'boolean'
+      ? policy.hybrid_auto_publish_enabled
+      : DEFAULT_WIKI_COMPILATION_SETTINGS.hybridAutoPublish.enabled;
+
+  const maxContradictionsRaw = policy.hybrid_max_contradictions_for_auto_publish;
+  const maxContradictions =
+    typeof maxContradictionsRaw === 'number' && Number.isFinite(maxContradictionsRaw)
+      ? Math.round(
+          clampNumber(
+            maxContradictionsRaw,
+            HYBRID_MAX_CONTRADICTIONS_MIN,
+            HYBRID_MAX_CONTRADICTIONS_MAX
+          )
+        )
+      : DEFAULT_WIKI_COMPILATION_SETTINGS.hybridAutoPublish.maxContradictionsForAutoPublish;
+
+  const minConfidenceRaw = policy.hybrid_min_confidence_delta_for_auto_publish;
+  const minConfidenceDelta =
+    typeof minConfidenceRaw === 'number' && Number.isFinite(minConfidenceRaw)
+      ? clampNumber(
+          minConfidenceRaw,
+          HYBRID_MIN_CONFIDENCE_DELTA_MIN,
+          HYBRID_MIN_CONFIDENCE_DELTA_MAX
+        )
+      : DEFAULT_WIKI_COMPILATION_SETTINGS.hybridAutoPublish.minConfidenceDeltaForAutoPublish;
+
+  return {
+    hybrid_auto_publish_enabled: hybridEnabled,
+    hybrid_max_contradictions_for_auto_publish: maxContradictions,
+    hybrid_min_confidence_delta_for_auto_publish: minConfidenceDelta,
+  };
+}
+
+type WikiCompilationSettingsSource = Pick<
+  OrgAgentSettings,
+  'wiki_auto_publish' | 'wiki_stale_threshold_days' | 'metadata'
+>;
+
+export function resolveWikiCompilationSettings(
+  row: WikiCompilationSettingsSource | null | undefined
+): WikiCompilationSettings {
+  const metadataPolicy = readWikiCompilationPolicyMetadata(row?.metadata);
+  const wikiAutoPublish =
+    row?.wiki_auto_publish ?? DEFAULT_WIKI_COMPILATION_SETTINGS.wikiAutoPublish;
+  const hybridEnabled = wikiAutoPublish && (metadataPolicy.hybrid_auto_publish_enabled ?? false);
+  const contradictionReviewMode: WikiCompilationSettings['contradictionReviewMode'] =
+    hybridEnabled ? 'hybrid' : wikiAutoPublish ? 'auto' : 'manual';
+
+  return {
+    wikiAutoPublish,
+    wikiStaleThresholdDays:
+      row?.wiki_stale_threshold_days ?? DEFAULT_WIKI_COMPILATION_SETTINGS.wikiStaleThresholdDays,
+    contradictionReviewMode,
+    hybridAutoPublish: {
+      enabled: hybridEnabled,
+      maxContradictionsForAutoPublish:
+        metadataPolicy.hybrid_max_contradictions_for_auto_publish ??
+        DEFAULT_WIKI_COMPILATION_SETTINGS.hybridAutoPublish.maxContradictionsForAutoPublish,
+      minConfidenceDeltaForAutoPublish:
+        metadataPolicy.hybrid_min_confidence_delta_for_auto_publish ??
+        DEFAULT_WIKI_COMPILATION_SETTINGS.hybridAutoPublish.minConfidenceDeltaForAutoPublish,
+    },
+  };
+}
 
 /** Agents unlocked per plan tier -- single source of truth for plan gating */
 const TIER_ALLOWED_AGENTS: Record<PlanTier, ReadonlySet<string>> = {
@@ -197,12 +305,30 @@ export async function getWikiCompilationSettings(
 ): Promise<WikiCompilationSettings> {
   try {
     const row = await getAgentSettings(orgId);
-    return {
-      wikiAutoPublish: row.wiki_auto_publish ?? DEFAULT_WIKI_COMPILATION_SETTINGS.wikiAutoPublish,
-      wikiStaleThresholdDays:
-        row.wiki_stale_threshold_days ?? DEFAULT_WIKI_COMPILATION_SETTINGS.wikiStaleThresholdDays,
-    };
+    return resolveWikiCompilationSettings(row);
   } catch {
-    return { ...DEFAULT_WIKI_COMPILATION_SETTINGS };
+    return resolveWikiCompilationSettings(null);
   }
+}
+
+/**
+ * Decide whether a contradiction should be auto-applied or routed to review
+ * using the org's configured compilation settings.
+ */
+export function shouldAutoApplyWikiContradiction(
+  settings: WikiCompilationSettings,
+  input: { contradictionCount: number; confidenceDelta: number }
+): boolean {
+  if (settings.contradictionReviewMode === 'manual') {
+    return false;
+  }
+  if (settings.contradictionReviewMode === 'auto') {
+    return true;
+  }
+
+  return (
+    input.contradictionCount > 0 &&
+    input.contradictionCount <= settings.hybridAutoPublish.maxContradictionsForAutoPublish &&
+    input.confidenceDelta >= settings.hybridAutoPublish.minConfidenceDeltaForAutoPublish
+  );
 }

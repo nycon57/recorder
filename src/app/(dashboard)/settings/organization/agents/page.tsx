@@ -194,12 +194,24 @@ interface AgentSettings {
   global_agent_enabled: boolean | null;
   wiki_auto_publish?: boolean | null;
   wiki_stale_threshold_days?: number | null;
+  wiki_contradiction_routing_mode?: WikiContradictionRoutingMode | null;
+  wiki_hybrid_auto_publish_enabled?: boolean | null;
+  wiki_hybrid_max_contradictions?: number | null;
+  wiki_hybrid_min_confidence_delta?: number | null;
   [key: string]: unknown;
 }
 
 const WIKI_STALE_THRESHOLD_MIN = 1;
 const WIKI_STALE_THRESHOLD_MAX = 365;
 const WIKI_STALE_THRESHOLD_DEFAULT = 90;
+const WIKI_HYBRID_MAX_CONTRADICTIONS_MIN = 1;
+const WIKI_HYBRID_MAX_CONTRADICTIONS_MAX = 10;
+const WIKI_HYBRID_MAX_CONTRADICTIONS_DEFAULT = 1;
+const WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MIN = -0.2;
+const WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MAX = 0.2;
+const WIKI_HYBRID_MIN_CONFIDENCE_DELTA_DEFAULT = 0;
+
+type WikiContradictionRoutingMode = 'manual' | 'auto' | 'hybrid';
 
 interface AgentPermissionRow {
   agent_type: string;
@@ -222,6 +234,12 @@ export default function AgentsSettingsPage() {
   // instant; commits on blur / Enter via a PATCH.
   const [staleThresholdDraft, setStaleThresholdDraft] = useState<string>(
     String(WIKI_STALE_THRESHOLD_DEFAULT),
+  );
+  const [hybridMaxContradictionsDraft, setHybridMaxContradictionsDraft] = useState<string>(
+    String(WIKI_HYBRID_MAX_CONTRADICTIONS_DEFAULT),
+  );
+  const [hybridMinConfidenceDeltaDraft, setHybridMinConfidenceDeltaDraft] = useState<string>(
+    String(WIKI_HYBRID_MIN_CONFIDENCE_DELTA_DEFAULT),
   );
 
   // --- Queries ---
@@ -368,12 +386,24 @@ export default function AgentsSettingsPage() {
     },
   });
 
-  // Sync the stale-threshold draft from the server value whenever it changes.
+  // Sync numeric drafts from server values whenever they change.
   useEffect(() => {
     if (typeof settings?.wiki_stale_threshold_days === 'number') {
       setStaleThresholdDraft(String(settings.wiki_stale_threshold_days));
     }
   }, [settings?.wiki_stale_threshold_days]);
+
+  useEffect(() => {
+    setHybridMaxContradictionsDraft(
+      String(settings?.wiki_hybrid_max_contradictions ?? WIKI_HYBRID_MAX_CONTRADICTIONS_DEFAULT),
+    );
+  }, [settings?.wiki_hybrid_max_contradictions]);
+
+  useEffect(() => {
+    setHybridMinConfidenceDeltaDraft(
+      String(settings?.wiki_hybrid_min_confidence_delta ?? WIKI_HYBRID_MIN_CONFIDENCE_DELTA_DEFAULT),
+    );
+  }, [settings?.wiki_hybrid_min_confidence_delta]);
 
   // --- Loading state ---
 
@@ -391,9 +421,14 @@ export default function AgentsSettingsPage() {
   // --- Helpers ---
 
   const globalEnabled = settings?.global_agent_enabled ?? true;
-  const wikiAutoPublish = settings?.wiki_auto_publish ?? false;
+  const wikiRoutingMode: WikiContradictionRoutingMode =
+    settings?.wiki_contradiction_routing_mode ?? 'manual';
   const wikiStaleThresholdServerValue =
     settings?.wiki_stale_threshold_days ?? WIKI_STALE_THRESHOLD_DEFAULT;
+  const wikiHybridMaxContradictionsServerValue =
+    settings?.wiki_hybrid_max_contradictions ?? WIKI_HYBRID_MAX_CONTRADICTIONS_DEFAULT;
+  const wikiHybridMinConfidenceDeltaServerValue =
+    settings?.wiki_hybrid_min_confidence_delta ?? WIKI_HYBRID_MIN_CONFIDENCE_DELTA_DEFAULT;
   const pendingCount = approvals?.filter(a => a.status === 'pending').length ?? 0;
 
   function commitStaleThreshold(): void {
@@ -414,6 +449,69 @@ export default function AgentsSettingsPage() {
       return;
     }
     settingsMutation.mutate({ wiki_stale_threshold_days: parsed });
+  }
+
+  function updateWikiRoutingMode(mode: WikiContradictionRoutingMode): void {
+    if (mode === wikiRoutingMode) return;
+
+    if (mode === 'manual') {
+      settingsMutation.mutate({
+        wiki_auto_publish: false,
+        wiki_hybrid_auto_publish_enabled: false,
+      });
+      return;
+    }
+
+    if (mode === 'auto') {
+      settingsMutation.mutate({
+        wiki_auto_publish: true,
+        wiki_hybrid_auto_publish_enabled: false,
+      });
+      return;
+    }
+
+    settingsMutation.mutate({
+      wiki_auto_publish: true,
+      wiki_hybrid_auto_publish_enabled: true,
+    });
+  }
+
+  function commitHybridMaxContradictions(): void {
+    const parsed = Number.parseInt(hybridMaxContradictionsDraft, 10);
+    if (
+      !Number.isInteger(parsed) ||
+      parsed < WIKI_HYBRID_MAX_CONTRADICTIONS_MIN ||
+      parsed > WIKI_HYBRID_MAX_CONTRADICTIONS_MAX
+    ) {
+      setHybridMaxContradictionsDraft(String(wikiHybridMaxContradictionsServerValue));
+      toast.error(
+        `Auto-publish contradiction threshold must be between ${WIKI_HYBRID_MAX_CONTRADICTIONS_MIN} and ${WIKI_HYBRID_MAX_CONTRADICTIONS_MAX}`,
+      );
+      return;
+    }
+    if (parsed === wikiHybridMaxContradictionsServerValue) {
+      return;
+    }
+    settingsMutation.mutate({ wiki_hybrid_max_contradictions: parsed });
+  }
+
+  function commitHybridMinConfidenceDelta(): void {
+    const parsed = Number.parseFloat(hybridMinConfidenceDeltaDraft);
+    if (
+      !Number.isFinite(parsed) ||
+      parsed < WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MIN ||
+      parsed > WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MAX
+    ) {
+      setHybridMinConfidenceDeltaDraft(String(wikiHybridMinConfidenceDeltaServerValue));
+      toast.error(
+        `Minimum confidence delta must be between ${WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MIN} and ${WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MAX}`,
+      );
+      return;
+    }
+    if (parsed === wikiHybridMinConfidenceDeltaServerValue) {
+      return;
+    }
+    settingsMutation.mutate({ wiki_hybrid_min_confidence_delta: parsed });
   }
 
   function getPermissionTier(agentType: string, actionType: string): PermissionTier {
@@ -475,27 +573,111 @@ export default function AgentsSettingsPage() {
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <Label
-                htmlFor="wiki-auto-publish"
+                htmlFor="wiki-contradiction-routing-mode"
                 className="text-sm font-medium cursor-pointer"
               >
-                Auto-publish wiki updates
+                Contradiction routing mode
               </Label>
               <p className="text-xs text-muted-foreground mt-1">
-                When on, contradictory updates are applied automatically and previous
-                versions are superseded. When off, contradictions are flagged for admin
-                review before any change is published.
+                Choose whether contradictory updates always route to review, always auto-apply,
+                or use hybrid routing with thresholds.
               </p>
             </div>
-            <Switch
-              id="wiki-auto-publish"
-              checked={wikiAutoPublish}
-              onCheckedChange={(checked) =>
-                settingsMutation.mutate({ wiki_auto_publish: checked })
+            <Select
+              value={wikiRoutingMode}
+              onValueChange={(value) =>
+                updateWikiRoutingMode(value as WikiContradictionRoutingMode)
               }
               disabled={settingsMutation.isPending}
-              aria-label="Auto-publish wiki updates"
-            />
+            >
+              <SelectTrigger
+                id="wiki-contradiction-routing-mode"
+                className="w-[220px] shrink-0"
+                aria-label="Wiki contradiction routing mode"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manual">Manual review</SelectItem>
+                <SelectItem value="auto">Always auto-apply</SelectItem>
+                <SelectItem value="hybrid">Hybrid thresholds</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+
+          {wikiRoutingMode === 'hybrid' && (
+            <>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <Label
+                    htmlFor="wiki-hybrid-max-contradictions"
+                    className="text-sm font-medium cursor-pointer"
+                  >
+                    Auto-apply up to N contradictions
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Contradictions above this count route to admin review. Must be between{' '}
+                    {WIKI_HYBRID_MAX_CONTRADICTIONS_MIN} and{' '}
+                    {WIKI_HYBRID_MAX_CONTRADICTIONS_MAX}.
+                  </p>
+                </div>
+                <Input
+                  id="wiki-hybrid-max-contradictions"
+                  type="number"
+                  inputMode="numeric"
+                  min={WIKI_HYBRID_MAX_CONTRADICTIONS_MIN}
+                  max={WIKI_HYBRID_MAX_CONTRADICTIONS_MAX}
+                  step={1}
+                  className="w-24 shrink-0"
+                  value={hybridMaxContradictionsDraft}
+                  onChange={(e) => setHybridMaxContradictionsDraft(e.target.value)}
+                  onBlur={commitHybridMaxContradictions}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  disabled={settingsMutation.isPending}
+                  aria-label="Hybrid max contradictions for auto-apply"
+                />
+              </div>
+
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <Label
+                    htmlFor="wiki-hybrid-min-confidence-delta"
+                    className="text-sm font-medium cursor-pointer"
+                  >
+                    Minimum confidence delta for auto-apply
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Contradictions below this confidence delta route to review. Must be between{' '}
+                    {WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MIN} and{' '}
+                    {WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MAX}.
+                  </p>
+                </div>
+                <Input
+                  id="wiki-hybrid-min-confidence-delta"
+                  type="number"
+                  inputMode="decimal"
+                  min={WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MIN}
+                  max={WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MAX}
+                  step={0.01}
+                  className="w-28 shrink-0"
+                  value={hybridMinConfidenceDeltaDraft}
+                  onChange={(e) => setHybridMinConfidenceDeltaDraft(e.target.value)}
+                  onBlur={commitHybridMinConfidenceDelta}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  disabled={settingsMutation.isPending}
+                  aria-label="Hybrid minimum confidence delta for auto-apply"
+                />
+              </div>
+            </>
+          )}
 
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">

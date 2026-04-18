@@ -35,6 +35,7 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import {
   getAgentSettings,
   getWikiCompilationSettings,
+  shouldAutoApplyWikiContradiction,
 } from '@/lib/services/agent-config';
 import { withAgentLogging } from '@/lib/services/agent-logger';
 import { generateOrgWikiPageEmbedding } from '@/lib/services/org-wiki-embedding';
@@ -987,7 +988,12 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
   } else {
     // contradiction
     const settings = await getWikiCompilationSettings(orgId);
-    if (settings.wikiAutoPublish) {
+    const shouldAutoApply = shouldAutoApplyWikiContradiction(settings, {
+      contradictionCount: diff.contradictions.length,
+      confidenceDelta: diff.confidence_delta,
+    });
+
+    if (shouldAutoApply) {
       relationshipTarget = await applyContradictionWithSupersede({
         supabase,
         existingPage,
@@ -999,6 +1005,11 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
         classification,
       });
     } else {
+      console.log(
+        `[compile-wiki] Contradiction routed to manual review ` +
+          `(mode=${settings.contradictionReviewMode}, conflicts=${diff.contradictions.length}, ` +
+          `confidence_delta=${diff.confidence_delta.toFixed(3)})`
+      );
       await applyContradictionFlagged({
         supabase,
         existingPage,
@@ -1647,4 +1658,3 @@ async function runBestEffortEmbedding(pageId: string): Promise<void> {
     );
   }
 }
-
