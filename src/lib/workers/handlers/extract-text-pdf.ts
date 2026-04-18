@@ -16,6 +16,10 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 
 import type { ProgressCallback } from '../job-processor';
 
@@ -35,7 +39,7 @@ const CHUNK_SIZE = 5000; // Characters per chunk for very long documents
  */
 export async function handleExtractTextPdf(
   job: Job,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const payload = job.payload as unknown as ExtractTextPdfPayload;
   const { recordingId, orgId, pdfPath } = payload;
@@ -56,7 +60,7 @@ export async function handleExtractTextPdf(
   // Update recording status
   await supabase
     .from('content')
-    .update({ status: 'transcribing' })
+    .update({ status: SOURCE_STATUS.TRANSCRIBING })
     .eq('id', recordingId);
 
   progressCallback?.(5, 'Downloading PDF file...');
@@ -64,7 +68,7 @@ export async function handleExtractTextPdf(
     recordingId,
     'all',
     5,
-    'Downloading PDF file...'
+    'Downloading PDF file...',
   );
 
   let tempPdfPath: string | null = null;
@@ -81,7 +85,7 @@ export async function handleExtractTextPdf(
 
     if (downloadError || !pdfBlob) {
       throw new Error(
-        `Failed to download PDF: ${downloadError?.message || 'Unknown error'}`
+        `Failed to download PDF: ${downloadError?.message || 'Unknown error'}`,
       );
     }
 
@@ -99,7 +103,7 @@ export async function handleExtractTextPdf(
       recordingId,
       'all',
       25,
-      'Extracting text from PDF document...'
+      'Extracting text from PDF document...',
     );
 
     // Parse PDF and extract text
@@ -120,7 +124,7 @@ export async function handleExtractTextPdf(
     // Check if PDF is scanned (OCR needed)
     if (!extractedText || extractedText.trim().length < 50) {
       throw new Error(
-        'PDF appears to be scanned or contains no extractable text. OCR support is required for scanned documents.'
+        'PDF appears to be scanned or contains no extractable text. OCR support is required for scanned documents.',
       );
     }
 
@@ -129,7 +133,7 @@ export async function handleExtractTextPdf(
       recordingId,
       'all',
       60,
-      'Processing extracted text...'
+      'Processing extracted text...',
     );
 
     // Clean and normalize text
@@ -157,7 +161,7 @@ export async function handleExtractTextPdf(
       recordingId,
       'all',
       75,
-      'Saving extracted text to database...'
+      'Saving extracted text to database...',
     );
 
     // Save transcript to database
@@ -187,18 +191,15 @@ export async function handleExtractTextPdf(
       context: { transcriptId: transcript.id },
     });
 
-    // Update recording status
-    await supabase
-      .from('content')
-      .update({ status: 'transcribed' })
-      .eq('id', recordingId);
-
-    progressCallback?.(85, 'Text extraction complete, queuing document generation...');
+    progressCallback?.(
+      85,
+      'Text extraction complete, queuing document generation...',
+    );
     streamingManager.sendProgress(
       recordingId,
       'all',
       85,
-      'Text extraction complete, queuing document generation...'
+      'Text extraction complete, queuing document generation...',
     );
 
     // Enqueue document generation and metadata generation jobs
@@ -227,11 +228,24 @@ export async function handleExtractTextPdf(
     ]);
 
     if (docGenResult.error) {
-      throw new Error(`Failed to enqueue doc_generate job for ${recordingId}: ${docGenResult.error.message}`);
+      throw new Error(
+        `Failed to enqueue doc_generate job for ${recordingId}: ${docGenResult.error.message}`,
+      );
     }
     if (metadataGenResult.error) {
-      throw new Error(`Failed to enqueue generate_metadata job for ${recordingId}: ${metadataGenResult.error.message}`);
+      throw new Error(
+        `Failed to enqueue generate_metadata job for ${recordingId}: ${metadataGenResult.error.message}`,
+      );
     }
+
+    await supabase
+      .from('content')
+      .update({
+        status:
+          getQueuedSourceStatusForJob('doc_generate') ??
+          SOURCE_STATUS.DOCUMENT_GENERATING,
+      })
+      .eq('id', recordingId);
 
     logger.info('Enqueued document generation and metadata generation jobs', {
       context: { recordingId, transcriptId: transcript.id },
@@ -242,7 +256,7 @@ export async function handleExtractTextPdf(
       recordingId,
       'all',
       100,
-      'PDF text extraction complete'
+      'PDF text extraction complete',
     );
 
     // Create event for notifications
@@ -256,7 +270,6 @@ export async function handleExtractTextPdf(
         orgId,
       },
     });
-
   } catch (error) {
     logger.error('PDF text extraction failed', {
       context: { recordingId, pdfPath },
@@ -265,17 +278,21 @@ export async function handleExtractTextPdf(
 
     streamingManager.sendError(
       recordingId,
-      `PDF text extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `PDF text extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
 
     // Update recording status to error
     await supabase
       .from('content')
       .update({
-        status: 'error',
-        error_message: error instanceof Error ? error.message : 'PDF text extraction failed',
+        status: SOURCE_STATUS.ERROR,
+        error_message:
+          error instanceof Error ? error.message : 'PDF text extraction failed',
         metadata: {
-          error: error instanceof Error ? error.message : 'PDF text extraction failed',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'PDF text extraction failed',
           errorType: 'pdf_extraction',
           timestamp: new Date().toISOString(),
         },

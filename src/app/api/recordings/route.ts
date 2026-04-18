@@ -13,6 +13,7 @@ import { withRateLimit } from '@/lib/rate-limit/middleware';
 import { QuotaManager } from '@/lib/services/quotas/quota-manager';
 import { RateLimiter } from '@/lib/services/quotas/rate-limiter';
 import { createRecordingSchema } from '@/lib/validations/api';
+import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
 
 // GET /api/recordings - List all recordings for the current org
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -25,7 +26,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const offset = parseInt(url.searchParams.get('offset') || '0');
 
   // Query content
-  const { data: recordings, error, count } = await supabase
+  const {
+    data: recordings,
+    error,
+    count,
+  } = await supabase
     .from('content')
     .select('*', { count: 'exact' })
     .eq('org_id', orgId)
@@ -87,40 +92,41 @@ export const POST = withRateLimit(
       });
     }
 
-    const { title, description, metadata, analysisType, skipAnalysis } = validationResult.data;
+    const { title, description, metadata, analysisType, skipAnalysis } =
+      validationResult.data;
 
-  // Create content entry
-  const { data: recording, error } = await supabase
-    .from('content')
-    .insert({
-      org_id: orgId,
-      created_by: userId,
-      title: title || null,
-      description: description || null,
-      status: 'uploading',
-      metadata: metadata || {},
-      analysis_type: analysisType || 'general',
-      skip_analysis: skipAnalysis || false,
-    })
-    .select()
-    .single();
+    // Create content entry
+    const { data: recording, error } = await supabase
+      .from('content')
+      .insert({
+        org_id: orgId,
+        created_by: userId,
+        title: title || null,
+        description: description || null,
+        status: SOURCE_STATUS.UPLOADING,
+        metadata: metadata || {},
+        analysis_type: analysisType || 'general',
+        skip_analysis: skipAnalysis || false,
+      })
+      .select()
+      .single();
 
-  if (error) {
-    console.error('Error creating recording:', error);
-    return errors.internalError();
-  }
+    if (error) {
+      console.error('Error creating recording:', error);
+      return errors.internalError();
+    }
 
-  // Generate signed upload URL
-  const storagePath = `org_${orgId}/recordings/${recording.id}/raw.webm`;
+    // Generate signed upload URL
+    const storagePath = `org_${orgId}/recordings/${recording.id}/raw.webm`;
 
-  const { data: uploadData, error: uploadError } = await supabase.storage
-    .from('recordings')
-    .createSignedUploadUrl(storagePath);
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('recordings')
+      .createSignedUploadUrl(storagePath);
 
-  if (uploadError) {
-    console.error('Error creating upload URL:', uploadError);
-    return errors.internalError();
-  }
+    if (uploadError) {
+      console.error('Error creating upload URL:', uploadError);
+      return errors.internalError();
+    }
 
     // PERFORMANCE OPTIMIZATION: Invalidate stats cache when new content is created
     const { CacheInvalidation } = await import('@/lib/services/cache');
@@ -134,7 +140,7 @@ export const POST = withRateLimit(
         token: uploadData.token,
       },
       undefined,
-      201
+      201,
     );
   }),
   {
@@ -143,5 +149,5 @@ export const POST = withRateLimit(
       const { orgId } = await requireOrg();
       return orgId;
     },
-  }
+  },
 );

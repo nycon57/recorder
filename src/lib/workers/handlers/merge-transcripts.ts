@@ -10,7 +10,14 @@ import type { Database } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { createLogger } from '@/lib/utils/logger';
 import { GOOGLE_CONFIG } from '@/lib/google/client';
-import { cleanupSegments, type VideoSegment } from '@/lib/services/video-splitter';
+import {
+  cleanupSegments,
+  type VideoSegment,
+} from '@/lib/services/video-splitter';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 
 const logger = createLogger({ service: 'merge-transcripts' });
 
@@ -75,7 +82,9 @@ function parseTimestamp(timestamp: string): number {
     const seconds = parseFloat(parts[2]);
 
     if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) {
-      throw new Error(`Invalid timestamp format: "${timestamp}" contains non-numeric values`);
+      throw new Error(
+        `Invalid timestamp format: "${timestamp}" contains non-numeric values`,
+      );
     }
 
     return hours * 3600 + minutes * 60 + seconds;
@@ -87,13 +96,17 @@ function parseTimestamp(timestamp: string): number {
     const seconds = parseFloat(parts[1]);
 
     if (isNaN(minutes) || isNaN(seconds)) {
-      throw new Error(`Invalid timestamp format: "${timestamp}" contains non-numeric values`);
+      throw new Error(
+        `Invalid timestamp format: "${timestamp}" contains non-numeric values`,
+      );
     }
 
     return minutes * 60 + seconds;
   }
 
-  throw new Error(`Invalid timestamp format: "${timestamp}". Expected HH:MM:SS or MM:SS`);
+  throw new Error(
+    `Invalid timestamp format: "${timestamp}". Expected HH:MM:SS or MM:SS`,
+  );
 }
 
 /**
@@ -101,9 +114,9 @@ function parseTimestamp(timestamp: string): number {
  */
 function adjustAudioTimestamps(
   segments: AudioSegment[],
-  offset: number
+  offset: number,
 ): AudioSegment[] {
-  return segments.map(seg => ({
+  return segments.map((seg) => ({
     ...seg,
     timestamp: formatTimestamp(parseTimestamp(seg.timestamp) + offset),
     startTime: seg.startTime + offset,
@@ -116,9 +129,9 @@ function adjustAudioTimestamps(
  */
 function adjustVisualTimestamps(
   events: VisualEvent[],
-  offset: number
+  offset: number,
 ): VisualEvent[] {
-  return events.map(event => ({
+  return events.map((event) => ({
     ...event,
     timestamp: formatTimestamp(parseTimestamp(event.timestamp) + offset),
   }));
@@ -129,9 +142,9 @@ function adjustVisualTimestamps(
  */
 function adjustKeyMomentTimestamps(
   moments: Array<{ timestamp: string; description: string }>,
-  offset: number
+  offset: number,
 ): Array<{ timestamp: string; description: string }> {
-  return moments.map(moment => ({
+  return moments.map((moment) => ({
     ...moment,
     timestamp: formatTimestamp(parseTimestamp(moment.timestamp) + offset),
   }));
@@ -202,7 +215,10 @@ export async function mergeTranscripts(job: Job): Promise<void> {
           .eq('id', job.id);
 
         logger.info('Merge job re-queued to wait for remaining segments', {
-          context: { contentId, remaining: total_segments - segments_completed },
+          context: {
+            contentId,
+            remaining: total_segments - segments_completed,
+          },
         });
 
         return; // Exit early - don't throw error, just wait
@@ -229,14 +245,17 @@ export async function mergeTranscripts(job: Job): Promise<void> {
 
     if (!fetchError && storedSegments && storedSegments.length > 0) {
       // Use segment_transcripts table data
-      segmentResults = storedSegments.map(s => ({
+      segmentResults = storedSegments.map((s) => ({
         segmentIndex: s.segment_index,
         segmentStartTime: s.segment_start_time,
         segmentDuration: s.segment_duration,
         audioTranscript: s.audio_transcript as AudioSegment[],
         visualEvents: s.visual_events as VisualEvent[],
         combinedNarrative: s.combined_narrative,
-        keyMoments: s.key_moments as Array<{ timestamp: string; description: string }>,
+        keyMoments: s.key_moments as Array<{
+          timestamp: string;
+          description: string;
+        }>,
       }));
     } else {
       // Fallback: fetch from completed segment jobs
@@ -249,12 +268,14 @@ export async function mergeTranscripts(job: Job): Promise<void> {
         .order('created_at', { ascending: true });
 
       if (jobsError || !segmentJobs || segmentJobs.length === 0) {
-        throw new Error(`Failed to fetch segment results: ${fetchError?.message || jobsError?.message || 'No segments found'}`);
+        throw new Error(
+          `Failed to fetch segment results: ${fetchError?.message || jobsError?.message || 'No segments found'}`,
+        );
       }
 
       segmentResults = segmentJobs
-        .map(j => j.result as SegmentResult)
-        .filter(r => r !== null)
+        .map((j) => j.result as SegmentResult)
+        .filter((r) => r !== null)
         .sort((a, b) => a.segmentIndex - b.segmentIndex);
     }
 
@@ -270,29 +291,39 @@ export async function mergeTranscripts(job: Job): Promise<void> {
     logger.info('Fetched segment results', {
       context: {
         segmentCount: segmentResults.length,
-        segmentIndices: segmentResults.map(s => s.segmentIndex),
+        segmentIndices: segmentResults.map((s) => s.segmentIndex),
       },
     });
 
     // Merge all segments with adjusted timestamps
     const mergedAudioTranscript: AudioSegment[] = [];
     const mergedVisualEvents: VisualEvent[] = [];
-    const mergedKeyMoments: Array<{ timestamp: string; description: string }> = [];
+    const mergedKeyMoments: Array<{ timestamp: string; description: string }> =
+      [];
     const narrativeParts: string[] = [];
 
     for (const segment of segmentResults) {
       const offset = segment.segmentStartTime;
 
       // Adjust and merge audio transcripts
-      const adjustedAudio = adjustAudioTimestamps(segment.audioTranscript || [], offset);
+      const adjustedAudio = adjustAudioTimestamps(
+        segment.audioTranscript || [],
+        offset,
+      );
       mergedAudioTranscript.push(...adjustedAudio);
 
       // Adjust and merge visual events
-      const adjustedVisual = adjustVisualTimestamps(segment.visualEvents || [], offset);
+      const adjustedVisual = adjustVisualTimestamps(
+        segment.visualEvents || [],
+        offset,
+      );
       mergedVisualEvents.push(...adjustedVisual);
 
       // Adjust and merge key moments
-      const adjustedMoments = adjustKeyMomentTimestamps(segment.keyMoments || [], offset);
+      const adjustedMoments = adjustKeyMomentTimestamps(
+        segment.keyMoments || [],
+        offset,
+      );
       mergedKeyMoments.push(...adjustedMoments);
 
       // Add segment narrative with context
@@ -305,13 +336,13 @@ export async function mergeTranscripts(job: Job): Promise<void> {
 
     // Build full transcript text
     const fullTranscript = mergedAudioTranscript
-      .map(seg => seg.text)
+      .map((seg) => seg.text)
       .join(' ')
       .trim();
 
     // Build words_json compatible structure
     const words_json = {
-      segments: mergedAudioTranscript.map(seg => ({
+      segments: mergedAudioTranscript.map((seg) => ({
         start: seg.startTime,
         end: seg.endTime,
         text: seg.text,
@@ -360,7 +391,9 @@ export async function mergeTranscripts(job: Job): Promise<void> {
       .single();
 
     if (transcriptError) {
-      throw new Error(`Failed to save merged transcript: ${transcriptError.message}`);
+      throw new Error(
+        `Failed to save merged transcript: ${transcriptError.message}`,
+      );
     }
 
     logger.info('Merged transcript saved', {
@@ -369,12 +402,6 @@ export async function mergeTranscripts(job: Job): Promise<void> {
         contentId,
       },
     });
-
-    // Update content status
-    await supabase
-      .from('content')
-      .update({ status: 'transcribed' })
-      .eq('id', contentId);
 
     // Create downstream jobs (doc generation, embeddings, metadata)
     const jobPromises = [
@@ -412,6 +439,15 @@ export async function mergeTranscripts(job: Job): Promise<void> {
     ];
 
     await Promise.all(jobPromises);
+
+    await supabase
+      .from('content')
+      .update({
+        status:
+          getQueuedSourceStatusForJob('doc_generate') ??
+          SOURCE_STATUS.DOCUMENT_GENERATING,
+      })
+      .eq('id', contentId);
 
     logger.info('Created downstream jobs', {
       context: {
@@ -469,9 +505,9 @@ export async function mergeTranscripts(job: Job): Promise<void> {
         totalDuration,
       },
     });
-
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Merge failed';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Merge failed';
 
     logger.error('Transcript merge failed', {
       context: { contentId, segmentCount },
@@ -482,7 +518,7 @@ export async function mergeTranscripts(job: Job): Promise<void> {
     await supabase
       .from('content')
       .update({
-        status: 'error',
+        status: SOURCE_STATUS.ERROR,
         metadata: {
           error: errorMessage,
           errorType: 'merge_transcripts',

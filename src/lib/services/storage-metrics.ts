@@ -11,6 +11,7 @@
 
 import { createClient } from '@/lib/supabase/admin';
 import type { StorageTier, StorageProvider } from '@/lib/types/database';
+import { getStatusDisplayState } from '@/lib/utils/status-helpers';
 
 /**
  * Storage metrics for a single organization
@@ -99,7 +100,12 @@ export interface StorageTrend {
  * Anomaly detection result
  */
 export interface StorageAnomaly {
-  type: 'spike' | 'drop' | 'unusual_growth' | 'unusual_shrinkage' | 'cost_spike';
+  type:
+    | 'spike'
+    | 'drop'
+    | 'unusual_growth'
+    | 'unusual_shrinkage'
+    | 'cost_spike';
   severity: 'low' | 'medium' | 'high';
   detectedAt: string;
   metric: string;
@@ -116,10 +122,19 @@ export interface StorageAnomaly {
 export interface StorageHealth {
   overallScore: number; // 0-100
   components: {
-    optimization: { score: number; status: 'excellent' | 'good' | 'fair' | 'poor' };
+    optimization: {
+      score: number;
+      status: 'excellent' | 'good' | 'fair' | 'poor';
+    };
     cost: { score: number; status: 'excellent' | 'good' | 'fair' | 'poor' };
-    distribution: { score: number; status: 'excellent' | 'good' | 'fair' | 'poor' };
-    processing: { score: number; status: 'excellent' | 'good' | 'fair' | 'poor' };
+    distribution: {
+      score: number;
+      status: 'excellent' | 'good' | 'fair' | 'poor';
+    };
+    processing: {
+      score: number;
+      status: 'excellent' | 'good' | 'fair' | 'poor';
+    };
   };
   issues: string[];
   recommendations: string[];
@@ -128,7 +143,9 @@ export interface StorageHealth {
 /**
  * Get comprehensive storage metrics for an organization
  */
-export async function getStorageMetrics(orgId: string): Promise<StorageMetrics> {
+export async function getStorageMetrics(
+  orgId: string,
+): Promise<StorageMetrics> {
   const supabase = createClient();
 
   // Get organization name
@@ -155,7 +172,10 @@ export async function getStorageMetrics(orgId: string): Promise<StorageMetrics> 
 
   // Calculate total storage
   const totalFiles = recordings.length;
-  const totalStorageBytes = recordings.reduce((sum, r) => sum + (r.file_size || 0), 0);
+  const totalStorageBytes = recordings.reduce(
+    (sum, r) => sum + (r.file_size || 0),
+    0,
+  );
   const totalStorageGB = totalStorageBytes / (1024 * 1024 * 1024);
 
   // Tier breakdown
@@ -178,7 +198,10 @@ export async function getStorageMetrics(orgId: string): Promise<StorageMetrics> 
   }));
 
   // Provider breakdown
-  const providerMap = new Map<StorageProvider, { count: number; bytes: number }>();
+  const providerMap = new Map<
+    StorageProvider,
+    { count: number; bytes: number }
+  >();
   recordings.forEach((r) => {
     const provider = (r.storage_provider || 'supabase') as StorageProvider;
     const existing = providerMap.get(provider) || { count: 0, bytes: 0 };
@@ -188,16 +211,20 @@ export async function getStorageMetrics(orgId: string): Promise<StorageMetrics> 
     });
   });
 
-  const providerBreakdown = Array.from(providerMap.entries()).map(([provider, stats]) => ({
-    provider,
-    fileCount: stats.count,
-    storageBytes: stats.bytes,
-    storageGB: stats.bytes / (1024 * 1024 * 1024),
-    percentage: (stats.bytes / totalStorageBytes) * 100,
-  }));
+  const providerBreakdown = Array.from(providerMap.entries()).map(
+    ([provider, stats]) => ({
+      provider,
+      fileCount: stats.count,
+      storageBytes: stats.bytes,
+      storageGB: stats.bytes / (1024 * 1024 * 1024),
+      percentage: (stats.bytes / totalStorageBytes) * 100,
+    }),
+  );
 
   // Deduplication metrics
-  const deduplicatedFiles = recordings.filter((r) => r.is_deduplicated === true);
+  const deduplicatedFiles = recordings.filter(
+    (r) => r.is_deduplicated === true,
+  );
   const originalSize = recordings.reduce((sum, r) => {
     if (r.is_deduplicated && r.file_size) {
       return sum + r.file_size;
@@ -211,13 +238,22 @@ export async function getStorageMetrics(orgId: string): Promise<StorageMetrics> 
 
   // Compression metrics
   const compressedFiles = recordings.filter(
-    (r) => r.compression_status === 'completed' && r.original_size && r.file_size
+    (r) =>
+      r.compression_status === 'completed' && r.original_size && r.file_size,
   );
-  const totalOriginalSize = compressedFiles.reduce((sum, r) => sum + (r.original_size || 0), 0);
-  const totalCompressedSize = compressedFiles.reduce((sum, r) => sum + (r.file_size || 0), 0);
+  const totalOriginalSize = compressedFiles.reduce(
+    (sum, r) => sum + (r.original_size || 0),
+    0,
+  );
+  const totalCompressedSize = compressedFiles.reduce(
+    (sum, r) => sum + (r.file_size || 0),
+    0,
+  );
 
   const compressionRatio =
-    totalOriginalSize > 0 ? (1 - totalCompressedSize / totalOriginalSize) * 100 : 0;
+    totalOriginalSize > 0
+      ? (1 - totalCompressedSize / totalOriginalSize) * 100
+      : 0;
   const spaceSavedByCompression = totalOriginalSize - totalCompressedSize;
 
   const totalSpaceSaved = spaceSavedByDeduplication + spaceSavedByCompression;
@@ -238,50 +274,66 @@ export async function getStorageMetrics(orgId: string): Promise<StorageMetrics> 
     });
   });
 
-  const fileTypeBreakdown = Array.from(typeMap.entries()).map(([type, stats]) => ({
-    type,
-    count: stats.count,
-    storageBytes: stats.bytes,
-    storageGB: stats.bytes / (1024 * 1024 * 1024),
-    percentage: (stats.bytes / totalStorageBytes) * 100,
-  }));
+  const fileTypeBreakdown = Array.from(typeMap.entries()).map(
+    ([type, stats]) => ({
+      type,
+      count: stats.count,
+      storageBytes: stats.bytes,
+      storageGB: stats.bytes / (1024 * 1024 * 1024),
+      percentage: (stats.bytes / totalStorageBytes) * 100,
+    }),
+  );
 
   // Processing status
   const processingStatus = {
-    pending: recordings.filter((r) => r.status === 'pending' || r.status === 'uploading').length,
-    processing: recordings.filter((r) => r.status === 'processing' || r.status === 'transcribing')
-      .length,
-    completed: recordings.filter((r) => r.status === 'completed').length,
-    failed: recordings.filter((r) => r.status === 'failed').length,
+    pending: recordings.filter((r) => {
+      const displayState = getStatusDisplayState(r.status);
+      return displayState === 'uploading' || displayState === 'queued';
+    }).length,
+    processing: recordings.filter(
+      (r) => getStatusDisplayState(r.status) === 'processing',
+    ).length,
+    completed: recordings.filter(
+      (r) => getStatusDisplayState(r.status) === 'ready',
+    ).length,
+    failed: recordings.filter(
+      (r) => getStatusDisplayState(r.status) === 'failed',
+    ).length,
   };
 
   // Similarity detection metrics
-  const processedForSimilarity = recordings.filter((r) => r.similarity_processed_at !== null).length;
+  const processedForSimilarity = recordings.filter(
+    (r) => r.similarity_processed_at !== null,
+  ).length;
 
   // Get all recording IDs for this organization
   const contentIds = recordings.map((r) => r.id);
 
   // Fetch similarity matches for all recordings in this organization
-  const { data: similarityMatches } = contentIds.length > 0
-    ? await supabase
-        .from('similarity_matches')
-        .select('*')
-        .in('content_id', contentIds)
-    : { data: [] };
+  const { data: similarityMatches } =
+    contentIds.length > 0
+      ? await supabase
+          .from('similarity_matches')
+          .select('*')
+          .in('content_id', contentIds)
+      : { data: [] };
 
   const totalMatches = similarityMatches?.length || 0;
   const nearIdenticalCount =
     similarityMatches?.filter((m) => m.overall_similarity >= 95).length || 0;
   const highSimilarityCount =
-    similarityMatches?.filter((m) => m.overall_similarity >= 85 && m.overall_similarity < 95)
-      .length || 0;
+    similarityMatches?.filter(
+      (m) => m.overall_similarity >= 85 && m.overall_similarity < 95,
+    ).length || 0;
   const mediumSimilarityCount =
-    similarityMatches?.filter((m) => m.overall_similarity >= 70 && m.overall_similarity < 85)
-      .length || 0;
+    similarityMatches?.filter(
+      (m) => m.overall_similarity >= 70 && m.overall_similarity < 85,
+    ).length || 0;
 
   // Estimate potential savings from near-identical matches
   const avgFileSize = totalFiles > 0 ? totalStorageBytes / totalFiles : 0;
-  const potentialSavingsGB = (nearIdenticalCount * avgFileSize) / (1024 * 1024 * 1024);
+  const potentialSavingsGB =
+    (nearIdenticalCount * avgFileSize) / (1024 * 1024 * 1024);
 
   return {
     orgId,
@@ -319,7 +371,7 @@ export async function getStorageMetrics(orgId: string): Promise<StorageMetrics> 
  */
 export async function getStorageTrends(
   orgId: string,
-  days: number = 30
+  days: number = 30,
 ): Promise<StorageTrend[]> {
   const supabase = createClient();
 
@@ -329,7 +381,10 @@ export async function getStorageTrends(
     .from('storage_history')
     .select('*')
     .eq('org_id', orgId)
-    .gte('date', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString())
+    .gte(
+      'date',
+      new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+    )
     .order('date', { ascending: true });
 
   if (error) {
@@ -351,7 +406,9 @@ export async function getStorageTrends(
 /**
  * Detect storage anomalies
  */
-export async function detectAnomalies(orgId: string): Promise<StorageAnomaly[]> {
+export async function detectAnomalies(
+  orgId: string,
+): Promise<StorageAnomaly[]> {
   const anomalies: StorageAnomaly[] = [];
 
   const supabase = createClient();
@@ -368,9 +425,11 @@ export async function detectAnomalies(orgId: string): Promise<StorageAnomaly[]> 
   const growthRates = trends
     .slice(1)
     .map((t, i) => t.totalStorageGB - trends[i].totalStorageGB);
-  const avgGrowth = growthRates.reduce((sum, g) => sum + g, 0) / growthRates.length;
+  const avgGrowth =
+    growthRates.reduce((sum, g) => sum + g, 0) / growthRates.length;
   const stdDevGrowth = Math.sqrt(
-    growthRates.reduce((sum, g) => sum + Math.pow(g - avgGrowth, 2), 0) / growthRates.length
+    growthRates.reduce((sum, g) => sum + Math.pow(g - avgGrowth, 2), 0) /
+      growthRates.length,
   );
 
   // Check for unusual growth
@@ -388,7 +447,10 @@ export async function detectAnomalies(orgId: string): Promise<StorageAnomaly[]> 
 
     anomalies.push({
       type: recentGrowth > avgGrowth ? 'unusual_growth' : 'unusual_shrinkage',
-      severity: Math.abs(recentGrowth - avgGrowth) > 3 * stdDevGrowth ? 'high' : 'medium',
+      severity:
+        Math.abs(recentGrowth - avgGrowth) > 3 * stdDevGrowth
+          ? 'high'
+          : 'medium',
       detectedAt: new Date().toISOString(),
       metric: 'storage_growth',
       currentValue: recentGrowth,
@@ -403,7 +465,8 @@ export async function detectAnomalies(orgId: string): Promise<StorageAnomaly[]> 
   }
 
   // Check for cost spikes
-  const avgCost = trends.reduce((sum, t) => sum + t.costEstimate, 0) / trends.length;
+  const avgCost =
+    trends.reduce((sum, t) => sum + t.costEstimate, 0) / trends.length;
   const recentCost = trends[trends.length - 1].costEstimate;
   if (recentCost > avgCost * 1.5) {
     anomalies.push({
@@ -415,7 +478,8 @@ export async function detectAnomalies(orgId: string): Promise<StorageAnomaly[]> 
       expectedValue: avgCost,
       deviation: ((recentCost - avgCost) / avgCost) * 100,
       description: `Storage cost spike detected: $${recentCost.toFixed(2)} vs expected $${avgCost.toFixed(2)}`,
-      recommendation: 'Review storage tier distribution and consider migrating older files to cheaper tiers',
+      recommendation:
+        'Review storage tier distribution and consider migrating older files to cheaper tiers',
     });
   }
 
@@ -425,11 +489,16 @@ export async function detectAnomalies(orgId: string): Promise<StorageAnomaly[]> 
 /**
  * Calculate storage health score
  */
-export async function calculateStorageHealth(orgId: string): Promise<StorageHealth> {
+export async function calculateStorageHealth(
+  orgId: string,
+): Promise<StorageHealth> {
   const metrics = await getStorageMetrics(orgId);
 
   // Optimization score (0-100)
-  const optimizationScore = Math.min(100, metrics.optimization.optimizationPercentage * 2);
+  const optimizationScore = Math.min(
+    100,
+    metrics.optimization.optimizationPercentage * 2,
+  );
   const optimizationStatus =
     optimizationScore >= 80
       ? 'excellent'
@@ -440,10 +509,17 @@ export async function calculateStorageHealth(orgId: string): Promise<StorageHeal
           : 'poor';
 
   // Cost score based on tier distribution (prefer cheaper tiers for older files)
-  const hotPercentage = metrics.tierBreakdown.find((t) => t.tier === 'hot')?.percentage || 0;
+  const hotPercentage =
+    metrics.tierBreakdown.find((t) => t.tier === 'hot')?.percentage || 0;
   const costScore = Math.max(0, 100 - hotPercentage); // Lower hot tier percentage = better score
   const costStatus =
-    costScore >= 80 ? 'excellent' : costScore >= 60 ? 'good' : costScore >= 40 ? 'fair' : 'poor';
+    costScore >= 80
+      ? 'excellent'
+      : costScore >= 60
+        ? 'good'
+        : costScore >= 40
+          ? 'fair'
+          : 'poor';
 
   // Distribution score (prefer balanced tier distribution)
   const tierCount = metrics.tierBreakdown.length;
@@ -461,9 +537,10 @@ export async function calculateStorageHealth(orgId: string): Promise<StorageHeal
   const processingScore = Math.max(
     0,
     100 -
-      ((metrics.processingStatus.pending + metrics.processingStatus.failed * 2) /
+      ((metrics.processingStatus.pending +
+        metrics.processingStatus.failed * 2) /
         metrics.totalFiles) *
-        100
+        100,
   );
   const processingStatus =
     processingScore >= 80
@@ -484,7 +561,9 @@ export async function calculateStorageHealth(orgId: string): Promise<StorageHeal
   // Identify issues
   const issues: string[] = [];
   if (optimizationScore < 60) {
-    issues.push(`Low optimization rate: ${metrics.optimization.optimizationPercentage.toFixed(1)}%`);
+    issues.push(
+      `Low optimization rate: ${metrics.optimization.optimizationPercentage.toFixed(1)}%`,
+    );
   }
   if (hotPercentage > 70) {
     issues.push(`Too many files in hot tier: ${hotPercentage.toFixed(1)}%`);
@@ -502,10 +581,14 @@ export async function calculateStorageHealth(orgId: string): Promise<StorageHeal
     recommendations.push('Run batch deduplication to identify duplicate files');
   }
   if (metrics.similarity.processedFiles < metrics.totalFiles) {
-    recommendations.push('Run similarity detection to find near-duplicate content');
+    recommendations.push(
+      'Run similarity detection to find near-duplicate content',
+    );
   }
   if (hotPercentage > 70) {
-    recommendations.push('Migrate older recordings to warm or cold tiers to reduce costs');
+    recommendations.push(
+      'Migrate older recordings to warm or cold tiers to reduce costs',
+    );
   }
   if (metrics.processingStatus.failed > 0) {
     recommendations.push('Review and retry failed recordings');
@@ -605,20 +688,28 @@ export async function getGlobalMetrics(): Promise<{
   for (let i = 0; i < organizations.length; i += BATCH_SIZE) {
     const batch = organizations.slice(i, i + BATCH_SIZE);
     const batchResults = await Promise.all(
-      batch.map((org) => getStorageMetrics(org.id))
+      batch.map((org) => getStorageMetrics(org.id)),
     );
     organizationMetrics.push(...batchResults);
   }
 
-  const totalFiles = organizationMetrics.reduce((sum, m) => sum + m.totalFiles, 0);
-  const totalStorageGB = organizationMetrics.reduce((sum, m) => sum + m.totalStorageGB, 0);
+  const totalFiles = organizationMetrics.reduce(
+    (sum, m) => sum + m.totalFiles,
+    0,
+  );
+  const totalStorageGB = organizationMetrics.reduce(
+    (sum, m) => sum + m.totalStorageGB,
+    0,
+  );
   const totalSpaceSavedGB = organizationMetrics.reduce(
     (sum, m) => sum + m.optimization.totalSpaceSavedGB,
-    0
+    0,
   );
   const avgOptimizationPercentage =
-    organizationMetrics.reduce((sum, m) => sum + m.optimization.optimizationPercentage, 0) /
-    organizations.length;
+    organizationMetrics.reduce(
+      (sum, m) => sum + m.optimization.optimizationPercentage,
+      0,
+    ) / organizations.length;
 
   return {
     totalOrganizations: organizations.length,

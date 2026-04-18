@@ -18,6 +18,10 @@ import {
 } from '@/lib/types/content';
 import { generateStoragePath } from '@/lib/validations/library';
 import { createLogger } from '@/lib/utils/logger';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 import type { ContentType, FileType, JobType } from '@/lib/types/database';
 
 const logger = createLogger({ service: 'library-upload' });
@@ -90,7 +94,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       return errors.badRequest(
         'Too many files. Maximum 10 files per request.',
         { maxFiles: 10 },
-        requestId
+        requestId,
       );
     }
 
@@ -102,7 +106,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
         fileCount: files.length,
         totalSizeBytes: totalSize,
         totalSizeMB: parseFloat((totalSize / 1024 / 1024).toFixed(2)),
-        filenames: files.map(f => f.name),
+        filenames: files.map((f) => f.name),
       },
     });
 
@@ -130,7 +134,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
               index,
               status: 'error' as const,
               title: file.name,
-              error: 'Screen recordings must be created via /api/recordings endpoint',
+              error:
+                'Screen recordings must be created via /api/recordings endpoint',
             };
           }
 
@@ -146,7 +151,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
               org_id: orgId,
               created_by: userId,
               title: sanitizedFilename,
-              status: 'uploading',
+              status: SOURCE_STATUS.UPLOADING,
               content_type: contentType,
               file_type: fileType,
               original_filename: sanitizedFilename,
@@ -175,7 +180,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
           logger.info('Database record created', {
             context: { requestId, orgId, recordingId: recording.id },
-            data: { filename: sanitizedFilename, contentType, fileType, fileSizeBytes: file.size },
+            data: {
+              filename: sanitizedFilename,
+              contentType,
+              fileType,
+              fileSizeBytes: file.size,
+            },
           });
 
           // Generate storage path
@@ -183,46 +193,57 @@ export const POST = apiHandler(async (request: NextRequest) => {
             orgId,
             contentType,
             recording.id,
-            fileType
+            fileType,
           );
 
           // Upload file to Supabase Storage
           const fileBuffer = await file.arrayBuffer();
-          const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-            .from('content')
-            .upload(storagePath, fileBuffer, {
-              contentType: file.type,
-              upsert: false,
-            });
+          const { data: uploadData, error: uploadError } =
+            await supabaseAdmin.storage
+              .from('content')
+              .upload(storagePath, fileBuffer, {
+                contentType: file.type,
+                upsert: false,
+              });
 
           if (uploadError) {
             logger.error('Storage upload failed', {
-              context: { requestId, orgId, recordingId: recording.id, storagePath },
+              context: {
+                requestId,
+                orgId,
+                recordingId: recording.id,
+                storagePath,
+              },
               error: uploadError as Error,
             });
 
             // Clean up database record
-            await supabaseAdmin
-              .from('content')
-              .delete()
-              .eq('id', recording.id);
+            await supabaseAdmin.from('content').delete().eq('id', recording.id);
 
             // Provide more specific error messages
             let errorMessage = `Storage upload failed: ${uploadError.message}`;
 
             // Check for common error scenarios
             // Handle statusCode as both string and number (if it exists on the error object)
-            const statusCode = 'statusCode' in uploadError && typeof uploadError.statusCode === 'number'
-              ? uploadError.statusCode
-              : undefined;
+            const statusCode =
+              'statusCode' in uploadError &&
+              typeof uploadError.statusCode === 'number'
+                ? uploadError.statusCode
+                : undefined;
 
-            if (uploadError.message?.includes('exceeded') || statusCode === 413) {
+            if (
+              uploadError.message?.includes('exceeded') ||
+              statusCode === 413
+            ) {
               // Use shared constants for file size limits
               const videoLimit = FILE_SIZE_LIMIT_LABELS.video;
               const audioLimit = FILE_SIZE_LIMIT_LABELS.audio;
               const documentLimit = FILE_SIZE_LIMIT_LABELS.document;
               errorMessage = `File too large. Your file (${formatFileSize(file.size)}) exceeds the storage limit. Maximum: ${videoLimit} for videos, ${audioLimit} for audio, ${documentLimit} for documents.`;
-            } else if (uploadError.message?.includes('mime') || uploadError.message?.includes('type')) {
+            } else if (
+              uploadError.message?.includes('mime') ||
+              uploadError.message?.includes('type')
+            ) {
               errorMessage = `File type not supported. Supported formats: MP4, MOV, WEBM, AVI (video), MP3, WAV, M4A, OGG (audio), PDF, DOCX (documents), TXT, MD (text).`;
             }
 
@@ -239,7 +260,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
             .from('content')
             .update({
               storage_path_raw: storagePath,
-              status: 'uploaded',
+              status: SOURCE_STATUS.UPLOADED,
             })
             .eq('id', recording.id);
 
@@ -278,16 +299,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
             });
 
             // Update recording status based on first job
-            let newStatus: typeof recording.status = 'uploaded';
-            if (firstJobType === 'transcribe') {
-              newStatus = 'transcribing';
-            } else if (firstJobType === 'extract_audio') {
-              newStatus = 'transcribing';
-            } else if (firstJobType.startsWith('extract_text')) {
-              newStatus = 'transcribing';
-            } else if (firstJobType === 'process_text_note') {
-              newStatus = 'transcribing';
-            }
+            const newStatus =
+              getQueuedSourceStatusForJob(firstJobType) ??
+              SOURCE_STATUS.UPLOADED;
 
             await supabaseAdmin
               .from('content')
@@ -327,11 +341,13 @@ export const POST = apiHandler(async (request: NextRequest) => {
             error: error.message || 'Unknown error occurred',
           };
         }
-      })
+      }),
     );
 
     // Calculate summary
-    const successful = uploadResults.filter((r) => r.status === 'success').length;
+    const successful = uploadResults.filter(
+      (r) => r.status === 'success',
+    ).length;
     const failed = uploadResults.filter((r) => r.status === 'error').length;
 
     logger.info('Upload request completed', {
@@ -340,7 +356,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
         total: uploadResults.length,
         successful,
         failed,
-        successRate: parseFloat(((successful / uploadResults.length) * 100).toFixed(2)),
+        successRate: parseFloat(
+          ((successful / uploadResults.length) * 100).toFixed(2),
+        ),
       },
     });
 
@@ -354,7 +372,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
         },
       },
       requestId,
-      successful > 0 ? 201 : 400
+      successful > 0 ? 201 : 400,
     );
   } catch (error: any) {
     logger.error('Upload request error', {

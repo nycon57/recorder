@@ -16,6 +16,10 @@ import { randomUUID } from 'crypto';
 import type { Database } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { openai } from '@/lib/openai/client';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -61,15 +65,19 @@ export async function transcribeRecording(job: Job): Promise<void> {
   const payload = job.payload as unknown as TranscribePayload;
   const { recordingId, orgId, storagePath } = payload;
 
-  console.log(`[Transcribe] Using OpenAI Whisper for transcription (Google for doc gen)`);
-  console.log(`[Transcribe] Starting transcription for recording ${recordingId}`);
+  console.log(
+    `[Transcribe] Using OpenAI Whisper for transcription (Google for doc gen)`,
+  );
+  console.log(
+    `[Transcribe] Starting transcription for recording ${recordingId}`,
+  );
 
   const supabase = createAdminClient();
 
   // Update recording status
   await supabase
     .from('content')
-    .update({ status: 'transcribing' })
+    .update({ status: SOURCE_STATUS.TRANSCRIBING })
     .eq('id', recordingId);
 
   let tempFilePath: string | null = null;
@@ -82,7 +90,9 @@ export async function transcribeRecording(job: Job): Promise<void> {
       .download(storagePath);
 
     if (downloadError || !videoBlob) {
-      throw new Error(`Failed to download video: ${downloadError?.message || 'Unknown error'}`);
+      throw new Error(
+        `Failed to download video: ${downloadError?.message || 'Unknown error'}`,
+      );
     }
 
     // Save to temp file
@@ -104,7 +114,9 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     const whisperResponse = transcription as unknown as WhisperResponse;
 
-    console.log(`[Transcribe] Transcription completed. Duration: ${whisperResponse.duration}s`);
+    console.log(
+      `[Transcribe] Transcription completed. Duration: ${whisperResponse.duration}s`,
+    );
 
     // Save transcript to database
     const { data: transcript, error: transcriptError } = await supabase
@@ -129,12 +141,6 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     console.log(`[Transcribe] Saved transcript ${transcript.id}`);
 
-    // Update recording status
-    await supabase
-      .from('content')
-      .update({ status: 'transcribed' })
-      .eq('id', recordingId);
-
     // Enqueue document generation job (WILL USE GOOGLE GEMINI)
     await supabase.from('jobs').insert({
       type: 'doc_generate',
@@ -147,7 +153,18 @@ export async function transcribeRecording(job: Job): Promise<void> {
       dedupe_key: `doc_generate:${recordingId}`,
     });
 
-    console.log(`[Transcribe] Enqueued document generation job (will use Google Gemini)`);
+    await supabase
+      .from('content')
+      .update({
+        status:
+          getQueuedSourceStatusForJob('doc_generate') ??
+          SOURCE_STATUS.DOCUMENT_GENERATING,
+      })
+      .eq('id', recordingId);
+
+    console.log(
+      `[Transcribe] Enqueued document generation job (will use Google Gemini)`,
+    );
 
     // Create event for notifications
     await supabase.from('events').insert({
@@ -158,7 +175,6 @@ export async function transcribeRecording(job: Job): Promise<void> {
         orgId,
       },
     });
-
   } catch (error) {
     console.error(`[Transcribe] Error:`, error);
 
@@ -166,9 +182,10 @@ export async function transcribeRecording(job: Job): Promise<void> {
     await supabase
       .from('content')
       .update({
-        status: 'error',
+        status: SOURCE_STATUS.ERROR,
         metadata: {
-          error: error instanceof Error ? error.message : 'Transcription failed',
+          error:
+            error instanceof Error ? error.message : 'Transcription failed',
         },
       })
       .eq('id', recordingId);

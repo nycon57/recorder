@@ -9,6 +9,10 @@ import {
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { reprocessRecordingSchema } from '@/lib/validations/api';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForReprocessStep,
+} from '@/lib/utils/status-helpers';
 
 /**
  * POST /api/recordings/[id]/reprocess
@@ -16,7 +20,10 @@ import { reprocessRecordingSchema } from '@/lib/validations/api';
  * Supports: transcribe, document, embeddings, or all
  */
 export const POST = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const { orgId, userId } = await requireOrg();
     const supabase = supabaseAdmin;
     const { id } = await params;
@@ -56,7 +63,10 @@ export const POST = apiHandler(
         .eq('content_id', id);
 
       if (deleteTranscriptError) {
-        console.error('[POST /reprocess] Error deleting transcript:', deleteTranscriptError);
+        console.error(
+          '[POST /reprocess] Error deleting transcript:',
+          deleteTranscriptError,
+        );
         // Non-fatal, continue with job creation
       }
 
@@ -70,16 +80,6 @@ export const POST = apiHandler(
         },
         dedupe_key: `transcribe:${id}:${timestamp}`,
       });
-
-      // Update recording status
-      await supabase
-        .from('content')
-        .update({
-          status: 'uploaded',
-          error_message: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
     }
 
     if (step === 'document' || step === 'all') {
@@ -92,7 +92,7 @@ export const POST = apiHandler(
 
       if (!transcript && step === 'document') {
         return errors.badRequest(
-          'Cannot regenerate document: Recording must be transcribed first'
+          'Cannot regenerate document: Recording must be transcribed first',
         );
       }
 
@@ -135,13 +135,13 @@ export const POST = apiHandler(
 
       if (!transcript && step === 'embeddings') {
         return errors.badRequest(
-          'Cannot regenerate embeddings: Recording must be transcribed first'
+          'Cannot regenerate embeddings: Recording must be transcribed first',
         );
       }
 
       if (!document && step === 'embeddings') {
         return errors.badRequest(
-          'Cannot regenerate embeddings: Document must be generated first'
+          'Cannot regenerate embeddings: Document must be generated first',
         );
       }
 
@@ -153,7 +153,10 @@ export const POST = apiHandler(
           .eq('content_id', id);
 
         if (deleteChunksError) {
-          console.error('[POST /reprocess] Error deleting chunks:', deleteChunksError);
+          console.error(
+            '[POST /reprocess] Error deleting chunks:',
+            deleteChunksError,
+          );
           // Non-fatal, continue with job creation
         }
 
@@ -172,18 +175,20 @@ export const POST = apiHandler(
 
     // Enqueue all jobs
     if (jobs.length === 0) {
-      return errors.badRequest('No jobs to enqueue. Recording may not be ready for reprocessing.');
+      return errors.badRequest(
+        'No jobs to enqueue. Recording may not be ready for reprocessing.',
+      );
     }
 
     const { data: createdJobs, error: jobError } = await supabase
       .from('jobs')
       .insert(
-        jobs.map(job => ({
+        jobs.map((job) => ({
           type: job.type,
           status: 'pending' as const,
           payload: job.payload,
           dedupe_key: job.dedupe_key,
-        }))
+        })),
       )
       .select();
 
@@ -192,14 +197,37 @@ export const POST = apiHandler(
       return errors.internalError();
     }
 
+    const queuedStatus = getQueuedSourceStatusForReprocessStep(
+      step as Parameters<typeof getQueuedSourceStatusForReprocessStep>[0],
+    );
+
+    if (queuedStatus) {
+      await supabase
+        .from('content')
+        .update({
+          status: queuedStatus,
+          error_message: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+    } else {
+      await supabase
+        .from('content')
+        .update({
+          error_message: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+    }
+
     console.log(
-      `[POST /reprocess] Reprocessing ${step} for recording ${id} by user ${userId}. Created ${createdJobs?.length} job(s).`
+      `[POST /reprocess] Reprocessing ${step} for recording ${id} by user ${userId}. Created ${createdJobs?.length} job(s).`,
     );
 
     return successResponse(
       {
         message: `Reprocessing started: ${step}`,
-        jobs: createdJobs?.map(job => ({
+        jobs: createdJobs?.map((job) => ({
           id: job.id,
           type: job.type,
           status: job.status,
@@ -208,7 +236,7 @@ export const POST = apiHandler(
         recordingId: id,
       },
       undefined,
-      202 // Accepted
+      202, // Accepted
     );
-  }
+  },
 );

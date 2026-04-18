@@ -24,6 +24,7 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { requireOrg } from '@/lib/utils/api';
 import { GoogleDriveConnector } from '@/lib/connectors/google-drive';
 import { ConnectorType } from '@/lib/connectors/base';
+import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
 import crypto from 'crypto';
 
 interface ImportRequest {
@@ -66,7 +67,8 @@ function getFileType(mimeType: string): string {
     'application/vnd.google-apps.spreadsheet': 'google_sheet',
     'application/vnd.google-apps.presentation': 'google_slides',
     'application/pdf': 'pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+      'docx',
     'application/msword': 'doc',
     'text/plain': 'txt',
     'text/markdown': 'md',
@@ -90,14 +92,14 @@ export async function POST(req: NextRequest) {
     if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
       return NextResponse.json(
         { error: 'No files selected for import' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (fileIds.length > 20) {
       return NextResponse.json(
         { error: 'Maximum 20 files can be imported at once' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -113,7 +115,7 @@ export async function POST(req: NextRequest) {
     if (configError || !connectorConfig) {
       return NextResponse.json(
         { error: 'Google Drive not connected' },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -123,12 +125,14 @@ export async function POST(req: NextRequest) {
       {
         accessToken: credentials.accessToken,
         refreshToken: credentials.refreshToken,
-        expiresAt: credentials.expiresAt ? new Date(credentials.expiresAt) : undefined,
+        expiresAt: credentials.expiresAt
+          ? new Date(credentials.expiresAt)
+          : undefined,
         scopes: credentials.scopes,
       },
       {
         connectorId: connectorConfig.id,
-      }
+      },
     );
 
     // Test connection
@@ -136,7 +140,7 @@ export async function POST(req: NextRequest) {
     if (!testResult.success) {
       return NextResponse.json(
         { error: 'Failed to connect to Google Drive. Please reconnect.' },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -149,8 +153,10 @@ export async function POST(req: NextRequest) {
       .eq('source_type', 'google_drive')
       .in('source_external_id', fileIds);
 
-    const existingFileIds = new Set((existingImports || []).map(d => d.source_external_id));
-    const newFileIds = fileIds.filter(id => !existingFileIds.has(id));
+    const existingFileIds = new Set(
+      (existingImports || []).map((d) => d.source_external_id),
+    );
+    const newFileIds = fileIds.filter((id) => !existingFileIds.has(id));
 
     if (newFileIds.length === 0) {
       return NextResponse.json({
@@ -161,7 +167,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    console.log(`[Google Drive Import] Importing ${newFileIds.length} files for org ${orgId}`);
+    console.log(
+      `[Google Drive Import] Importing ${newFileIds.length} files for org ${orgId}`,
+    );
 
     // Import each file
     const results = {
@@ -177,8 +185,10 @@ export async function POST(req: NextRequest) {
         const fileContent = await connector.downloadFile(fileId);
 
         // Check if file type is supported
-        if (!SUPPORTED_MIME_TYPES.has(fileContent.mimeType) &&
-            !fileContent.mimeType.startsWith('text/')) {
+        if (
+          !SUPPORTED_MIME_TYPES.has(fileContent.mimeType) &&
+          !fileContent.mimeType.startsWith('text/')
+        ) {
           results.failed.push({
             fileId,
             error: `Unsupported file type: ${fileContent.mimeType}`,
@@ -215,7 +225,7 @@ export async function POST(req: NextRequest) {
             title: fileContent.title,
             content_type: contentType,
             file_type: fileType,
-            status: 'pending',
+            status: SOURCE_STATUS.UPLOADED,
             // Source tracking columns (new unified architecture)
             source_type: 'google_drive',
             source_connector_id: connectorConfig.id,
@@ -235,7 +245,10 @@ export async function POST(req: NextRequest) {
           .single();
 
         if (insertError) {
-          console.error(`[Google Drive Import] Failed to insert content:`, insertError);
+          console.error(
+            `[Google Drive Import] Failed to insert content:`,
+            insertError,
+          );
           results.failed.push({
             fileId,
             error: insertError.message,
@@ -262,7 +275,10 @@ export async function POST(req: NextRequest) {
           });
 
         if (syncStateError) {
-          console.error(`[Google Drive Import] Failed to create sync state:`, syncStateError);
+          console.error(
+            `[Google Drive Import] Failed to create sync state:`,
+            syncStateError,
+          );
           // Continue anyway - content is created, sync state is supplementary
         }
 
@@ -278,11 +294,14 @@ export async function POST(req: NextRequest) {
           });
 
         if (transcriptError) {
-          console.error(`[Google Drive Import] Failed to create transcript:`, transcriptError);
+          console.error(
+            `[Google Drive Import] Failed to create transcript:`,
+            transcriptError,
+          );
           // Update content status to error
           await supabase
             .from('content')
-            .update({ status: 'error' })
+            .update({ status: SOURCE_STATUS.ERROR })
             .eq('id', contentRecord.id);
           results.failed.push({
             fileId,
@@ -294,7 +313,7 @@ export async function POST(req: NextRequest) {
         // Update content status to transcribed (ready for embedding)
         await supabase
           .from('content')
-          .update({ status: 'transcribed' })
+          .update({ status: SOURCE_STATUS.COMPLETED })
           .eq('id', contentRecord.id);
 
         // Enqueue embedding job (same as other content types)
@@ -309,21 +328,30 @@ export async function POST(req: NextRequest) {
         });
 
         if (jobError) {
-          console.error(`[Google Drive Import] Failed to create embedding job:`, jobError);
+          console.error(
+            `[Google Drive Import] Failed to create embedding job:`,
+            jobError,
+          );
           // Content is created, job failed - update status
           await supabase
             .from('content')
-            .update({ status: 'error' })
+            .update({ status: SOURCE_STATUS.ERROR })
             .eq('id', contentRecord.id);
         }
 
         results.imported.push(fileId);
-        console.log(`[Google Drive Import] Successfully imported ${fileContent.title}`);
+        console.log(
+          `[Google Drive Import] Successfully imported ${fileContent.title}`,
+        );
       } catch (fileError) {
-        console.error(`[Google Drive Import] Error importing file ${fileId}:`, fileError);
+        console.error(
+          `[Google Drive Import] Error importing file ${fileId}:`,
+          fileError,
+        );
         results.failed.push({
           fileId,
-          error: fileError instanceof Error ? fileError.message : 'Unknown error',
+          error:
+            fileError instanceof Error ? fileError.message : 'Unknown error',
         });
       }
     }
@@ -353,8 +381,11 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('[Google Drive Import] Error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to import files' },
-      { status: 500 }
+      {
+        error:
+          error instanceof Error ? error.message : 'Failed to import files',
+      },
+      { status: 500 },
     );
   }
 }

@@ -9,13 +9,20 @@ import {
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { updateDocumentMarkdownSchema } from '@/lib/validations/api';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 
 /**
  * GET /api/recordings/[id]/document
  * Retrieves the document for a recording
  */
 export const GET = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const { orgId } = await requireOrg();
     const supabase = supabaseAdmin;
     const { id } = await params;
@@ -69,7 +76,7 @@ export const GET = apiHandler(
         updatedAt: document.updated_at,
       },
     });
-  }
+  },
 );
 
 /**
@@ -80,7 +87,10 @@ export const GET = apiHandler(
  * Optional: Set refreshEmbeddings=true to automatically update vectors after edit
  */
 export const PUT = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const { orgId, userId } = await requireOrg();
     const supabase = supabaseAdmin;
     const { id } = await params;
@@ -143,7 +153,9 @@ export const PUT = apiHandler(
       return errors.internalError();
     }
 
-    console.log(`[PUT /document] Document updated for recording ${id} by user ${userId} (${newVersion})`);
+    console.log(
+      `[PUT /document] Document updated for recording ${id} by user ${userId} (${newVersion})`,
+    );
 
     // If refreshEmbeddings=true, automatically enqueue embeddings refresh
     let jobId = null;
@@ -158,10 +170,7 @@ export const PUT = apiHandler(
 
       if (transcript) {
         // Delete existing chunks (they're now stale)
-        await supabase
-          .from('transcript_chunks')
-          .delete()
-          .eq('content_id', id);
+        await supabase.from('transcript_chunks').delete().eq('content_id', id);
 
         // Enqueue embeddings job
         const { data: job } = await supabase
@@ -181,7 +190,9 @@ export const PUT = apiHandler(
           .single();
 
         jobId = job?.id;
-        console.log(`[PUT /document] Auto-enqueued embeddings refresh job ${jobId} for recording ${id}`);
+        console.log(
+          `[PUT /document] Auto-enqueued embeddings refresh job ${jobId} for recording ${id}`,
+        );
       }
     }
 
@@ -206,7 +217,7 @@ export const PUT = apiHandler(
         : 'Document updated successfully',
       embeddingsJobId: jobId,
     });
-  }
+  },
 );
 
 /**
@@ -215,7 +226,10 @@ export const PUT = apiHandler(
  * Enqueues a new doc_generate job
  */
 export const POST = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const { orgId, userId } = await requireOrg();
     const supabase = supabaseAdmin;
     const { id } = await params;
@@ -242,7 +256,7 @@ export const POST = apiHandler(
 
     if (transcriptError || !transcript) {
       return errors.badRequest(
-        'Cannot regenerate document: Recording must be transcribed first'
+        'Cannot regenerate document: Recording must be transcribed first',
       );
     }
 
@@ -287,7 +301,20 @@ export const POST = apiHandler(
       return errors.internalError();
     }
 
-    console.log(`[POST /document] Document regeneration job created for recording ${id} by user ${userId}`);
+    await supabase
+      .from('content')
+      .update({
+        status:
+          getQueuedSourceStatusForJob('doc_generate') ??
+          SOURCE_STATUS.DOCUMENT_GENERATING,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('org_id', orgId);
+
+    console.log(
+      `[POST /document] Document regeneration job created for recording ${id} by user ${userId}`,
+    );
 
     return successResponse(
       {
@@ -296,7 +323,7 @@ export const POST = apiHandler(
         status: 'Document will be regenerated shortly',
       },
       undefined,
-      202 // Accepted
+      202, // Accepted
     );
-  }
+  },
 );

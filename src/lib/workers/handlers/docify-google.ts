@@ -11,11 +11,23 @@ import { isAgentEnabled } from '@/lib/services/agent-config';
 import type { Database } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
-import { streamDocumentGeneration, isStreamingAvailable, sendCompletionNotification } from '@/lib/services/llm-streaming-helper';
-import { detectContentType, getInsightsPrompt, SCREEN_RECORDING_ENHANCEMENT } from '@/lib/prompts/insights-prompts';
-import { getAnalysisPrompt, type AnalysisType } from '@/lib/services/analysis-templates';
+import {
+  streamDocumentGeneration,
+  isStreamingAvailable,
+  sendCompletionNotification,
+} from '@/lib/services/llm-streaming-helper';
+import {
+  detectContentType,
+  getInsightsPrompt,
+  SCREEN_RECORDING_ENHANCEMENT,
+} from '@/lib/prompts/insights-prompts';
+import {
+  getAnalysisPrompt,
+  type AnalysisType,
+} from '@/lib/services/analysis-templates';
 import OpenAI from 'openai';
 import { checkAutoPublish } from '@/lib/workers/hooks/auto-publish';
+import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
 
 // PERF-AI-006: Lazy-initialized OpenAI client for fallback
 let openaiClient: OpenAI | null = null;
@@ -51,7 +63,7 @@ function isRecoverableGeminiError(error: any): boolean {
  */
 async function generateDocumentWithOpenAIFallback(
   prompt: string,
-  logger: ReturnType<typeof createLogger>
+  logger: ReturnType<typeof createLogger>,
 ): Promise<{ content: string; provider: 'openai' }> {
   logger.info('Falling back to OpenAI GPT-4o-mini for document generation');
 
@@ -62,7 +74,8 @@ async function generateDocumentWithOpenAIFallback(
     messages: [
       {
         role: 'system',
-        content: 'You are a professional document writer that creates clear, well-structured documents from transcripts. Follow the user\'s formatting instructions exactly.',
+        content:
+          "You are a professional document writer that creates clear, well-structured documents from transcripts. Follow the user's formatting instructions exactly.",
       },
       {
         role: 'user',
@@ -99,7 +112,10 @@ interface DocifyPayload {
 /**
  * Generate document from transcript using Google Gemini
  */
-export async function generateDocument(job: Job, progressCallback?: (percent: number, message: string, data?: any) => void): Promise<void> {
+export async function generateDocument(
+  job: Job,
+  progressCallback?: (percent: number, message: string, data?: any) => void,
+): Promise<void> {
   const payload = job.payload as unknown as DocifyPayload;
   const { recordingId, transcriptId, orgId } = payload;
 
@@ -141,7 +157,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
     // Ensure recording status is correct
     await supabase
       .from('content')
-      .update({ status: 'completed' })
+      .update({ status: SOURCE_STATUS.COMPLETED })
       .eq('id', recordingId);
 
     // Enqueue embedding generation job (in case pipeline was interrupted)
@@ -165,7 +181,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
         dedupe_key: `generate_embeddings:${recordingId}`,
       });
       console.log(
-        `[Docify] Enqueued embedding generation job for existing document`
+        `[Docify] Enqueued embedding generation job for existing document`,
       );
     }
 
@@ -175,23 +191,31 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
   // Update recording status
   await supabase
     .from('content')
-    .update({ status: 'doc_generating' })
+    .update({ status: SOURCE_STATUS.DOCUMENT_GENERATING })
     .eq('id', recordingId);
 
   try {
     // Fetch transcript with visual events
-    const { data: transcript, error: transcriptError} = await supabase
+    const { data: transcript, error: transcriptError } = await supabase
       .from('transcripts')
-      .select('text, language, words_json, visual_events, video_metadata, provider')
+      .select(
+        'text, language, words_json, visual_events, video_metadata, provider',
+      )
       .eq('id', transcriptId)
       .single();
 
     if (transcriptError || !transcript) {
-      throw new Error(`Failed to fetch transcript: ${transcriptError?.message || 'Not found'}`);
+      throw new Error(
+        `Failed to fetch transcript: ${transcriptError?.message || 'Not found'}`,
+      );
     }
 
-    const hasVisualContext = transcript.visual_events && (transcript.visual_events as any[]).length > 0;
-    const visualEventsCount = hasVisualContext ? (transcript.visual_events as any[]).length : 0;
+    const hasVisualContext =
+      transcript.visual_events &&
+      (transcript.visual_events as any[]).length > 0;
+    const visualEventsCount = hasVisualContext
+      ? (transcript.visual_events as any[]).length
+      : 0;
 
     logger.info('Loaded transcript', {
       context: {
@@ -205,7 +229,12 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
     // Send progress via callback AND streaming (if available)
     progressCallback?.(10, 'Loading transcript and metadata...');
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'document', 10, 'Loading transcript and metadata...');
+      streamingManager.sendProgress(
+        recordingId,
+        'document',
+        10,
+        'Loading transcript and metadata...',
+      );
     }
 
     // Fetch recording metadata for context (including analysis settings)
@@ -233,7 +262,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
       // Mark recording as completed without generating document
       await supabase
         .from('content')
-        .update({ status: 'completed' })
+        .update({ status: SOURCE_STATUS.COMPLETED })
         .eq('id', recordingId);
 
       // Still enqueue embedding generation for raw transcript
@@ -248,12 +277,18 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
         dedupe_key: `generate_embeddings:${recordingId}`,
       });
 
-      logger.info('Skipped document generation, enqueued embedding generation', {
-        context: { recordingId },
-      });
+      logger.info(
+        'Skipped document generation, enqueued embedding generation',
+        {
+          context: { recordingId },
+        },
+      );
 
       if (isStreaming) {
-        streamingManager.sendComplete(recordingId, 'Analysis skipped as requested');
+        streamingManager.sendComplete(
+          recordingId,
+          'Analysis skipped as requested',
+        );
       }
 
       return;
@@ -276,7 +311,8 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
     let visualContext = '';
     if (hasVisualContext) {
       const visualEvents = transcript.visual_events as any[];
-      visualContext = '\n\nVISUAL EVENTS (what happened on screen):\n' +
+      visualContext =
+        '\n\nVISUAL EVENTS (what happened on screen):\n' +
         visualEvents
           .map((event: any, index: number) => {
             const parts = [
@@ -308,7 +344,12 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
 
       progressCallback?.(20, `Using ${analysisType} analysis template...`);
       if (isStreaming) {
-        streamingManager.sendProgress(recordingId, 'document', 20, `Using ${analysisType} analysis template...`);
+        streamingManager.sendProgress(
+          recordingId,
+          'document',
+          20,
+          `Using ${analysisType} analysis template...`,
+        );
       }
 
       // Get specialized prompt based on analysis type
@@ -337,17 +378,30 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
 
       progressCallback?.(25, `Generating ${analysisType} document...`);
       if (isStreaming) {
-        streamingManager.sendProgress(recordingId, 'document', 25, `Generating ${analysisType} document...`);
+        streamingManager.sendProgress(
+          recordingId,
+          'document',
+          25,
+          `Generating ${analysisType} document...`,
+        );
       }
     } else {
       // Fall back to legacy content type detection system
-      logger.info('No explicit analysis type, detecting content type for insights', {
-        context: { transcriptLength: transcript.text.length },
-      });
+      logger.info(
+        'No explicit analysis type, detecting content type for insights',
+        {
+          context: { transcriptLength: transcript.text.length },
+        },
+      );
 
       progressCallback?.(20, 'Analyzing content type...');
       if (isStreaming) {
-        streamingManager.sendProgress(recordingId, 'document', 20, 'Analyzing content type...');
+        streamingManager.sendProgress(
+          recordingId,
+          'document',
+          20,
+          'Analyzing content type...',
+        );
       }
 
       const contentType = await detectContentType(transcript.text, model);
@@ -356,9 +410,17 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
         context: { contentType, hasVisualContext },
       });
 
-      progressCallback?.(25, `Generating ${contentType.replace('_', ' ')} insights...`);
+      progressCallback?.(
+        25,
+        `Generating ${contentType.replace('_', ' ')} insights...`,
+      );
       if (isStreaming) {
-        streamingManager.sendProgress(recordingId, 'document', 25, `Generating ${contentType.replace('_', ' ')} insights...`);
+        streamingManager.sendProgress(
+          recordingId,
+          'document',
+          25,
+          `Generating ${contentType.replace('_', ' ')} insights...`,
+        );
       }
 
       // Get content-type-specific prompt (legacy system)
@@ -392,15 +454,28 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
 
     progressCallback?.(30, 'Preparing prompt for AI analysis...');
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'document', 30, 'Preparing prompt for AI analysis...');
+      streamingManager.sendProgress(
+        recordingId,
+        'document',
+        30,
+        'Preparing prompt for AI analysis...',
+      );
     }
 
     // Brief delay to show the "preparing" message
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
-    progressCallback?.(35, 'Calling Gemini AI (this may take 15-30 seconds)...');
+    progressCallback?.(
+      35,
+      'Calling Gemini AI (this may take 15-30 seconds)...',
+    );
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'document', 35, 'Calling Gemini AI (this may take 15-30 seconds)...');
+      streamingManager.sendProgress(
+        recordingId,
+        'document',
+        35,
+        'Calling Gemini AI (this may take 15-30 seconds)...',
+      );
     }
 
     // PERF-AI-006: Track which provider was used
@@ -421,7 +496,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
           chunkDelayMs: 100,
           punctuationChunking: true,
           progressUpdateInterval: 5,
-        }
+        },
       );
 
       generatedContent = streamingResult.fullText;
@@ -434,19 +509,30 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
     } catch (geminiError: any) {
       // PERF-AI-006: Attempt fallback on recoverable errors
       if (isRecoverableGeminiError(geminiError) && process.env.OPENAI_API_KEY) {
-        logger.warn('Gemini document generation failed, attempting OpenAI fallback', {
-          context: {
-            recordingId,
-            error: geminiError.message || String(geminiError),
+        logger.warn(
+          'Gemini document generation failed, attempting OpenAI fallback',
+          {
+            context: {
+              recordingId,
+              error: geminiError.message || String(geminiError),
+            },
           },
-        });
+        );
 
         progressCallback?.(40, 'Gemini unavailable, using OpenAI fallback...');
         if (isStreaming) {
-          streamingManager.sendProgress(recordingId, 'document', 40, 'Gemini unavailable, using OpenAI fallback...');
+          streamingManager.sendProgress(
+            recordingId,
+            'document',
+            40,
+            'Gemini unavailable, using OpenAI fallback...',
+          );
         }
 
-        const fallbackResult = await generateDocumentWithOpenAIFallback(enhancedPrompt, logger);
+        const fallbackResult = await generateDocumentWithOpenAIFallback(
+          enhancedPrompt,
+          logger,
+        );
         generatedContent = fallbackResult.content;
         docProvider = 'openai';
         modelUsed = 'gpt-4o-mini';
@@ -469,15 +555,25 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
 
     progressCallback?.(80, 'AI response received, processing output...');
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'document', 80, 'AI response received, processing output...');
+      streamingManager.sendProgress(
+        recordingId,
+        'document',
+        80,
+        'AI response received, processing output...',
+      );
     }
 
     // Brief delay to show processing message
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     progressCallback?.(85, 'Saving document to database...');
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'document', 85, 'Saving document to database...');
+      streamingManager.sendProgress(
+        recordingId,
+        'document',
+        85,
+        'Saving document to database...',
+      );
     }
 
     // Save document to database
@@ -518,13 +614,18 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
 
     progressCallback?.(90, 'Document saved, starting embedding generation...');
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'document', 90, 'Document saved, starting embedding generation...');
+      streamingManager.sendProgress(
+        recordingId,
+        'document',
+        90,
+        'Document saved, starting embedding generation...',
+      );
     }
 
     // Update recording status
     await supabase
       .from('content')
-      .update({ status: 'completed' })
+      .update({ status: SOURCE_STATUS.COMPLETED })
       .eq('id', recordingId);
 
     // Enqueue embeddings job (always required)
@@ -553,7 +654,9 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
         dedupe_key: `workflow_extraction:${recordingId}`,
         priority: 2, // JOB_PRIORITY.NORMAL
       });
-      logger.info('Enqueuing workflow extraction job', { context: { recordingId } });
+      logger.info('Enqueuing workflow extraction job', {
+        context: { recordingId },
+      });
       await Promise.all([embeddingsInsert, workflowInsert]);
     } else {
       await embeddingsInsert;
@@ -589,7 +692,10 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
         context: {
           recordingId,
           documentId: document.id,
-          error: autoPublishError instanceof Error ? autoPublishError.message : 'Unknown error',
+          error:
+            autoPublishError instanceof Error
+              ? autoPublishError.message
+              : 'Unknown error',
         },
       });
     }
@@ -610,11 +716,14 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
 
     if (isStreaming) {
       sendCompletionNotification(recordingId, 'Document generation', totalTime);
-      streamingManager.sendComplete(recordingId, `Document generation complete in ${Math.round(totalTime / 1000)}s`);
+      streamingManager.sendComplete(
+        recordingId,
+        `Document generation complete in ${Math.round(totalTime / 1000)}s`,
+      );
     }
-
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Document generation failed';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Document generation failed';
 
     logger.error('Document generation failed', {
       context: {
@@ -634,7 +743,7 @@ export async function generateDocument(job: Job, progressCallback?: (percent: nu
     await supabase
       .from('content')
       .update({
-        status: 'error',
+        status: SOURCE_STATUS.ERROR,
         metadata: {
           error: errorMessage,
           errorType: 'document_generation',

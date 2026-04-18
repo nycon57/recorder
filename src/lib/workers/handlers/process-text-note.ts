@@ -9,6 +9,10 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
+import {
+  SOURCE_STATUS,
+  getQueuedSourceStatusForJob,
+} from '@/lib/utils/status-helpers';
 
 import type { ProgressCallback } from '../job-processor';
 
@@ -28,7 +32,7 @@ const MAX_TEXT_LENGTH = 500000; // Maximum characters to process
  */
 export async function handleProcessTextNote(
   job: Job,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const payload = job.payload as unknown as ProcessTextNotePayload;
   const { recordingId, orgId, transcriptId } = payload;
@@ -47,12 +51,7 @@ export async function handleProcessTextNote(
   const supabase = createAdminClient();
 
   progressCallback?.(10, 'Loading text note...');
-  streamingManager.sendProgress(
-    recordingId,
-    'all',
-    10,
-    'Loading text note...'
-  );
+  streamingManager.sendProgress(recordingId, 'all', 10, 'Loading text note...');
 
   try {
     // If transcriptId is provided, fetch existing transcript
@@ -86,7 +85,7 @@ export async function handleProcessTextNote(
     // If no transcript exists, this is an error
     if (!transcript) {
       throw new Error(
-        'No transcript found for text note. Text content should be created before processing.'
+        'No transcript found for text note. Text content should be created before processing.',
       );
     }
 
@@ -102,14 +101,14 @@ export async function handleProcessTextNote(
       recordingId,
       'all',
       30,
-      'Validating text content...'
+      'Validating text content...',
     );
 
     // Validate text length
     const textContent = transcript.text || '';
     if (textContent.trim().length < MIN_TEXT_LENGTH) {
       throw new Error(
-        `Text note is too short. Minimum ${MIN_TEXT_LENGTH} characters required.`
+        `Text note is too short. Minimum ${MIN_TEXT_LENGTH} characters required.`,
       );
     }
 
@@ -127,7 +126,7 @@ export async function handleProcessTextNote(
       recordingId,
       'all',
       50,
-      'Cleaning and normalizing text...'
+      'Cleaning and normalizing text...',
     );
 
     // Clean and normalize text
@@ -173,21 +172,15 @@ export async function handleProcessTextNote(
       recordingId,
       'all',
       70,
-      'Text validation complete...'
+      'Text validation complete...',
     );
-
-    // Update recording status
-    await supabase
-      .from('content')
-      .update({ status: 'transcribed' })
-      .eq('id', recordingId);
 
     progressCallback?.(85, 'Queuing document generation...');
     streamingManager.sendProgress(
       recordingId,
       'all',
       85,
-      'Queuing document generation...'
+      'Queuing document generation...',
     );
 
     // Enqueue document generation and metadata generation jobs
@@ -217,16 +210,37 @@ export async function handleProcessTextNote(
 
     if (docGenResult.error) {
       logger.error('Failed to enqueue doc_generate job', {
-        context: { recordingId, dedupeKey: `doc_generate:${recordingId}`, error: docGenResult.error.message },
+        context: {
+          recordingId,
+          dedupeKey: `doc_generate:${recordingId}`,
+          error: docGenResult.error.message,
+        },
       });
-      throw new Error(`Failed to enqueue doc_generate job for ${recordingId}: ${docGenResult.error.message}`);
+      throw new Error(
+        `Failed to enqueue doc_generate job for ${recordingId}: ${docGenResult.error.message}`,
+      );
     }
     if (metadataGenResult.error) {
       logger.error('Failed to enqueue generate_metadata job', {
-        context: { recordingId, dedupeKey: `generate_metadata:${recordingId}`, error: metadataGenResult.error.message },
+        context: {
+          recordingId,
+          dedupeKey: `generate_metadata:${recordingId}`,
+          error: metadataGenResult.error.message,
+        },
       });
-      throw new Error(`Failed to enqueue generate_metadata job for ${recordingId}: ${metadataGenResult.error.message}`);
+      throw new Error(
+        `Failed to enqueue generate_metadata job for ${recordingId}: ${metadataGenResult.error.message}`,
+      );
     }
+
+    await supabase
+      .from('content')
+      .update({
+        status:
+          getQueuedSourceStatusForJob('doc_generate') ??
+          SOURCE_STATUS.DOCUMENT_GENERATING,
+      })
+      .eq('id', recordingId);
 
     logger.info('Enqueued document generation and metadata generation jobs', {
       context: { recordingId, transcriptId: transcript.id },
@@ -237,7 +251,7 @@ export async function handleProcessTextNote(
       recordingId,
       'all',
       100,
-      'Text note processing complete'
+      'Text note processing complete',
     );
 
     // Create event for notifications
@@ -250,7 +264,6 @@ export async function handleProcessTextNote(
         orgId,
       },
     });
-
   } catch (error) {
     logger.error('Text note processing failed', {
       context: { recordingId, transcriptId },
@@ -259,17 +272,23 @@ export async function handleProcessTextNote(
 
     streamingManager.sendError(
       recordingId,
-      `Text note processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Text note processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
 
     // Update recording status to error
     await supabase
       .from('content')
       .update({
-        status: 'error',
-        error_message: error instanceof Error ? error.message : 'Text note processing failed',
+        status: SOURCE_STATUS.ERROR,
+        error_message:
+          error instanceof Error
+            ? error.message
+            : 'Text note processing failed',
         metadata: {
-          error: error instanceof Error ? error.message : 'Text note processing failed',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Text note processing failed',
           errorType: 'text_note_processing',
           timestamp: new Date().toISOString(),
         },
