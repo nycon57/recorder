@@ -101,14 +101,14 @@ export const dynamic = 'force-dynamic';
 export const POST = apiHandler(
   async (
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
   ) => {
     const requestId = generateRequestId();
     const { orgId, userId } = await requireOrg();
     const { id: contentId } = await params;
 
     console.log(
-      `[Publish API] POST request for content ${contentId}, org ${orgId}`
+      `[Publish API] POST request for content ${contentId}, org ${orgId}`,
     );
 
     try {
@@ -140,14 +140,11 @@ export const POST = apiHandler(
         .single();
 
       if (docError || !document) {
-        console.error(
-          '[Publish API] No document found for content:',
-          docError
-        );
+        console.error('[Publish API] No document found for content:', docError);
         return errors.badRequest(
           'Content does not have a generated document. Please wait for processing to complete.',
           { contentId, status: content.status },
-          requestId
+          requestId,
         );
       }
 
@@ -172,20 +169,19 @@ export const POST = apiHandler(
           return errors.badRequest(
             `No active connector found for ${validated.destination}. Please connect and authorize a ${validated.destination} connector first.`,
             { destination: validated.destination },
-            requestId
+            requestId,
           );
         }
 
         connectorId = defaultConnector.id;
       } else {
         // Verify specified connector exists and is valid
-        const { data: connector, error: connectorError } =
-          await supabaseAdmin
-            .from('connector_configs')
-            .select('id, connector_type, is_active, supports_publish')
-            .eq('id', connectorId)
-            .eq('org_id', orgId)
-            .single();
+        const { data: connector, error: connectorError } = await supabaseAdmin
+          .from('connector_configs')
+          .select('id, connector_type, is_active, supports_publish')
+          .eq('id', connectorId)
+          .eq('org_id', orgId)
+          .single();
 
         if (connectorError || !connector) {
           return errors.notFound('Connector', requestId);
@@ -195,7 +191,7 @@ export const POST = apiHandler(
           return errors.badRequest(
             'Connector is not active',
             { connectorId },
-            requestId
+            requestId,
           );
         }
 
@@ -203,7 +199,7 @@ export const POST = apiHandler(
           return errors.badRequest(
             'Connector does not have write permissions for publishing',
             { connectorId },
-            requestId
+            requestId,
           );
         }
 
@@ -211,7 +207,7 @@ export const POST = apiHandler(
           return errors.badRequest(
             `Connector type (${connector.connector_type}) does not match requested destination (${validated.destination})`,
             { connectorId, destination: validated.destination },
-            requestId
+            requestId,
           );
         }
       }
@@ -239,10 +235,11 @@ export const POST = apiHandler(
       }
 
       console.log(
-        `[Publish API] Successfully published content ${contentId} to ${validated.destination}`
+        `[Publish API] Successfully published content ${contentId} to ${validated.destination}`,
       );
 
       revalidatePath('/admin/wiki-review');
+      updateTag(`wiki-review-count:${orgId}`);
       updateTag(`review-queue-count:${orgId}`);
 
       return successResponse(
@@ -252,7 +249,7 @@ export const POST = apiHandler(
           externalUrl: result.externalUrl!,
         },
         requestId,
-        201
+        201,
       );
     } catch (error: any) {
       console.error('[Publish API] Request error:', error);
@@ -264,7 +261,7 @@ export const POST = apiHandler(
 
       return errors.internalError(requestId);
     }
-  }
+  },
 );
 
 /**
@@ -316,7 +313,7 @@ export const POST = apiHandler(
 export const GET = apiHandler(
   async (
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
   ) => {
     const requestId = generateRequestId();
     const { orgId } = await requireOrg();
@@ -352,7 +349,7 @@ export const GET = apiHandler(
 
       // 3. Map database rows to models
       const mappedPublications = (publications || []).map((pub) =>
-        mapPublishedDocumentRow(pub as PublishedDocumentRow)
+        mapPublishedDocumentRow(pub as PublishedDocumentRow),
       );
 
       return successResponse(
@@ -360,11 +357,11 @@ export const GET = apiHandler(
           publications: mappedPublications,
           total: mappedPublications.length,
         },
-        requestId
+        requestId,
       );
     } catch (error: any) {
       console.error('[Publish API] Request error:', error);
       return errors.internalError(requestId);
     }
-  }
+  },
 );

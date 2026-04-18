@@ -146,7 +146,7 @@ async function loadPageMetrics(orgId: string): Promise<PageMetrics> {
  */
 async function loadCoverageMap(
   orgId: string,
-  lintResult: LintResult | null
+  lintResult: LintResult | null,
 ): Promise<CoverageMapData> {
   const [vendorRes, activeRes] = await Promise.all([
     supabaseAdmin.from('vendor_wiki_pages').select('app, screen'),
@@ -188,8 +188,7 @@ async function loadCoverageMap(
     if (coveredKeys.has(key)) fullyCovered.push(tuple);
   }
   fullyCovered.sort(
-    (a, b) =>
-      a.app.localeCompare(b.app) || a.screen.localeCompare(b.screen)
+    (a, b) => a.app.localeCompare(b.app) || a.screen.localeCompare(b.screen),
   );
 
   // Vendor-only gaps: prefer the lint result (authoritative snapshot from
@@ -198,8 +197,7 @@ async function loadCoverageMap(
   let vendorOnlyGaps: CoverageGapDetail[];
   if (lintResult) {
     vendorOnlyGaps = [...lintResult.details.coverage_gaps].sort(
-      (a, b) =>
-        a.app.localeCompare(b.app) || a.screen.localeCompare(b.screen)
+      (a, b) => a.app.localeCompare(b.app) || a.screen.localeCompare(b.screen),
     );
   } else {
     const liveGaps: CoverageGapDetail[] = [];
@@ -214,7 +212,7 @@ async function loadCoverageMap(
         (r) =>
           r.app &&
           r.screen &&
-          `${r.app.toLowerCase()}::${r.screen.toLowerCase()}` === key
+          `${r.app.toLowerCase()}::${r.screen.toLowerCase()}` === key,
       ).length;
       liveGaps.push({
         app: tuple.app,
@@ -223,8 +221,7 @@ async function loadCoverageMap(
       });
     }
     vendorOnlyGaps = liveGaps.sort(
-      (a, b) =>
-        a.app.localeCompare(b.app) || a.screen.localeCompare(b.screen)
+      (a, b) => a.app.localeCompare(b.app) || a.screen.localeCompare(b.screen),
     );
   }
 
@@ -238,7 +235,7 @@ async function loadCoverageMap(
  * from vendor_wiki_pages in the first place).
  */
 async function resolveVendorPageLinks(
-  gaps: CoverageGapDetail[]
+  gaps: CoverageGapDetail[],
 ): Promise<Map<string, string>> {
   if (gaps.length === 0) return new Map();
 
@@ -274,16 +271,23 @@ export default async function KnowledgeHealthPage() {
     redirect('/dashboard');
   }
 
-  const [pageMetrics, lintResult, pendingReviewCount] = await Promise.all([
-    loadPageMetrics(orgId),
-    getLatestLintResult(orgId),
-    getPendingReviewQueueCount(orgId),
-  ]);
-  const knowledgeStatus = await fetchKnowledgeStatusSummary(orgId);
+  const [pageMetrics, lintResult, knowledgeStatus, pendingReviewCount] =
+    await Promise.all([
+      loadPageMetrics(orgId),
+      getLatestLintResult(orgId),
+      fetchKnowledgeStatusSummary(orgId),
+      getPendingReviewQueueCount(orgId).catch((error) => {
+        console.warn(
+          '[KnowledgeHealth] Failed to load review queue count:',
+          error,
+        );
+        return null;
+      }),
+    ]);
 
   const coverageMap = await loadCoverageMap(orgId, lintResult);
   const vendorPageLinks = await resolveVendorPageLinks(
-    coverageMap.vendorOnlyGaps
+    coverageMap.vendorOnlyGaps,
   );
 
   const lastRunLabel = lintResult
@@ -383,9 +387,7 @@ function PageMetricsCard({ metrics }: { metrics: PageMetrics }) {
             label="Avg confidence"
             value={confidenceLabel}
             caption="Across active pages"
-            icon={
-              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-            }
+            icon={<CheckCircle2 className="h-4 w-4 text-muted-foreground" />}
           />
           <Metric
             label="Clusters"
@@ -440,12 +442,12 @@ function KnowledgeStatusCard({ counts }: { counts: KnowledgeStatusCounts }) {
           {KNOWLEDGE_STATUS_DISPLAY_ORDER.map((status) => {
             const meta = getKnowledgeStatusMeta(status);
             return (
-              <div
-                key={status}
-                className="rounded-lg border bg-card/40 p-3"
-              >
+              <div key={status} className="rounded-lg border bg-card/40 p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <Badge variant={meta.badgeVariant} className={meta.badgeClassName}>
+                  <Badge
+                    variant={meta.badgeVariant}
+                    className={meta.badgeClassName}
+                  >
                     {meta.shortLabel}
                   </Badge>
                   <span className="text-2xl font-semibold tabular-nums">
@@ -491,13 +493,11 @@ function LintHealthCard({
           <div className="flex items-start gap-3 rounded-lg border border-dashed bg-muted/20 p-4">
             <Inbox className="mt-0.5 h-5 w-5 text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium">
-                Lint hasn&apos;t run yet
-              </p>
+              <p className="text-sm font-medium">Lint hasn&apos;t run yet</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                First run scheduled for the next 03:00 UTC cron pass. Once
-                it completes you&apos;ll see orphans, stale pages, stale
-                links, coverage gaps, and confidence decay counts here.
+                First run scheduled for the next 03:00 UTC cron pass. Once it
+                completes you&apos;ll see orphans, stale pages, stale links,
+                coverage gaps, and confidence decay counts here.
               </p>
             </div>
           </div>
@@ -558,10 +558,7 @@ function LintHealthCard({
       <CardContent>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {checks.map((check) => (
-            <div
-              key={check.label}
-              className="rounded-lg border bg-card/40 p-3"
-            >
+            <div key={check.label} className="rounded-lg border bg-card/40 p-3">
               <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
                 {check.icon}
                 <span>{check.label}</span>
@@ -584,8 +581,9 @@ function LintHealthCard({
 // Card: Pending review
 // ---------------------------------------------------------------------------
 
-function PendingReviewCard({ count }: { count: number }) {
-  const hasAny = count > 0;
+function PendingReviewCard({ count }: { count: number | null }) {
+  const isUnavailable = count === null;
+  const hasAny = (count ?? 0) > 0;
 
   return (
     <Card className="h-full">
@@ -595,7 +593,8 @@ function PendingReviewCard({ count }: { count: number }) {
           Pending review
         </CardTitle>
         <CardDescription>
-          Contradictions, routing gaps, and manual publication work awaiting attention.
+          Contradictions, routing gaps, and manual publication work awaiting
+          attention.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -607,15 +606,25 @@ function PendingReviewCard({ count }: { count: number }) {
           }
         >
           <div className="text-xs uppercase tracking-wide text-muted-foreground">
-            {hasAny ? 'Needs attention' : 'Status'}
+            {isUnavailable
+              ? 'Unavailable'
+              : hasAny
+                ? 'Needs attention'
+                : 'Status'}
           </div>
           <div className="mt-2 text-3xl font-semibold tabular-nums">
-            {hasAny ? count.toLocaleString() : 'All clear'}
+            {isUnavailable
+              ? '—'
+              : hasAny
+                ? count.toLocaleString()
+                : 'All clear'}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {hasAny
-              ? `${count === 1 ? 'entry' : 'entries'} awaiting review`
-              : 'No review items waiting right now'}
+            {isUnavailable
+              ? 'Review queue count could not be loaded right now.'
+              : hasAny
+                ? `${count === 1 ? 'entry' : 'entries'} awaiting review`
+                : 'No review items waiting right now'}
           </p>
         </div>
         <Button asChild variant="outline" size="sm" className="w-full">
@@ -650,8 +659,8 @@ function CoverageMapCard({
           Coverage map
         </CardTitle>
         <CardDescription>
-          Vendor (app, screen) pairs cross-referenced against your active
-          wiki pages.
+          Vendor (app, screen) pairs cross-referenced against your active wiki
+          pages.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -774,11 +783,7 @@ function LintDetailLinks({
   stale: StaleDetail[];
   staleLinks: StaleLinkDetail[];
 }) {
-  if (
-    orphans.length === 0 &&
-    stale.length === 0 &&
-    staleLinks.length === 0
-  ) {
+  if (orphans.length === 0 && stale.length === 0 && staleLinks.length === 0) {
     return null;
   }
 
@@ -790,8 +795,8 @@ function LintDetailLinks({
           Flagged pages
         </CardTitle>
         <CardDescription>
-          First 10 of each category from the most recent lint run. Click to
-          open the page in the knowledge browser.
+          First 10 of each category from the most recent lint run. Click to open
+          the page in the knowledge browser.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -817,7 +822,7 @@ function LintDetailLinks({
               secondary: s.last_contributed_at
                 ? `Last source ${formatDistanceToNow(
                     new Date(s.last_contributed_at),
-                    { addSuffix: true }
+                    { addSuffix: true },
                   )}`
                 : 'Never corroborated',
             }))}
@@ -840,8 +845,8 @@ function LintDetailLinks({
           <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[11px]">
             /dashboard/knowledge/pages/[id]
           </code>
-          is a future drilldown target — if it does not yet exist in your
-          build, links will 404 until it ships.
+          is a future drilldown target — if it does not yet exist in your build,
+          links will 404 until it ships.
         </p>
       </CardContent>
     </Card>
