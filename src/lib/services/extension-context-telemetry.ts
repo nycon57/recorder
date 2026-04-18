@@ -1,5 +1,6 @@
 import type {
   KnowledgeMatchBasis,
+  KnowledgeMatchCategory,
   KnowledgeAvailability,
   PageContext,
 } from '@tribora/shared';
@@ -37,6 +38,12 @@ export interface ExtensionContextTelemetryPayload {
   knowledgeMode: KnowledgeAvailability['mode'] | 'unknown';
   vendorMatchBasis: KnowledgeMatchBasis;
   orgMatchBasis: KnowledgeMatchBasis;
+  vendorMatchCategory: KnowledgeMatchCategory | 'unknown';
+  orgMatchCategory: KnowledgeMatchCategory | 'unknown';
+  vendorMatchLabel: string | null;
+  orgMatchLabel: string | null;
+  vendorMatchExplanation: string | null;
+  orgMatchExplanation: string | null;
   vendorMatchConfidence: number | null;
   orgMatchConfidence: number | null;
   selectedEntityTitle: string | null;
@@ -161,6 +168,14 @@ export function buildExtensionContextTelemetry(args: {
     knowledgeMode: context.knowledgeAvailability?.mode ?? 'unknown',
     vendorMatchBasis: context.vendorKnowledgeMatch?.basis ?? 'none',
     orgMatchBasis: context.orgKnowledgeMatch?.basis ?? 'none',
+    vendorMatchCategory:
+      context.vendorKnowledgeMatch?.basisCategory ?? 'unknown',
+    orgMatchCategory: context.orgKnowledgeMatch?.basisCategory ?? 'unknown',
+    vendorMatchLabel: context.vendorKnowledgeMatch?.basisLabel ?? null,
+    orgMatchLabel: context.orgKnowledgeMatch?.basisLabel ?? null,
+    vendorMatchExplanation:
+      context.vendorKnowledgeMatch?.basisExplanation ?? null,
+    orgMatchExplanation: context.orgKnowledgeMatch?.basisExplanation ?? null,
     vendorMatchConfidence: context.vendorKnowledgeMatch?.confidence ?? null,
     orgMatchConfidence: context.orgKnowledgeMatch?.confidence ?? null,
     selectedEntityTitle: context.selectedEntity?.title ?? null,

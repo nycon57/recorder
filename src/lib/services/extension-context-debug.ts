@@ -250,6 +250,14 @@ export function normalizeExtensionContextDebugEvent(
         'none') as ExtensionContextTelemetryPayload['vendorMatchBasis'],
       orgMatchBasis: (readString(payload, 'orgMatchBasis') ??
         'none') as ExtensionContextTelemetryPayload['orgMatchBasis'],
+      vendorMatchCategory: (readString(payload, 'vendorMatchCategory') ??
+        'unknown') as ExtensionContextTelemetryPayload['vendorMatchCategory'],
+      orgMatchCategory: (readString(payload, 'orgMatchCategory') ??
+        'unknown') as ExtensionContextTelemetryPayload['orgMatchCategory'],
+      vendorMatchLabel: readString(payload, 'vendorMatchLabel'),
+      orgMatchLabel: readString(payload, 'orgMatchLabel'),
+      vendorMatchExplanation: readString(payload, 'vendorMatchExplanation'),
+      orgMatchExplanation: readString(payload, 'orgMatchExplanation'),
       vendorMatchConfidence: readNumber(payload, 'vendorMatchConfidence'),
       orgMatchConfidence: readNumber(payload, 'orgMatchConfidence'),
       selectedEntityTitle: readString(payload, 'selectedEntityTitle'),
@@ -303,6 +311,10 @@ export function matchesExtensionContextDebugFilters(
       telemetry.urlPath,
       telemetry.pageSummary,
       telemetry.selectedEntityTitle,
+      telemetry.vendorMatchLabel,
+      telemetry.orgMatchLabel,
+      telemetry.vendorMatchExplanation,
+      telemetry.orgMatchExplanation,
       ...telemetry.currentNavigationLabels,
       ...telemetry.workspaceValues,
     ]

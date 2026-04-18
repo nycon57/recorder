@@ -117,6 +117,12 @@ export type KnowledgeMatchBasis =
   | 'domain_alias'
   | 'none';
 
+export type KnowledgeMatchCategory =
+  | 'exact'
+  | 'alias'
+  | 'app'
+  | 'domain';
+
 export interface KnowledgeMatch {
   matched: boolean;
   basis: KnowledgeMatchBasis;
@@ -126,6 +132,9 @@ export interface KnowledgeMatch {
   label?: string;
   pageIds: string[];
   selectorHints?: string[];
+  basisCategory?: KnowledgeMatchCategory;
+  basisLabel?: string;
+  basisExplanation?: string;
 }
 
 export interface KnowledgeAvailability {
