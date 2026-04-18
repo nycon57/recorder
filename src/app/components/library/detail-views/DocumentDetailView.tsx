@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import useSWR from 'swr';
 import { ArrowLeft, Loader2, FileText as FileTextIcon, AlertCircle, RotateCcw, Trash2, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -38,6 +39,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
 import type { Tag } from '@/lib/types/database';
+import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
 interface Transcript {
   id: string;
@@ -86,61 +88,38 @@ interface DocumentDetailViewProps {
   recording: Recording;
   transcript: Transcript | null; // For documents, transcript contains extracted text
   document: Document | null; // AI-generated summary
+  knowledgeStatus: KnowledgeStatus;
   initialTags: Tag[];
   sourceKey?: string; // Cache key for fetching highlight sources
   initialHighlightId?: string; // Initial chunk to scroll to
 }
 
+const highlightSourcesFetcher = async (url: string): Promise<any[] | null> => {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch sources: ${response.status}`);
+  }
+
+  const { sources } = await response.json();
+  return sources || null;
+};
+
 export default function DocumentDetailView({
   recording,
   transcript,
   document,
+  knowledgeStatus,
   initialTags,
   sourceKey,
   initialHighlightId,
 }: DocumentDetailViewProps) {
   const router = useRouter();
 
-  // Client-side highlight sources fetching
-  const [highlightSources, setHighlightSources] = React.useState<any[] | null>(null);
-  const [isFetchingSources, setIsFetchingSources] = React.useState(false);
-
-  // Fetch highlight sources from cache when sourceKey is provided
-  React.useEffect(() => {
-    if (!sourceKey) return;
-
-    const fetchSources = async () => {
-      setIsFetchingSources(true);
-      console.log('[DocumentDetailView] Fetching sources client-side:', sourceKey);
-
-      try {
-        const response = await fetch(`/api/chat?sourcesKey=${sourceKey}`);
-        console.log('[DocumentDetailView] Fetch response:', {
-          status: response.status,
-          ok: response.ok,
-        });
-
-        if (response.ok) {
-          const { sources } = await response.json();
-          console.log('[DocumentDetailView] Sources fetched:', {
-            count: sources?.length || 0,
-            sources: sources,
-            firstSource: sources?.[0],
-          });
-          setHighlightSources(sources || null);
-          console.log('[DocumentDetailView] State updated with sources');
-        } else {
-          console.error('[DocumentDetailView] Failed to fetch sources:', response.status);
-        }
-      } catch (error) {
-        console.error('[DocumentDetailView] Error fetching sources:', error);
-      } finally {
-        setIsFetchingSources(false);
-      }
-    };
-
-    fetchSources();
-  }, [sourceKey]);
+  const { data: highlightSources, isLoading: isFetchingSources } = useSWR(
+    sourceKey ? `/api/chat?sourcesKey=${sourceKey}` : null,
+    highlightSourcesFetcher
+  );
 
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
   const [tags, setTags] = React.useState<Tag[]>(initialTags);
@@ -672,6 +651,7 @@ export default function DocumentDetailView({
                 contentType={recording.content_type}
                 fileType={recording.file_type}
                 status={recording.status}
+                knowledgeStatus={knowledgeStatus}
                 fileSize={recording.file_size}
                 duration={recording.duration_sec}
                 createdAt={recording.created_at}

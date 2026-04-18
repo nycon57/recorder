@@ -5,6 +5,7 @@ import { extractPendingContradictions, readCompilationLog } from './wiki-review'
 import {
   getKnowledgeStatusMeta,
   resolveKnowledgeStatusForSource,
+  resolveSourceWikiPageStatus,
   summarizeKnowledgeStatusCounts,
   resolveKnowledgeStatusForWikiPage,
   KNOWLEDGE_STATUS,
@@ -24,6 +25,7 @@ export interface KnowledgeStatusSummary {
 export {
   getKnowledgeStatusMeta,
   resolveKnowledgeStatusForSource,
+  resolveSourceWikiPageStatus,
   resolveKnowledgeStatusForWikiPage,
   summarizeKnowledgeStatusCounts,
   KNOWLEDGE_STATUS,
@@ -32,6 +34,71 @@ export {
   type KnowledgeStatus,
   type KnowledgeStatusMeta,
 } from '../utils/knowledge-status';
+
+export async function fetchKnowledgeStatusForSource(input: {
+  orgId: string;
+  sourceId: string;
+  sourceStatus: string;
+}): Promise<KnowledgeStatus> {
+  const fallbackStatus = resolveKnowledgeStatusForSource({
+    sourceStatus: input.sourceStatus,
+    wikiPageStatus: null,
+  });
+
+  const { data: sourceLinks, error: sourceLinksError } = await supabaseAdmin
+    .from('wiki_page_sources')
+    .select('page_id')
+    .eq('source_id', input.sourceId);
+
+  if (sourceLinksError) {
+    console.warn(
+      '[knowledge-status] Failed to load wiki source links for source detail:',
+      sourceLinksError.message
+    );
+    return fallbackStatus;
+  }
+
+  const pageIds = Array.from(
+    new Set((sourceLinks ?? []).map((link) => link.page_id).filter(Boolean))
+  );
+
+  if (pageIds.length === 0) {
+    return fallbackStatus;
+  }
+
+  const { data: wikiPages, error: wikiPagesError } = await supabaseAdmin
+    .from('org_wiki_pages')
+    .select('id, app, screen, valid_until, compilation_log')
+    .eq('org_id', input.orgId)
+    .in('id', pageIds);
+
+  if (wikiPagesError) {
+    console.warn(
+      '[knowledge-status] Failed to load source-linked wiki pages for source detail:',
+      wikiPagesError.message
+    );
+    return fallbackStatus;
+  }
+
+  const wikiPageStatus = resolveSourceWikiPageStatus(
+    ((wikiPages ?? []) as Array<
+      Pick<OrgWikiPageRow, 'id' | 'app' | 'screen' | 'valid_until' | 'compilation_log'>
+    >).map((page) =>
+      resolveKnowledgeStatusForWikiPage({
+        validUntil: page.valid_until,
+        app: page.app,
+        screen: page.screen,
+        hasPendingReview:
+          extractPendingContradictions(readCompilationLog(page.compilation_log)).length > 0,
+      })
+    )
+  );
+
+  return resolveKnowledgeStatusForSource({
+    sourceStatus: input.sourceStatus,
+    wikiPageStatus,
+  });
+}
 
 export async function fetchKnowledgeStatusSummary(
   orgId: string

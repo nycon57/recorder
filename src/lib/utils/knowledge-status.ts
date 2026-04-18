@@ -111,6 +111,31 @@ export function resolveKnowledgeStatusForSource(input: {
   return KNOWLEDGE_STATUS.LIVE;
 }
 
+export function resolveSourceWikiPageStatus(
+  wikiPageStatuses: KnowledgeStatus[]
+): KnowledgeStatus | null {
+  if (wikiPageStatuses.length === 0) {
+    return null;
+  }
+
+  const priorityOrder: KnowledgeStatus[] = [
+    KNOWLEDGE_STATUS.NEEDS_REVIEW,
+    KNOWLEDGE_STATUS.NEEDS_ROUTING,
+    KNOWLEDGE_STATUS.LIVE,
+    KNOWLEDGE_STATUS.SUPERSEDED,
+    KNOWLEDGE_STATUS.VENDOR_ONLY,
+    KNOWLEDGE_STATUS.PROCESSING,
+  ];
+
+  for (const status of priorityOrder) {
+    if (wikiPageStatuses.includes(status)) {
+      return status;
+    }
+  }
+
+  return wikiPageStatuses[0] ?? null;
+}
+
 export function summarizeKnowledgeStatusCounts(input: {
   processingSources: number;
   wikiPageStatuses: KnowledgeStatus[];

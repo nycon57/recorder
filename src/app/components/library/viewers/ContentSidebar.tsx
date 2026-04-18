@@ -1,18 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Download,
   Edit,
   Trash2,
   Share2,
   RefreshCw,
-  FileText,
-  Clock,
-  Calendar,
-  HardDrive,
-  FileType as FileTypeIcon,
   Copy,
   FileUp,
 } from 'lucide-react';
@@ -26,6 +20,10 @@ import { cn } from '@/lib/utils';
 import { formatFileSize } from '@/lib/types/content';
 import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
 import type { Tag } from '@/lib/types/database';
+import {
+  getKnowledgeStatusMeta,
+  type KnowledgeStatus,
+} from '@/lib/utils/knowledge-status';
 import TagBadge from '@/app/components/TagBadge';
 import ContentTypeBadge from '../shared/ContentTypeBadge';
 import { ConceptSection } from '@/app/components/knowledge';
@@ -50,6 +48,7 @@ interface ContentSidebarProps {
   contentType: ContentType | null;
   fileType: FileType | null;
   status: RecordingStatus;
+  knowledgeStatus: KnowledgeStatus;
   fileSize?: number | null;
   duration?: number | null;
   createdAt: string;
@@ -84,6 +83,7 @@ export default function ContentSidebar({
   contentType,
   fileType,
   status,
+  knowledgeStatus,
   fileSize,
   duration,
   createdAt,
@@ -103,6 +103,7 @@ export default function ContentSidebar({
   onPublish,
 }: ContentSidebarProps) {
   const isTrashed = !!deletedAt;
+  const knowledgeStatusMeta = getKnowledgeStatusMeta(knowledgeStatus);
 
   const handleCopy = async () => {
     if (!textContent) return;
@@ -166,10 +167,26 @@ export default function ContentSidebar({
 
           {/* Status */}
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Status</span>
+            <span className="text-sm text-muted-foreground">Source status</span>
             <Badge className={cn('capitalize', getStatusColor(status))}>
               {status}
             </Badge>
+          </div>
+
+          {/* Knowledge Status */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-muted-foreground">Knowledge status</span>
+              <Badge
+                variant={knowledgeStatusMeta.badgeVariant}
+                className={cn('shrink-0 border', knowledgeStatusMeta.badgeClassName)}
+              >
+                {knowledgeStatusMeta.label}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {knowledgeStatusMeta.description}
+            </p>
           </div>
 
           {/* File Type */}

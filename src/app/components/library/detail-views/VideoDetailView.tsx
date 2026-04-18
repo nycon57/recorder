@@ -36,6 +36,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
 import type { Tag } from '@/lib/types/database';
+import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
 interface Word {
   word: string;
@@ -91,6 +92,7 @@ export interface VideoDetailViewProps {
   recording: Recording;
   transcript: Transcript | null;
   document: Document | null;
+  knowledgeStatus: KnowledgeStatus;
   initialTags: Tag[];
   /** Cache key for fetching highlight sources */
   sourceKey?: string;
@@ -104,6 +106,7 @@ export default function VideoDetailView({
   recording,
   transcript,
   document,
+  knowledgeStatus,
   initialTags,
   initialTimestamp,
 }: VideoDetailViewProps) {
@@ -599,6 +602,7 @@ export default function VideoDetailView({
                 contentType={recording.content_type}
                 fileType={recording.file_type}
                 status={recording.status}
+                knowledgeStatus={knowledgeStatus}
                 fileSize={recording.file_size}
                 duration={videoDuration}
                 createdAt={recording.created_at}

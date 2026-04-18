@@ -5,6 +5,7 @@ import {
   KNOWLEDGE_STATUS,
   getKnowledgeStatusMeta,
   resolveKnowledgeStatusForSource,
+  resolveSourceWikiPageStatus,
   resolveKnowledgeStatusForWikiPage,
   summarizeKnowledgeStatusCounts,
 } from '../knowledge-status';
@@ -78,6 +79,16 @@ test('resolveKnowledgeStatusForSource reuses wiki-page routing state after proce
   });
 
   assert.equal(status, KNOWLEDGE_STATUS.NEEDS_ROUTING);
+});
+
+test('resolveSourceWikiPageStatus prefers actionable active page states over live or superseded pages', () => {
+  const status = resolveSourceWikiPageStatus([
+    KNOWLEDGE_STATUS.LIVE,
+    KNOWLEDGE_STATUS.SUPERSEDED,
+    KNOWLEDGE_STATUS.NEEDS_REVIEW,
+  ]);
+
+  assert.equal(status, KNOWLEDGE_STATUS.NEEDS_REVIEW);
 });
 
 test('getKnowledgeStatusMeta returns consistent labels for UI surfaces', () => {
