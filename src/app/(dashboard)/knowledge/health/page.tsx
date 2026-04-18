@@ -6,7 +6,7 @@
  * wiki-specific health metrics powered by:
  *
  *   - TRIB-42 daily lint results (`wiki_lint_results`)
- *   - TRIB-41 pending contradictions count (`getPendingContradictionCount`)
+ *   - TRIB-110 unified review queue count (`getPendingReviewQueueCount`)
  *   - TRIB-44 community-detection clusters (`wiki_clusters`)
  *   - TRIB-40 active / superseded `org_wiki_pages` rows
  *
@@ -14,7 +14,7 @@
  *
  *   1. Page metrics card      — active pages, superseded, avg confidence, clusters
  *   2. Lint health card       — orphan/stale/stale_link/coverage_gap/confidence_decay
- *   3. Pending contradictions — count + link to /admin/wiki-review
+ *   3. Pending review queue — count + link to /admin/wiki-review
  *   4. Coverage map           — "fully covered" vs "vendor-only gaps" (app, screen) pairs
  *   5. Lint detail drilldowns — first-N lists linking to per-page routes / vendor pages
  *
@@ -63,7 +63,7 @@ import {
   type StaleDetail,
   type StaleLinkDetail,
 } from '@/lib/services/wiki-lint';
-import { getPendingContradictionCount } from '@/lib/services/wiki-review';
+import { getPendingReviewQueueCount } from '@/lib/services/review-queue';
 import {
   fetchKnowledgeStatusSummary,
   getKnowledgeStatusMeta,
@@ -76,7 +76,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = {
   title: 'Knowledge Health | Dashboard',
   description:
-    'Wiki health metrics — lint results, contradictions, coverage, and clusters.',
+    'Wiki health metrics — lint results, review load, coverage, and clusters.',
 };
 
 // ---------------------------------------------------------------------------
@@ -274,10 +274,10 @@ export default async function KnowledgeHealthPage() {
     redirect('/dashboard');
   }
 
-  const [pageMetrics, lintResult, pendingContradictions] = await Promise.all([
+  const [pageMetrics, lintResult, pendingReviewCount] = await Promise.all([
     loadPageMetrics(orgId),
     getLatestLintResult(orgId),
-    getPendingContradictionCount(orgId),
+    getPendingReviewQueueCount(orgId),
   ]);
   const knowledgeStatus = await fetchKnowledgeStatusSummary(orgId);
 
@@ -301,7 +301,7 @@ export default async function KnowledgeHealthPage() {
             Knowledge Health
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Wiki health metrics — page counts, lint results, contradictions,
+            Wiki health metrics — page counts, lint results, review load,
             coverage, and clusters.
           </p>
         </div>
@@ -321,12 +321,12 @@ export default async function KnowledgeHealthPage() {
       {/* --- Row 2: Knowledge status -------------------------------------- */}
       <KnowledgeStatusCard counts={knowledgeStatus.counts} />
 
-      {/* --- Row 3: Lint health + Pending contradictions ----------------- */}
+      {/* --- Row 3: Lint health + review queue --------------------------- */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <LintHealthCard lintResult={lintResult} lastRunLabel={lastRunLabel} />
         </div>
-        <PendingContradictionsCard count={pendingContradictions} />
+        <PendingReviewCard count={pendingReviewCount} />
       </div>
 
       {/* --- Row 4: Coverage map ----------------------------------------- */}
@@ -581,10 +581,10 @@ function LintHealthCard({
 }
 
 // ---------------------------------------------------------------------------
-// Card: Pending contradictions
+// Card: Pending review
 // ---------------------------------------------------------------------------
 
-function PendingContradictionsCard({ count }: { count: number }) {
+function PendingReviewCard({ count }: { count: number }) {
   const hasAny = count > 0;
 
   return (
@@ -595,7 +595,7 @@ function PendingContradictionsCard({ count }: { count: number }) {
           Pending review
         </CardTitle>
         <CardDescription>
-          Flagged contradictions awaiting admin approval.
+          Contradictions, routing gaps, and manual publication work awaiting attention.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -615,12 +615,12 @@ function PendingContradictionsCard({ count }: { count: number }) {
           <p className="mt-1 text-xs text-muted-foreground">
             {hasAny
               ? `${count === 1 ? 'entry' : 'entries'} awaiting review`
-              : 'No pending contradictions to review'}
+              : 'No review items waiting right now'}
           </p>
         </div>
         <Button asChild variant="outline" size="sm" className="w-full">
           <Link href="/admin/wiki-review">
-            Open Wiki Review
+            Open Review Queue
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </Button>

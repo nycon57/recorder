@@ -207,6 +207,7 @@ function invalidate(orgId: string): void {
   // updateTag gives read-your-own-writes semantics in server actions, so the
   // admin nav badge reflects the fresh count on the very next render.
   updateTag(`wiki-review-count:${orgId}`);
+  updateTag(`review-queue-count:${orgId}`);
 }
 
 // ---------------------------------------------------------------------------

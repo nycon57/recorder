@@ -14,6 +14,7 @@ import {
   errors,
   generateRequestId,
 } from '@/lib/utils/api';
+import { revalidatePath, updateTag } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { DocumentPublisher } from '@/lib/services/document-publisher';
 import {
@@ -240,6 +241,9 @@ export const POST = apiHandler(
       console.log(
         `[Publish API] Successfully published content ${contentId} to ${validated.destination}`
       );
+
+      revalidatePath('/admin/wiki-review');
+      updateTag(`review-queue-count:${orgId}`);
 
       return successResponse(
         {

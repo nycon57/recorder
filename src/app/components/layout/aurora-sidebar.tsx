@@ -44,8 +44,8 @@ interface AuroraSidebarProps extends React.ComponentProps<typeof Sidebar> {
   isSystemAdmin?: boolean
   hasOnboardingPlan?: boolean
   hasDigestEnabled?: boolean
-  /** TRIB-34: pending wiki-contradiction count for the admin nav badge. */
-  wikiReviewCount?: number
+  /** TRIB-110: pending review-queue count for the admin nav badge. */
+  reviewQueueCount?: number
 }
 
 // Motion variants for logo entrance
@@ -63,7 +63,7 @@ const logoVariants = {
   },
 }
 
-export function AuroraSidebar({ role, isSystemAdmin = false, hasOnboardingPlan = false, hasDigestEnabled = false, wikiReviewCount = 0, ...props }: AuroraSidebarProps) {
+export function AuroraSidebar({ role, isSystemAdmin = false, hasOnboardingPlan = false, hasDigestEnabled = false, reviewQueueCount = 0, ...props }: AuroraSidebarProps) {
   // System admin access is only for platform operators, not org-level admins
   const hasSystemAdminAccess = isSystemAdmin === true
   const [mounted, setMounted] = React.useState(false)
@@ -149,7 +149,7 @@ export function AuroraSidebar({ role, isSystemAdmin = false, hasOnboardingPlan =
         {hasSystemAdminAccess && (
           <>
             <SidebarSeparator className="mx-0" />
-            <NavAdminAurora wikiReviewCount={wikiReviewCount} />
+            <NavAdminAurora reviewQueueCount={reviewQueueCount} />
           </>
         )}
       </SidebarContent>
