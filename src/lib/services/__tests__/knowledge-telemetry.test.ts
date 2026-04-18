@@ -59,6 +59,31 @@ test('buildKnowledgeChatTelemetry does not mark tool discovery as a routing fail
   assert.equal(telemetry.routingFailureReason, null);
 });
 
+test('buildKnowledgeChatTelemetry preserves an explicit false routingFailed value', () => {
+  const telemetry = buildKnowledgeChatTelemetry({
+    orgId: 'org-123',
+    userId: 'user-123',
+    queryId: 'query-123',
+    answerMode: 'discovery',
+    routeStrategy: 'standard_search',
+    selectedStrategy: 'standard_search:discovery',
+    recordingsCount: 8,
+    sourcesCount: 0,
+    retrievalAttempts: 3,
+    finalThreshold: 0.7,
+    averageSimilarity: 0,
+    query: 'how do we route leads?',
+    queryLength: 23,
+    queryWordCount: 5,
+    totalTimeMs: 1280,
+    routingFailed: false,
+    routingFailureReason: 'manual_override',
+  });
+
+  assert.equal(telemetry.routingFailed, false);
+  assert.equal(telemetry.routingFailureReason, null);
+});
+
 test('buildKnowledgeExtensionQueryTelemetry captures org and vendor knowledge availability', () => {
   const telemetry = buildKnowledgeExtensionQueryTelemetry({
     orgId: 'org-123',
@@ -106,4 +131,18 @@ test('buildKnowledgeReviewTelemetry records the resolved review outcome', () => 
     contentLength: null,
     errorMessage: null,
   });
+});
+
+test('buildKnowledgeReviewTelemetry trims error messages', () => {
+  const telemetry = buildKnowledgeReviewTelemetry({
+    orgId: 'org-123',
+    userId: 'user-123',
+    pageId: 'page-1',
+    logEntryIndex: 2,
+    action: 'rejectContradiction',
+    outcome: 'error',
+    errorMessage: '  failed to parse contradiction  ',
+  });
+
+  assert.equal(telemetry.errorMessage, 'failed to parse contradiction');
 });

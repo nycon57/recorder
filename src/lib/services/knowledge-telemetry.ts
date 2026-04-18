@@ -205,8 +205,7 @@ export function buildKnowledgeChatTelemetry(
     args.sourcesCount === 0 &&
     args.recordingsCount > 0;
   const routingFailed =
-    args.routingFailed ||
-    shouldInferRoutingFailure;
+    args.routingFailed ?? shouldInferRoutingFailure;
 
   return {
     ...args,
@@ -232,11 +231,13 @@ export function buildKnowledgeExtensionQueryTelemetry(
 export function buildKnowledgeReviewTelemetry(
   args: KnowledgeReviewTelemetryInput,
 ): KnowledgeReviewTelemetryPayload {
+  const errorMessage = normalizeText(args.errorMessage);
+
   return {
     ...args,
     contentLength:
       typeof args.contentLength === 'number' ? args.contentLength : null,
-    errorMessage: args.errorMessage?.trim() ? args.errorMessage : null,
+    errorMessage: errorMessage ? errorMessage : null,
   };
 }
 

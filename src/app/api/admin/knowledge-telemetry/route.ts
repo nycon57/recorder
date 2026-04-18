@@ -8,7 +8,6 @@ import {
 } from '@/lib/utils/api';
 import {
   listKnowledgeTelemetryEvents,
-  summarizeKnowledgeTelemetryEvents,
   type KnowledgeTelemetryEventType,
   type KnowledgeTelemetrySince,
 } from '@/lib/services/knowledge-telemetry';
@@ -53,14 +52,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
   const type = rawType === 'all' ? null : (rawType as KnowledgeTelemetryEventType);
 
-  const { events } = await listKnowledgeTelemetryEvents({
+  const { events, summary } = await listKnowledgeTelemetryEvents({
     orgId,
     since,
     limit,
     type,
   });
-
-  const summary = summarizeKnowledgeTelemetryEvents(events);
 
   return successResponse({
     filters: {
@@ -69,6 +66,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
       type: type ?? 'all',
     },
     summary,
-    events: events.slice(0, limit),
+    events,
   });
 });
