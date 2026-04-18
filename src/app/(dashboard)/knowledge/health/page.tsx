@@ -64,6 +64,12 @@ import {
   type StaleLinkDetail,
 } from '@/lib/services/wiki-lint';
 import { getPendingContradictionCount } from '@/lib/services/wiki-review';
+import {
+  fetchKnowledgeStatusSummary,
+  getKnowledgeStatusMeta,
+  KNOWLEDGE_STATUS_DISPLAY_ORDER,
+  type KnowledgeStatusCounts,
+} from '@/lib/services/knowledge-status';
 
 export const dynamic = 'force-dynamic';
 
@@ -273,6 +279,7 @@ export default async function KnowledgeHealthPage() {
     getLatestLintResult(orgId),
     getPendingContradictionCount(orgId),
   ]);
+  const knowledgeStatus = await fetchKnowledgeStatusSummary(orgId);
 
   const coverageMap = await loadCoverageMap(orgId, lintResult);
   const vendorPageLinks = await resolveVendorPageLinks(
@@ -311,7 +318,10 @@ export default async function KnowledgeHealthPage() {
       {/* --- Row 1: Page metrics ------------------------------------------ */}
       <PageMetricsCard metrics={pageMetrics} />
 
-      {/* --- Row 2: Lint health + Pending contradictions ----------------- */}
+      {/* --- Row 2: Knowledge status -------------------------------------- */}
+      <KnowledgeStatusCard counts={knowledgeStatus.counts} />
+
+      {/* --- Row 3: Lint health + Pending contradictions ----------------- */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <LintHealthCard lintResult={lintResult} lastRunLabel={lastRunLabel} />
@@ -319,10 +329,10 @@ export default async function KnowledgeHealthPage() {
         <PendingContradictionsCard count={pendingContradictions} />
       </div>
 
-      {/* --- Row 3: Coverage map ----------------------------------------- */}
+      {/* --- Row 4: Coverage map ----------------------------------------- */}
       <CoverageMapCard data={coverageMap} vendorPageLinks={vendorPageLinks} />
 
-      {/* --- Row 4: Lint detail drilldowns ------------------------------- */}
+      {/* --- Row 5: Lint detail drilldowns ------------------------------- */}
       {lintResult && (
         <LintDetailLinks
           orphans={lintResult.details.orphans}
@@ -409,6 +419,48 @@ function Metric({
       <div className="mt-2 text-3xl font-semibold tabular-nums">{value}</div>
       <p className="mt-1 text-xs text-muted-foreground">{caption}</p>
     </div>
+  );
+}
+
+function KnowledgeStatusCard({ counts }: { counts: KnowledgeStatusCounts }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Layers className="h-5 w-5" />
+          Operational status
+        </CardTitle>
+        <CardDescription>
+          Shared knowledge-state buckets used across processing, review, graph,
+          and coverage surfaces.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {KNOWLEDGE_STATUS_DISPLAY_ORDER.map((status) => {
+            const meta = getKnowledgeStatusMeta(status);
+            return (
+              <div
+                key={status}
+                className="rounded-lg border bg-card/40 p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant={meta.badgeVariant} className={meta.badgeClassName}>
+                    {meta.shortLabel}
+                  </Badge>
+                  <span className="text-2xl font-semibold tabular-nums">
+                    {counts[status].toLocaleString()}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {meta.description}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

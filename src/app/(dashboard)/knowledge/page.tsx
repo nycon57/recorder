@@ -39,6 +39,11 @@ import {
   CONCEPT_TYPES,
 } from '@/lib/validations/knowledge';
 import { fadeIn } from '@/lib/utils/animations';
+import {
+  getKnowledgeStatusMeta,
+  KNOWLEDGE_STATUS_DISPLAY_ORDER,
+  type KnowledgeStatusCounts,
+} from '@/lib/utils/knowledge-status';
 
 type ViewMode = 'graph' | 'list';
 type SortOption = 'mention_count_desc' | 'last_seen_desc' | 'name_asc' | 'name_desc';
@@ -68,6 +73,8 @@ function KnowledgePageContent() {
   const [graphNodes, setGraphNodes] = useState<KnowledgeGraphData['nodes']>([]);
   const [graphEdges, setGraphEdges] = useState<KnowledgeGraphData['edges']>([]);
   const [concepts, setConcepts] = useState<Concept[]>([]);
+  const [knowledgeStatusCounts, setKnowledgeStatusCounts] =
+    useState<KnowledgeStatusCounts | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,14 +95,34 @@ function KnowledgePageContent() {
           graphParams.set('types', types.join(','));
         }
 
-        const graphResponse = await fetch(`/api/knowledge/graph?${graphParams.toString()}`, { signal });
+        const conceptParams = new URLSearchParams();
+        // Fetch all concepts - client-side filtering handles multiple type selection
+        // The API only supports single type filter, so we fetch all and filter in filteredConcepts
+        conceptParams.set('sort', sort);
+        conceptParams.set('limit', '100');
+
+        const [graphResponse, conceptResponse, healthResponse] = await Promise.all([
+          fetch(`/api/knowledge/graph?${graphParams.toString()}`, { signal }),
+          fetch(`/api/knowledge/concepts?${conceptParams.toString()}`, { signal }),
+          fetch('/api/dashboard/knowledge-health', { signal }),
+        ]);
 
         if (!graphResponse.ok) {
           const errorData = await graphResponse.json().catch(() => ({}));
           throw new Error(errorData.error?.message || 'Failed to fetch knowledge graph');
         }
 
+        if (!conceptResponse.ok) {
+          throw new Error('Failed to fetch concepts');
+        }
+
+        if (!healthResponse.ok) {
+          throw new Error('Failed to fetch knowledge status');
+        }
+
         const graphResult = await graphResponse.json();
+        const conceptResult = await conceptResponse.json();
+        const healthResult = await healthResponse.json();
         const data = graphResult.data || { nodes: [], edges: [] };
 
         // Check if aborted before updating state
@@ -104,25 +131,11 @@ function KnowledgePageContent() {
         setGraphNodes(data.nodes);
         setGraphEdges(data.edges);
 
-        // Also fetch concepts for list view
-        const conceptParams = new URLSearchParams();
-        // Fetch all concepts - client-side filtering handles multiple type selection
-        // The API only supports single type filter, so we fetch all and filter in filteredConcepts
-        conceptParams.set('sort', sort);
-        conceptParams.set('limit', '100');
-
-        const conceptResponse = await fetch(`/api/knowledge/concepts?${conceptParams.toString()}`, { signal });
-
-        if (!conceptResponse.ok) {
-          throw new Error('Failed to fetch concepts');
-        }
-
-        const conceptResult = await conceptResponse.json();
-
         // Check if aborted before updating state
         if (signal.aborted) return;
 
         setConcepts(conceptResult.data?.concepts || []);
+        setKnowledgeStatusCounts(healthResult.data?.knowledgeStatus?.counts ?? null);
       } catch (err) {
         // Ignore abort errors
         if (err instanceof Error && err.name === 'AbortError') {
@@ -369,6 +382,29 @@ function KnowledgePageContent() {
             )}
           </div>
         </div>
+
+        {knowledgeStatusCounts && (
+          <div className="rounded-xl border bg-card/40 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Operational status
+              </span>
+              {KNOWLEDGE_STATUS_DISPLAY_ORDER.map((status) => {
+                const meta = getKnowledgeStatusMeta(status);
+                return (
+                  <Badge
+                    key={status}
+                    variant={meta.badgeVariant}
+                    className={meta.badgeClassName}
+                    title={meta.description}
+                  >
+                    {meta.shortLabel}: {knowledgeStatusCounts[status]}
+                  </Badge>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Error Display */}

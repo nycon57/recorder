@@ -29,6 +29,7 @@
  *         valid_until: string | null;
  *         supersedes_id: string | null;
  *         compilation_log: unknown;
+ *         knowledge_status: string;
  *         created_at: string;
  *         updated_at: string;
  *       }>;
@@ -44,6 +45,11 @@ import type { NextRequest } from 'next/server';
 import { requireOrg, errors, successResponse } from '@/lib/utils/api';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { createLogger } from '@/lib/utils/logger';
+import { resolveKnowledgeStatusForWikiPage } from '@/lib/utils/knowledge-status';
+import {
+  extractPendingContradictions,
+  readCompilationLog,
+} from '@/lib/services/wiki-review';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -136,6 +142,15 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     id,
     headId,
     versionCount: rows.length,
-    versions: rows,
+    versions: rows.map((row) => ({
+      ...row,
+      knowledge_status: resolveKnowledgeStatusForWikiPage({
+        validUntil: row.valid_until,
+        app: row.app,
+        screen: row.screen,
+        hasPendingReview:
+          extractPendingContradictions(readCompilationLog(row.compilation_log)).length > 0,
+      }),
+    })),
   });
 }

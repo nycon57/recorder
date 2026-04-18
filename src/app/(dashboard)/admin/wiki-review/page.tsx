@@ -24,6 +24,10 @@ import {
   CardHeader,
   CardTitle,
 } from '@/app/components/ui/card';
+import {
+  getKnowledgeStatusMeta,
+  KNOWLEDGE_STATUS,
+} from '@/lib/services/knowledge-status';
 import { requireAdmin } from '@/lib/utils/api';
 import { listPendingReviewPages } from '@/lib/services/wiki-review';
 
@@ -37,6 +41,7 @@ export const metadata = {
 };
 
 export default async function WikiReviewPage() {
+  const reviewStatusMeta = getKnowledgeStatusMeta(KNOWLEDGE_STATUS.NEEDS_REVIEW);
   let orgId: string;
   try {
     const ctx = await requireAdmin();
@@ -58,8 +63,11 @@ export default async function WikiReviewPage() {
             compilation engine.
           </p>
         </div>
-        <Badge variant="outline" className="text-sm">
-          {totalEntries} pending
+        <Badge
+          variant={reviewStatusMeta.badgeVariant}
+          className={reviewStatusMeta.badgeClassName}
+        >
+          {totalEntries} {reviewStatusMeta.shortLabel}
         </Badge>
       </header>
 
