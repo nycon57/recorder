@@ -60,12 +60,9 @@ import { GoogleGenAI } from '@google/genai';
 
 import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
-import { resolveVendorWikiPage } from '@/lib/services/vendor-wiki-resolver';
-import { resolveOrgWikiPagesByVector } from '@/lib/services/org-wiki-embedding';
 import type { ResolvedOrgWikiPage } from '@/lib/services/org-wiki-embedding';
-import { resolveClusterContext } from '@/lib/services/wiki-clusters';
+import { resolveCompiledMemoryContext } from '@/lib/services/compiled-memory-context';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
-import { getVendorForOrg } from '@/lib/services/vendor-customers';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 
@@ -470,41 +467,6 @@ class TagStreamParser {
   }
 }
 
-// -------------------- Citation enrichment --------------------
-
-/**
- * Given a set of org page ids that were cited, look up their first
- * contributing recording source so the extension can deep-link the user
- * to the recording on the hub. Best-effort: failures are swallowed and
- * the citation is emitted without a recordingUrl.
- *
- * NOTE: This is an in-memory cache keyed by page id. We resolve lazily,
- * only when the LLM actually cites a page, so we don't do DB work for
- * unused pages.
- */
-async function resolveRecordingUrlForPage(
-  pageId: string
-): Promise<string | undefined> {
-  try {
-    const supabase = createAdminClient();
-    const { data } = await supabase
-      .from('wiki_page_sources')
-      .select('source_id, source_type')
-      .eq('page_id', pageId)
-      .eq('source_type', 'recording')
-      .order('contributed_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    const row = data as { source_id: string; source_type: string } | null;
-    if (!row?.source_id) return undefined;
-
-    return `/dashboard/recordings/${row.source_id}`;
-  } catch {
-    return undefined;
-  }
-}
-
 // -------------------- Route handler --------------------
 
 export async function POST(request: NextRequest) {
@@ -623,10 +585,7 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        // ---- Step 1: resolve vendor page (Layer 1) ---------------------
-        const vendorPage = await resolveVendorWikiPage({ app, screen });
-
-        // ---- Step 2: embed the question (RETRIEVAL_QUERY task) ---------
+        // ---- Step 1: embed the question (RETRIEVAL_QUERY task) ---------
         // Reuse the project's fallback-aware embedding helper so we get
         // identical dimensions and retry behavior as TRIB-36 writes.
         let questionEmbedding: number[] = [];
@@ -646,120 +605,23 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // ---- Step 3: TRIB-54 resolve vendor training pages (Layer 2) ----
-        // If the requesting org has a vendor_org_id, pull the vendor
-        // org's wiki pages as "vendor training" — how the vendor
-        // recommends using the software. knowledge_scope filtering
-        // limits which apps are included.
-        let vendorTrainingPages: ResolvedOrgWikiPage[] = [];
-        if (questionEmbedding.length > 0) {
-          try {
-            const vendorInfo = await getVendorForOrg(orgId);
-            if (vendorInfo) {
-              // Respect knowledge_scope: only include vendor training
-              // pages for apps in the configured scope (if any).
-              const inScope =
-                !vendorInfo.whiteLabelConfig.knowledge_scope ||
-                vendorInfo.whiteLabelConfig.knowledge_scope.length === 0 ||
-                vendorInfo.whiteLabelConfig.knowledge_scope.some(
-                  (s) => s.toLowerCase() === app
-                );
+        // ---- Step 2: resolve compiled-memory context -------------------
+        // Shared service owns three-layer knowledge resolution and
+        // structured citation metadata. The route keeps prompt assembly
+        // and SSE/tag handling local.
+        const compiledMemory = await resolveCompiledMemoryContext({
+          orgId,
+          userId,
+          app,
+          screen,
+          questionEmbedding,
+          asOf,
+        });
+        const vendorPage = compiledMemory.vendorKnowledge.page;
+        const vendorTrainingPages = compiledMemory.vendorTraining.pages;
+        const orgPages = compiledMemory.orgKnowledge.pages;
 
-              if (inScope) {
-                vendorTrainingPages = await resolveOrgWikiPagesByVector({
-                  orgId: vendorInfo.vendorOrgId,
-                  questionEmbedding,
-                  limit: 3,
-                  asOf,
-                });
-              }
-            }
-          } catch (vendorTrainingError) {
-            // Non-fatal: proceed without vendor training layer
-            console.error(
-              '[extension/query] vendor training page resolution failed:',
-              vendorTrainingError
-            );
-          }
-        }
-
-        // ---- Step 4: resolve top-N customer org pages (Layer 3) -------
-        // TRIB-40: when `as_of` was supplied, the resolver uses the
-        // temporal variant RPC under the hood.
-        let orgPages: ResolvedOrgWikiPage[] = [];
-        if (questionEmbedding.length > 0) {
-          try {
-            orgPages = await resolveOrgWikiPagesByVector({
-              orgId,
-              questionEmbedding,
-              limit: 3,
-              asOf,
-            });
-          } catch (orgError) {
-            console.error(
-              '[extension/query] org page resolution failed:',
-              orgError
-            );
-          }
-        }
-
-        // ---- Step 4b: widen context via same-cluster pages (TRIB-44) --
-        // After the top-N pages are ranked by vector distance, pull up
-        // to 2 extra active pages from the SAME cluster as each match.
-        // This gives the LLM nearby knowledge that didn't happen to
-        // clear the cosine-similarity bar, which is especially useful
-        // for compound questions ("how does X interact with Y?").
-        //
-        // Gated by org_agent_settings.wiki_cluster_context_enabled so
-        // orgs can opt out without a code change. Defaults to true.
-        //
-        // Point-in-time queries (as_of) skip cluster expansion — the
-        // clusters table only stores the latest run's snapshot, so
-        // mixing it with temporal retrieval would produce incoherent
-        // context. Direct vector matches only for historical queries.
-        if (orgPages.length > 0 && asOf == null) {
-          try {
-            const supabase = createAdminClient();
-            const { data: settingsRaw } = await supabase
-              .from('org_agent_settings')
-              .select('wiki_cluster_context_enabled')
-              .eq('org_id', orgId)
-              .maybeSingle();
-
-            const settings = settingsRaw as
-              | { wiki_cluster_context_enabled: boolean | null }
-              | null;
-
-            // Default is ON — only skip when the org explicitly disabled it.
-            const enabled = settings?.wiki_cluster_context_enabled !== false;
-
-            if (enabled) {
-              const basePageIds = orgPages.map((p) => p.id);
-              const clusterPages = await resolveClusterContext({
-                orgId,
-                basePageIds,
-                perCluster: 2,
-                excludePageIds: basePageIds,
-              });
-
-              // Mix cluster-context pages in AFTER the vector-ranked
-              // pages so the LLM still sees the strongest matches
-              // first (prompt order matters for model attention).
-              if (clusterPages.length > 0) {
-                orgPages = [...orgPages, ...clusterPages];
-              }
-            }
-          } catch (clusterError) {
-            // Non-fatal: fall back to vector-matches-only if cluster
-            // expansion errors out. Logging lets us spot chronic issues.
-            console.error(
-              '[extension/query] cluster context expansion failed:',
-              clusterError
-            );
-          }
-        }
-
-        // ---- Step 5: early exit if all layers are empty -----------------
+        // ---- Step 3: early exit if all layers are empty -----------------
         if (!vendorPage && vendorTrainingPages.length === 0 && orgPages.length === 0) {
           emit({
             type: 'text_chunk',
@@ -769,41 +631,9 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        // ---- Step 5b: TRIB-50 user memory lookup ----------------------
-        // Query prior interactions so the LLM can skip basic explanations
-        // the user has already seen. Lightweight: single indexed query.
-        let userMemoryTopics: string[] = [];
-        if (orgPages.length > 0) {
-          try {
-            const supabase = createAdminClient();
-            const orgPageIds = orgPages.map((p) => p.id);
-            const { data: priorInteractions } = await supabase
-              .from('user_wiki_interactions')
-              .select('wiki_page_id')
-              .eq('user_id', userId)
-              .eq('org_id', orgId)
-              .in('wiki_page_id', orgPageIds);
+        const userMemoryTopics = compiledMemory.orgKnowledge.priorTopics;
 
-            if (priorInteractions && priorInteractions.length > 0) {
-              const priorPageIds = new Set(
-                (priorInteractions as { wiki_page_id: string }[]).map(
-                  (r) => r.wiki_page_id
-                )
-              );
-              userMemoryTopics = orgPages
-                .filter((p) => priorPageIds.has(p.id))
-                .map((p) => p.topic);
-            }
-          } catch (memoryError) {
-            // Non-fatal: proceed without user memory context
-            console.error(
-              '[extension/query] user memory lookup failed:',
-              memoryError
-            );
-          }
-        }
-
-        // ---- Step 6: build the three-layer fusion prompt ----------------
+        // ---- Step 4: build the three-layer fusion prompt ----------------
         const fusionPrompt = buildFusionPrompt({
           app,
           screen,
@@ -824,17 +654,8 @@ export async function POST(request: NextRequest) {
         hadVendorKnowledge =
           vendorTrainingPages.length > 0 || vendorPage != null;
 
-        // ---- Step 7: stream the LLM response through the tag parser ---
-        // Track which page ids we've already cited so we only enrich the
-        // recording URL lookup once per source.
+        // ---- Step 5: stream the LLM response through the tag parser ----
         const citedPageIds = new Set<string>();
-        const orgPageIds = new Set(orgPages.map((p) => p.id));
-        const vendorTrainingPageIds = new Set(vendorTrainingPages.map((p) => p.id));
-        const vendorPageId = vendorPage?.id;
-        const vendorPageTitle = vendorPage
-          ? `${vendorPage.app} — ${vendorPage.screen}`
-          : null;
-        const vendorSourceUrl = vendorPage?.source_url ?? undefined;
 
         const parser = new TagStreamParser(
           // onText
@@ -856,59 +677,12 @@ export async function POST(request: NextRequest) {
             if (citedPageIds.has(sourceId)) return;
             citedPageIds.add(sourceId);
 
-            // Vendor citation — use the source_url directly.
-            if (sourceId === vendorPageId) {
-              emit({
-                type: 'citation',
-                sourceId,
-                title: title || vendorPageTitle || 'Vendor documentation',
-                recordingUrl: vendorSourceUrl,
-              });
-              return;
-            }
-
-            // Vendor training citation — emit without recording URL
-            // (vendor training pages belong to the vendor org, not the
-            // customer, so we don't try to resolve customer recordings).
-            if (vendorTrainingPageIds.has(sourceId)) {
-              emit({
-                type: 'citation',
-                sourceId,
-                title: title || 'Vendor training',
-              });
-              return;
-            }
-
-            // Org citation — try to resolve a recording URL in the
-            // background so we don't block the text stream.
-            if (orgPageIds.has(sourceId)) {
-              emit({
-                type: 'citation',
-                sourceId,
-                title: title || 'Team knowledge',
-              });
-              resolveRecordingUrlForPage(sourceId)
-                .then((recordingUrl) => {
-                  if (recordingUrl) {
-                    emit({
-                      type: 'citation',
-                      sourceId,
-                      title: title || 'Team knowledge',
-                      recordingUrl,
-                    });
-                  }
-                })
-                .catch(() => {
-                  /* best-effort enrichment */
-                });
-              return;
-            }
-
-            // Unknown id — emit raw anyway so the extension still sees it.
+            const citation = compiledMemory.citationsBySourceId[sourceId];
             emit({
               type: 'citation',
               sourceId,
-              title: title || 'Source',
+              title: title || citation?.title || 'Source',
+              recordingUrl: citation?.linkUrl,
             });
           }
         );

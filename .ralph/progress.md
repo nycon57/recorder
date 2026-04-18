@@ -9,6 +9,37 @@ Started: 2026-02-11
 - Database types: `lib/types/database.ts` — manual `Database` interface with Row/Insert/Update per table
 
 ---
+## 2026-04-18T19:15Z - TRIB-90: Extract shared compiled-memory resolver/context service
+Thread: N/A
+Run: manual-worktree-trib-90
+Pass: 3/3 - Implementation + verification
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: included in the TRIB-90 worktree commit for this pass
+- Post-commit status: pending at entry time
+- Skills invoked:
+  - /brainstorming: yes (lightweight boundary check only; user requested direct implementation)
+  - /test-driven-development: yes (wrote target service tests first; Jest blocked by pre-existing harness issue)
+  - /verification-before-completion: yes
+- Verification:
+  - Command: `npm test -- --runInBand src/lib/services/__tests__/compiled-memory-context.test.ts` -> FAIL (pre-existing Jest blocker: `Cannot find module '@clerk/nextjs' from 'jest.setup.js'`)
+  - Command: `npm run type:check` -> FAIL (pre-existing repo-wide TypeScript failures across `scripts/` and `src/lib/workers/`, unrelated to TRIB-90)
+  - Command: `npm run lint` -> FAIL (pre-existing lint command issue: `next lint` exits with `Invalid project directory provided .../lint`)
+  - Command: `npm run build` -> PASS
+- Files changed:
+  - src/lib/services/compiled-memory-context.ts
+  - src/app/api/extension/query/route.ts
+  - src/lib/services/__tests__/compiled-memory-context.test.ts
+- What was implemented:
+  - Extracted three-layer compiled-memory resolution into a shared backend service
+  - Moved vendor docs, vendor-training retrieval, org compiled-memory retrieval, and structured citation metadata behind one service contract
+  - Refactored `/api/extension/query` to consume the shared service while keeping prompt assembly, SSE output, and tag parsing local
+  - Added service-level test coverage for layered context resolution and citation shaping
+- **Learnings for future iterations:**
+  - The real extraction boundary is the full three-layer compiled-memory bundle, not just org wiki lookup
+  - Recording-link enrichment is cleaner as batched citation metadata in the shared service than as lazy route-local lookups
+  - The current Jest, lint, and typecheck baselines have unrelated blockers that make targeted regression verification harder than the build path
+---
 
 ## 2026-02-11T18:33Z - US-001: Create agent_memory table migration
 Thread: N/A
