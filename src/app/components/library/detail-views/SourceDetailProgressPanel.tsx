@@ -29,6 +29,14 @@ interface LinkedKnowledgePageArtifact {
   topic: string | null;
   app: string | null;
   screen: string | null;
+  confidence: number;
+  routeConfidence: number | null;
+  routeReason: string | null;
+  detectedTopic: string | null;
+  detectedApp: string | null;
+  detectedScreen: string | null;
+  vendorBaselineCount: number;
+  vendorBaselineId: string | null;
   valid_until: string | null;
   updated_at: string;
 }
@@ -85,6 +93,10 @@ function buildKnowledgeHealthHref(contentId: string, wikiPageId: string): string
     wikiPageId,
   });
   return `/knowledge/health?${params.toString()}`;
+}
+
+function buildKnowledgePageHref(pageId: string): string {
+  return `/knowledge/pages/${encodeURIComponent(pageId)}`;
 }
 
 export default function SourceDetailProgressPanel({
@@ -192,6 +204,44 @@ export default function SourceDetailProgressPanel({
                 <p className="text-xs text-muted-foreground">
                   {knowledgePage.topic?.trim() || 'Compiled page'} · {knowledgePage.app ?? 'unassigned app'} / {knowledgePage.screen ?? 'unassigned screen'}
                 </p>
+                <div className="flex flex-wrap gap-2">
+                  {typeof knowledgePage.routeConfidence === 'number' ? (
+                    <Badge variant="outline">
+                      Route confidence {Math.round(knowledgePage.routeConfidence * 100)}%
+                    </Badge>
+                  ) : null}
+                  <Badge variant="outline">
+                    Page confidence {Math.round(knowledgePage.confidence * 100)}%
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Detected route: {knowledgePage.detectedTopic ?? 'unknown-topic'} ·{' '}
+                  {knowledgePage.detectedApp ?? 'unassigned app'} /{' '}
+                  {knowledgePage.detectedScreen ?? 'unassigned screen'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Match basis: {knowledgePage.routeReason?.trim() || 'Compiled route from source transcript and metadata.'}
+                </p>
+                {knowledgePage.vendorBaselineCount > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Vendor baseline matches: {knowledgePage.vendorBaselineCount}
+                    {knowledgePage.vendorBaselineId ? (
+                      <>
+                        {' · '}
+                        <Link
+                          href={buildKnowledgePageHref(knowledgePage.vendorBaselineId)}
+                          className="text-primary underline underline-offset-2"
+                        >
+                          Open baseline
+                        </Link>
+                      </>
+                    ) : null}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Vendor baseline matches: none
+                  </p>
+                )}
                 <Link
                   href={buildKnowledgeHealthHref(contentId, knowledgePage.id)}
                   className="inline-flex text-xs text-primary underline underline-offset-2"

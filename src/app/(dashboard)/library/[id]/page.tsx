@@ -18,6 +18,7 @@ import type { Tag, WorkflowStep } from '@/lib/types/database';
 import WorkflowViewer from '@/app/components/workflow/WorkflowViewer';
 import SourceDetailProgressPanel from '@/app/components/library/detail-views/SourceDetailProgressPanel';
 import { resolvePreferredSourceKnowledgePage } from '@/lib/services/source-detail';
+import { parseRoutingReviewState } from '@/lib/services/routing-review';
 
 async function getContentItem(id: string, internalOrgId: string) {
   const { data: item, error } = await supabaseAdmin
@@ -219,12 +220,30 @@ export default async function LibraryItemDetailPage({
   if (linkedPageIds.length > 0) {
     const { data: linkedPages } = await supabaseAdmin
       .from('org_wiki_pages')
-      .select('id, topic, app, screen, valid_until, updated_at')
+      .select('id, topic, app, screen, confidence, compilation_log, valid_until, updated_at')
       .eq('org_id', orgId)
       .in('id', linkedPageIds);
 
     linkedKnowledgePage = resolvePreferredSourceKnowledgePage(linkedPages ?? []);
   }
+
+  const linkedRoutingState = linkedKnowledgePage
+    ? parseRoutingReviewState(linkedKnowledgePage.compilation_log)
+    : null;
+
+  const { data: linkedVendorBaselineRows } =
+    linkedKnowledgePage?.app && linkedKnowledgePage?.screen
+      ? await supabaseAdmin
+          .from('vendor_wiki_pages')
+          .select('id')
+          .ilike('app', linkedKnowledgePage.app)
+          .ilike('screen', linkedKnowledgePage.screen)
+          .order('updated_at', { ascending: false })
+          .limit(5)
+      : { data: [] as Array<{ id: string }> };
+
+  const linkedVendorBaselineCount = linkedVendorBaselineRows?.length ?? 0;
+  const linkedVendorBaselineId = linkedVendorBaselineRows?.[0]?.id ?? null;
 
   const sharedProps = {
     recording: item,
@@ -281,7 +300,26 @@ export default async function LibraryItemDetailPage({
           transcript={transcript}
           document={document}
           workflow={workflow}
-          knowledgePage={linkedKnowledgePage}
+          knowledgePage={
+            linkedKnowledgePage
+              ? {
+                  ...linkedKnowledgePage,
+                  routeConfidence: linkedRoutingState?.routeConfidence ?? null,
+                  routeReason: linkedRoutingState?.routeReason ?? null,
+                  detectedTopic:
+                    linkedRoutingState?.proposedRoute.topic ??
+                    linkedKnowledgePage.topic,
+                  detectedApp:
+                    linkedRoutingState?.proposedRoute.app ??
+                    linkedKnowledgePage.app,
+                  detectedScreen:
+                    linkedRoutingState?.proposedRoute.screen ??
+                    linkedKnowledgePage.screen,
+                  vendorBaselineCount: linkedVendorBaselineCount,
+                  vendorBaselineId: linkedVendorBaselineId,
+                }
+              : null
+          }
         />
       </section>
       {workflow && (

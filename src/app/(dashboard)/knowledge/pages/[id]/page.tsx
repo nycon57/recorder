@@ -28,6 +28,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { fetchKnowledgePageDetail } from '@/lib/services/knowledge-page-detail';
 import { getKnowledgeStatusMeta } from '@/lib/services/knowledge-status';
+import { parseRoutingReviewState } from '@/lib/services/routing-review';
 import { requireOrg } from '@/lib/utils/api';
 
 export const dynamic = 'force-dynamic';
@@ -78,6 +79,9 @@ export default async function KnowledgePageDetailPage({ params }: RouteParams) {
   }
 
   const isOrgPage = detail.kind === 'org';
+  const orgRoutingState = isOrgPage
+    ? parseRoutingReviewState(detail.page.compilation_log)
+    : null;
   const conceptEnrichmentHref = `/knowledge/map?view=list&originPage=${encodeURIComponent(detail.page.id)}`;
   const primaryGraphHref = '/knowledge/map?view=graph';
 
@@ -113,6 +117,11 @@ export default async function KnowledgePageDetailPage({ params }: RouteParams) {
               {isOrgPage ? (
                 <>
                   <Badge variant="outline">Confidence {Math.round(detail.page.confidence * 100)}%</Badge>
+                  {typeof orgRoutingState?.routeConfidence === 'number' ? (
+                    <Badge variant="outline">
+                      Route confidence {Math.round(orgRoutingState.routeConfidence * 100)}%
+                    </Badge>
+                  ) : null}
                   <Badge variant={detail.page.valid_until ? 'secondary' : 'default'}>
                     {detail.page.valid_until ? 'Superseded' : 'Active'}
                   </Badge>
@@ -165,6 +174,25 @@ export default async function KnowledgePageDetailPage({ params }: RouteParams) {
               )}
             </div>
           )}
+          {isOrgPage ? (
+            <>
+              <div>
+                <p className="text-xs text-muted-foreground">Detected route</p>
+                <p>
+                  {orgRoutingState?.proposedRoute.topic ?? detail.page.topic} ·{' '}
+                  {orgRoutingState?.proposedRoute.app ?? detail.page.app ?? 'unassigned app'} /{' '}
+                  {orgRoutingState?.proposedRoute.screen ?? detail.page.screen ?? 'unassigned screen'}
+                </p>
+              </div>
+              <div className="md:col-span-2">
+                <p className="text-xs text-muted-foreground">Match basis</p>
+                <p>
+                  {orgRoutingState?.routeReason?.trim() ||
+                    'Compiled route inferred from source transcript and metadata.'}
+                </p>
+              </div>
+            </>
+          ) : null}
         </CardContent>
       </Card>
 
