@@ -301,10 +301,7 @@ export async function POST(req: Request) {
       isMetaDiscoveryQuery =
         preprocessed.wasTransformed &&
         preprocessed.transformation === 'meta-question-extraction-and-expansion';
-      useToolDiscovery =
-        isMetaDiscoveryQuery ||
-        route.strategy === 'direct_listing' ||
-        route.strategy === 'topic_overview';
+      useToolDiscovery = isMetaDiscoveryQuery;
 
       if (useToolDiscovery) {
         answerMode = 'tool-discovery';
@@ -658,10 +655,12 @@ Remember: You're helping users discover what knowledge is available in their lib
 **CRITICAL RULES:**
 1. ONLY use information explicitly stated in the compiled memory below
 2. Compiled memory is the canonical answer layer for this chat
-3. Do NOT fall back to raw transcript or document evidence unless the user explicitly asks to search the raw evidence
-4. If the answer is not in the compiled memory, respond with: "I don't have compiled knowledge about that yet. I can search the raw recordings if you'd like."
-5. NEVER mention products, platforms, or concepts not present in the compiled memory
-6. Answer questions directly and naturally based on what they asked
+3. If sources conflict, prioritize YOUR TEAM'S KNOWLEDGE over VENDOR TRAINING and VENDOR KNOWLEDGE
+4. Do NOT fall back to raw transcript or document evidence unless the user explicitly asks to search the raw evidence
+5. If the answer is not in the compiled memory, respond with: "I don't have compiled knowledge about that yet. I can search the raw recordings if you'd like."
+6. Cite source numbers for every factual claim and keep citations tied to the exact supporting source
+7. NEVER mention products, platforms, or concepts not present in the compiled memory
+8. Answer questions directly and naturally based on what they asked
 
 **CITATION FORMAT:**
 When referencing sources from the Context, use ONLY the citation numbers in brackets, like [1], [2], [3].
@@ -727,7 +726,7 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
 
     // Create tools with bound context
     // Pass Zod schemas directly - AI SDK v5 handles conversion for Gemini
-    const toolsWithContext = ENABLE_CHAT_TOOLS ? {
+    const toolsWithContext = ENABLE_CHAT_TOOLS && useToolDiscovery ? {
       searchRecordings: tool({
         description: toolDescriptions.searchRecordings,
         inputSchema: searchRecordingsInputSchema,
@@ -794,7 +793,7 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
       answerMode,
       shouldPreferTools,
       toolsEnabled: !!toolsWithContext,
-      toolChoice: shouldPreferTools ? 'auto (discovery)' : 'auto',
+      toolChoice: shouldPreferTools ? 'auto (explicit discovery)' : 'auto (compiled-memory default)',
     });
 
     // Convert messages to model format manually
@@ -941,6 +940,12 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
               sourceId: source.sourceId,
               layer: source.layer,
               sourceType: 'compiled_memory',
+              provenance: {
+                layer: source.layer,
+                pageId: source.sourceId,
+                title: source.title,
+                url: source.url || '/dashboard/knowledge',
+              },
             },
           })) || []
         : ragContext?.sources?.map((source, index) => ({
