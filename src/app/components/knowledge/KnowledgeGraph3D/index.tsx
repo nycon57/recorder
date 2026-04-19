@@ -23,7 +23,7 @@
 
 'use client';
 
-import { Suspense, useMemo, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useMemo, useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Preload, AdaptiveDpr, AdaptiveEvents } from '@react-three/drei';
 import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Loader2 } from 'lucide-react';
@@ -35,7 +35,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/app/components/ui/tooltip';
-import { Skeleton } from '@/app/components/ui/skeleton';
 import {
   Empty,
   EmptyHeader,
@@ -46,8 +45,7 @@ import {
 
 import { GraphScene } from './GraphScene';
 import { useGraphLayout } from './hooks/useGraphLayout';
-import { useAdaptiveLOD } from './hooks/useAdaptiveLOD';
-import type { KnowledgeGraph3DProps, GraphNode3D } from './types';
+import type { KnowledgeGraph3DProps } from './types';
 import { LOD_CONFIGS } from './types';
 
 // ============================================================================
@@ -169,7 +167,7 @@ function ControlsOverlay({
 
       {/* Stats panel */}
       <div className="absolute top-4 left-4 bg-background/80 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-muted-foreground z-10 flex flex-col gap-1">
-        <span>{nodeCount} concepts</span>
+        <span>{nodeCount} nodes</span>
         <span>{edgeCount} connections</span>
         <span className="text-[10px] opacity-70">
           {fps} FPS • {lodLevel.toUpperCase()}
@@ -197,7 +195,6 @@ export function KnowledgeGraph3D({
   isLoading = false,
   height = 600,
 }: KnowledgeGraph3DProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [cameraApi, setCameraApi] = useState<{
     zoomIn: () => void;
     zoomOut: () => void;
@@ -287,8 +284,8 @@ export function KnowledgeGraph3D({
             </EmptyMedia>
             <EmptyTitle>No Knowledge Graph Available</EmptyTitle>
             <EmptyDescription>
-              Start adding content to build your knowledge graph. Concepts and
-              relationships will appear here as they are extracted.
+              Start adding content to build your knowledge graph. Operational
+              wiki nodes and relationships will appear here as they are compiled.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -302,7 +299,6 @@ export function KnowledgeGraph3D({
       style={{ height }}
     >
       <Canvas
-        ref={canvasRef as any}
         camera={{ position: [0, 0, 400], fov: 60, near: 0.1, far: 3000 }}
         dpr={[1, 2]}
         gl={{
@@ -311,7 +307,7 @@ export function KnowledgeGraph3D({
           powerPreference: 'high-performance',
         }}
         style={{ background: '#030e10' }}
-        onCreated={({ camera, gl }) => {
+        onCreated={({ camera }) => {
           // Expose camera controls
           setCameraApi({
             zoomIn: () => {

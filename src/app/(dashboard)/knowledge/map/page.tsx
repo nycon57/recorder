@@ -32,10 +32,12 @@ import {
 import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/KeyboardShortcutsProvider';
 import { useKeyboardShortcuts } from '@/app/hooks/useKeyboardShortcuts';
 import {
-  KnowledgeGraphData,
   Concept,
   ConceptType,
+  type KnowledgeGraphData,
 } from '@/lib/validations/knowledge';
+import { type KnowledgeGraphPayload } from '@/lib/types/knowledge-graph';
+import { toCanvasGraphData } from '@/lib/services/knowledge-graph-canvas';
 import { fadeIn } from '@/lib/utils/animations';
 import {
   getKnowledgeStatusMeta,
@@ -60,7 +62,7 @@ type SortOption = 'mention_count_desc' | 'last_seen_desc' | 'name_asc' | 'name_d
  */
 function KnowledgePageContent() {
   // View state
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>('graph');
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
 
   // Filter state
@@ -70,6 +72,9 @@ function KnowledgePageContent() {
   // Data state
   const [graphNodes, setGraphNodes] = useState<KnowledgeGraphData['nodes']>([]);
   const [graphEdges, setGraphEdges] = useState<KnowledgeGraphData['edges']>([]);
+  const [graphMeta, setGraphMeta] = useState<KnowledgeGraphPayload['meta'] | null>(
+    null
+  );
   const [concepts, setConcepts] = useState<Concept[]>([]);
   const [knowledgeStatusCounts, setKnowledgeStatusCounts] =
     useState<KnowledgeStatusCounts | null>(null);
@@ -78,20 +83,19 @@ function KnowledgePageContent() {
 
   // Stable fetch function that takes params explicitly to avoid stale closures
   const fetchGraphData = useCallback(
-    async (
-      types: ConceptType[],
-      sort: SortOption,
-      signal: AbortSignal
-    ) => {
+    async (sort: SortOption, signal: AbortSignal) => {
       try {
         setLoading(true);
         setError(null);
 
-        // Build query params for graph
-        const graphParams = new URLSearchParams();
-        if (types.length > 0) {
-          graphParams.set('types', types.join(','));
-        }
+        // Build query params for operational page graph
+        const graphParams = new URLSearchParams({
+          orgPageLimit: '300',
+          vendorPageLimit: '300',
+          clusterLimit: '200',
+          relationshipLimit: '2000',
+          vendorMatchesPerOrgPage: '3',
+        });
 
         const conceptParams = new URLSearchParams();
         // Fetch all concepts - client-side filtering handles multiple type selection
@@ -121,13 +125,19 @@ function KnowledgePageContent() {
         const graphResult = await graphResponse.json();
         const conceptResult = await conceptResponse.json();
         const healthResult = await healthResponse.json();
-        const data = graphResult.data || { nodes: [], edges: [] };
+        const payload = (graphResult.data || {
+          nodes: [],
+          edges: [],
+          meta: null,
+        }) as KnowledgeGraphPayload;
+        const canvasGraph = toCanvasGraphData(payload);
 
         // Check if aborted before updating state
         if (signal.aborted) return;
 
-        setGraphNodes(data.nodes);
-        setGraphEdges(data.edges);
+        setGraphNodes(canvasGraph.nodes);
+        setGraphEdges(canvasGraph.edges);
+        setGraphMeta(payload.meta ?? null);
 
         // Check if aborted before updating state
         if (signal.aborted) return;
@@ -151,26 +161,41 @@ function KnowledgePageContent() {
     [] // No dependencies - all values passed as params
   );
 
-  // Fetch data when selectedTypes or sortBy change (including initial mount)
+  // Fetch data when sortBy changes (including initial mount)
   useEffect(() => {
     const controller = new AbortController();
 
-    fetchGraphData(selectedTypes, sortBy, controller.signal);
+    fetchGraphData(sortBy, controller.signal);
 
     return () => {
       controller.abort();
     };
-  }, [fetchGraphData, selectedTypes, sortBy]);
+  }, [fetchGraphData, sortBy]);
+
+  // Graph nodes represent operational wiki pages, not concepts.
+  // Close concept detail panel when switching to graph mode.
+  useEffect(() => {
+    if (viewMode === 'graph' && selectedConceptId) {
+      setSelectedConceptId(null);
+    }
+  }, [viewMode, selectedConceptId]);
 
   // Calculate stats
   const stats = useMemo(() => {
     const total = viewMode === 'graph' ? graphNodes.length : concepts.length;
-    const byType: Partial<Record<ConceptType, number>> = {};
+    const byType: Record<string, number> = {};
 
     if (viewMode === 'graph') {
-      graphNodes.forEach((node) => {
-        byType[node.type] = (byType[node.type] || 0) + 1;
-      });
+      if (graphMeta) {
+        byType['org pages'] = graphMeta.counts.orgPages;
+        byType['vendor pages'] = graphMeta.counts.vendorPages;
+        byType['clusters'] = graphMeta.counts.clusters;
+      } else {
+        graphNodes.forEach((node) => {
+          const label = node.typeLabel || node.type;
+          byType[label] = (byType[label] || 0) + 1;
+        });
+      }
     } else {
       concepts.forEach((concept) => {
         byType[concept.conceptType] = (byType[concept.conceptType] || 0) + 1;
@@ -178,7 +203,7 @@ function KnowledgePageContent() {
     }
 
     return { total, byType };
-  }, [graphNodes, concepts, viewMode]);
+  }, [graphNodes, graphMeta, concepts, viewMode]);
 
   // Filter concepts for list view
   const filteredConcepts = useMemo(() => {
@@ -254,15 +279,15 @@ function KnowledgePageContent() {
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[320px] p-4">
                     <div className="space-y-2">
-                      <p className="font-medium">How concepts are created</p>
+                      <p className="font-medium">How operational graph nodes are created</p>
                       <p className="text-xs text-muted-foreground">
-                        Concepts are automatically extracted from your content using AI.
-                        When you upload recordings, videos, or documents, our system identifies
-                        key topics, tools, people, and ideas mentioned in your content.
+                        Org wiki pages are compiled from your recordings/documents, vendor
+                        pages come from source documentation, and clusters are derived from
+                        page relationships.
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        As you add more content, concepts build connections showing how
-                        different ideas relate across your knowledge base.
+                        This graph shows relationships, cluster memberships, and vendor
+                        matches so you can inspect operational coverage in one canvas.
                       </p>
                     </div>
                   </TooltipContent>
@@ -270,7 +295,7 @@ function KnowledgePageContent() {
               </TooltipProvider>
             </div>
             <p className="text-sm sm:text-base text-muted-foreground">
-              Explore concepts and relationships across your content
+              Explore org pages, vendor pages, relationships, and clusters
             </p>
           </div>
 
@@ -315,7 +340,9 @@ function KnowledgePageContent() {
           <div className="flex items-center gap-4 flex-wrap" role="status" aria-live="polite">
             <div className="flex items-center gap-2">
               <Hash className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-              <span className="text-sm font-medium">{stats.total} concepts</span>
+              <span className="text-sm font-medium">
+                {stats.total} {viewMode === 'graph' ? 'nodes' : 'concepts'}
+              </span>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -323,9 +350,9 @@ function KnowledgePageContent() {
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[280px]">
                     <p className="text-xs">
-                      Concepts are key topics, tools, people, and ideas automatically
-                      extracted from your content. The more content you add, the richer
-                      your knowledge graph becomes.
+                      {viewMode === 'graph'
+                        ? 'Graph mode visualizes operational wiki nodes and typed edges for routing, relationship, and coverage analysis.'
+                        : 'Concept mode lists AI-extracted topics from your content.'}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -346,11 +373,13 @@ function KnowledgePageContent() {
 
           {/* Filters */}
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Concept Type Filter */}
-            <ConceptFilter
-              selectedTypes={selectedTypes}
-              onSelectionChange={setSelectedTypes}
-            />
+            {/* Concept Type Filter (list view only) */}
+            {viewMode === 'list' && (
+              <ConceptFilter
+                selectedTypes={selectedTypes}
+                onSelectionChange={setSelectedTypes}
+              />
+            )}
 
             {/* Sort (List view only) */}
             {viewMode === 'list' && (
@@ -368,7 +397,7 @@ function KnowledgePageContent() {
             )}
 
             {/* Clear filters */}
-            {selectedTypes.length > 0 && (
+            {viewMode === 'list' && selectedTypes.length > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -520,8 +549,6 @@ function KnowledgePageContent() {
               <KnowledgeGraphContainer
                 nodes={graphNodes}
                 edges={graphEdges}
-                onNodeClick={handleConceptClick}
-                selectedNodeId={selectedConceptId}
                 height={600}
               />
             ) : (
@@ -537,11 +564,13 @@ function KnowledgePageContent() {
       </AnimatePresence>
 
       {/* Concept Details Panel */}
-      <ConceptPanel
-        conceptId={selectedConceptId}
-        onClose={handleClosePanel}
-        onConceptClick={handleConceptClick}
-      />
+      {viewMode === 'list' && (
+        <ConceptPanel
+          conceptId={selectedConceptId}
+          onClose={handleClosePanel}
+          onConceptClick={handleConceptClick}
+        />
+      )}
     </div>
   );
 }
