@@ -8,8 +8,13 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   fetchKnowledgeStatusSummary,
+  KNOWLEDGE_STATUS,
   type KnowledgeStatusSummary,
 } from '@/lib/services/knowledge-status';
+import {
+  listReviewQueueItems,
+  type ReviewQueueKind,
+} from '@/lib/services/review-queue';
 
 export interface KnowledgeHealthData {
   curatorEnabled: boolean;
@@ -23,6 +28,95 @@ export interface KnowledgeHealthData {
   healthScore: number;
   hasContent: boolean;
   knowledgeStatus: KnowledgeStatusSummary;
+}
+
+export type KnowledgeBottleneckKind =
+  | 'routing'
+  | 'review'
+  | 'publication'
+  | 'vendor-gap'
+  | 'processing';
+
+export interface KnowledgeFlowBottleneck {
+  key: KnowledgeBottleneckKind;
+  label: string;
+  count: number;
+}
+
+export interface KnowledgeOperationalMetrics {
+  knowledgeStatus: KnowledgeStatusSummary;
+  reviewQueueCounts: Record<ReviewQueueKind, number>;
+  pendingReviewCount: number;
+  routingBacklog: number;
+  reviewBacklog: number;
+  publicationBacklog: number;
+  vendorGapCount: number;
+  processingCount: number;
+  primaryBottleneck: KnowledgeFlowBottleneck | null;
+}
+
+export function summarizeReviewQueueKindCounts(
+  queueKinds: ReviewQueueKind[],
+): Record<ReviewQueueKind, number> {
+  const counts: Record<ReviewQueueKind, number> = {
+    contradiction: 0,
+    routing: 0,
+    'manual-publication': 0,
+  };
+
+  for (const kind of queueKinds) {
+    counts[kind] += 1;
+  }
+
+  return counts;
+}
+
+export function deriveKnowledgeOperationalMetrics(input: {
+  knowledgeStatus: KnowledgeStatusSummary;
+  reviewQueueCounts: Record<ReviewQueueKind, number>;
+}): KnowledgeOperationalMetrics {
+  const { knowledgeStatus, reviewQueueCounts } = input;
+  const routingBacklog =
+    knowledgeStatus.counts[KNOWLEDGE_STATUS.NEEDS_ROUTING] +
+    reviewQueueCounts.routing;
+  const reviewBacklog =
+    knowledgeStatus.counts[KNOWLEDGE_STATUS.NEEDS_REVIEW] +
+    reviewQueueCounts.contradiction;
+  const publicationBacklog = reviewQueueCounts['manual-publication'];
+  const vendorGapCount = knowledgeStatus.counts[KNOWLEDGE_STATUS.VENDOR_ONLY];
+  const processingCount = knowledgeStatus.counts[KNOWLEDGE_STATUS.PROCESSING];
+  const pendingReviewCount =
+    reviewQueueCounts.contradiction +
+    reviewQueueCounts.routing +
+    reviewQueueCounts['manual-publication'];
+
+  const bottleneckCandidates: KnowledgeFlowBottleneck[] = [
+    { key: 'routing', label: 'Routing', count: routingBacklog },
+    { key: 'review', label: 'Review', count: reviewBacklog },
+    { key: 'publication', label: 'Publication', count: publicationBacklog },
+    { key: 'vendor-gap', label: 'Vendor gaps', count: vendorGapCount },
+    { key: 'processing', label: 'Processing', count: processingCount },
+  ];
+
+  let primaryBottleneck: KnowledgeFlowBottleneck | null = null;
+  for (const candidate of bottleneckCandidates) {
+    if (candidate.count <= 0) continue;
+    if (!primaryBottleneck || candidate.count > primaryBottleneck.count) {
+      primaryBottleneck = candidate;
+    }
+  }
+
+  return {
+    knowledgeStatus,
+    reviewQueueCounts,
+    pendingReviewCount,
+    routingBacklog,
+    reviewBacklog,
+    publicationBacklog,
+    vendorGapCount,
+    processingCount,
+    primaryBottleneck,
+  };
 }
 
 /**
@@ -146,4 +240,27 @@ export async function fetchKnowledgeHealth(orgId: string): Promise<KnowledgeHeal
     hasContent: total > 0,
     knowledgeStatus,
   };
+}
+
+export async function fetchKnowledgeOperationalMetrics(
+  orgId: string,
+): Promise<KnowledgeOperationalMetrics> {
+  const [knowledgeStatus, reviewQueueKinds] = await Promise.all([
+    fetchKnowledgeStatusSummary(orgId),
+    listReviewQueueItems(orgId)
+      .then((items) => items.map((item) => item.kind))
+      .catch((error) => {
+        console.warn(
+          '[knowledge-health] Failed to load review queue items for operational metrics:',
+          error,
+        );
+        return [] as ReviewQueueKind[];
+      }),
+  ]);
+
+  const reviewQueueCounts = summarizeReviewQueueKindCounts(reviewQueueKinds);
+  return deriveKnowledgeOperationalMetrics({
+    knowledgeStatus,
+    reviewQueueCounts,
+  });
 }
