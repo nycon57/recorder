@@ -71,6 +71,8 @@ export function NavMain() {
             // Determine active state based on pathname
             const isActive = item.url === '/library'
               ? pathname === '/library' || pathname.startsWith('/library/')
+              : item.url === '/knowledge'
+                ? pathname === '/knowledge' || pathname.startsWith('/knowledge/')
               : pathname === item.url
 
             return (
