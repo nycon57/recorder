@@ -6,7 +6,8 @@
  * queries to the owning org, and returns structured JSON.
  *
  * Tools:
- *   searchRecordings      — Raw-evidence discovery across content
+ *   answerQuestion        — Compiled-memory Q&A context with citations
+ *   searchRecordings      — Raw evidence discovery across content
  *   searchConcepts        — Knowledge graph concept search
  *   exploreKnowledgeGraph — Depth-based graph traversal
  *   getDocument           — Retrieve document by content ID
@@ -24,6 +25,7 @@ import {
   McpRateLimitError,
 } from './auth';
 import {
+  handleAnswerQuestion,
   handleSearchRecordings,
   handleSearchConcepts,
   handleExploreKnowledgeGraph,
@@ -110,8 +112,36 @@ function registerTools(
   keyId: string
 ): void {
   server.tool(
+    'answerQuestion',
+    'Answer a question using compiled memory. Returns citation-ordered context with the same precedence used by dashboard chat: team knowledge first, then vendor training, then vendor documentation.',
+    {
+      question: z
+        .string()
+        .min(1)
+        .max(1000)
+        .describe('The question to answer from compiled memory'),
+      app: z
+        .string()
+        .optional()
+        .describe('Optional app scope for compiled memory resolution'),
+      screen: z
+        .string()
+        .optional()
+        .describe('Optional screen scope for compiled memory resolution'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(10)
+        .default(3)
+        .describe('Max compiled-memory citations to include'),
+    },
+    wrapHandler('answerQuestion', (args) => handleAnswerQuestion(args, ctx), keyId)
+  );
+
+  server.tool(
     'searchRecordings',
-    'Discovery-mode search across recordings, transcripts, and documents. Use it for raw evidence lookup and audit trails, not canonical compiled-memory answers. Returns matching items with snippets and similarity scores.',
+    'Search raw recordings, transcripts, and documents to discover evidence. Returns matching items with snippets and similarity scores.',
     {
       query: z.string().min(1).max(500).describe('Search query'),
       limit: z

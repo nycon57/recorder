@@ -7,6 +7,7 @@
 
 import { tool } from 'ai';
 import {
+  executeAnswerQuestion,
   executeSearchRecordings,
   executeGetDocument,
   executeGetTranscript,
@@ -15,6 +16,7 @@ import {
   toolDescriptions,
 } from '../src/lib/services/chat-tools';
 import {
+  answerQuestionInputSchema,
   searchRecordingsInputSchema,
   getDocumentInputSchema,
   getTranscriptInputSchema,
@@ -32,6 +34,13 @@ console.log(`\n${YELLOW}Testing Tool Schema Compatibility with Gemini API${RESET
 
 // Create tools exactly as they're created in the API route
 const toolsWithContext = {
+  answerQuestion: tool({
+    description: toolDescriptions.answerQuestion,
+    inputSchema: answerQuestionInputSchema,
+    execute: async (args: any) => {
+      return await executeAnswerQuestion(args, { orgId: 'test', userId: 'test' });
+    },
+  }),
   searchRecordings: tool({
     description: toolDescriptions.searchRecordings,
     inputSchema: searchRecordingsInputSchema,

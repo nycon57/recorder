@@ -23,6 +23,16 @@ export interface CompiledMemoryAnswerSource {
   url?: string;
 }
 
+export interface CompiledMemoryAnswerCitation {
+  citationNumber: number;
+  sourceId: string;
+  title: string;
+  layer: CompiledMemoryCitationLayer;
+  excerpt: string;
+  confidence: number;
+  url?: string;
+}
+
 export interface CompiledMemoryAnswerContext {
   context: string;
   sources: CompiledMemoryAnswerSource[];
@@ -31,7 +41,7 @@ export interface CompiledMemoryAnswerContext {
 
 interface ResolveCompiledMemoryAnswerContextArgs {
   orgId: string;
-  userId: string;
+  userId?: string;
   question: string;
   app?: string;
   screen?: string;
@@ -93,6 +103,7 @@ function renderSection(
 
 export function buildCompiledMemoryAnswerContext(
   compiledMemory: CompiledMemoryContext,
+  citationLimit?: number,
 ): CompiledMemoryAnswerContext {
   const orgSources = compiledMemory.orgKnowledge.pages
     .map((page) =>
@@ -139,7 +150,23 @@ export function buildCompiledMemoryAnswerContext(
       ].filter((source): source is CompiledMemoryAnswerSource => source != null)
     : [];
 
-  const sources = [...orgSources, ...vendorTrainingSources, ...vendorSources];
+  const remainingBudget =
+    citationLimit == null ? Number.POSITIVE_INFINITY : Math.max(citationLimit, 0);
+  const limitedOrgSources = orgSources.slice(0, remainingBudget);
+  const remainingAfterOrg = remainingBudget - limitedOrgSources.length;
+  const limitedVendorTrainingSources = vendorTrainingSources.slice(
+    0,
+    Math.max(remainingAfterOrg, 0),
+  );
+  const remainingAfterTraining =
+    remainingAfterOrg - limitedVendorTrainingSources.length;
+  const limitedVendorSources = vendorSources.slice(0, Math.max(remainingAfterTraining, 0));
+
+  const sources = [
+    ...limitedOrgSources,
+    ...limitedVendorTrainingSources,
+    ...limitedVendorSources,
+  ];
 
   const sections: string[] = [];
   let nextIndex = 1;
@@ -153,23 +180,31 @@ export function buildCompiledMemoryAnswerContext(
     ].join('\n'),
   );
 
-  const orgSection = renderSection("YOUR TEAM'S KNOWLEDGE", orgSources, nextIndex);
+  const orgSection = renderSection(
+    "YOUR TEAM'S KNOWLEDGE",
+    limitedOrgSources,
+    nextIndex,
+  );
   if (orgSection) {
     sections.push(orgSection);
-    nextIndex += orgSources.length;
+    nextIndex += limitedOrgSources.length;
   }
 
   const vendorTrainingSection = renderSection(
     'VENDOR TRAINING',
-    vendorTrainingSources,
+    limitedVendorTrainingSources,
     nextIndex,
   );
   if (vendorTrainingSection) {
     sections.push(vendorTrainingSection);
-    nextIndex += vendorTrainingSources.length;
+    nextIndex += limitedVendorTrainingSources.length;
   }
 
-  const vendorSection = renderSection('VENDOR KNOWLEDGE', vendorSources, nextIndex);
+  const vendorSection = renderSection(
+    'VENDOR KNOWLEDGE',
+    limitedVendorSources,
+    nextIndex,
+  );
   if (vendorSection) {
     sections.push(vendorSection);
   }
@@ -179,6 +214,20 @@ export function buildCompiledMemoryAnswerContext(
     sources,
     priorTopics: compiledMemory.orgKnowledge.priorTopics,
   };
+}
+
+export function buildCompiledMemoryCitations(
+  sources: CompiledMemoryAnswerSource[],
+): CompiledMemoryAnswerCitation[] {
+  return sources.map((source, index) => ({
+    citationNumber: index + 1,
+    sourceId: source.sourceId,
+    title: source.title,
+    layer: source.layer,
+    excerpt: source.excerpt,
+    confidence: source.confidence,
+    url: source.url,
+  }));
 }
 
 export async function resolveCompiledMemoryAnswerContext(
@@ -240,7 +289,7 @@ export async function resolveCompiledMemoryAnswerContext(
       limit,
     });
 
-    return buildCompiledMemoryAnswerContext(compiledMemory);
+    return buildCompiledMemoryAnswerContext(compiledMemory, limit);
   } catch (error) {
     console.error(
       '[compiled-memory-answer-context] compiled memory resolution failed:',
