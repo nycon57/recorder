@@ -57,6 +57,7 @@ import {
 import type { Database, Json, WorkflowStep } from '@/lib/types/database';
 
 import type { ProgressCallback } from '../job-processor';
+
 import { runRelationshipExtraction } from './compile-wiki-relationships';
 import { runCrossPageContradictionDetection } from './compile-wiki-cross-page';
 
@@ -749,6 +750,9 @@ async function queueRoutingReview(args: {
     routeReason: classification.routeReason,
     proposedRoute,
     approvedRoute: null,
+    decisionVersion: 0,
+    lastAction: null,
+    history: [],
   });
 
   const { error: updateError } = await supabase

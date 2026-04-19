@@ -6,10 +6,29 @@ export const ROUTING_REVIEW_ACTION_TYPE = 'reroute_content';
 export const ROUTING_REVIEW_METADATA_KEY = 'knowledge_routing_review';
 export const ROUTING_REVIEW_CONFIDENCE_THRESHOLD = 0.7;
 
+export type RoutingReviewDecisionAction =
+  | 'approve'
+  | 'edit_and_approve'
+  | 'reroute'
+  | 'reject';
+
 export interface RoutingRoute {
   topic: string;
   app: string | null;
   screen: string | null;
+}
+
+export interface RoutingReviewHistoryEntry {
+  version: number;
+  action: RoutingReviewDecisionAction;
+  decidedAt: string;
+  decidedBy: string | null;
+  approvalId: string | null;
+  rejectionReason: string | null;
+  routeConfidence: number | null;
+  routeReason: string | null;
+  proposedRoute: RoutingRoute;
+  approvedRoute: RoutingRoute | null;
 }
 
 export interface RoutingReviewState {
@@ -23,6 +42,9 @@ export interface RoutingReviewState {
   routeReason: string | null;
   proposedRoute: RoutingRoute;
   approvedRoute: RoutingRoute | null;
+  decisionVersion: number;
+  lastAction: RoutingReviewDecisionAction | null;
+  history: RoutingReviewHistoryEntry[];
 }
 
 export interface RoutingReviewProposedAction {
@@ -38,9 +60,99 @@ function isRecord(value: Json | null | undefined): value is Record<string, Json>
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isDecisionAction(value: Json | null | undefined): value is RoutingReviewDecisionAction {
+  return (
+    value === 'approve' ||
+    value === 'edit_and_approve' ||
+    value === 'reroute' ||
+    value === 'reject'
+  );
+}
+
 function clampConfidence(value: number | null | undefined): number | null {
   if (typeof value !== 'number' || Number.isNaN(value)) return null;
   return Math.max(0, Math.min(1, value));
+}
+
+function normalizeVersion(value: Json | null | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
+  return Math.floor(value);
+}
+
+function routesEqual(left: RoutingRoute | null, right: RoutingRoute | null): boolean {
+  if (!left || !right) return false;
+  return (
+    left.topic === right.topic &&
+    left.app === right.app &&
+    left.screen === right.screen
+  );
+}
+
+function parseRoutingReviewHistoryEntry(value: Json): RoutingReviewHistoryEntry | null {
+  if (!isRecord(value)) return null;
+
+  const proposedRoute = normalizeRoutingRoute({
+    topic: value.proposedTopic,
+    app: value.proposedApp,
+    screen: value.proposedScreen,
+  });
+
+  if (!proposedRoute) return null;
+
+  const approvedRoute = normalizeRoutingRoute({
+    topic: value.approvedTopic,
+    app: value.approvedApp,
+    screen: value.approvedScreen,
+  });
+
+  const action = isDecisionAction(value.action) ? value.action : null;
+  const decidedAt = typeof value.decidedAt === 'string' ? value.decidedAt : null;
+  const version = normalizeVersion(value.version);
+
+  if (!action || !decidedAt || version <= 0) {
+    return null;
+  }
+
+  return {
+    version,
+    action,
+    decidedAt,
+    decidedBy: typeof value.decidedBy === 'string' ? value.decidedBy : null,
+    approvalId: typeof value.approvalId === 'string' ? value.approvalId : null,
+    rejectionReason:
+      typeof value.rejectionReason === 'string' ? value.rejectionReason : null,
+    routeConfidence: clampConfidence(
+      typeof value.routeConfidence === 'number' ? value.routeConfidence : null
+    ),
+    routeReason: typeof value.routeReason === 'string' ? value.routeReason : null,
+    proposedRoute,
+    approvedRoute,
+  };
+}
+
+export function determineRoutingReviewDecisionAction(input: {
+  status: 'approved' | 'rejected';
+  proposedRoute: RoutingRoute;
+  approvedRoute: RoutingRoute | null;
+  decisionHint?: RoutingReviewDecisionAction | null;
+}): RoutingReviewDecisionAction {
+  if (input.status === 'rejected') {
+    return 'reject';
+  }
+
+  if (
+    input.decisionHint === 'approve' ||
+    input.decisionHint === 'edit_and_approve' ||
+    input.decisionHint === 'reroute'
+  ) {
+    return input.decisionHint;
+  }
+
+  if (routesEqual(input.proposedRoute, input.approvedRoute)) {
+    return 'approve';
+  }
+
+  return 'reroute';
 }
 
 export function normalizeRoutingApp(value: unknown): string | null {
@@ -137,6 +249,13 @@ export function parseRoutingReviewState(
     routeReason: typeof raw.routeReason === 'string' ? raw.routeReason : null,
     proposedRoute,
     approvedRoute,
+    decisionVersion: normalizeVersion(raw.decisionVersion),
+    lastAction: isDecisionAction(raw.lastAction) ? raw.lastAction : null,
+    history: Array.isArray(raw.history)
+      ? raw.history
+          .map((entry) => parseRoutingReviewHistoryEntry(entry))
+          .filter((entry): entry is RoutingReviewHistoryEntry => entry !== null)
+      : [],
   };
 }
 
@@ -154,6 +273,10 @@ export function writeRoutingReviewState(
   metadata: Json | null | undefined,
   state: RoutingReviewState
 ): Json {
+  const history = [...state.history]
+    .sort((left, right) => left.version - right.version)
+    .slice(-50);
+
   const next = isRecord(metadata) ? { ...metadata } : {};
   next[ROUTING_REVIEW_METADATA_KEY] = {
     status: state.status,
@@ -170,6 +293,24 @@ export function writeRoutingReviewState(
     approvedTopic: state.approvedRoute?.topic ?? null,
     approvedApp: state.approvedRoute?.app ?? null,
     approvedScreen: state.approvedRoute?.screen ?? null,
+    decisionVersion: normalizeVersion(state.decisionVersion),
+    lastAction: state.lastAction ?? null,
+    history: history.map((entry) => ({
+      version: normalizeVersion(entry.version),
+      action: entry.action,
+      decidedAt: entry.decidedAt,
+      decidedBy: entry.decidedBy,
+      approvalId: entry.approvalId,
+      rejectionReason: entry.rejectionReason,
+      routeConfidence: entry.routeConfidence,
+      routeReason: entry.routeReason,
+      proposedTopic: entry.proposedRoute.topic,
+      proposedApp: entry.proposedRoute.app,
+      proposedScreen: entry.proposedRoute.screen,
+      approvedTopic: entry.approvedRoute?.topic ?? null,
+      approvedApp: entry.approvedRoute?.app ?? null,
+      approvedScreen: entry.approvedRoute?.screen ?? null,
+    })),
   } as Json;
   return next as Json;
 }
