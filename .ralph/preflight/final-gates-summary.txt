@@ -1,0 +1,62 @@
+Dashboard Final Gates (TRIB-124)
+Date: 2026-04-19
+Worktree: /Users/jarrettstanley/Desktop/websites/recorder/.worktrees/trib-124
+
+Commands run:
+1) npm run build
+2) npm run lint
+3) npm run type:check -- --pretty false
+
+Results:
+- build: PASS
+- lint: FAIL (known script path issue)
+- typecheck: FAIL (known repo-wide baseline type debt)
+
+Lint failure output:
+
+> recorder@0.0.0 lint
+> next lint
+
+Invalid project directory provided, no such directory: /Users/jarrettstanley/Desktop/websites/recorder/.worktrees/trib-124/lint
+
+Typecheck sample (first 40 lines):
+
+> recorder@0.0.0 type:check
+> tsc --noEmit --pretty false
+
+__tests__/e2e/helpers/knowledge-cross-surface-fixtures.ts(6,7): error TS2739: Type '{ id: string; app: string; screen: string; content: string; source_url: string; }' is missing the following properties from type '{ id: string; app: string; app_version: string | null; screen: string; content: string; element_selectors: Json; source_url: string | null; content_hash: string | null; created_at: string | null; updated_at: string | null; }': app_version, element_selectors, content_hash, created_at, updated_at
+__tests__/e2e/knowledge-cross-surface.spec.ts(224,11): error TS2739: Type '{ id: string; org_id: string; app: string; screen: string; topic: string; content: string; confidence: number; valid_from: string; valid_until: null; supersedes_id: null; compilation_log: never[]; created_at: string; updated_at: string; }' is missing the following properties from type '{ id: string; org_id: string; app: string | null; screen: string | null; topic: string; content: string; confidence: number; valid_from: string; valid_until: string | null; supersedes_id: string | null; ... 4 more ...; cluster_id: string | null; }': embedding, cluster_id
+scripts/analyze-db-performance.ts(44,22): error TS2345: Argument of type '{ query: string; }' is not assignable to parameter of type 'undefined'.
+scripts/analyze-db-performance.ts(67,21): error TS2339: Property 'length' does not exist on type 'never'.
+scripts/analyze-db-performance.ts(75,8): error TS2339: Property 'forEach' does not exist on type 'never'.
+scripts/analyze-db-performance.ts(91,22): error TS2345: Argument of type '{ query: string; }' is not assignable to parameter of type 'undefined'.
+scripts/analyze-db-performance.ts(115,9): error TS2339: Property 'forEach' does not exist on type 'never'.
+scripts/analyze-db-performance.ts(128,31): error TS2339: Property 'filter' does not exist on type 'never'.
+scripts/analyze-db-performance.ts(144,22): error TS2345: Argument of type '{ query: string; }' is not assignable to parameter of type 'undefined'.
+scripts/analyze-db-performance.ts(175,9): error TS2339: Property 'forEach' does not exist on type 'never'.
+scripts/analyze-db-performance.ts(194,22): error TS2345: Argument of type '{ query: string; }' is not assignable to parameter of type 'undefined'.
+scripts/analyze-db-performance.ts(223,9): error TS2339: Property 'forEach' does not exist on type 'never'.
+scripts/analyze-db-performance.ts(242,22): error TS2345: Argument of type '{ query: string; }' is not assignable to parameter of type 'undefined'.
+scripts/analyze-db-performance.ts(262,33): error TS2339: Property 'reduce' does not exist on type 'never'.
+scripts/analyze-db-performance.ts(287,22): error TS2345: Argument of type '{ query: string; }' is not assignable to parameter of type 'undefined'.
+scripts/analyze-db-performance.ts(305,21): error TS2339: Property 'length' does not exist on type 'never'.
+scripts/analyze-db-performance.ts(310,8): error TS2339: Property 'forEach' does not exist on type 'never'.
+scripts/analyze-db-performance.ts(317,22): error TS2345: Argument of type '{ query: string; }' is not assignable to parameter of type 'undefined'.
+scripts/analyze-db-performance.ts(326,30): error TS2339: Property 'length' does not exist on type 'never'.
+scripts/analyze-db-performance.ts(327,35): error TS2339: Property 'row_count' does not exist on type 'never'.
+scripts/analyze-search-quality.ts(166,30): error TS2339: Property 'metadata' does not exist on type 'never'.
+scripts/analyze-search-quality.ts(167,29): error TS2339: Property 'content' does not exist on type 'never'.
+scripts/apply-match-chunks-migration.ts(20,59): error TS2345: Argument of type '{ sql: string; }' is not assignable to parameter of type 'undefined'.
+scripts/apply-match-chunks-migration.ts(27,87): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "_supabase_migrations", never, "POST">', gave the following error.
+    Argument of type '{ name: string; statements: string[]; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "_supabase_migrations", never, "POST">', gave the following error.
+    Object literal may only specify known properties, and 'name' does not exist in type 'never[]'.
+scripts/apply-match-chunks-migration.ts(45,80): error TS2345: Argument of type '{ query_embedding: string; match_threshold: number; match_count: number; }' is not assignable to parameter of type 'undefined'.
+scripts/check-system-health.ts(217,59): error TS2339: Property 'status' does not exist on type 'never'.
+scripts/diagnose-processing.ts(126,32): error TS18047: 'file.metadata' is possibly 'null'.
+scripts/explain-critical-queries.ts(50,22): error TS2345: Argument of type '{ query: string; }' is not assignable to parameter of type 'undefined'.
+scripts/explain-critical-queries.ts(63,10): error TS2339: Property 'forEach' does not exist on type 'never'.
+scripts/optimize-database.ts(36,58): error TS2345: Argument of type '{ query: string; }' is not assignable to parameter of type 'undefined'.
+scripts/optimize-database.ts(61,58): error TS2345: Argument of type '{ query: string; }' is not assignable to parameter of type 'undefined'.
+scripts/optimize-database.ts(228,54): error TS2345: Argument of type '{ query: string; }' is not assignable to parameter of type 'undefined'.
