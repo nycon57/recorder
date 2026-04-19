@@ -50,6 +50,10 @@ export function getKnowledgeWorkspaceModeFromPathname(
   }
 
   const candidate = segments[knowledgeIndex + 1]
+  if (candidate === 'pages') {
+    return 'docs'
+  }
+
   if (isKnowledgeWorkspaceMode(candidate)) {
     return candidate
   }
