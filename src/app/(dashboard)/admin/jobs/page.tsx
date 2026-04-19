@@ -1,7 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/app/components/ui/card';
+import {
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Database,
+  Loader,
+  RefreshCw,
+  XCircle,
+} from 'lucide-react';
+
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from '@/app/components/ui/card';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -20,15 +35,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/app/components/ui/table';
-import {
-  Database,
-  AlertTriangle,
-  RefreshCw,
-  CheckCircle,
-  XCircle,
-  Clock,
-  Loader,
-} from 'lucide-react';
 
 interface Job {
   id: string;
@@ -72,9 +78,10 @@ export default function AdminJobsPage() {
 
   async function fetchJobs() {
     try {
-      const url = statusFilter === 'all'
-        ? '/api/admin/jobs?limit=100'
-        : `/api/admin/jobs?status=${statusFilter}&limit=100`;
+      const url =
+        statusFilter === 'all'
+          ? '/api/admin/jobs?limit=100'
+          : `/api/admin/jobs?status=${statusFilter}&limit=100`;
 
       const response = await fetch(url);
 
@@ -159,7 +166,7 @@ export default function AdminJobsPage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="trbd-page">
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
@@ -173,12 +180,14 @@ export default function AdminJobsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="trbd-page">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-normal">Job Queue</h1>
-          <p className="text-muted-foreground">Monitor and manage background jobs</p>
+          <h1 className="trbd-page-title">Job Queue</h1>
+          <p className="text-muted-foreground">
+            Monitor and manage background jobs
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -281,7 +290,9 @@ export default function AdminJobsPage() {
                 {data.jobs.map((job) => (
                   <TableRow key={job.id}>
                     <TableCell className="font-medium">
-                      <code className="text-xs bg-muted px-2 py-1 rounded">{job.type}</code>
+                      <code className="text-xs bg-muted px-2 py-1 rounded">
+                        {job.type}
+                      </code>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -303,21 +314,22 @@ export default function AdminJobsPage() {
                       {job.completedAt ? formatDate(job.completedAt) : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {job.status === 'failed' && job.attemptCount < job.maxAttempts && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => retryJob(job.id)}
-                          disabled={retrying === job.id}
-                        >
-                          {retrying === job.id ? (
-                            <Loader className="h-3 w-3 animate-spin mr-1" />
-                          ) : (
-                            <RefreshCw className="h-3 w-3 mr-1" />
-                          )}
-                          Retry
-                        </Button>
-                      )}
+                      {job.status === 'failed' &&
+                        job.attemptCount < job.maxAttempts && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => retryJob(job.id)}
+                            disabled={retrying === job.id}
+                          >
+                            {retrying === job.id ? (
+                              <Loader className="h-3 w-3 animate-spin mr-1" />
+                            ) : (
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                            )}
+                            Retry
+                          </Button>
+                        )}
                     </TableCell>
                   </TableRow>
                 ))}

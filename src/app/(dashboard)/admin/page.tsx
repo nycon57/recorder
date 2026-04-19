@@ -1,19 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/app/components/ui/card';
-import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import { Badge } from '@/app/components/ui/badge';
 import {
   Activity,
-  Search,
-  Database,
-  Zap,
   AlertTriangle,
+  Clock,
+  Database,
+  Search,
   Shield,
   TrendingUp,
-  Clock,
+  Zap,
 } from 'lucide-react';
+
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from '@/app/components/ui/card';
+import { Alert, AlertDescription } from '@/app/components/ui/alert';
+import { Badge } from '@/app/components/ui/badge';
 import { useFetchWithInterval } from '@/app/hooks/useFetchWithAbort';
 
 interface DashboardMetrics {
@@ -48,7 +54,7 @@ export default function AdminDashboard() {
   }, []);
 
   // ✅ Use interval-based fetch with abort controller (prevents race conditions)
-  const { loading, error: fetchError } = useFetchWithInterval<{ data: DashboardMetrics }>(
+  const { loading } = useFetchWithInterval<{ data: DashboardMetrics }>(
     '/api/admin/metrics?timeRange=24h',
     30000, // Refresh every 30 seconds
     {
@@ -62,7 +68,7 @@ export default function AdminDashboard() {
           : err.message || 'Failed to fetch metrics';
         setError(errorMessage);
       },
-    }
+    },
   );
 
   if (loading && !metrics) {
@@ -75,7 +81,7 @@ export default function AdminDashboard() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="trbd-page">
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
@@ -89,16 +95,18 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="trbd-page">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
+          <div className="trbd-icon-chip">
             <Shield className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl font-normal">System Dashboard</h1>
-            <p className="text-muted-foreground">Platform-wide monitoring and metrics</p>
+            <h1 className="trbd-page-title">System Dashboard</h1>
+            <p className="text-muted-foreground">
+              Platform-wide monitoring and metrics
+            </p>
           </div>
         </div>
         <Badge variant="outline" className="text-sm">
@@ -111,7 +119,9 @@ export default function AdminDashboard() {
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            {metrics.summary.criticalAlerts} critical alert{metrics.summary.criticalAlerts > 1 ? 's' : ''} require immediate attention
+            {metrics.summary.criticalAlerts} critical alert
+            {metrics.summary.criticalAlerts > 1 ? 's' : ''} require immediate
+            attention
           </AlertDescription>
         </Alert>
       )}
@@ -121,7 +131,9 @@ export default function AdminDashboard() {
         {/* Total Searches */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Searches</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Searches
+            </CardTitle>
             <Search className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -139,17 +151,19 @@ export default function AdminDashboard() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.summary.p95Latency}ms</div>
-            <p className="text-xs text-muted-foreground">
-              95th percentile
-            </p>
+            <div className="text-2xl font-bold">
+              {metrics.summary.p95Latency}ms
+            </div>
+            <p className="text-xs text-muted-foreground">95th percentile</p>
           </CardContent>
         </Card>
 
         {/* Cache Hit Rate */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cache Hit Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Cache Hit Rate
+            </CardTitle>
             <Zap className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -191,7 +205,9 @@ export default function AdminDashboard() {
                 <Badge variant="secondary">{metrics.jobs.pending}</Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Processing</span>
+                <span className="text-sm text-muted-foreground">
+                  Processing
+                </span>
                 <Badge variant="default">{metrics.jobs.processing}</Badge>
               </div>
               <div className="flex justify-between items-center">
@@ -210,25 +226,46 @@ export default function AdminDashboard() {
           <CardContent>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total Organizations</span>
+                <span className="text-sm text-muted-foreground">
+                  Total Organizations
+                </span>
                 <Badge variant="outline">{metrics.quotas.totalOrgs}</Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Near Search Limit</span>
-                <Badge variant={metrics.quotas.orgsNearSearchLimit > 0 ? "destructive" : "secondary"}>
+                <span className="text-sm text-muted-foreground">
+                  Near Search Limit
+                </span>
+                <Badge
+                  variant={
+                    metrics.quotas.orgsNearSearchLimit > 0
+                      ? 'destructive'
+                      : 'secondary'
+                  }
+                >
                   {metrics.quotas.orgsNearSearchLimit}
                 </Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Near Storage Limit</span>
-                <Badge variant={metrics.quotas.orgsNearStorageLimit > 0 ? "destructive" : "secondary"}>
+                <span className="text-sm text-muted-foreground">
+                  Near Storage Limit
+                </span>
+                <Badge
+                  variant={
+                    metrics.quotas.orgsNearStorageLimit > 0
+                      ? 'destructive'
+                      : 'secondary'
+                  }
+                >
                   {metrics.quotas.orgsNearStorageLimit}
                 </Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total Storage</span>
+                <span className="text-sm text-muted-foreground">
+                  Total Storage
+                </span>
                 <span className="text-sm font-medium">
-                  {metrics.quotas.totalStorageUsedGb.toFixed(1)} / {metrics.quotas.totalStorageLimitGb} GB
+                  {metrics.quotas.totalStorageUsedGb.toFixed(1)} /{' '}
+                  {metrics.quotas.totalStorageLimitGb} GB
                 </span>
               </div>
             </div>

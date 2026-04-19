@@ -24,10 +24,7 @@ import {
   parseExtensionContextDebugFilters,
   type ExtensionContextDebugKnowledgeMode,
 } from '@/lib/services/extension-context-debug';
-import type {
-  ExtensionContextPageType,
-  ExtensionContextTelemetryPayload,
-} from '@/lib/services/extension-context-telemetry';
+import type { ExtensionContextPageType } from '@/lib/services/extension-context-telemetry';
 import { requireAdmin } from '@/lib/utils/api';
 
 export const dynamic = 'force-dynamic';
@@ -89,24 +86,6 @@ function knowledgeModeVariant(mode: ExtensionContextDebugKnowledgeMode) {
   }
 }
 
-function matchCategoryVariant(
-  category: ExtensionContextTelemetryPayload['vendorMatchCategory'],
-) {
-  switch (category) {
-    case 'exact':
-      return 'aurora';
-    case 'alias':
-      return 'secondary';
-    case 'domain':
-      return 'outline';
-    case 'app':
-      return 'outline';
-    case 'unknown':
-    default:
-      return 'outline';
-  }
-}
-
 export default async function ExtensionContextDebugPage({
   searchParams,
 }: PageProps) {
@@ -126,10 +105,10 @@ export default async function ExtensionContextDebugPage({
     });
 
   return (
-    <div className="container mx-auto space-y-6 py-8">
+    <div className="trbd-page">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-3xl font-normal tracking-tight">
+          <h1 className="flex items-center gap-2 trbd-page-title tracking-tight">
             <Bug className="h-7 w-7" />
             Extension Context Debug
           </h1>
@@ -375,23 +354,11 @@ export default async function ExtensionContextDebugPage({
                           >
                             {event.telemetry.knowledgeMode}
                           </Badge>
-                          <Badge
-                            variant={matchCategoryVariant(
-                              event.telemetry.vendorMatchCategory,
-                            )}
-                          >
-                            Vendor:{' '}
-                            {event.telemetry.vendorMatchLabel ??
-                              event.telemetry.vendorMatchBasis}
+                          <Badge variant="outline">
+                            vendor:{event.telemetry.vendorMatchBasis}
                           </Badge>
-                          <Badge
-                            variant={matchCategoryVariant(
-                              event.telemetry.orgMatchCategory,
-                            )}
-                          >
-                            Org:{' '}
-                            {event.telemetry.orgMatchLabel ??
-                              event.telemetry.orgMatchBasis}
+                          <Badge variant="outline">
+                            org:{event.telemetry.orgMatchBasis}
                           </Badge>
                         </div>
                       </TableCell>
@@ -436,46 +403,6 @@ export default async function ExtensionContextDebugPage({
                           {event.telemetry.detectionConfidence.screen ?? 'n/a'}{' '}
                           / overall{' '}
                           {event.telemetry.detectionConfidence.overall ?? 'n/a'}
-                        </div>
-                        <div className="grid gap-3 pt-1 md:grid-cols-2">
-                          <div className="rounded-md border border-border/60 bg-background p-3">
-                            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                              Vendor baseline
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <Badge
-                                variant={matchCategoryVariant(
-                                  event.telemetry.vendorMatchCategory,
-                                )}
-                              >
-                                {event.telemetry.vendorMatchLabel ??
-                                  event.telemetry.vendorMatchBasis}
-                              </Badge>
-                            </div>
-                            <p className="mt-2 text-sm text-muted-foreground">
-                              {event.telemetry.vendorMatchExplanation ??
-                                'No vendor baseline explanation was recorded for this check.'}
-                            </p>
-                          </div>
-                          <div className="rounded-md border border-border/60 bg-background p-3">
-                            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                              Org overlay
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <Badge
-                                variant={matchCategoryVariant(
-                                  event.telemetry.orgMatchCategory,
-                                )}
-                              >
-                                {event.telemetry.orgMatchLabel ??
-                                  event.telemetry.orgMatchBasis}
-                              </Badge>
-                            </div>
-                            <p className="mt-2 text-sm text-muted-foreground">
-                              {event.telemetry.orgMatchExplanation ??
-                                'No org overlay explanation was recorded for this check.'}
-                            </p>
-                          </div>
                         </div>
                       </div>
                       <div className="rounded-md bg-background p-3 text-xs text-muted-foreground">

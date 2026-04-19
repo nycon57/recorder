@@ -54,12 +54,12 @@ const navItems: NavItem[] = [
     icon: Lightbulb,
     description: 'Optimization suggestions',
   },
-  // TRIB-110: Review Queue surfaces contradictions, routing gaps, and manual publication work
+  // TRIB-34: Wiki Review surfaces flagged contradictions for admin approval
   {
-    title: 'Review Queue',
+    title: 'Wiki Review',
     href: '/admin/wiki-review',
     icon: FileWarning,
-    description: 'Resolve knowledge review items',
+    description: 'Resolve flagged contradictions',
   },
 ];
 
@@ -67,14 +67,15 @@ export default function AdminNavigation() {
   const pathname = usePathname();
 
   return (
-    <nav className="space-y-2">
-      <div className="px-3 py-2">
-        <h2 className="mb-2 px-4 text-lg font-semibold tracking-tight flex items-center gap-2">
-          <LayoutDashboard className="h-5 w-5" />
+    <nav className="space-y-3">
+      <div className="px-2">
+        <p className="trbd-kicker">System Console</p>
+        <h2 className="mt-2 flex items-center gap-2 text-base font-semibold tracking-tight">
+          <LayoutDashboard className="h-4 w-4" />
           Admin Dashboard
         </h2>
       </div>
-      <div className="space-y-1 px-3">
+      <div className="space-y-1">
         {navItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -84,12 +85,19 @@ export default function AdminNavigation() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all hover:bg-accent',
-                isActive ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground'
+                'group flex items-start gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors',
+                isActive
+                  ? 'border-sidebar-ring/30 bg-sidebar-accent text-foreground'
+                  : 'border-transparent text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
               )}
             >
-              <Icon className="h-4 w-4" />
-              <div className="flex-1">
+              <Icon
+                className={cn(
+                  'mt-0.5 h-4 w-4',
+                  isActive ? 'text-primary' : 'text-muted-foreground',
+                )}
+              />
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span>{item.title}</span>
                   {item.badge && (
@@ -98,9 +106,9 @@ export default function AdminNavigation() {
                     </Badge>
                   )}
                 </div>
-                {isActive && (
-                  <p className="text-xs text-muted-foreground">{item.description}</p>
-                )}
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {item.description}
+                </p>
               </div>
             </Link>
           );

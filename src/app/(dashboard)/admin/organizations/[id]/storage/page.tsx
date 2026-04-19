@@ -23,16 +23,19 @@ export default async function OrganizationStoragePage({ params }: PageProps) {
   const { id } = await params;
 
   // Validate UUID format
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(id)) {
     notFound();
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="trbd-page">
       {/* Page Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-normal tracking-tight">Organization Storage Deep Dive</h1>
+        <h1 className="trbd-page-title tracking-tight">
+          Organization Storage Deep Dive
+        </h1>
         <p className="text-muted-foreground">
           Detailed storage analysis and management for this organization
         </p>

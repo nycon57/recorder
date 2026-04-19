@@ -1,10 +1,30 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/app/components/ui/card';
+import {
+  Activity,
+  AlertTriangle,
+  Clock,
+  Search,
+  TrendingUp,
+  Zap,
+} from 'lucide-react';
+
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardDescription,
+} from '@/app/components/ui/card';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/app/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -12,14 +32,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
-import {
-  Activity,
-  Zap,
-  Search,
-  Clock,
-  AlertTriangle,
-  TrendingUp,
-} from 'lucide-react';
 
 interface MetricsData {
   timeRange: string;
@@ -93,7 +105,7 @@ export default function AdminMetricsPage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="trbd-page">
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
@@ -107,12 +119,14 @@ export default function AdminMetricsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="trbd-page">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-normal">System Metrics</h1>
-          <p className="text-muted-foreground">Real-time performance monitoring</p>
+          <h1 className="trbd-page-title">System Metrics</h1>
+          <p className="text-muted-foreground">
+            Real-time performance monitoring
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -138,14 +152,16 @@ export default function AdminMetricsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Searches</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Searches
+            </CardTitle>
             <Search className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.search.totalSearches.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              in {timeRange}
-            </p>
+            <div className="text-2xl font-bold">
+              {metrics.search.totalSearches.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">in {timeRange}</p>
           </CardContent>
         </Card>
 
@@ -155,7 +171,9 @@ export default function AdminMetricsPage() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.search.avgLatencyMs}ms</div>
+            <div className="text-2xl font-bold">
+              {metrics.search.avgLatencyMs}ms
+            </div>
             <p className="text-xs text-muted-foreground">Mean response time</p>
           </CardContent>
         </Card>
@@ -166,18 +184,24 @@ export default function AdminMetricsPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.search.p95LatencyMs}ms</div>
+            <div className="text-2xl font-bold">
+              {metrics.search.p95LatencyMs}ms
+            </div>
             <p className="text-xs text-muted-foreground">95th percentile</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cache Hit Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Cache Hit Rate
+            </CardTitle>
             <Zap className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{(metrics.cache.hitRate * 100).toFixed(1)}%</div>
+            <div className="text-2xl font-bold">
+              {(metrics.cache.hitRate * 100).toFixed(1)}%
+            </div>
             <p className="text-xs text-muted-foreground">
               {metrics.cache.hits} hits / {metrics.cache.misses} misses
             </p>
@@ -212,18 +236,38 @@ export default function AdminMetricsPage() {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Average (Mean)</span>
-                  <Badge variant="outline">{metrics.search.avgLatencyMs}ms</Badge>
+                  <span className="text-sm text-muted-foreground">
+                    Average (Mean)
+                  </span>
+                  <Badge variant="outline">
+                    {metrics.search.avgLatencyMs}ms
+                  </Badge>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">P95 (95th percentile)</span>
-                  <Badge variant={metrics.search.p95LatencyMs > 500 ? "destructive" : "default"}>
+                  <span className="text-sm text-muted-foreground">
+                    P95 (95th percentile)
+                  </span>
+                  <Badge
+                    variant={
+                      metrics.search.p95LatencyMs > 500
+                        ? 'destructive'
+                        : 'default'
+                    }
+                  >
                     {metrics.search.p95LatencyMs}ms
                   </Badge>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">P99 (99th percentile)</span>
-                  <Badge variant={metrics.search.p99LatencyMs > 1000 ? "destructive" : "default"}>
+                  <span className="text-sm text-muted-foreground">
+                    P99 (99th percentile)
+                  </span>
+                  <Badge
+                    variant={
+                      metrics.search.p99LatencyMs > 1000
+                        ? 'destructive'
+                        : 'default'
+                    }
+                  >
                     {metrics.search.p99LatencyMs}ms
                   </Badge>
                 </div>
@@ -241,12 +285,21 @@ export default function AdminMetricsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {Object.entries(metrics.cache.layerDistribution).map(([layer, count]) => (
-                  <div key={layer} className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground capitalize">{layer}</span>
-                    <Badge variant="secondary">{count.toLocaleString()}</Badge>
-                  </div>
-                ))}
+                {Object.entries(metrics.cache.layerDistribution).map(
+                  ([layer, count]) => (
+                    <div
+                      key={layer}
+                      className="flex justify-between items-center"
+                    >
+                      <span className="text-sm text-muted-foreground capitalize">
+                        {layer}
+                      </span>
+                      <Badge variant="secondary">
+                        {count.toLocaleString()}
+                      </Badge>
+                    </div>
+                  ),
+                )}
               </div>
             </CardContent>
           </Card>
@@ -261,12 +314,19 @@ export default function AdminMetricsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {Object.entries(metrics.search.modeDistribution).map(([mode, count]) => (
-                  <div key={mode} className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground capitalize">{mode}</span>
-                    <Badge variant="outline">{count.toLocaleString()}</Badge>
-                  </div>
-                ))}
+                {Object.entries(metrics.search.modeDistribution).map(
+                  ([mode, count]) => (
+                    <div
+                      key={mode}
+                      className="flex justify-between items-center"
+                    >
+                      <span className="text-sm text-muted-foreground capitalize">
+                        {mode}
+                      </span>
+                      <Badge variant="outline">{count.toLocaleString()}</Badge>
+                    </div>
+                  ),
+                )}
               </div>
             </CardContent>
           </Card>

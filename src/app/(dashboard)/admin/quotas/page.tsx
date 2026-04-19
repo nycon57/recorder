@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/app/components/ui/card';
+import { AlertTriangle, HardDrive, Package, Users } from 'lucide-react';
+
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardDescription,
+} from '@/app/components/ui/card';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
 import { Progress } from '@/app/components/ui/progress';
@@ -13,13 +21,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/app/components/ui/table';
-import {
-  HardDrive,
-  Users,
-  AlertTriangle,
-  TrendingUp,
-  Package,
-} from 'lucide-react';
 
 interface QuotasData {
   totalOrgs: number;
@@ -97,7 +98,7 @@ export default function AdminQuotasPage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="trbd-page">
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
@@ -110,17 +111,20 @@ export default function AdminQuotasPage() {
     return null;
   }
 
-  const storageUtilization = data.totalStorageLimitGb && data.totalStorageLimitGb > 0
-    ? (data.totalStorageUsedGb / data.totalStorageLimitGb) * 100
-    : 0;
+  const storageUtilization =
+    data.totalStorageLimitGb && data.totalStorageLimitGb > 0
+      ? (data.totalStorageUsedGb / data.totalStorageLimitGb) * 100
+      : 0;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="trbd-page">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-normal">Quota Management</h1>
-          <p className="text-muted-foreground">Monitor organization usage and limits</p>
+          <h1 className="trbd-page-title">Quota Management</h1>
+          <p className="text-muted-foreground">
+            Monitor organization usage and limits
+          </p>
         </div>
 
         <Badge variant="outline" className="text-sm">
@@ -132,7 +136,9 @@ export default function AdminQuotasPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Organizations</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Organizations
+            </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -142,30 +148,46 @@ export default function AdminQuotasPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Near Search Limit</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Near Search Limit
+            </CardTitle>
             <AlertTriangle className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.orgsNearSearchLimit ?? 0}</div>
+            <div className="text-2xl font-bold">
+              {data.orgsNearSearchLimit ?? 0}
+            </div>
             <p className="text-xs text-muted-foreground">
               {data.totalOrgs && data.totalOrgs > 0
-                ? (((data.orgsNearSearchLimit ?? 0) / data.totalOrgs) * 100).toFixed(0)
-                : '0'}% of orgs
+                ? (
+                    ((data.orgsNearSearchLimit ?? 0) / data.totalOrgs) *
+                    100
+                  ).toFixed(0)
+                : '0'}
+              % of orgs
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Near Storage Limit</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Near Storage Limit
+            </CardTitle>
             <HardDrive className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.orgsNearStorageLimit ?? 0}</div>
+            <div className="text-2xl font-bold">
+              {data.orgsNearStorageLimit ?? 0}
+            </div>
             <p className="text-xs text-muted-foreground">
               {data.totalOrgs && data.totalOrgs > 0
-                ? (((data.orgsNearStorageLimit ?? 0) / data.totalOrgs) * 100).toFixed(0)
-                : '0'}% of orgs
+                ? (
+                    ((data.orgsNearStorageLimit ?? 0) / data.totalOrgs) *
+                    100
+                  ).toFixed(0)
+                : '0'}
+              % of orgs
             </p>
           </CardContent>
         </Card>
@@ -180,53 +202,62 @@ export default function AdminQuotasPage() {
               {(data.totalStorageUsedGb ?? 0).toFixed(0)}GB
             </div>
             <p className="text-xs text-muted-foreground">
-              of {data.totalStorageLimitGb ?? 0}GB ({storageUtilization.toFixed(1)}%)
+              of {data.totalStorageLimitGb ?? 0}GB (
+              {storageUtilization.toFixed(1)}%)
             </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Plan Distribution */}
-      {data.planDistribution && Object.keys(data.planDistribution).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Plan Distribution</CardTitle>
-            <CardDescription>Organizations by subscription tier</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {Object.entries(data.planDistribution).map(([plan, count]) => {
-                const percentage = data.totalOrgs && data.totalOrgs > 0
-                  ? (count / data.totalOrgs) * 100
-                  : 0;
-                return (
-                  <div key={plan} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge variant={getPlanBadgeVariant(plan)}>
-                          {plan.toUpperCase()}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">
-                          {count} organizations
+      {data.planDistribution &&
+        Object.keys(data.planDistribution).length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Plan Distribution</CardTitle>
+              <CardDescription>
+                Organizations by subscription tier
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {Object.entries(data.planDistribution).map(([plan, count]) => {
+                  const percentage =
+                    data.totalOrgs && data.totalOrgs > 0
+                      ? (count / data.totalOrgs) * 100
+                      : 0;
+                  return (
+                    <div key={plan} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={getPlanBadgeVariant(plan)}>
+                            {plan.toUpperCase()}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            {count} organizations
+                          </span>
+                        </div>
+                        <span className="text-sm font-medium">
+                          {percentage.toFixed(1)}%
                         </span>
                       </div>
-                      <span className="text-sm font-medium">{percentage.toFixed(1)}%</span>
+                      <Progress value={percentage} className="h-2" />
                     </div>
-                    <Progress value={percentage} className="h-2" />
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
       {/* Organizations Near Limits */}
       {data.orgs && data.orgs.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Organizations Near Limits</CardTitle>
-            <CardDescription>Organizations using &gt; 80% of their quota</CardDescription>
+            <CardDescription>
+              Organizations using &gt; 80% of their quota
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -241,26 +272,33 @@ export default function AdminQuotasPage() {
               </TableHeader>
               <TableBody>
                 {data.orgs.map((org) => {
-                  const storagePercent = org.storageLimit && org.storageLimit > 0
-                    ? (org.storageUsed / org.storageLimit) * 100
-                    : 0;
-                  const searchPercent = org.searchesLimit && org.searchesLimit > 0
-                    ? (org.searchesUsed / org.searchesLimit) * 100
-                    : 0;
+                  const storagePercent =
+                    org.storageLimit && org.storageLimit > 0
+                      ? (org.storageUsed / org.storageLimit) * 100
+                      : 0;
+                  const searchPercent =
+                    org.searchesLimit && org.searchesLimit > 0
+                      ? (org.searchesUsed / org.searchesLimit) * 100
+                      : 0;
                   const nearLimit = storagePercent > 80 || searchPercent > 80;
 
                   return (
                     <TableRow key={org.id}>
-                      <TableCell className="font-medium">{org.name || 'Unknown'}</TableCell>
+                      <TableCell className="font-medium">
+                        {org.name || 'Unknown'}
+                      </TableCell>
                       <TableCell>
-                        <Badge variant={getPlanBadgeVariant(org.plan || 'free')}>
+                        <Badge
+                          variant={getPlanBadgeVariant(org.plan || 'free')}
+                        >
                           {org.plan || 'free'}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1">
                           <div className="text-sm">
-                            {(org.storageUsed ?? 0).toFixed(1)} / {org.storageLimit ?? 0} GB
+                            {(org.storageUsed ?? 0).toFixed(1)} /{' '}
+                            {org.storageLimit ?? 0} GB
                           </div>
                           <Progress
                             value={storagePercent}
@@ -271,7 +309,8 @@ export default function AdminQuotasPage() {
                       <TableCell>
                         <div className="space-y-1">
                           <div className="text-sm">
-                            {(org.searchesUsed ?? 0).toLocaleString()} / {(org.searchesLimit ?? 0).toLocaleString()}
+                            {(org.searchesUsed ?? 0).toLocaleString()} /{' '}
+                            {(org.searchesLimit ?? 0).toLocaleString()}
                           </div>
                           <Progress
                             value={searchPercent}

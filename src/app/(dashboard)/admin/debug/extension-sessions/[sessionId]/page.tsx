@@ -202,7 +202,7 @@ export default async function ExtensionSessionDetailPage({
   const { summary } = timeline;
 
   return (
-    <div className="container mx-auto space-y-6 py-8">
+    <div className="trbd-page">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Button asChild variant="ghost" size="sm" className="mb-3 -ml-3">
@@ -211,7 +211,7 @@ export default async function ExtensionSessionDetailPage({
               Back to sessions
             </Link>
           </Button>
-          <h1 className="flex items-center gap-2 text-3xl font-normal tracking-tight">
+          <h1 className="flex items-center gap-2 trbd-page-title tracking-tight">
             <AudioLines className="h-7 w-7" />
             Session {summary.id}
           </h1>
