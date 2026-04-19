@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
 
 import {
   buildCompiledMemoryAnswerContext,
@@ -76,6 +75,11 @@ test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor l
   assert.match(result.context, /YOUR TEAM'S KNOWLEDGE:/);
   assert.match(result.context, /VENDOR TRAINING:/);
   assert.match(result.context, /VENDOR KNOWLEDGE:/);
+  assert.match(result.context, /SOURCE PRECEDENCE:/);
+  assert.match(
+    result.context,
+    /YOUR TEAM'S KNOWLEDGE overrides VENDOR TRAINING and VENDOR KNOWLEDGE/,
+  );
   assert.match(result.context, /\[1\] Deal routing/);
   assert.match(result.context, /\[2\] Vendor rollout playbook/);
   assert.match(result.context, /\[3\] hubspot — deals/);
