@@ -1,8 +1,8 @@
 import { Suspense } from 'react';
 import { headers } from 'next/headers';
-import { auth } from '@/lib/auth/auth';
 import { redirect } from 'next/navigation';
 
+import { auth } from '@/lib/auth/auth';
 import {
   AgentStatusWidget,
   DashboardContent,
@@ -24,7 +24,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 space-y-8">
+    <div className="trbd-page">
       <DashboardContent />
       <Suspense fallback={null}>
         <KnowledgeHealthWidget />

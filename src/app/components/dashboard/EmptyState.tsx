@@ -5,8 +5,6 @@ import {
   ArrowRight,
   Video,
   Upload,
-  Sparkles,
-  Zap,
   Search,
   MessageSquare,
 } from 'lucide-react';
@@ -21,11 +19,6 @@ import {
   EmptyContent,
 } from '@/app/components/ui/empty';
 
-/**
- * Dashboard EmptyState Component
- *
- * @refactored - Now uses @shadcn/empty as foundation
- */
 interface EmptyStateProps {
   onRecordClick?: () => void;
   onUploadClick?: () => void;
@@ -33,43 +26,29 @@ interface EmptyStateProps {
 
 export function EmptyState({ onRecordClick, onUploadClick }: EmptyStateProps) {
   return (
-    <Empty className="border-2 bg-gradient-to-br from-primary/5 via-background to-secondary/5 py-16">
+    <Empty className="border border-border bg-card/60 py-14">
       <EmptyHeader>
-        {/* Icon with sparkle decoration */}
-        <EmptyMedia className="relative mb-6">
-          <div className="inline-flex items-center justify-center rounded-full bg-primary/10 p-6">
-            <FolderOpen className="size-16 text-primary" />
-          </div>
-          <div className="absolute -top-2 -right-2 animate-pulse">
-            <Sparkles className="size-8 text-yellow-500 fill-yellow-500" />
-          </div>
+        <EmptyMedia className="mb-6 inline-flex rounded-xl border border-border bg-muted/70 p-5">
+          <FolderOpen className="size-14 text-muted-foreground" />
         </EmptyMedia>
 
-        <EmptyTitle className="text-3xl mb-3">
-          Welcome to Your Knowledge Hub
+        <EmptyTitle className="font-[var(--font-heading)] text-3xl font-semibold tracking-tight">
+          Start Your Knowledge Hub
         </EmptyTitle>
 
-        <EmptyDescription className="text-lg mb-2 max-w-md">
-          Start capturing, organizing, and discovering insights from all your content.
-        </EmptyDescription>
-
-        <EmptyDescription className="text-sm mb-6 max-w-lg">
-          Record your screen, upload files, or create notes. Everything is automatically transcribed,
-          searchable, and enhanced with AI.
+        <EmptyDescription className="max-w-2xl text-sm text-muted-foreground">
+          Record your screen, upload existing material, or create notes. Tribora
+          indexes it all so your team can search, review, and reuse decisions
+          without repeat explanations.
         </EmptyDescription>
       </EmptyHeader>
 
       <EmptyContent className="max-w-3xl">
-        {/* Primary Actions */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-8">
-          <Button
-            size="lg"
-            onClick={onRecordClick}
-            className="gap-2 shadow-lg shadow-primary/20"
-          >
+        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <Button size="lg" onClick={onRecordClick} className="gap-2">
             <Video className="size-5" />
             Start Recording
-            <ArrowRight className="size-4 ml-1" />
+            <ArrowRight className="size-4" />
           </Button>
           <Button
             size="lg"
@@ -82,59 +61,29 @@ export function EmptyState({ onRecordClick, onUploadClick }: EmptyStateProps) {
           </Button>
         </div>
 
-        {/* Quick Start Guide */}
-        <div className="w-full">
-          <h4 className="text-sm font-semibold mb-4 text-muted-foreground uppercase tracking-wide">
-            What You Can Do
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div className="flex flex-col items-center text-center p-4 rounded-lg bg-background border">
-              <div className="inline-flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30 p-3 mb-3">
-                <Video className="size-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <h5 className="font-semibold text-sm mb-2">Record & Upload</h5>
-              <p className="text-xs text-muted-foreground">
-                Capture screen recordings or upload videos, audio files, and documents
-              </p>
-            </div>
-
-            <div className="flex flex-col items-center text-center p-4 rounded-lg bg-background border">
-              <div className="inline-flex items-center justify-center rounded-full bg-purple-100 dark:bg-purple-900/30 p-3 mb-3">
-                <Search className="size-6 text-purple-600 dark:text-purple-400" />
-              </div>
-              <h5 className="font-semibold text-sm mb-2">Smart Search</h5>
-              <p className="text-xs text-muted-foreground">
-                Find anything instantly with AI-powered semantic search across all content
-              </p>
-            </div>
-
-            <div className="flex flex-col items-center text-center p-4 rounded-lg bg-background border">
-              <div className="inline-flex items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30 p-3 mb-3">
-                <MessageSquare className="size-6 text-green-600 dark:text-green-400" />
-              </div>
-              <h5 className="font-semibold text-sm mb-2">AI Assistant</h5>
-              <p className="text-xs text-muted-foreground">
-                Chat with your content and get instant answers from your knowledge base
-              </p>
-            </div>
+        <div className="grid gap-3 text-left sm:grid-cols-3">
+          <div className="rounded-lg border border-border bg-muted/35 p-4">
+            <Video className="mb-3 size-5 text-muted-foreground" />
+            <p className="font-medium">Capture</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Record workflows and demos with audio, camera, and screen context.
+            </p>
           </div>
-        </div>
-
-        {/* Features List */}
-        <div className="pt-6 border-t w-full max-w-md mx-auto">
-          <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-              <Zap className="size-3 text-yellow-600" />
-              <span>Auto-transcription</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="size-3 text-purple-600" />
-              <span>AI summaries</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Search className="size-3 text-blue-600" />
-              <span>Semantic search</span>
-            </div>
+          <div className="rounded-lg border border-border bg-muted/35 p-4">
+            <Search className="mb-3 size-5 text-muted-foreground" />
+            <p className="font-medium">Retrieve</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Search by meaning, topic, speaker, and timeframe across all
+              assets.
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/35 p-4">
+            <MessageSquare className="mb-3 size-5 text-muted-foreground" />
+            <p className="font-medium">Assist</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ask the assistant for source-backed answers from your own
+              material.
+            </p>
           </div>
         </div>
       </EmptyContent>

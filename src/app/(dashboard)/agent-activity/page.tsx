@@ -16,7 +16,12 @@ import {
   Zap,
 } from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -113,7 +118,10 @@ const OUTCOME_LABELS: Record<string, string> = {
 };
 
 function agentLabel(type: string): string {
-  return AGENT_LABELS[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return (
+    AGENT_LABELS[type] ||
+    type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  );
 }
 
 function formatTime(iso: string): string {
@@ -121,7 +129,10 @@ function formatTime(iso: string): string {
   const now = new Date();
   const isToday = date.toDateString() === now.toDateString();
 
-  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const time = date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
   if (isToday) return time;
 
   return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${time}`;
@@ -192,7 +203,9 @@ export default function AgentActivityPage() {
     d.setDate(d.getDate() - 30);
     return d.toISOString().slice(0, 10);
   });
-  const [exportEndDate, setExportEndDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [exportEndDate, setExportEndDate] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
@@ -225,7 +238,7 @@ export default function AgentActivityPage() {
     setExpandedId(null);
 
     fetch(fetchUrl, { signal: controller.signal })
-      .then(res => {
+      .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
@@ -237,7 +250,7 @@ export default function AgentActivityPage() {
         setActionTypes(json.data.filters.actionTypes);
         setLoading(false);
       })
-      .catch(err => {
+      .catch((err) => {
         if (err.name !== 'AbortError') {
           console.error('[AgentActivity] Fetch error:', err);
           setError('Failed to load activity. Try refreshing the page.');
@@ -260,7 +273,7 @@ export default function AgentActivityPage() {
         throw new Error(`HTTP ${res.status} ${res.statusText}`);
       }
       const json: ActivityResponse = await res.json();
-      setEntries(prev => [...prev, ...json.data.entries]);
+      setEntries((prev) => [...prev, ...json.data.entries]);
       setHasMore(json.data.hasMore);
     } catch (err) {
       console.error('[AgentActivity] Load more error:', err);
@@ -271,7 +284,7 @@ export default function AgentActivityPage() {
 
   // Toggle row expansion
   const toggleExpand = useCallback((id: string) => {
-    setExpandedId(prev => (prev === id ? null : id));
+    setExpandedId((prev) => (prev === id ? null : id));
   }, []);
 
   // Trigger CSV/JSON export download
@@ -281,15 +294,22 @@ export default function AgentActivityPage() {
     try {
       const params = new URLSearchParams({ format: exportFormat });
       params.set('startDate', new Date(exportStartDate).toISOString());
-      params.set('endDate', new Date(exportEndDate + 'T23:59:59').toISOString());
+      params.set(
+        'endDate',
+        new Date(exportEndDate + 'T23:59:59').toISOString(),
+      );
       if (agentType) params.set('agentType', agentType);
       if (actionType) params.set('actionType', actionType);
 
-      const res = await fetch(`/api/organizations/agent-audit/export?${params}`);
+      const res = await fetch(
+        `/api/organizations/agent-audit/export?${params}`,
+      );
 
       if (res.status === 429) {
         const retryAfter = res.headers.get('Retry-After') ?? '60';
-        setExportError(`Export rate limit reached. Try again in ${retryAfter} seconds.`);
+        setExportError(
+          `Export rate limit reached. Try again in ${retryAfter} seconds.`,
+        );
         return;
       }
       if (!res.ok) {
@@ -320,14 +340,14 @@ export default function AgentActivityPage() {
   }, [exportFormat, exportStartDate, exportEndDate, agentType, actionType]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="trbd-page">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-accent/20 to-accent/10">
+        <div className="trbd-icon-chip">
           <Activity className="h-5 w-5 text-accent" />
         </div>
         <div className="flex-1">
-          <h1 className="text-heading-3 font-outfit tracking-tight">Agent Activity</h1>
+          <h1 className="trbd-page-title tracking-tight">Agent Activity</h1>
           <p className="text-sm text-muted-foreground">
             Chronological feed of agent actions in your organization
           </p>
@@ -335,7 +355,10 @@ export default function AgentActivityPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => { setExportOpen(true); setExportError(null); }}
+          onClick={() => {
+            setExportOpen(true);
+            setExportError(null);
+          }}
         >
           <Download className="h-4 w-4" />
           Export Audit Trail
@@ -351,8 +374,13 @@ export default function AgentActivityPage() {
 
           <div className="flex flex-col gap-4 py-2">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" htmlFor="export-format">Format</label>
-              <Select value={exportFormat} onValueChange={v => setExportFormat(v as 'csv' | 'json')}>
+              <label className="text-sm font-medium" htmlFor="export-format">
+                Format
+              </label>
+              <Select
+                value={exportFormat}
+                onValueChange={(v) => setExportFormat(v as 'csv' | 'json')}
+              >
                 <SelectTrigger id="export-format">
                   <SelectValue />
                 </SelectTrigger>
@@ -364,34 +392,44 @@ export default function AgentActivityPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" htmlFor="export-start">Start date</label>
+              <label className="text-sm font-medium" htmlFor="export-start">
+                Start date
+              </label>
               <input
                 id="export-start"
                 type="date"
                 value={exportStartDate}
-                onChange={e => setExportStartDate(e.target.value)}
+                onChange={(e) => setExportStartDate(e.target.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" htmlFor="export-end">End date</label>
+              <label className="text-sm font-medium" htmlFor="export-end">
+                End date
+              </label>
               <input
                 id="export-end"
                 type="date"
                 value={exportEndDate}
-                onChange={e => setExportEndDate(e.target.value)}
+                onChange={(e) => setExportEndDate(e.target.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
 
             {exportError && (
-              <p className="text-sm text-red-600 dark:text-red-400">{exportError}</p>
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {exportError}
+              </p>
             )}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setExportOpen(false)} disabled={exporting}>
+            <Button
+              variant="outline"
+              onClick={() => setExportOpen(false)}
+              disabled={exporting}
+            >
               Cancel
             </Button>
             <Button onClick={handleExport} disabled={exporting}>
@@ -416,25 +454,41 @@ export default function AgentActivityPage() {
         <StatCard
           label="Total Actions"
           value={stats?.totalActions.toLocaleString() ?? '--'}
-          icon={<Hash className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+          icon={
+            <Hash
+              className="h-4 w-4 text-muted-foreground"
+              aria-hidden="true"
+            />
+          }
           loading={loading}
         />
         <StatCard
           label="Success Rate"
           value={stats ? `${stats.successRate}%` : '--'}
-          icon={<Zap className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+          icon={
+            <Zap className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          }
           loading={loading}
         />
         <StatCard
           label="Most Active Agent"
-          value={stats?.mostActiveAgent ? agentLabel(stats.mostActiveAgent) : '--'}
-          icon={<Cpu className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+          value={
+            stats?.mostActiveAgent ? agentLabel(stats.mostActiveAgent) : '--'
+          }
+          icon={
+            <Cpu className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          }
           loading={loading}
         />
         <StatCard
           label="Tokens Used"
           value={stats ? formatTokens(stats.totalTokens) : '--'}
-          icon={<Activity className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+          icon={
+            <Activity
+              className="h-4 w-4 text-muted-foreground"
+              aria-hidden="true"
+            />
+          }
           loading={loading}
         />
       </div>
@@ -443,31 +497,44 @@ export default function AgentActivityPage() {
       <div className="flex flex-wrap items-center gap-3">
         <Filter className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
 
-        <Select value={agentType || ALL_VALUE} onValueChange={v => setAgentType(v === ALL_VALUE ? '' : v)}>
+        <Select
+          value={agentType || ALL_VALUE}
+          onValueChange={(v) => setAgentType(v === ALL_VALUE ? '' : v)}
+        >
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="Agent Type" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL_VALUE}>All Agents</SelectItem>
-            {agentTypes.map(t => (
-              <SelectItem key={t} value={t}>{agentLabel(t)}</SelectItem>
+            {agentTypes.map((t) => (
+              <SelectItem key={t} value={t}>
+                {agentLabel(t)}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        <Select value={actionType || ALL_VALUE} onValueChange={v => setActionType(v === ALL_VALUE ? '' : v)}>
+        <Select
+          value={actionType || ALL_VALUE}
+          onValueChange={(v) => setActionType(v === ALL_VALUE ? '' : v)}
+        >
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Action Type" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL_VALUE}>All Actions</SelectItem>
-            {actionTypes.map(t => (
-              <SelectItem key={t} value={t}>{t.replace(/_/g, ' ')}</SelectItem>
+            {actionTypes.map((t) => (
+              <SelectItem key={t} value={t}>
+                {t.replace(/_/g, ' ')}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        <Select value={outcome || ALL_VALUE} onValueChange={v => setOutcome(v === ALL_VALUE ? '' : v)}>
+        <Select
+          value={outcome || ALL_VALUE}
+          onValueChange={(v) => setOutcome(v === ALL_VALUE ? '' : v)}
+        >
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Outcome" />
           </SelectTrigger>
@@ -535,7 +602,7 @@ export default function AgentActivityPage() {
           </div>
         ) : (
           <div className="divide-y divide-border/30">
-            {entries.map(entry => (
+            {entries.map((entry) => (
               <ActivityRow
                 key={entry.id}
                 entry={entry}
@@ -586,7 +653,9 @@ function StatCard({ label, value, icon, loading }: StatCardProps) {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            {label}
+          </CardTitle>
           {icon}
         </div>
       </CardHeader>
@@ -623,9 +692,15 @@ function ActivityRow({ entry, expanded, onToggle }: ActivityRowProps) {
         className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-accent/5 transition-colors"
       >
         {expanded ? (
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <ChevronDown
+            className="h-4 w-4 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
         ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <ChevronRight
+            className="h-4 w-4 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
         )}
 
         <span className="w-20 shrink-0 text-muted-foreground tabular-nums">
@@ -636,7 +711,9 @@ function ActivityRow({ entry, expanded, onToggle }: ActivityRowProps) {
           {agentLabel(entry.agent_type)}
         </Badge>
 
-        <span className="text-muted-foreground" aria-hidden="true">&rarr;</span>
+        <span className="text-muted-foreground" aria-hidden="true">
+          &rarr;
+        </span>
 
         <span className="font-medium truncate">
           {entry.action_type.replace(/_/g, ' ')}
@@ -644,7 +721,9 @@ function ActivityRow({ entry, expanded, onToggle }: ActivityRowProps) {
 
         {entry.content_title && (
           <>
-            <span className="text-muted-foreground" aria-hidden="true">&rarr;</span>
+            <span className="text-muted-foreground" aria-hidden="true">
+              &rarr;
+            </span>
             <span className="truncate text-muted-foreground">
               &ldquo;{entry.content_title}&rdquo;
             </span>
@@ -681,7 +760,11 @@ function ActivityRow({ entry, expanded, onToggle }: ActivityRowProps) {
             <DetailRow label="Output" value={entry.output_summary} />
           )}
           {entry.error_message && (
-            <DetailRow label="Error" value={entry.error_message} className="text-red-500" />
+            <DetailRow
+              label="Error"
+              value={entry.error_message}
+              className="text-red-500"
+            />
           )}
           <div className="flex flex-wrap gap-x-6 gap-y-1 text-muted-foreground">
             {entry.tokens_used != null && (
@@ -699,7 +782,9 @@ function ActivityRow({ entry, expanded, onToggle }: ActivityRowProps) {
           </div>
           {entry.metadata && Object.keys(entry.metadata).length > 0 && (
             <div>
-              <span className="text-xs font-medium text-muted-foreground">Metadata</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Metadata
+              </span>
               <pre className="mt-1 text-xs bg-background/50 p-2 rounded overflow-x-auto max-h-40">
                 {JSON.stringify(entry.metadata, null, 2)}
               </pre>

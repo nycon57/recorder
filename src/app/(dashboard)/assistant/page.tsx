@@ -12,30 +12,25 @@
  * - Mobile-responsive design
  */
 
-import React from 'react';
 import { ConversationProvider } from './store/ConversationContext';
 import { AssistantChat } from './components/AssistantChat';
 
 export default function AssistantPage() {
   return (
     <ConversationProvider>
-      {/*
-        Fixed height calculation:
-        - Dashboard header: 64px (h-16)
-        - Using absolute positioning to escape main padding and fill viewport below header
-        - Total top offset: 64px (top-16 = 64px)
-      */}
-      <div className="absolute inset-0 top-16 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex-shrink-0 border-b px-6 py-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <h1 className="text-2xl font-normal">AI Assistant</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Ask questions about your recordings with AI-powered search and reasoning
-          </p>
+      <div className="trbd-page h-[calc(100dvh-7.5rem)] !gap-0 !pb-0">
+        <div className="trbd-page-header border-b border-border pb-4">
+          <div className="trbd-page-heading">
+            <h1 className="trbd-page-title">AI Assistant</h1>
+            <p className="trbd-page-description">
+              Ask questions about your recordings with AI-powered search and
+              reasoning
+            </p>
+          </div>
         </div>
 
-        {/* Chat Interface */}
         <AssistantChat
+          className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card/60"
           apiEndpoint="/api/chat"
           showAdvancedFeatures={true}
           examplePrompts={[

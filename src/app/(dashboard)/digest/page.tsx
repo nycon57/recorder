@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/lib/auth/auth';
+
 import { DigestContent } from './digest-content';
 
 export const metadata = {
@@ -19,7 +20,7 @@ export default async function DigestPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4">
+    <div className="trbd-page">
       <DigestContent />
     </div>
   );

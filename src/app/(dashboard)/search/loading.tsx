@@ -6,7 +6,7 @@ import { Skeleton } from '@/app/components/ui/skeleton';
  */
 export default function SearchLoading() {
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="trbd-page">
       {/* Header */}
       <div className="mb-8">
         <Skeleton className="h-9 w-56 mb-2" />

@@ -13,12 +13,8 @@ import {
 import { RelatedContent } from '@/app/components/content/RelatedContent';
 import { ContentChatWidget } from '@/app/components/content/ContentChatWidget';
 import { OnboardingViewTracker } from '@/app/components/onboarding/OnboardingViewTracker';
-import { fetchKnowledgeStatusForSource } from '@/lib/services/knowledge-status';
-import type { Tag, WorkflowStep } from '@/lib/types/database';
+import type { WorkflowStep } from '@/lib/types/database';
 import WorkflowViewer from '@/app/components/workflow/WorkflowViewer';
-import SourceDetailProgressPanel from '@/app/components/library/detail-views/SourceDetailProgressPanel';
-import { resolvePreferredSourceKnowledgePage } from '@/lib/services/source-detail';
-import { parseRoutingReviewState } from '@/lib/services/routing-review';
 
 async function getContentItem(id: string, internalOrgId: string) {
   const { data: item, error } = await supabaseAdmin
@@ -28,7 +24,7 @@ async function getContentItem(id: string, internalOrgId: string) {
       *,
       transcripts (*),
       documents (*)
-    `
+    `,
     )
     .eq('id', id)
     .eq('org_id', internalOrgId)
@@ -138,15 +134,11 @@ export default async function LibraryItemDetailPage({
   const document = Array.isArray(item.documents)
     ? item.documents[0]
     : item.documents || null;
-  const knowledgeStatus = await fetchKnowledgeStatusForSource({
-    orgId,
-    sourceId: id,
-    sourceStatus: item.status,
-  });
 
   const { data: itemTags } = await supabaseAdmin
     .from('content_tags')
-    .select(`
+    .select(
+      `
       tag_id,
       tags (
         id,
@@ -155,13 +147,14 @@ export default async function LibraryItemDetailPage({
         created_at,
         updated_at
       )
-    `)
+    `,
+    )
     .eq('content_id', id);
 
   const tags =
     itemTags
-      ?.map((relation: { tags: Tag | null }) => relation.tags)
-      .filter((tag): tag is Tag => tag !== null) || [];
+      ?.map((rt: { tags: Record<string, unknown> | null }) => rt.tags)
+      .filter(Boolean) || [];
 
   // Fetch the most recent non-archived workflow for this content
   const { data: rawWorkflow } = await supabaseAdmin
@@ -191,7 +184,7 @@ export default async function LibraryItemDetailPage({
         } catch {
           return { ...step, screenshotPath: null };
         }
-      })
+      }),
     );
     workflow = { ...rawWorkflow, steps };
 
@@ -205,51 +198,10 @@ export default async function LibraryItemDetailPage({
     }
   }
 
-  const { data: sourceLinks } = await supabaseAdmin
-    .from('wiki_page_sources')
-    .select('page_id')
-    .eq('source_id', id);
-
-  const linkedPageIds = Array.from(
-    new Set((sourceLinks ?? []).map((link) => link.page_id).filter(Boolean))
-  );
-
-  let linkedKnowledgePage: ReturnType<typeof resolvePreferredSourceKnowledgePage> =
-    null;
-
-  if (linkedPageIds.length > 0) {
-    const { data: linkedPages } = await supabaseAdmin
-      .from('org_wiki_pages')
-      .select('id, topic, app, screen, confidence, compilation_log, valid_until, updated_at')
-      .eq('org_id', orgId)
-      .in('id', linkedPageIds);
-
-    linkedKnowledgePage = resolvePreferredSourceKnowledgePage(linkedPages ?? []);
-  }
-
-  const linkedRoutingState = linkedKnowledgePage
-    ? parseRoutingReviewState(linkedKnowledgePage.compilation_log)
-    : null;
-
-  const { data: linkedVendorBaselineRows } =
-    linkedKnowledgePage?.app && linkedKnowledgePage?.screen
-      ? await supabaseAdmin
-          .from('vendor_wiki_pages')
-          .select('id')
-          .ilike('app', linkedKnowledgePage.app)
-          .ilike('screen', linkedKnowledgePage.screen)
-          .order('updated_at', { ascending: false })
-          .limit(5)
-      : { data: [] as Array<{ id: string }> };
-
-  const linkedVendorBaselineCount = linkedVendorBaselineRows?.length ?? 0;
-  const linkedVendorBaselineId = linkedVendorBaselineRows?.[0]?.id ?? null;
-
   const sharedProps = {
     recording: item,
     transcript,
     document,
-    knowledgeStatus,
     initialTags: tags,
     sourceKey,
     initialHighlightId: highlight,
@@ -280,51 +232,18 @@ export default async function LibraryItemDetailPage({
       );
   }
 
-  const showRelated = item.status === 'completed' || item.status === 'transcribed';
+  const showRelated =
+    item.status === 'completed' || item.status === 'transcribed';
 
   return (
     <>
       <OnboardingViewTracker contentId={id} />
       {detailView}
-      <section className="mt-8 px-4 container mx-auto" aria-labelledby="processing-artifacts-heading">
-        <h2 id="processing-artifacts-heading" className="sr-only">
-          Processing and artifacts
-        </h2>
-        <SourceDetailProgressPanel
-          contentId={id}
-          contentType={item.content_type}
-          status={item.status}
-          createdAt={item.created_at}
-          updatedAt={item.updated_at}
-          completedAt={item.completed_at}
-          transcript={transcript}
-          document={document}
-          workflow={workflow}
-          knowledgePage={
-            linkedKnowledgePage
-              ? {
-                  ...linkedKnowledgePage,
-                  routeConfidence: linkedRoutingState?.routeConfidence ?? null,
-                  routeReason: linkedRoutingState?.routeReason ?? null,
-                  detectedTopic:
-                    linkedRoutingState?.proposedRoute.topic ??
-                    linkedKnowledgePage.topic,
-                  detectedApp:
-                    linkedRoutingState?.proposedRoute.app ??
-                    linkedKnowledgePage.app,
-                  detectedScreen:
-                    linkedRoutingState?.proposedRoute.screen ??
-                    linkedKnowledgePage.screen,
-                  vendorBaselineCount: linkedVendorBaselineCount,
-                  vendorBaselineId: linkedVendorBaselineId,
-                }
-              : null
-          }
-        />
-      </section>
       {workflow && (
-        <section className="mt-8 px-4 container mx-auto" aria-labelledby="workflow-heading">
-          <h2 id="workflow-heading" className="text-lg font-light mb-4">Workflow</h2>
+        <section className="trbd-page" aria-labelledby="workflow-heading">
+          <h2 id="workflow-heading" className="text-heading-4">
+            Workflow
+          </h2>
           <WorkflowViewer
             workflowId={workflow.id}
             workflow={workflow}
@@ -334,8 +253,13 @@ export default async function LibraryItemDetailPage({
       )}
       {showRelated && (
         <>
-          <section className="mt-8" aria-labelledby="related-content-heading">
-            <h2 id="related-content-heading" className="text-lg font-light">Related Content</h2>
+          <section
+            className="trbd-page"
+            aria-labelledby="related-content-heading"
+          >
+            <h2 id="related-content-heading" className="text-heading-4">
+              Related Content
+            </h2>
             <Suspense fallback={null}>
               <RelatedContent contentId={id} orgId={item.org_id} />
             </Suspense>

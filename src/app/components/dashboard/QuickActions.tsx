@@ -35,7 +35,10 @@ const itemVariants = {
   },
 };
 
-export function QuickActions({ onUploadClick, onCreateNoteClick }: QuickActionsProps) {
+export function QuickActions({
+  onUploadClick,
+  onCreateNoteClick,
+}: QuickActionsProps) {
   const router = useRouter();
   const [mounted, setMounted] = React.useState(false);
 
@@ -49,7 +52,8 @@ export function QuickActions({ onUploadClick, onCreateNoteClick }: QuickActionsP
     {
       icon: Video,
       label: 'Record Screen',
-      description: 'Capture screen, camera, and audio instantly. No downloads required.',
+      description:
+        'Capture screen, camera, and audio instantly. No downloads required.',
       onClick: () => router.push('/record'),
     },
     {
@@ -74,11 +78,13 @@ export function QuickActions({ onUploadClick, onCreateNoteClick }: QuickActionsP
 
   return (
     <MotionDiv
-      {...(mounted ? {
-        variants: containerVariants,
-        initial: 'hidden',
-        animate: 'visible',
-      } : {})}
+      {...(mounted
+        ? {
+            variants: containerVariants,
+            initial: 'hidden',
+            animate: 'visible',
+          }
+        : {})}
       className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
     >
       {actions.map((action) => {
@@ -86,23 +92,25 @@ export function QuickActions({ onUploadClick, onCreateNoteClick }: QuickActionsP
         return (
           <MotionDiv
             key={action.label}
-            {...(mounted ? {
-              variants: itemVariants,
-              whileHover: { scale: 1.02 },
-              whileTap: { scale: 0.98 },
-            } : {})}
+            {...(mounted
+              ? {
+                  variants: itemVariants,
+                  whileHover: { scale: 1.02 },
+                  whileTap: { scale: 0.98 },
+                }
+              : {})}
           >
             <button
               onClick={action.onClick}
-              className="group relative w-full rounded-2xl border border-border/50 bg-card p-6 text-left transition-all duration-300 hover:border-accent/30 hover:shadow-[0_0_30px_rgba(0,223,130,0.1)] focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              className="group relative w-full rounded-xl border border-border bg-card/70 p-5 text-left transition-all duration-200 hover:border-ring/35 hover:bg-card focus:outline-none focus:ring-2 focus:ring-ring/35"
               aria-label={action.label}
             >
               <div className="mb-4">
-                <div className="inline-flex items-center justify-center rounded-xl bg-accent/10 p-3 ring-1 ring-accent/20 transition-all duration-300 group-hover:bg-accent/20 group-hover:ring-accent/30 group-hover:shadow-[0_0_20px_rgba(0,223,130,0.15)]">
-                  <Icon className="size-5 text-accent" />
+                <div className="inline-flex items-center justify-center rounded-lg border border-border bg-muted/60 p-2.5 transition-colors group-hover:border-ring/40 group-hover:bg-muted">
+                  <Icon className="size-5 text-muted-foreground group-hover:text-foreground" />
                 </div>
               </div>
-              <h3 className="text-heading-6 font-outfit text-foreground mb-2">
+              <h3 className="mb-2 font-[var(--font-heading)] text-base font-semibold tracking-tight text-foreground">
                 {action.label}
               </h3>
               <p className="text-body-sm text-muted-foreground line-clamp-2">

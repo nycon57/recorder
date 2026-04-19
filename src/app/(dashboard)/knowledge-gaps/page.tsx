@@ -14,7 +14,13 @@ import { toast } from 'sonner';
 
 import { useFetchWithAbort } from '@/app/hooks/useFetchWithAbort';
 import { ColoredBadge } from '@/app/components/ui/colored-badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import {
   Table,
   TableBody,
@@ -77,7 +83,11 @@ interface ResolveState {
 }
 
 const DISMISS_INITIAL: DismissState = { open: false, gapId: null, reason: '' };
-const RESOLVE_INITIAL: ResolveState = { open: false, gapId: null, contentId: '' };
+const RESOLVE_INITIAL: ResolveState = {
+  open: false,
+  gapId: null,
+  contentId: '',
+};
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return '—';
@@ -97,7 +107,9 @@ async function patchGap(id: string, body: Record<string, unknown>) {
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json() as Promise<{ data: { gap: KnowledgeGap; resolvedContentTitle: string | null } }>;
+  return response.json() as Promise<{
+    data: { gap: KnowledgeGap; resolvedContentTitle: string | null };
+  }>;
 }
 
 export default function KnowledgeGapsPage() {
@@ -111,16 +123,15 @@ export default function KnowledgeGapsPage() {
     document.title = 'Knowledge Gaps - Tribora';
   }, []);
 
-  const { loading, refetch } = useFetchWithAbort<{ data: { gaps: KnowledgeGap[] } }>(
-    '/api/knowledge-gaps',
-    {
-      onSuccess: (data) => setGaps(data.data.gaps),
-      onError: (err) => {
-        console.error('Failed to fetch knowledge gaps:', err);
-        toast.error('Failed to load knowledge gaps');
-      },
-    }
-  );
+  const { loading, refetch } = useFetchWithAbort<{
+    data: { gaps: KnowledgeGap[] };
+  }>('/api/knowledge-gaps', {
+    onSuccess: (data) => setGaps(data.data.gaps),
+    onError: (err) => {
+      console.error('Failed to fetch knowledge gaps:', err);
+      toast.error('Failed to load knowledge gaps');
+    },
+  });
 
   function toggleRow(id: string) {
     setExpandedRows((prev) => {
@@ -189,15 +200,16 @@ export default function KnowledgeGapsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8 p-4 md:p-8">
+    <div className="trbd-page">
       <div className="flex items-center gap-3">
-        <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-destructive/20 to-destructive/10 flex items-center justify-center">
+        <div className="trbd-icon-chip">
           <AlertTriangle className="h-6 w-6 text-destructive" />
         </div>
         <div>
-          <h1 className="text-heading-3 font-outfit tracking-tight">Knowledge Gaps</h1>
+          <h1 className="trbd-page-title tracking-tight">Knowledge Gaps</h1>
           <p className="text-muted-foreground">
-            Topics your team searches for but lacks documentation — ranked by impact
+            Topics your team searches for but lacks documentation — ranked by
+            impact
           </p>
         </div>
       </div>
@@ -205,21 +217,26 @@ export default function KnowledgeGapsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Open Gaps</CardTitle>
-          <CardDescription>Highest impact first. Click a row to expand details.</CardDescription>
+          <CardDescription>
+            Highest impact first. Click a row to expand details.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-14 bg-muted motion-safe:animate-pulse rounded" />
+                <div
+                  key={i}
+                  className="h-14 bg-muted motion-safe:animate-pulse rounded"
+                />
               ))}
             </div>
           ) : gaps.length === 0 ? (
             <div className="flex flex-col items-center py-16 text-center">
               <Search className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
               <p className="text-sm text-muted-foreground max-w-sm">
-                No knowledge gaps detected yet. Gaps appear as your team searches for topics with
-                insufficient content.
+                No knowledge gaps detected yet. Gaps appear as your team
+                searches for topics with insufficient content.
               </p>
             </div>
           ) : (
@@ -272,7 +289,9 @@ export default function KnowledgeGapsPage() {
                         </ColoredBadge>
                       </TableCell>
                       <TableCell className="text-center tabular-nums">
-                        {gap.impact_score != null ? gap.impact_score.toFixed(1) : '—'}
+                        {gap.impact_score != null
+                          ? gap.impact_score.toFixed(1)
+                          : '—'}
                       </TableCell>
                       <TableCell className="text-center tabular-nums">
                         {gap.search_count ?? '—'}
@@ -284,12 +303,20 @@ export default function KnowledgeGapsPage() {
                         {formatDate(gap.last_searched_at)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={gap.status === 'acknowledged' ? 'secondary' : 'outline'}>
+                        <Badge
+                          variant={
+                            gap.status === 'acknowledged'
+                              ? 'secondary'
+                              : 'outline'
+                          }
+                        >
                           {gap.status}
                         </Badge>
                       </TableCell>
                       <TableCell className="max-w-48 text-sm text-muted-foreground">
-                        <span className="line-clamp-1">{gap.suggested_action ?? '—'}</span>
+                        <span className="line-clamp-1">
+                          {gap.suggested_action ?? '—'}
+                        </span>
                       </TableCell>
                       {/* Action buttons — stop propagation so they don't toggle the row */}
                       <TableCell
@@ -305,15 +332,26 @@ export default function KnowledgeGapsPage() {
                               onClick={() => handleAcknowledge(gap.id)}
                               disabled={actionLoading === gap.id}
                             >
-                              <CheckCircle className="h-4 w-4" aria-hidden="true" />
-                              <span className="hidden lg:inline">Acknowledge</span>
+                              <CheckCircle
+                                className="h-4 w-4"
+                                aria-hidden="true"
+                              />
+                              <span className="hidden lg:inline">
+                                Acknowledge
+                              </span>
                             </Button>
                           )}
                           <Button
                             variant="ghost"
                             size="sm"
                             aria-label="Dismiss this knowledge gap"
-                            onClick={() => setDismiss({ open: true, gapId: gap.id, reason: '' })}
+                            onClick={() =>
+                              setDismiss({
+                                open: true,
+                                gapId: gap.id,
+                                reason: '',
+                              })
+                            }
                             disabled={actionLoading === gap.id}
                           >
                             <X className="h-4 w-4" aria-hidden="true" />
@@ -323,10 +361,19 @@ export default function KnowledgeGapsPage() {
                             variant="ghost"
                             size="sm"
                             aria-label="Mark this knowledge gap as resolved"
-                            onClick={() => setResolve({ open: true, gapId: gap.id, contentId: '' })}
+                            onClick={() =>
+                              setResolve({
+                                open: true,
+                                gapId: gap.id,
+                                contentId: '',
+                              })
+                            }
                             disabled={actionLoading === gap.id}
                           >
-                            <CheckCheck className="h-4 w-4" aria-hidden="true" />
+                            <CheckCheck
+                              className="h-4 w-4"
+                              aria-hidden="true"
+                            />
                             <span className="hidden lg:inline">Resolved</span>
                           </Button>
                         </div>
@@ -352,32 +399,42 @@ export default function KnowledgeGapsPage() {
                                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
                                   Resolution Suggestions
                                 </p>
-                                <p className="text-sm">{gap.suggested_action}</p>
-                              </div>
-                            )}
-
-                            {gap.related_concept_ids && gap.related_concept_ids.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                                  Related Concepts
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                  {gap.related_concept_ids.length} concept
-                                  {gap.related_concept_ids.length === 1 ? '' : 's'} linked
+                                <p className="text-sm">
+                                  {gap.suggested_action}
                                 </p>
                               </div>
                             )}
 
-                            {gap.metadata && 'bus_factor' in gap.metadata && (
+                            {gap.related_concept_ids &&
+                              gap.related_concept_ids.length > 0 && (
                                 <div>
                                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                                    Bus Factor Details
+                                    Related Concepts
                                   </p>
-                                  <pre className="text-xs bg-muted rounded p-2 overflow-auto whitespace-pre-wrap">
-                                    {JSON.stringify(gap.metadata.bus_factor, null, 2)}
-                                  </pre>
+                                  <p className="text-sm text-muted-foreground">
+                                    {gap.related_concept_ids.length} concept
+                                    {gap.related_concept_ids.length === 1
+                                      ? ''
+                                      : 's'}{' '}
+                                    linked
+                                  </p>
                                 </div>
                               )}
+
+                            {gap.metadata && 'bus_factor' in gap.metadata && (
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                                  Bus Factor Details
+                                </p>
+                                <pre className="text-xs bg-muted rounded p-2 overflow-auto whitespace-pre-wrap">
+                                  {JSON.stringify(
+                                    gap.metadata.bus_factor,
+                                    null,
+                                    2,
+                                  )}
+                                </pre>
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -409,7 +466,9 @@ export default function KnowledgeGapsPage() {
               id="dismiss-reason"
               placeholder="e.g. Not relevant to our team's work..."
               value={dismiss.reason}
-              onChange={(e) => setDismiss((prev) => ({ ...prev, reason: e.target.value }))}
+              onChange={(e) =>
+                setDismiss((prev) => ({ ...prev, reason: e.target.value }))
+              }
             />
           </div>
           <DialogFooter>
@@ -440,16 +499,21 @@ export default function KnowledgeGapsPage() {
           <DialogHeader>
             <DialogTitle>Mark as Resolved</DialogTitle>
             <DialogDescription>
-              Optionally link the content item that fills this knowledge gap for traceability.
+              Optionally link the content item that fills this knowledge gap for
+              traceability.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="resolve-content-id">Content item ID (optional)</Label>
+            <Label htmlFor="resolve-content-id">
+              Content item ID (optional)
+            </Label>
             <Input
               id="resolve-content-id"
               placeholder="Paste a content item UUID..."
               value={resolve.contentId}
-              onChange={(e) => setResolve((prev) => ({ ...prev, contentId: e.target.value }))}
+              onChange={(e) =>
+                setResolve((prev) => ({ ...prev, contentId: e.target.value }))
+              }
             />
           </div>
           <DialogFooter>

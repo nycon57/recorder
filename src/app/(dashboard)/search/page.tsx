@@ -1,302 +1,884 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+/**
+ * Enhanced Search Page
+ * Semantic search with Phase 8 advanced filtering
+ *
+ * New Features:
+ * - Advanced filters (content type, tags, collections, date range)
+ * - Filter chips showing active filters
+ * - Favorites integration
+ * - Tags display on results
+ * - Collection breadcrumb
+ * - Keyboard shortcuts
+ */
+
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  Search,
+  Filter,
+  Clock,
+  FileText,
+  Video,
+  SlidersHorizontal,
+  Bookmark,
+  X,
+  AlertCircle,
+} from 'lucide-react';
+import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
-import { AlertCircle, Search, Sparkles } from 'lucide-react';
 
 import { Loader } from '@/app/components/ai-elements/loader';
-import {
-  Source,
-  Sources,
-  SourcesContent,
-  SourcesTrigger,
-} from '@/app/components/ai-elements/sources';
-import { SearchInitialState, SearchNoResultsState } from '@/app/components/empty-states/SearchEmptyState';
-import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/KeyboardShortcutsProvider';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
+import { staggerContainer, staggerItem } from '@/lib/utils/animations';
+import {
+  SearchNoResultsState,
+  SearchInitialState,
+} from '@/app/components/empty-states/SearchEmptyState';
 import { Button } from '@/app/components/ui/button';
+import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';
 import {
-  COMMON_SHORTCUTS,
-  useKeyboardShortcuts,
-} from '@/app/hooks/useKeyboardShortcuts';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/select';
 import {
-  SEARCH_UI_DEFAULT_MODE,
-  SEARCH_UI_MODES,
-  SearchUiMode,
-  parseSearchUiMode,
-} from '@/app/components/search/search-modes';
-import { DocsModeResults } from '@/app/components/search/DocsModeResults';
-import { SourcesModeResults } from '@/app/components/search/SourcesModeResults';
-import type { SearchResultItem } from '@/app/components/search/search-result-types';
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/app/components/ui/sheet';
+import { TagFilter } from '@/app/components/tags/TagFilter';
+import { TagBadge } from '@/app/components/tags/TagBadge';
+import { ConceptFilter, ConceptBadge } from '@/app/components/knowledge';
+import type { ConceptType } from '@/lib/validations/knowledge';
+import { FavoriteButton } from '@/app/components/favorites/FavoriteButton';
+import { CollectionPicker } from '@/app/components/collections/CollectionPicker';
+import { Collection } from '@/app/components/collections/CollectionTree';
+import { DateRangePicker } from '@/app/components/filters/DateRangePicker';
+import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/KeyboardShortcutsProvider';
+import {
+  useKeyboardShortcuts,
+  COMMON_SHORTCUTS,
+} from '@/app/hooks/useKeyboardShortcuts';
+import { ContentType } from '@/lib/types/database';
+import { CONTENT_TYPE_EMOJI } from '@/lib/types/content';
 import { trackSearchQuery } from '@/lib/hooks/useEngagementTracking';
-import { fadeIn } from '@/lib/utils/animations';
 
-interface SearchApiResponse {
-  data?: {
-    results?: SearchResultItem[];
-  };
-  error?: {
-    message?: string;
-  };
+interface SearchResultConcept {
+  id: string;
+  name: string;
+  conceptType: ConceptType;
 }
 
-interface GroupedSource {
+interface SearchResult {
+  id: string;
   contentId: string;
   contentTitle: string;
   contentType: string;
-  startTime?: number;
-  bestSimilarity: number;
-  matchCount: number;
-  topSnippet: string;
+  chunkText: string;
+  similarity: number;
+  metadata: {
+    source: 'transcript' | 'document';
+    transcriptId?: string;
+    documentId?: string;
+    chunkIndex?: number;
+    startTime?: number;
+    endTime?: number;
+    tags?: Array<{ id: string; name: string; color: string }>;
+    collectionId?: string;
+    isFavorite?: boolean;
+    contentType?: string;
+  };
+  createdAt: string;
+  concepts?: SearchResultConcept[];
 }
 
-function truncateText(value: string, maxLength = 260) {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength).trimEnd()}...`;
+interface SearchTag {
+  id: string;
+  name: string;
+  color: string;
+  usage_count?: number;
 }
 
-function buildLibraryHref(contentId: string, startTime?: number) {
-  if (startTime === undefined) return `/library/${contentId}`;
-  return `/library/${contentId}?t=${Math.floor(startTime)}`;
+interface SearchApiConcept {
+  id: string;
+  name: string;
+  conceptType?: ConceptType;
+  concept_type?: ConceptType;
 }
 
-function groupResultsBySource(results: SearchResultItem[]): GroupedSource[] {
-  const grouped = new Map<string, GroupedSource>();
-
-  for (const result of results) {
-    const existing = grouped.get(result.contentId);
-    if (!existing) {
-      grouped.set(result.contentId, {
-        contentId: result.contentId,
-        contentTitle: result.contentTitle || 'Untitled',
-        contentType: result.contentType || 'content',
-        startTime: result.metadata.startTime,
-        bestSimilarity: result.similarity,
-        matchCount: 1,
-        topSnippet: result.chunkText,
-      });
-      continue;
-    }
-
-    existing.matchCount += 1;
-    if (result.similarity > existing.bestSimilarity) {
-      existing.bestSimilarity = result.similarity;
-      existing.topSnippet = result.chunkText;
-      existing.startTime = result.metadata.startTime;
-    }
-  }
-
-  return Array.from(grouped.values()).sort(
-    (a, b) => b.bestSimilarity - a.bestSimilarity,
-  );
+interface FilterState {
+  contentTypes: ContentType[];
+  tagIds: string[];
+  collectionId: string | null;
+  dateFrom: Date | null;
+  dateTo: Date | null;
+  favoritesOnly: boolean;
+  conceptTypes: ConceptType[];
 }
 
 function SearchPageContent() {
-  const pathname = usePathname();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const initializedFromUrlRef = useRef(false);
-
   const [query, setQuery] = useState('');
-  const [mode, setMode] = useState<SearchUiMode>(SEARCH_UI_DEFAULT_MODE);
-  const [results, setResults] = useState<SearchResultItem[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasSearched, setHasSearched] = useState(false);
-
-  const groupedSources = useMemo(() => groupResultsBySource(results), [results]);
-
-  const syncUrlState = useCallback(
-    (nextMode: SearchUiMode, nextQuery: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set('mode', nextMode);
-
-      const normalizedQuery = nextQuery.trim();
-      if (normalizedQuery.length > 0) {
-        params.set('q', normalizedQuery);
-      } else {
-        params.delete('q');
-      }
-
-      const queryString = params.toString();
-      router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
-        scroll: false,
-      });
-    },
-    [pathname, router, searchParams],
+  const [searchMode, setSearchMode] = useState<'vector' | 'hybrid'>('vector');
+  const [sourceFilter, setSourceFilter] = useState<
+    'all' | 'transcript' | 'document'
+  >('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [sortBy, setSortBy] = useState<'relevance' | 'date' | 'name'>(
+    'relevance',
   );
 
-  const performSearch = useCallback(async (searchQuery: string) => {
-    const normalizedQuery = searchQuery.trim();
-    if (!normalizedQuery) {
-      setResults([]);
+  // Track if user has performed a search (for showing "no results" vs initial state)
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // Advanced filters state
+  const [filters, setFilters] = useState<FilterState>({
+    contentTypes: [],
+    tagIds: [],
+    collectionId: null,
+    dateFrom: null,
+    dateTo: null,
+    favoritesOnly: false,
+    conceptTypes: [],
+  });
+
+  // Tags and collections
+  const [availableTags, setAvailableTags] = useState<SearchTag[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [tagFilterMode, setTagFilterMode] = useState<'and' | 'or'>('or');
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Track content IDs we've already fetched concepts for (prevents infinite loops)
+  const fetchedConceptsRef = useRef<Set<string>>(new Set());
+
+  // Fetch tags and collections
+  useEffect(() => {
+    fetchTags();
+    fetchCollections();
+  }, []);
+
+  const handleSearch = useCallback(
+    async (
+      e?: React.FormEvent,
+      overrideQuery?: string,
+      overrideFilters?: FilterState,
+    ) => {
+      e?.preventDefault();
+
+      // Use override values if provided, otherwise use state
+      const searchQuery = overrideQuery ?? query;
+      const searchFilters = overrideFilters ?? filters;
+
+      if (!searchQuery.trim()) {
+        // Clear results if query is empty
+        setResults([]);
+        setError(null);
+        setHasSearched(false);
+        return;
+      }
+
+      setLoading(true);
+      setShowSuggestions(false);
       setError(null);
-      setHasSearched(false);
-      return;
-    }
+      trackSearchQuery(searchQuery);
+      // Clear fetched concepts cache for fresh results
+      fetchedConceptsRef.current.clear();
 
-    setLoading(true);
-    setError(null);
-    trackSearchQuery(normalizedQuery);
+      try {
+        const response = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: searchQuery,
+            mode: searchMode,
+            source: sourceFilter === 'all' ? undefined : sourceFilter,
+            contentTypes:
+              searchFilters.contentTypes.length > 0
+                ? searchFilters.contentTypes
+                : undefined,
+            dateFrom: searchFilters.dateFrom?.toISOString(),
+            dateTo: searchFilters.dateTo?.toISOString(),
+            tagIds:
+              searchFilters.tagIds.length > 0
+                ? searchFilters.tagIds
+                : undefined,
+            collectionId: searchFilters.collectionId || undefined,
+            favoritesOnly: searchFilters.favoritesOnly || undefined,
+            limit: 20,
+            threshold: 0.7,
+          }),
+        });
 
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.error?.message ||
+              `Search failed with status ${response.status}`,
+          );
+        }
+
+        const data = await response.json();
+        let results = data.data.results;
+
+        // Apply client-side sorting
+        results = sortResults(results, sortBy);
+
+        setResults(results);
+        setError(null);
+        setHasSearched(true);
+      } catch (error) {
+        console.error('Search error:', error);
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : 'Search failed. Please try again.';
+        setError(errorMessage);
+        setResults([]);
+        setHasSearched(true);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [query, filters, searchMode, sourceFilter, sortBy],
+  );
+
+  // Note: Removed auto-search on typing for cleaner UX
+  // Users can press Enter or click Search button to perform search
+  // This prevents unnecessary API calls and erroneous intermediate results
+
+  async function fetchTags() {
     try {
-      const response = await fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: normalizedQuery,
-          mode: 'hybrid',
-          limit: 20,
-          threshold: 0.7,
-        }),
-      });
+      const response = await fetch(
+        '/api/tags?includeUsageCount=true&limit=100',
+      );
+      if (!response.ok) throw new Error('Failed to fetch tags');
 
-      const payload = (await response.json().catch(() => ({}))) as SearchApiResponse;
-      if (!response.ok) {
-        throw new Error(
-          payload.error?.message ??
-            `Search failed with status ${response.status}`,
+      const data = await response.json();
+      setAvailableTags(data.data.tags || []);
+    } catch (error) {
+      console.error('Error fetching tags:', error);
+    }
+  }
+
+  async function fetchCollections() {
+    try {
+      const response = await fetch('/api/collections');
+      if (!response.ok) throw new Error('Failed to fetch collections');
+
+      const data = await response.json();
+      setCollections(data.data?.collections || []);
+    } catch (error) {
+      console.error('Error fetching collections:', error);
+    }
+  }
+
+  // Fetch concepts for search results
+  const fetchResultsConcepts = useCallback(
+    async (searchResults: SearchResult[]) => {
+      if (searchResults.length === 0) return;
+
+      // Get unique content IDs that we haven't already fetched
+      const allContentIds = [...new Set(searchResults.map((r) => r.contentId))];
+      const contentIdsToFetch = allContentIds.filter(
+        (id) => !fetchedConceptsRef.current.has(id),
+      );
+
+      if (contentIdsToFetch.length === 0) return;
+
+      // Track IDs currently being fetched to prevent concurrent duplicate requests
+      const fetchingIds = new Set<string>();
+      contentIdsToFetch.forEach((id) => fetchingIds.add(id));
+
+      const conceptsMap = new Map<string, SearchResultConcept[]>();
+      const BATCH_SIZE = 10;
+
+      // Process content IDs in batches to limit concurrent requests
+      for (let i = 0; i < contentIdsToFetch.length; i += BATCH_SIZE) {
+        const batch = contentIdsToFetch.slice(i, i + BATCH_SIZE);
+
+        await Promise.all(
+          batch.map(async (contentId) => {
+            try {
+              const response = await fetch(
+                `/api/library/${contentId}/concepts?limit=5`,
+              );
+              if (response.ok) {
+                const data = await response.json();
+                const concepts = data.data?.concepts || [];
+                conceptsMap.set(
+                  contentId,
+                  (concepts as SearchApiConcept[]).map((c) => ({
+                    id: c.id,
+                    name: c.name,
+                    conceptType: c.conceptType || c.concept_type || 'general',
+                  })),
+                );
+                // Only mark as fetched after successful fetch
+                fetchedConceptsRef.current.add(contentId);
+              }
+              // Non-ok responses: ID not added to fetchedConceptsRef, allowing retry
+            } catch (error) {
+              console.error(`Error fetching concepts for ${contentId}:`, error);
+              // Failed fetch: ID not added to fetchedConceptsRef, allowing retry
+            }
+          }),
         );
       }
 
-      const nextResults = payload.data?.results ?? [];
-      setResults(nextResults);
-      setHasSearched(true);
-    } catch (searchError) {
-      console.error('[SearchPage] search failed', searchError);
-      setResults([]);
-      setError(
-        searchError instanceof Error
-          ? searchError.message
-          : 'Search failed. Please try again.',
-      );
-      setHasSearched(true);
-    } finally {
-      setLoading(false);
+      // Update results with concepts
+      if (conceptsMap.size > 0) {
+        setResults((prevResults) =>
+          prevResults.map((result) => ({
+            ...result,
+            concepts: conceptsMap.get(result.contentId) || result.concepts,
+          })),
+        );
+      }
+    },
+    [],
+  );
+
+  // Fetch concepts when results change
+  useEffect(() => {
+    // Check if any result needs concepts (more robust than checking only first result)
+    const needsConcepts = results.some((r) => r.concepts === undefined);
+    if (results.length > 0 && needsConcepts) {
+      fetchResultsConcepts(results);
     }
+  }, [results, fetchResultsConcepts]);
+
+  const sortResults = (
+    results: SearchResult[],
+    sortBy: 'relevance' | 'date' | 'name',
+  ) => {
+    const sorted = [...results];
+    switch (sortBy) {
+      case 'relevance':
+        return sorted.sort((a, b) => b.similarity - a.similarity);
+      case 'date':
+        return sorted.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+      case 'name':
+        return sorted.sort((a, b) =>
+          (a.contentTitle || '').localeCompare(b.contentTitle || ''),
+        );
+      default:
+        return sorted;
+    }
+  };
+
+  const getActiveFiltersCount = () => {
+    let count = 0;
+    if (filters.contentTypes.length > 0) count++;
+    if (filters.tagIds.length > 0) count++;
+    if (filters.collectionId) count++;
+    if (filters.dateFrom || filters.dateTo) count++;
+    if (filters.favoritesOnly) count++;
+    if (filters.conceptTypes.length > 0) count++;
+    return count;
+  };
+
+  const clearAllFilters = () => {
+    setFilters({
+      contentTypes: [],
+      tagIds: [],
+      collectionId: null,
+      dateFrom: null,
+      dateTo: null,
+      favoritesOnly: false,
+      conceptTypes: [],
+    });
+  };
+
+  const removeConceptTypeFilter = (type: ConceptType) => {
+    setFilters((prev) => ({
+      ...prev,
+      conceptTypes: prev.conceptTypes.filter((t) => t !== type),
+    }));
+  };
+
+  const removeContentTypeFilter = (type: ContentType) => {
+    setFilters((prev) => ({
+      ...prev,
+      contentTypes: prev.contentTypes.filter((t) => t !== type),
+    }));
+  };
+
+  const removeTagFilter = (tagId: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      tagIds: prev.tagIds.filter((id) => id !== tagId),
+    }));
+  };
+
+  // Hide suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        searchInputRef.current &&
+        !searchInputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSearchSubmit = async (event?: React.FormEvent) => {
-    event?.preventDefault();
-    await performSearch(query);
-    syncUrlState(mode, query);
-  };
-
-  const handleModeChange = (nextMode: SearchUiMode) => {
-    setMode(nextMode);
-    syncUrlState(nextMode, query);
-  };
-
+  // Re-sort results when sortBy changes
   useEffect(() => {
-    if (initializedFromUrlRef.current) return;
-    initializedFromUrlRef.current = true;
-
-    const urlMode = parseSearchUiMode(searchParams.get('mode'));
-    const urlQuery = searchParams.get('q')?.trim() ?? '';
-
-    setMode(urlMode);
-    setQuery(urlQuery);
-
-    if (urlQuery) {
-      void performSearch(urlQuery);
+    if (results.length > 0) {
+      setResults((prevResults) => sortResults(prevResults, sortBy));
     }
-  }, [performSearch, searchParams]);
+  }, [sortBy]);
 
-  useKeyboardShortcuts([
-    {
-      ...COMMON_SHORTCUTS.SEARCH,
-      handler: () => searchInputRef.current?.focus(),
-    },
-    {
-      key: '1',
-      handler: () => handleModeChange('answer'),
-      description: 'Switch to Answer mode',
-    },
-    {
-      key: '2',
-      handler: () => handleModeChange('docs'),
-      description: 'Switch to Docs mode',
-    },
-    {
-      key: '3',
-      handler: () => handleModeChange('sources'),
-      description: 'Switch to Sources mode',
-    },
-  ]);
+  // Keyboard shortcuts
+  const keyboardShortcuts = useMemo(
+    () => [
+      {
+        ...COMMON_SHORTCUTS.SEARCH,
+        handler: () => searchInputRef.current?.focus(),
+      },
+      {
+        key: 'f',
+        handler: () =>
+          setFilters((prev) => ({
+            ...prev,
+            favoritesOnly: !prev.favoritesOnly,
+          })),
+        description: 'Toggle favorites filter',
+      },
+      {
+        key: 'Escape',
+        handler: () => {
+          if (showFilters) {
+            setShowFilters(false);
+          } else if (showSuggestions) {
+            setShowSuggestions(false);
+          }
+        },
+        description: 'Close filters/suggestions',
+        preventDefault: false,
+      },
+    ],
+    [
+      showFilters,
+      showSuggestions,
+      setFilters,
+      setShowFilters,
+      setShowSuggestions,
+    ],
+  );
 
-  const answerMarkdown = useMemo(() => {
-    if (groupedSources.length === 0) return '';
+  useKeyboardShortcuts(keyboardShortcuts);
 
-    const topSources = groupedSources.slice(0, 3);
-    return topSources
-      .map((source, index) => {
-        const score = Math.round(source.bestSimilarity * 100);
-        return `${index + 1}. **${source.contentTitle}** (${score}% match)\n\n${truncateText(source.topSnippet, 320)}`;
-      })
-      .join('\n\n');
-  }, [groupedSources]);
+  const handleSearchModeChange = (value: string) => {
+    if (value === 'vector' || value === 'hybrid') {
+      setSearchMode(value);
+    }
+  };
 
-  const modeMeta = SEARCH_UI_MODES.find((item) => item.mode === mode);
+  const handleSourceFilterChange = (value: string) => {
+    if (value === 'all' || value === 'transcript' || value === 'document') {
+      setSourceFilter(value);
+    }
+  };
+
+  const handleSortByChange = (value: string) => {
+    if (value === 'relevance' || value === 'date' || value === 'name') {
+      setSortBy(value);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const activeFiltersCount = getActiveFiltersCount();
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <div className="mb-8 space-y-2">
-        <h1 className="text-heading-3 font-outfit">Search Workspace</h1>
+    <div className="trbd-page">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="trbd-page-title mb-2">Search Recordings</h1>
         <p className="text-muted-foreground">
-          One omnibox, three result modes. Ask for an answer, inspect docs, or
-          browse source matches.
+          Search across all your recordings using AI-powered semantic search
         </p>
       </div>
 
-      <form onSubmit={handleSearchSubmit} className="mb-6">
-        <div className="flex gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+      {/* Search Form */}
+      <form onSubmit={handleSearch} className="mb-8">
+        <div className="flex gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5" />
             <Input
               ref={searchInputRef}
               type="text"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Ask anything across your recordings and documents..."
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search for anything..."
               className="pl-10 pr-4 py-6 text-base"
             />
           </div>
-          <Button type="submit" size="lg" disabled={loading || !query.trim()}>
+          <Button type="submit" disabled={loading || !query.trim()} size="lg">
             {loading ? 'Searching...' : 'Search'}
           </Button>
+          <Sheet open={showFilters} onOpenChange={setShowFilters}>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="lg" className="gap-2">
+                <Filter className="w-5 h-5" />
+                Filters
+                {activeFiltersCount > 0 && (
+                  <Badge variant="secondary">{activeFiltersCount}</Badge>
+                )}
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-full max-w-[400px] sm:max-w-[540px] overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle className="text-lg sm:text-xl">
+                  Advanced Filters
+                </SheetTitle>
+              </SheetHeader>
+
+              <div className="space-y-5 sm:space-y-6 mt-4 sm:mt-6">
+                {/* Search Mode */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Search Mode
+                  </label>
+                  <Select
+                    value={searchMode}
+                    onValueChange={handleSearchModeChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vector">Semantic (AI)</SelectItem>
+                      <SelectItem value="hybrid">
+                        Hybrid (AI + Keywords)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Source Filter */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Source
+                  </label>
+                  <Select
+                    value={sourceFilter}
+                    onValueChange={handleSourceFilterChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Sources</SelectItem>
+                      <SelectItem value="transcript">
+                        Transcripts Only
+                      </SelectItem>
+                      <SelectItem value="document">Documents Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Content Types */}
+                <div>
+                  <label className="block text-sm sm:text-base font-medium mb-2">
+                    Content Types
+                  </label>
+                  <div className="space-y-1">
+                    {(
+                      [
+                        'recording',
+                        'video',
+                        'audio',
+                        'document',
+                        'text',
+                      ] as ContentType[]
+                    ).map((type) => (
+                      <label
+                        key={type}
+                        className="flex items-center gap-2 sm:gap-3 cursor-pointer py-1.5 min-h-[44px]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={filters.contentTypes.includes(type)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFilters((prev) => ({
+                                ...prev,
+                                contentTypes: [...prev.contentTypes, type],
+                              }));
+                            } else {
+                              removeContentTypeFilter(type);
+                            }
+                          }}
+                          className="rounded w-4 h-4 sm:w-5 sm:h-5"
+                        />
+                        <span className="text-sm sm:text-base capitalize">
+                          {type}s
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tags Filter */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Tags</label>
+                  <TagFilter
+                    tags={availableTags}
+                    selectedTags={filters.tagIds}
+                    onSelectionChange={(ids) =>
+                      setFilters((prev) => ({ ...prev, tagIds: ids }))
+                    }
+                    filterMode={tagFilterMode}
+                    onFilterModeChange={setTagFilterMode}
+                    showCounts={true}
+                  />
+                </div>
+
+                {/* Concept Types Filter */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Concept Types
+                  </label>
+                  <ConceptFilter
+                    selectedTypes={filters.conceptTypes}
+                    onSelectionChange={(types) =>
+                      setFilters((prev) => ({ ...prev, conceptTypes: types }))
+                    }
+                  />
+                </div>
+
+                {/* Collection Filter */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Collection
+                  </label>
+                  <CollectionPicker
+                    collections={collections}
+                    selectedId={filters.collectionId}
+                    onSelect={(id) =>
+                      setFilters((prev) => ({ ...prev, collectionId: id }))
+                    }
+                    placeholder="All collections"
+                  />
+                </div>
+
+                {/* Date Range */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Date Range
+                  </label>
+                  <DateRangePicker
+                    from={filters.dateFrom || undefined}
+                    to={filters.dateTo || undefined}
+                    onSelect={(range) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        dateFrom: range?.from || null,
+                        dateTo: range?.to || null,
+                      }))
+                    }
+                  />
+                </div>
+
+                {/* Favorites Only */}
+                <label className="flex items-center gap-2 sm:gap-3 cursor-pointer py-1.5 min-h-[44px]">
+                  <input
+                    type="checkbox"
+                    checked={filters.favoritesOnly}
+                    onChange={(e) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        favoritesOnly: e.target.checked,
+                      }))
+                    }
+                    className="rounded w-4 h-4 sm:w-5 sm:h-5"
+                  />
+                  <Bookmark className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="text-sm sm:text-base">Favorites only</span>
+                </label>
+
+                {/* Clear Filters */}
+                {activeFiltersCount > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={clearAllFilters}
+                    className="w-full"
+                  >
+                    Clear all filters
+                  </Button>
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
+
+        {/* Active Filters Chips */}
+        {activeFiltersCount > 0 && (
+          <div className="mt-4 flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-muted-foreground">
+              Active filters:
+            </span>
+
+            {/* Content Type Filters */}
+            {filters.contentTypes.map((type) => (
+              <Badge key={type} variant="secondary" className="gap-1">
+                <span>Type: {type}</span>
+                <button
+                  type="button"
+                  onClick={() => removeContentTypeFilter(type)}
+                  className="hover:bg-black/10 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+
+            {/* Tag Filters */}
+            {filters.tagIds.map((tagId) => {
+              const tag = availableTags.find((t) => t.id === tagId);
+              return tag ? (
+                <TagBadge
+                  key={tagId}
+                  tag={tag}
+                  onRemove={() => removeTagFilter(tagId)}
+                  showRemoveButton
+                />
+              ) : null;
+            })}
+
+            {/* Concept Type Filters */}
+            {filters.conceptTypes.map((type) => (
+              <Badge key={type} variant="secondary" className="gap-1">
+                <span className="capitalize">{type.replace('_', ' ')}</span>
+                <button
+                  type="button"
+                  onClick={() => removeConceptTypeFilter(type)}
+                  className="hover:bg-black/10 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+
+            {/* Collection Filter */}
+            {filters.collectionId && (
+              <Badge variant="secondary" className="gap-1">
+                <span>Collection</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFilters((prev) => ({ ...prev, collectionId: null }))
+                  }
+                  className="hover:bg-black/10 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+
+            {/* Favorites Filter */}
+            {filters.favoritesOnly && (
+              <Badge variant="secondary" className="gap-1">
+                <Bookmark className="w-3 h-3" />
+                <span>Favorites</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFilters((prev) => ({ ...prev, favoritesOnly: false }))
+                  }
+                  className="hover:bg-black/10 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+
+            {/* Date Range Filter */}
+            {(filters.dateFrom || filters.dateTo) && (
+              <Badge variant="secondary" className="gap-1">
+                <span>Date range</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      dateFrom: null,
+                      dateTo: null,
+                    }))
+                  }
+                  className="hover:bg-black/10 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              className="h-6 px-2 text-xs"
+            >
+              Clear all
+            </Button>
+          </div>
+        )}
       </form>
 
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        {SEARCH_UI_MODES.map((item) => (
-          <Button
-            key={item.mode}
-            type="button"
-            variant={mode === item.mode ? 'default' : 'outline'}
-            onClick={() => handleModeChange(item.mode)}
-            aria-pressed={mode === item.mode}
-          >
-            {item.label}
-          </Button>
-        ))}
-        {modeMeta ? (
-          <span className="text-sm text-muted-foreground ml-1">
-            {modeMeta.description}
-          </span>
-        ) : null}
-      </div>
-
-      {error ? (
+      {/* Error Display */}
+      {error && (
         <Alert variant="destructive" className="mb-6">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-      ) : null}
+      )}
 
+      {/* Sort Options */}
+      {results.length > 0 && (
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-muted-foreground">
+            Found {results.length} result{results.length !== 1 ? 's' : ''} for
+            {' '}
+            &quot;{query}&quot;
+          </p>
+          <Select value={sortBy} onValueChange={handleSortByChange}>
+            <SelectTrigger className="w-[180px]">
+              <SlidersHorizontal className="mr-2 h-4 w-4" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="relevance">Most Relevant</SelectItem>
+              <SelectItem value="date">Most Recent</SelectItem>
+              <SelectItem value="name">Name A-Z</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Results */}
       <AnimatePresence mode="wait">
         {loading ? (
           <motion.div
@@ -307,61 +889,187 @@ function SearchPageContent() {
             className="flex flex-col items-center justify-center py-12"
           >
             <Loader size={48} className="text-primary mb-4" />
-            <p className="text-muted-foreground">Searching your knowledge base...</p>
+            <p className="text-muted-foreground">
+              Searching your knowledge base...
+            </p>
           </motion.div>
-        ) : results.length === 0 && hasSearched && query ? (
-          <motion.div key="no-results" variants={fadeIn} initial="hidden" animate="show" exit="exit">
-            <SearchNoResultsState
-              query={query}
-              onClearSearch={() => {
-                setQuery('');
-                setResults([]);
-                setError(null);
-                setHasSearched(false);
-                syncUrlState(mode, '');
-              }}
-            />
-          </motion.div>
-        ) : results.length === 0 ? (
-          <motion.div key="initial" variants={fadeIn} initial="hidden" animate="show" exit="exit">
-            <SearchInitialState />
-          </motion.div>
-        ) : mode === 'answer' ? (
+        ) : results.length > 0 ? (
           <motion.div
-            key="answer-mode"
-            variants={fadeIn}
+            key="search-results"
+            variants={staggerContainer}
             initial="hidden"
             animate="show"
             exit="exit"
             className="space-y-4"
           >
-            <section className="rounded-xl border bg-card/40 p-6">
-              <div className="mb-3 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <h2 className="text-base font-semibold">Answer</h2>
-              </div>
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown>{answerMarkdown}</ReactMarkdown>
-              </div>
-            </section>
+            {results.map((result) => (
+              <Link
+                key={result.id}
+                href={`/library/${result.contentId}${
+                  result.metadata.startTime
+                    ? `?t=${Math.floor(result.metadata.startTime)}`
+                    : ''
+                }`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block"
+              >
+                <motion.div
+                  variants={staggerItem}
+                  className="border border-border rounded-lg p-5 transition-all hover:shadow-md hover:border-primary/50 cursor-pointer group"
+                >
+                  {/* Result Header */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      {/* Content Title with hover state */}
+                      <h3 className="text-lg font-semibold text-primary group-hover:text-primary/80 group-hover:underline transition-colors">
+                        {result.contentTitle || 'Untitled'}
+                      </h3>
 
-            <Sources>
-              <SourcesTrigger count={Math.min(groupedSources.length, 5)} />
-              <SourcesContent>
-                {groupedSources.slice(0, 5).map((source) => (
-                  <Source
-                    key={source.contentId}
-                    href={buildLibraryHref(source.contentId, source.startTime)}
-                    title={source.contentTitle}
-                  />
-                ))}
-              </SourcesContent>
-            </Sources>
+                      {/* Content Type and Source Info */}
+                      <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground flex-wrap">
+                        {/* Content Type Badge */}
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted/50 text-xs font-medium">
+                          {result.contentType &&
+                            CONTENT_TYPE_EMOJI[
+                              result.contentType as keyof typeof CONTENT_TYPE_EMOJI
+                            ]}
+                          <span className="capitalize">
+                            {result.contentType || 'content'}
+                          </span>
+                        </span>
+
+                        {/* Source Badge (Transcript vs AI Document) */}
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted/50 text-xs font-medium">
+                          {result.metadata.source === 'transcript' ? (
+                            <>
+                              <Video className="w-3 h-3" /> Transcript
+                            </>
+                          ) : (
+                            <>
+                              <FileText className="w-3 h-3" /> AI Analysis
+                            </>
+                          )}
+                        </span>
+
+                        {/* Timestamp if available */}
+                        {result.metadata.startTime !== undefined && (
+                          <span className="inline-flex items-center gap-1 text-xs">
+                            <Clock className="w-3 h-3" />
+                            {formatTime(result.metadata.startTime)}
+                          </span>
+                        )}
+
+                        {/* Match Score */}
+                        <span className="text-success font-medium text-xs">
+                          {Math.round(result.similarity * 100)}% match
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Favorite Button - stop propagation to prevent navigation */}
+                    <div onClick={(e) => e.preventDefault()}>
+                      <FavoriteButton
+                        recordingId={result.contentId}
+                        isFavorite={result.metadata.isFavorite || false}
+                        size="sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Result Text */}
+                  <div className="text-foreground leading-relaxed mb-3 prose prose-sm dark:prose-invert max-w-none [&_p]:mb-2 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1">
+                    <ReactMarkdown
+                      components={{
+                        // Custom styling for markdown elements
+                        p: ({ children }) => <p>{children}</p>,
+                        ul: ({ children }) => (
+                          <ul className="list-disc list-inside">{children}</ul>
+                        ),
+                        ol: ({ children }) => (
+                          <ol className="list-decimal list-inside">
+                            {children}
+                          </ol>
+                        ),
+                        li: ({ children }) => <li>{children}</li>,
+                        code: ({ children }) => (
+                          <code className="bg-muted px-1.5 py-0.5 rounded text-sm">
+                            {children}
+                          </code>
+                        ),
+                        pre: ({ children }) => (
+                          <pre className="bg-muted p-3 rounded-md overflow-x-auto">
+                            {children}
+                          </pre>
+                        ),
+                        strong: ({ children }) => (
+                          <strong className="font-semibold">{children}</strong>
+                        ),
+                        em: ({ children }) => (
+                          <em className="italic">{children}</em>
+                        ),
+                        h1: ({ children }) => (
+                          <h1 className="text-xl font-bold mt-3 mb-2">
+                            {children}
+                          </h1>
+                        ),
+                        h2: ({ children }) => (
+                          <h2 className="text-lg font-bold mt-2 mb-1">
+                            {children}
+                          </h2>
+                        ),
+                        h3: ({ children }) => (
+                          <h3 className="text-base font-semibold mt-2 mb-1">
+                            {children}
+                          </h3>
+                        ),
+                      }}
+                    >
+                      {result.chunkText}
+                    </ReactMarkdown>
+                  </div>
+
+                  {/* Tags */}
+                  {result.metadata.tags && result.metadata.tags.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {result.metadata.tags.map((tag) => (
+                        <TagBadge key={tag.id} tag={tag} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Concepts */}
+                  {result.concepts && result.concepts.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap mt-2">
+                      {result.concepts.slice(0, 3).map((concept) => (
+                        <ConceptBadge
+                          key={concept.id}
+                          name={concept.name}
+                          type={concept.conceptType}
+                          size="sm"
+                        />
+                      ))}
+                      {result.concepts.length > 3 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{result.concepts.length - 3} more
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              </Link>
+            ))}
           </motion.div>
-        ) : mode === 'docs' ? (
-          <DocsModeResults results={results} query={query} />
+        ) : hasSearched && query ? (
+          <SearchNoResultsState
+            query={query}
+            onClearSearch={() => {
+              setQuery('');
+              setHasSearched(false);
+            }}
+          />
         ) : (
-          <SourcesModeResults results={results} query={query} />
+          <SearchInitialState />
         )}
       </AnimatePresence>
     </div>
