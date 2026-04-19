@@ -63,6 +63,11 @@ import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import type { ResolvedOrgWikiPage } from '@/lib/services/org-wiki-embedding';
 import { resolveCompiledMemoryContext } from '@/lib/services/compiled-memory-context';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
+import {
+  buildKnowledgeExtensionQueryTelemetry,
+  recordKnowledgeTelemetryEvent,
+  type KnowledgeExtensionQueryTelemetryPayload,
+} from '@/lib/services/knowledge-telemetry';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 
@@ -545,6 +550,7 @@ export async function POST(request: NextRequest) {
 
   // TRIB-57: Track request start time for latency measurement
   const requestStartTime = Date.now();
+  let telemetryPayload: KnowledgeExtensionQueryTelemetryPayload | null = null;
 
   // TRIB-57: Mutable flags for knowledge layer presence (set inside the stream)
   let hadOrgKnowledge = false;
@@ -564,6 +570,24 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encodeEvent(encoder, event));
       };
 
+      const captureTelemetry = () => {
+        telemetryPayload = buildKnowledgeExtensionQueryTelemetry({
+          orgId,
+          userId,
+          app,
+          screen,
+          hadOrgKnowledge,
+          hadVendorKnowledge,
+          knowledgeMode: hadOrgKnowledge
+            ? 'org_backed'
+            : hadVendorKnowledge
+              ? 'vendor_backed'
+              : 'dom_only',
+          responseLatencyMs: Date.now() - requestStartTime,
+          asOf,
+        });
+      };
+
       /**
        * Terminal helper: emit `done` and close the stream exactly once.
        * Guards against double-close if an error path races the happy path.
@@ -572,6 +596,7 @@ export async function POST(request: NextRequest) {
       const finish = () => {
         if (closed) return;
         closed = true;
+        captureTelemetry();
         try {
           emit({ type: 'done' });
         } catch {
@@ -811,6 +836,15 @@ export async function POST(request: NextRequest) {
       }
     });
   }
+
+  after(async () => {
+    if (!telemetryPayload) return;
+
+    await recordKnowledgeTelemetryEvent({
+      type: 'knowledge.extension.query.outcome',
+      payload: telemetryPayload,
+    });
+  });
 
   return new Response(stream, {
     headers: {

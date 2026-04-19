@@ -32,7 +32,7 @@ import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 import { resolveExtensionContextMatches } from '@/lib/services/extension-context';
 import { buildExtensionContextTelemetry } from '@/lib/services/extension-context-telemetry';
-import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import { recordKnowledgeTelemetryEvent } from '@/lib/services/knowledge-telemetry';
 import { logger } from '@/lib/monitoring/logger';
 
 export const runtime = 'nodejs';
@@ -148,8 +148,7 @@ export async function POST(request: NextRequest) {
           fingerprint: telemetry.fingerprint,
         });
 
-        const supabase = createAdminClient();
-        await supabase.from('events').insert({
+        await recordKnowledgeTelemetryEvent({
           type: 'extension.context.checked',
           payload: telemetry,
         });

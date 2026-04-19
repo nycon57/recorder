@@ -32,6 +32,10 @@ import { requireAdmin } from '@/lib/utils/api';
 import { logger } from '@/lib/utils/logger';
 import type { Database, Json } from '@/lib/types/database';
 import {
+  buildKnowledgeReviewTelemetry,
+  recordKnowledgeTelemetryEvent,
+} from '@/lib/services/knowledge-telemetry';
+import {
   applyContradictionsToContent,
   readCompilationLog,
   type CompilationLogEntry,
@@ -209,6 +213,31 @@ function invalidate(orgId: string): void {
   updateTag(`wiki-review-count:${orgId}`);
 }
 
+async function recordReviewOutcome(input: {
+  orgId: string;
+  userId: string;
+  pageId: string;
+  logEntryIndex: number;
+  action: 'approveContradiction' | 'rejectContradiction' | 'editAndApproveContradiction';
+  outcome: 'approved' | 'rejected' | 'edited_and_approved' | 'auto_rejected_noop' | 'error';
+  contentLength?: number;
+  errorMessage?: string | null;
+}): Promise<void> {
+  await recordKnowledgeTelemetryEvent({
+    type: 'knowledge.review.outcome',
+    payload: buildKnowledgeReviewTelemetry({
+      orgId: input.orgId,
+      userId: input.userId,
+      pageId: input.pageId,
+      logEntryIndex: input.logEntryIndex,
+      action: input.action,
+      outcome: input.outcome,
+      contentLength: input.contentLength ?? null,
+      errorMessage: input.errorMessage ?? null,
+    }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
@@ -223,8 +252,10 @@ export async function approveContradiction(input: {
   pageId: string;
   logEntryIndex: number;
 }): Promise<ActionResult> {
+  let authContext: { orgId: string; userId: string } | null = null;
   try {
     const { userId, orgId } = await requireAdmin();
+    authContext = { orgId, userId };
     const { page, log, entry } = await loadAndValidateTarget({ ...input, orgId });
 
     const mergedContent = entry.merged_content?.trim();
@@ -244,6 +275,14 @@ export async function approveContradiction(input: {
       logger.warn('Approve resulted in no content change; auto-rejected', {
         context: { orgId, userId, pageId: page.id, logEntryIndex: input.logEntryIndex },
       });
+      await recordReviewOutcome({
+        orgId,
+        userId,
+        pageId: page.id,
+        logEntryIndex: input.logEntryIndex,
+        action: 'approveContradiction',
+        outcome: 'auto_rejected_noop',
+      });
       invalidate(orgId);
       return { ok: true };
     }
@@ -261,6 +300,15 @@ export async function approveContradiction(input: {
       context: { orgId, userId, pageId: page.id, logEntryIndex: input.logEntryIndex },
     });
 
+    await recordReviewOutcome({
+      orgId,
+      userId,
+      pageId: page.id,
+      logEntryIndex: input.logEntryIndex,
+      action: 'approveContradiction',
+      outcome: 'approved',
+    });
+
     invalidate(orgId);
     return { ok: true };
   } catch (error) {
@@ -269,6 +317,17 @@ export async function approveContradiction(input: {
       error: error instanceof Error ? error : undefined,
       context: { pageId: input.pageId, logEntryIndex: input.logEntryIndex },
     });
+    if (authContext) {
+      await recordReviewOutcome({
+        orgId: authContext.orgId,
+        userId: authContext.userId,
+        pageId: input.pageId,
+        logEntryIndex: input.logEntryIndex,
+        action: 'approveContradiction',
+        outcome: 'error',
+        errorMessage: message,
+      });
+    }
     return { ok: false, error: message };
   }
 }
@@ -281,8 +340,10 @@ export async function rejectContradiction(input: {
   pageId: string;
   logEntryIndex: number;
 }): Promise<ActionResult> {
+  let authContext: { orgId: string; userId: string } | null = null;
   try {
     const { userId, orgId } = await requireAdmin();
+    authContext = { orgId, userId };
     const { page, log } = await loadAndValidateTarget({ ...input, orgId });
 
     await patchLogEntryInPlace({
@@ -300,6 +361,15 @@ export async function rejectContradiction(input: {
       context: { orgId, userId, pageId: page.id, logEntryIndex: input.logEntryIndex },
     });
 
+    await recordReviewOutcome({
+      orgId,
+      userId,
+      pageId: page.id,
+      logEntryIndex: input.logEntryIndex,
+      action: 'rejectContradiction',
+      outcome: 'rejected',
+    });
+
     invalidate(orgId);
     return { ok: true };
   } catch (error) {
@@ -308,6 +378,17 @@ export async function rejectContradiction(input: {
       error: error instanceof Error ? error : undefined,
       context: { pageId: input.pageId, logEntryIndex: input.logEntryIndex },
     });
+    if (authContext) {
+      await recordReviewOutcome({
+        orgId: authContext.orgId,
+        userId: authContext.userId,
+        pageId: input.pageId,
+        logEntryIndex: input.logEntryIndex,
+        action: 'rejectContradiction',
+        outcome: 'error',
+        errorMessage: message,
+      });
+    }
     return { ok: false, error: message };
   }
 }
@@ -322,8 +403,10 @@ export async function editAndApproveContradiction(input: {
   logEntryIndex: number;
   editedContent: string;
 }): Promise<ActionResult> {
+  let authContext: { orgId: string; userId: string } | null = null;
   try {
     const { userId, orgId } = await requireAdmin();
+    authContext = { orgId, userId };
     const { page, log } = await loadAndValidateTarget({
       pageId: input.pageId,
       logEntryIndex: input.logEntryIndex,
@@ -354,6 +437,16 @@ export async function editAndApproveContradiction(input: {
       },
     });
 
+    await recordReviewOutcome({
+      orgId,
+      userId,
+      pageId: page.id,
+      logEntryIndex: input.logEntryIndex,
+      action: 'editAndApproveContradiction',
+      outcome: 'edited_and_approved',
+      contentLength: editedContent.length,
+    });
+
     invalidate(orgId);
     return { ok: true };
   } catch (error) {
@@ -362,6 +455,18 @@ export async function editAndApproveContradiction(input: {
       error: error instanceof Error ? error : undefined,
       context: { pageId: input.pageId, logEntryIndex: input.logEntryIndex },
     });
+    if (authContext) {
+      await recordReviewOutcome({
+        orgId: authContext.orgId,
+        userId: authContext.userId,
+        pageId: input.pageId,
+        logEntryIndex: input.logEntryIndex,
+        action: 'editAndApproveContradiction',
+        outcome: 'error',
+        contentLength: input.editedContent?.trim().length || null,
+        errorMessage: message,
+      });
+    }
     return { ok: false, error: message };
   }
 }
