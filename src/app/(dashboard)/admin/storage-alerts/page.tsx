@@ -13,10 +13,10 @@ export const metadata: Metadata = {
 
 export default function StorageAlertsPage() {
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="trbd-page">
       {/* Page Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-normal tracking-tight">Storage Alerts</h1>
+        <h1 className="trbd-page-title tracking-tight">Storage Alerts</h1>
         <p className="text-muted-foreground">
           Monitor storage anomalies, cost overruns, and system health issues
         </p>

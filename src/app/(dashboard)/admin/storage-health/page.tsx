@@ -9,15 +9,18 @@ import {
 
 export const metadata: Metadata = {
   title: 'Storage Health | Admin',
-  description: 'Monitor storage system health, performance, and capacity planning',
+  description:
+    'Monitor storage system health, performance, and capacity planning',
 };
 
 export default function StorageHealthPage() {
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="trbd-page">
       {/* Page Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-normal tracking-tight">Storage System Health</h1>
+        <h1 className="trbd-page-title tracking-tight">
+          Storage System Health
+        </h1>
         <p className="text-muted-foreground">
           Monitor system health, service status, and performance metrics
         </p>

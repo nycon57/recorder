@@ -12,7 +12,6 @@
  */
 
 import { redirect } from 'next/navigation';
-
 import { AlertTriangle, Inbox } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/app/components/ui/alert';
@@ -24,29 +23,20 @@ import {
   CardHeader,
   CardTitle,
 } from '@/app/components/ui/card';
-import {
-  getKnowledgeStatusMeta,
-  KNOWLEDGE_STATUS,
-} from '@/lib/services/knowledge-status';
-import {
-  listReviewQueueItems,
-  splitReviewQueueItemsByKind,
-} from '@/lib/services/review-queue';
 import { requireAdmin } from '@/lib/utils/api';
 
-import { ReviewQueueItemCard } from './review-queue-item-card';
 import { RoutingReviewCard } from './routing-review-card';
+import { listReviewQueueItems, splitReviewQueueItemsByKind } from './review-queue';
 import { WikiReviewCard } from './wiki-review-card';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Review Queue | Admin',
-  description: 'Review contradictions, routing gaps, and manual publication work',
+  title: 'Wiki Review | Admin',
+  description: 'Review and resolve flagged wiki contradictions and routing gaps',
 };
 
 export default async function WikiReviewPage() {
-  const reviewStatusMeta = getKnowledgeStatusMeta(KNOWLEDGE_STATUS.NEEDS_REVIEW);
   let orgId: string;
   try {
     const ctx = await requireAdmin();
@@ -60,20 +50,17 @@ export default async function WikiReviewPage() {
   const totalEntries = reviewQueueItems.length;
 
   return (
-    <div className="container mx-auto space-y-6 py-8">
+    <div className="trbd-page">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-normal tracking-tight">Review Queue</h1>
+          <h1 className="trbd-page-title tracking-tight">Wiki Review</h1>
           <p className="mt-1 text-muted-foreground">
-            Resolve contradictions, route ambiguous knowledge, and finish manual
-            publication work from one operational surface.
+            Resolve flagged contradictions and confirm routing gaps before wiki
+            updates settle into their final destination.
           </p>
         </div>
-        <Badge
-          variant={reviewStatusMeta.badgeVariant}
-          className={reviewStatusMeta.badgeClassName}
-        >
-          {totalEntries} {reviewStatusMeta.shortLabel}
+        <Badge variant="outline" className="text-sm">
+          {totalEntries} pending
         </Badge>
       </header>
 
@@ -81,10 +68,12 @@ export default async function WikiReviewPage() {
         <AlertTriangle className="h-4 w-4" />
         <AlertTitle>How this works</AlertTitle>
         <AlertDescription>
-          Contradictions can still be approved, rejected, or edited directly here.
-          Routing items now let reviewers approve or edit the proposed
-          topic/app/screen before a reroute-safe compile runs, while
-          manual-publication items still point you to the owning workflow.
+          When a new recording contradicts an existing wiki page, the compilation
+          engine flags it here instead of overwriting the page. Pages that still
+          need human routing review also appear here. Contradictions can be
+          approved, rejected, or rewritten directly. Routing decisions now show
+          the proposed review surface so backend apply hooks can slot in without
+          another UI pass.
         </AlertDescription>
       </Alert>
 
@@ -96,8 +85,8 @@ export default async function WikiReviewPage() {
               No pending reviews
             </CardTitle>
             <CardDescription>
-              Review items will appear here when contradictions, routing gaps, or
-              manual publication work needs attention.
+              Every contradiction and routing gap has been resolved. New review
+              work will appear here automatically.
             </CardDescription>
           </CardHeader>
           <CardContent />
@@ -109,28 +98,26 @@ export default async function WikiReviewPage() {
               <div>
                 <h2 className="text-lg font-medium">Contradictions</h2>
                 <p className="text-sm text-muted-foreground">
-                  Flagged wiki conflicts that still need a direct approve, reject,
-                  or edit decision.
+                  Flagged wiki conflicts that still need direct approve, reject,
+                  or rewrite decisions.
                 </p>
               </div>
-              {groupedItems.contradiction.map((item) =>
-                item.kind === 'contradiction' ? (
-                  <WikiReviewCard
-                    key={item.id}
-                    pageId={item.pageId}
-                    logEntryIndex={item.logEntryIndex}
-                    topic={item.topic}
-                    app={item.app}
-                    screen={item.screen}
-                    currentContent={item.currentContent}
-                    detectedAt={item.detectedAt}
-                    sourceRecordingId={item.sourceRecordingId}
-                    contradictions={item.contradictions}
-                    additions={item.additions}
-                    mergedContentPreview={item.mergedContentPreview}
-                  />
-                ) : null
-              )}
+              {groupedItems.contradiction.map((item) => (
+                <WikiReviewCard
+                  key={item.id}
+                  pageId={item.pageId}
+                  logEntryIndex={item.logEntryIndex}
+                  topic={item.topic}
+                  app={item.app}
+                  screen={item.screen}
+                  currentContent={item.currentContent}
+                  detectedAt={item.detectedAt}
+                  sourceRecordingId={item.sourceRecordingId}
+                  contradictions={item.contradictions}
+                  additions={item.additions}
+                  mergedContentPreview={item.mergedContentPreview}
+                />
+              ))}
             </section>
           ) : null}
 
@@ -139,34 +126,13 @@ export default async function WikiReviewPage() {
               <div>
                 <h2 className="text-lg font-medium">Needs Routing</h2>
                 <p className="text-sm text-muted-foreground">
-                  Low-confidence routes pause here until a reviewer confirms the
-                  right topic, app, and screen.
+                  Pages missing stable app or screen placement, ready for reviewer
+                  confirmation once routing apply hooks are connected.
                 </p>
               </div>
-              {groupedItems.routing.map((item) =>
-                item.kind === 'routing'
-                  ? item.routingKind === 'approval'
-                    ? <RoutingReviewCard key={item.id} item={item} />
-                    : <ReviewQueueItemCard key={item.id} item={item} />
-                  : null
-              )}
-            </section>
-          ) : null}
-
-          {groupedItems['manual-publication'].length > 0 ? (
-            <section className="space-y-4">
-              <div>
-                <h2 className="text-lg font-medium">Manual Publication</h2>
-                <p className="text-sm text-muted-foreground">
-                  Completed documents that are ready for a reviewer to publish
-                  through the library flow.
-                </p>
-              </div>
-              {groupedItems['manual-publication'].map((item) =>
-                item.kind === 'manual-publication' ? (
-                  <ReviewQueueItemCard key={item.id} item={item} />
-                ) : null
-              )}
+              {groupedItems.routing.map((item) => (
+                <RoutingReviewCard key={item.id} item={item} />
+              ))}
             </section>
           ) : null}
         </div>

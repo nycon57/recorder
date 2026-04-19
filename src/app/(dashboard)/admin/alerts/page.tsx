@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/app/components/ui/card';
+import { AlertCircle, AlertTriangle, CheckCircle, Info } from 'lucide-react';
+
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from '@/app/components/ui/card';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
-import {
-  AlertTriangle,
-  AlertCircle,
-  Info,
-  CheckCircle,
-} from 'lucide-react';
 
 interface AlertIncident {
   id: string;
@@ -112,7 +113,7 @@ export default function AdminAlertsPage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="trbd-page">
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
@@ -126,12 +127,14 @@ export default function AdminAlertsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="trbd-page">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-normal">System Alerts</h1>
-          <p className="text-muted-foreground">Monitor critical system incidents</p>
+          <h1 className="trbd-page-title">System Alerts</h1>
+          <p className="text-muted-foreground">
+            Monitor critical system incidents
+          </p>
         </div>
 
         <Badge variant="outline" className="text-sm">
@@ -191,7 +194,9 @@ export default function AdminAlertsPage() {
           {!data.recentIncidents || data.recentIncidents.length === 0 ? (
             <div className="text-center py-12">
               <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4 opacity-50" />
-              <p className="text-sm text-muted-foreground">No open alerts - system healthy</p>
+              <p className="text-sm text-muted-foreground">
+                No open alerts - system healthy
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -206,12 +211,15 @@ export default function AdminAlertsPage() {
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{incident.ruleName}</span>
-                      <Badge variant={getSeverityBadgeVariant(incident.severity)}>
+                      <Badge
+                        variant={getSeverityBadgeVariant(incident.severity)}
+                      >
                         {incident.severity}
                       </Badge>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      <span className="font-mono">{incident.metricName}</span>: {incident.metricValue}
+                      <span className="font-mono">{incident.metricName}</span>:{' '}
+                      {incident.metricValue}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Triggered {formatDate(incident.triggeredAt)}

@@ -1,6 +1,11 @@
 import { Metadata } from 'next';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/app/components/ui/tabs';
 import {
   PlatformOverviewCards,
   StorageDistribution,
@@ -11,17 +16,19 @@ import {
 
 export const metadata: Metadata = {
   title: 'Storage Analytics | Admin',
-  description: 'Platform storage metrics, optimization analytics, and cost tracking',
+  description:
+    'Platform storage metrics, optimization analytics, and cost tracking',
 };
 
 export default function StorageAnalyticsPage() {
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="trbd-page">
       {/* Page Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-normal tracking-tight">Storage Analytics</h1>
+        <h1 className="trbd-page-title tracking-tight">Storage Analytics</h1>
         <p className="text-muted-foreground">
-          Platform-wide storage metrics, optimization effectiveness, and cost tracking
+          Platform-wide storage metrics, optimization effectiveness, and cost
+          tracking
         </p>
       </div>
 
