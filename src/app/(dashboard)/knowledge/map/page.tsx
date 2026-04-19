@@ -2,12 +2,21 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { Brain, List, Network, Hash, AlertCircle, Info, Sparkles, Upload, Activity } from 'lucide-react';
+import { Brain, List, Network, Hash, AlertCircle, Info, Sparkles, Upload, Activity, Filter, ExternalLink, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
+import { Input } from '@/app/components/ui/input';
+import { Switch } from '@/app/components/ui/switch';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import {
   Tooltip,
   TooltipContent,
@@ -37,7 +46,15 @@ import {
   type KnowledgeGraphData,
 } from '@/lib/validations/knowledge';
 import { type KnowledgeGraphPayload } from '@/lib/types/knowledge-graph';
-import { toCanvasGraphData } from '@/lib/services/knowledge-graph-canvas';
+import {
+  CANVAS_EDGE_KIND_FILTERS,
+  CANVAS_NODE_KIND_FILTERS,
+  buildCanvasClusterHulls,
+  filterCanvasGraphData,
+  type CanvasEdgeKindFilter,
+  type CanvasNodeKindFilter,
+  toCanvasGraphData,
+} from '@/lib/services/knowledge-graph-canvas';
 import { fadeIn } from '@/lib/utils/animations';
 import {
   getKnowledgeStatusMeta,
@@ -47,6 +64,51 @@ import {
 
 type ViewMode = 'graph' | 'list';
 type SortOption = 'mention_count_desc' | 'last_seen_desc' | 'name_asc' | 'name_desc';
+
+const NODE_KIND_LABELS: Record<CanvasNodeKindFilter, string> = {
+  org_page: 'Org pages',
+  vendor_page: 'Vendor pages',
+  cluster: 'Clusters',
+};
+
+const EDGE_KIND_STYLES: Record<
+  CanvasEdgeKindFilter,
+  { label: string; color: string; description: string }
+> = {
+  org_relationship: {
+    label: 'Page relationships',
+    color: '#6366f1',
+    description: 'Org page to org page semantic links.',
+  },
+  org_in_cluster: {
+    label: 'Cluster membership',
+    color: '#0ea5e9',
+    description: 'Org page membership edges into computed clusters.',
+  },
+  org_matches_vendor: {
+    label: 'Vendor overlay matches',
+    color: '#16a34a',
+    description: 'Org pages aligned to vendor reference pages.',
+  },
+};
+
+const RELATIONSHIP_TYPE_LABELS: Record<
+  'requires' | 'precedes' | 'contradicts' | 'related',
+  string
+> = {
+  requires: 'Requires',
+  precedes: 'Precedes',
+  contradicts: 'Contradicts',
+  related: 'Related',
+};
+
+const CLUSTER_HULL_COLORS = [
+  'bg-sky-500/15 border-sky-500/40',
+  'bg-emerald-500/15 border-emerald-500/40',
+  'bg-fuchsia-500/15 border-fuchsia-500/40',
+  'bg-amber-500/15 border-amber-500/40',
+  'bg-violet-500/15 border-violet-500/40',
+] as const;
 
 /**
  * KnowledgePage - Main Knowledge Graph page
@@ -64,10 +126,22 @@ function KnowledgePageContent() {
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
+  const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
+  const [focusedClusterNodeId, setFocusedClusterNodeId] = useState<string | null>(
+    null
+  );
 
   // Filter state
   const [selectedTypes, setSelectedTypes] = useState<ConceptType[]>([]);
   const [sortBy, setSortBy] = useState<SortOption>('mention_count_desc');
+  const [graphSearch, setGraphSearch] = useState('');
+  const [includeSuperseded, setIncludeSuperseded] = useState(false);
+  const [selectedNodeKinds, setSelectedNodeKinds] = useState<CanvasNodeKindFilter[]>(
+    [...CANVAS_NODE_KIND_FILTERS]
+  );
+  const [selectedEdgeKinds, setSelectedEdgeKinds] = useState<CanvasEdgeKindFilter[]>(
+    [...CANVAS_EDGE_KIND_FILTERS]
+  );
 
   // Data state
   const [graphNodes, setGraphNodes] = useState<KnowledgeGraphData['nodes']>([]);
@@ -83,7 +157,11 @@ function KnowledgePageContent() {
 
   // Stable fetch function that takes params explicitly to avoid stale closures
   const fetchGraphData = useCallback(
-    async (sort: SortOption, signal: AbortSignal) => {
+    async (
+      sort: SortOption,
+      includeSupersededRecords: boolean,
+      signal: AbortSignal
+    ) => {
       try {
         setLoading(true);
         setError(null);
@@ -96,6 +174,9 @@ function KnowledgePageContent() {
           relationshipLimit: '2000',
           vendorMatchesPerOrgPage: '3',
         });
+        if (includeSupersededRecords) {
+          graphParams.set('includeSuperseded', 'true');
+        }
 
         const conceptParams = new URLSearchParams();
         // Fetch all concepts - client-side filtering handles multiple type selection
@@ -165,12 +246,12 @@ function KnowledgePageContent() {
   useEffect(() => {
     const controller = new AbortController();
 
-    fetchGraphData(sortBy, controller.signal);
+    fetchGraphData(sortBy, includeSuperseded, controller.signal);
 
     return () => {
       controller.abort();
     };
-  }, [fetchGraphData, sortBy]);
+  }, [fetchGraphData, includeSuperseded, sortBy]);
 
   // Graph nodes represent operational wiki pages, not concepts.
   // Close concept detail panel when switching to graph mode.
@@ -180,22 +261,86 @@ function KnowledgePageContent() {
     }
   }, [viewMode, selectedConceptId]);
 
+  useEffect(() => {
+    if (viewMode !== 'graph' && selectedGraphNodeId) {
+      setSelectedGraphNodeId(null);
+    }
+  }, [selectedGraphNodeId, viewMode]);
+
+  const baseFilteredGraph = useMemo(
+    () =>
+      filterCanvasGraphData(
+        {
+          nodes: graphNodes,
+          edges: graphEdges,
+        },
+        {
+          nodeKinds: selectedNodeKinds,
+          edgeKinds: selectedEdgeKinds,
+          search: graphSearch,
+        }
+      ),
+    [graphEdges, graphNodes, graphSearch, selectedEdgeKinds, selectedNodeKinds]
+  );
+
+  const clusterHulls = useMemo(
+    () => buildCanvasClusterHulls(baseFilteredGraph),
+    [baseFilteredGraph]
+  );
+
+  useEffect(() => {
+    if (!focusedClusterNodeId) return;
+    if (!clusterHulls.some((hull) => hull.clusterNodeId === focusedClusterNodeId)) {
+      setFocusedClusterNodeId(null);
+    }
+  }, [clusterHulls, focusedClusterNodeId]);
+
+  const filteredGraph = useMemo(() => {
+    if (!focusedClusterNodeId) return baseFilteredGraph;
+
+    const focusedHull = clusterHulls.find(
+      (hull) => hull.clusterNodeId === focusedClusterNodeId
+    );
+    if (!focusedHull) return baseFilteredGraph;
+
+    const includedNodeIds = new Set<string>([
+      focusedHull.clusterNodeId,
+      ...focusedHull.memberNodeIds,
+      ...focusedHull.vendorNodeIds,
+    ]);
+
+    const nodes = baseFilteredGraph.nodes.filter((node) =>
+      includedNodeIds.has(node.id)
+    );
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    const edges = baseFilteredGraph.edges.filter(
+      (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target)
+    );
+
+    return {
+      nodes,
+      edges,
+    };
+  }, [baseFilteredGraph, clusterHulls, focusedClusterNodeId]);
+
+  useEffect(() => {
+    if (!selectedGraphNodeId) return;
+    if (!filteredGraph.nodes.some((node) => node.id === selectedGraphNodeId)) {
+      setSelectedGraphNodeId(null);
+    }
+  }, [filteredGraph.nodes, selectedGraphNodeId]);
+
   // Calculate stats
   const stats = useMemo(() => {
-    const total = viewMode === 'graph' ? graphNodes.length : concepts.length;
+    const total =
+      viewMode === 'graph' ? filteredGraph.nodes.length : concepts.length;
     const byType: Record<string, number> = {};
 
     if (viewMode === 'graph') {
-      if (graphMeta) {
-        byType['org pages'] = graphMeta.counts.orgPages;
-        byType['vendor pages'] = graphMeta.counts.vendorPages;
-        byType['clusters'] = graphMeta.counts.clusters;
-      } else {
-        graphNodes.forEach((node) => {
-          const label = node.typeLabel || node.type;
-          byType[label] = (byType[label] || 0) + 1;
-        });
-      }
+      filteredGraph.nodes.forEach((node) => {
+        const label = node.typeLabel || node.type;
+        byType[label] = (byType[label] || 0) + 1;
+      });
     } else {
       concepts.forEach((concept) => {
         byType[concept.conceptType] = (byType[concept.conceptType] || 0) + 1;
@@ -203,7 +348,7 @@ function KnowledgePageContent() {
     }
 
     return { total, byType };
-  }, [graphNodes, graphMeta, concepts, viewMode]);
+  }, [concepts, filteredGraph.nodes, viewMode]);
 
   // Filter concepts for list view
   const filteredConcepts = useMemo(() => {
@@ -225,9 +370,44 @@ function KnowledgePageContent() {
     setSelectedConceptId(null);
   }, []);
 
-  // Clear filters
+  // Clear list filters
   const handleClearFilters = useCallback(() => {
     setSelectedTypes([]);
+  }, []);
+
+  const handleGraphNodeClick = useCallback((nodeId: string) => {
+    setSelectedGraphNodeId(nodeId);
+  }, []);
+
+  const toggleNodeKind = useCallback((kind: CanvasNodeKindFilter) => {
+    setSelectedNodeKinds((current) => {
+      if (current.includes(kind)) {
+        if (current.length === 1) {
+          return current;
+        }
+        return current.filter((item) => item !== kind);
+      }
+      return [...current, kind];
+    });
+  }, []);
+
+  const toggleEdgeKind = useCallback((kind: CanvasEdgeKindFilter) => {
+    setSelectedEdgeKinds((current) => {
+      if (current.includes(kind)) {
+        if (current.length === 1) {
+          return current;
+        }
+        return current.filter((item) => item !== kind);
+      }
+      return [...current, kind];
+    });
+  }, []);
+
+  const handleResetGraphFilters = useCallback(() => {
+    setGraphSearch('');
+    setSelectedNodeKinds([...CANVAS_NODE_KIND_FILTERS]);
+    setSelectedEdgeKinds([...CANVAS_EDGE_KIND_FILTERS]);
+    setFocusedClusterNodeId(null);
   }, []);
 
   // Keyboard shortcuts
@@ -245,18 +425,112 @@ function KnowledgePageContent() {
     {
       key: 'Escape',
       handler: () => {
-        if (selectedConceptId) {
+        if (viewMode === 'graph' && selectedGraphNodeId) {
+          setSelectedGraphNodeId(null);
+          return;
+        }
+        if (viewMode === 'list' && selectedConceptId) {
           handleClosePanel();
         }
       },
-      description: 'Close concept panel',
+      description: 'Close inspector panel',
       preventDefault: false,
     },
   ]);
 
+  const selectedGraphNode = useMemo(
+    () =>
+      filteredGraph.nodes.find((node) => node.id === selectedGraphNodeId) ??
+      null,
+    [filteredGraph.nodes, selectedGraphNodeId]
+  );
+
+  const connectedGraphNodes = useMemo(() => {
+    if (!selectedGraphNodeId) return [];
+
+    const connectionMap = new Map<
+      string,
+      { edgeType: string; edgeKind: CanvasEdgeKindFilter; strength: number }
+    >();
+
+    filteredGraph.edges.forEach((edge) => {
+      if (edge.source === selectedGraphNodeId) {
+        connectionMap.set(edge.target, {
+          edgeType: edge.relationshipType ?? edge.type,
+          edgeKind: edge.edgeKind ?? 'org_relationship',
+          strength: edge.strength,
+        });
+      }
+      if (edge.target === selectedGraphNodeId) {
+        connectionMap.set(edge.source, {
+          edgeType: edge.relationshipType ?? edge.type,
+          edgeKind: edge.edgeKind ?? 'org_relationship',
+          strength: edge.strength,
+        });
+      }
+    });
+
+    return filteredGraph.nodes
+      .filter((node) => connectionMap.has(node.id))
+      .map((node) => ({
+        node,
+        edgeType: connectionMap.get(node.id)?.edgeType ?? 'related',
+        edgeKind: connectionMap.get(node.id)?.edgeKind ?? 'org_relationship',
+        strength: connectionMap.get(node.id)?.strength ?? 0,
+      }))
+      .sort((left, right) => right.node.mentionCount - left.node.mentionCount);
+  }, [filteredGraph.edges, filteredGraph.nodes, selectedGraphNodeId]);
+
+  const selectedGraphNodeKnowledgeHref = selectedGraphNode?.rawId
+    ? `/dashboard/knowledge/pages/${selectedGraphNode.rawId}`
+    : null;
+
+  const selectedGraphNodeHealthHref = selectedGraphNode?.rawId
+    ? `/knowledge/health?wikiPageId=${selectedGraphNode.rawId}`
+    : '/knowledge/health';
+
+  const relationshipBreakdown = useMemo(() => {
+    const counts: Partial<
+      Record<'requires' | 'precedes' | 'contradicts' | 'related', number>
+    > = {};
+
+    filteredGraph.edges.forEach((edge) => {
+      const edgeKind = edge.edgeKind ?? 'org_relationship';
+      if (edgeKind !== 'org_relationship') return;
+
+      const relationshipType = edge.relationshipType ?? 'related';
+      counts[relationshipType] = (counts[relationshipType] ?? 0) + 1;
+    });
+
+    return counts;
+  }, [filteredGraph.edges]);
+
+  const edgeKindBreakdown = useMemo(() => {
+    const counts: Record<CanvasEdgeKindFilter, number> = {
+      org_relationship: 0,
+      org_in_cluster: 0,
+      org_matches_vendor: 0,
+    };
+
+    filteredGraph.edges.forEach((edge) => {
+      const edgeKind = edge.edgeKind ?? 'org_relationship';
+      counts[edgeKind] += 1;
+    });
+
+    return counts;
+  }, [filteredGraph.edges]);
+
+  const graphGeneratedLabel = graphMeta?.generatedAt
+    ? new Date(graphMeta.generatedAt).toLocaleString()
+    : null;
+
+  const focusedHull = focusedClusterNodeId
+    ? clusterHulls.find((hull) => hull.clusterNodeId === focusedClusterNodeId) ?? null
+    : null;
+
   // Check if we have any data
   const hasData = viewMode === 'graph'
-    ? graphNodes.length > 0
+    ? filteredGraph.nodes.length > 0
     : concepts.length > 0;
 
   return (
@@ -544,13 +818,383 @@ function KnowledgePageContent() {
             initial="hidden"
             animate="show"
             exit="exit"
+            className="space-y-4"
           >
             {viewMode === 'graph' ? (
-              <KnowledgeGraphContainer
-                nodes={graphNodes}
-                edges={graphEdges}
-                height={600}
-              />
+              <>
+                <Card className="gap-3 py-4">
+                  <CardHeader className="px-4 pb-0">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Filter className="h-4 w-4 text-muted-foreground" />
+                      Graph filters
+                    </CardTitle>
+                    <CardDescription>
+                      Narrow node/edge types, include superseded records, and focus
+                      specific cluster hulls without leaving the map.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-4 space-y-4">
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                      <Input
+                        value={graphSearch}
+                        onChange={(event) => setGraphSearch(event.target.value)}
+                        placeholder="Search nodes by title, app, or screen"
+                        aria-label="Search graph nodes"
+                      />
+                      <label className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+                        <span className="text-muted-foreground">Include superseded</span>
+                        <Switch
+                          checked={includeSuperseded}
+                          onCheckedChange={setIncludeSuperseded}
+                          aria-label="Include superseded pages"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Node kinds
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {CANVAS_NODE_KIND_FILTERS.map((kind) => (
+                            <Button
+                              key={kind}
+                              type="button"
+                              variant={
+                                selectedNodeKinds.includes(kind) ? 'secondary' : 'outline'
+                              }
+                              size="sm"
+                              onClick={() => toggleNodeKind(kind)}
+                              className="h-8"
+                            >
+                              {NODE_KIND_LABELS[kind]}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Edge kinds
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {CANVAS_EDGE_KIND_FILTERS.map((kind) => (
+                            <Button
+                              key={kind}
+                              type="button"
+                              variant={
+                                selectedEdgeKinds.includes(kind) ? 'secondary' : 'outline'
+                              }
+                              size="sm"
+                              onClick={() => toggleEdgeKind(kind)}
+                              className="h-8"
+                            >
+                              {EDGE_KIND_STYLES[kind].label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {focusedHull && (
+                          <Badge variant="outline" className="text-[11px]">
+                            Focused hull: {focusedHull.clusterLabel}
+                          </Badge>
+                        )}
+                        {graphGeneratedLabel && (
+                          <span>Snapshot: {graphGeneratedLabel}</span>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        onClick={handleResetGraphFilters}
+                        className="h-8"
+                      >
+                        Reset filters
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <Card className="gap-3 py-4">
+                    <CardHeader className="px-4 pb-0">
+                      <CardTitle className="text-base">Typed edge legend</CardTitle>
+                      <CardDescription>
+                        Operational edge classes and relationship distribution currently
+                        visible in the graph.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-4 space-y-3">
+                      <div className="space-y-2">
+                        {CANVAS_EDGE_KIND_FILTERS.map((kind) => (
+                          <div
+                            key={kind}
+                            className="flex items-start justify-between gap-3 rounded-md border p-2"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="inline-flex h-2.5 w-2.5 rounded-full"
+                                  style={{ backgroundColor: EDGE_KIND_STYLES[kind].color }}
+                                  aria-hidden="true"
+                                />
+                                <p className="text-sm font-medium">
+                                  {EDGE_KIND_STYLES[kind].label}
+                                </p>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {EDGE_KIND_STYLES[kind].description}
+                              </p>
+                            </div>
+                            <Badge variant="outline">{edgeKindBreakdown[kind]}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Relationship types
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(relationshipBreakdown).length > 0 ? (
+                            (Object.entries(relationshipBreakdown) as Array<
+                              [
+                                'requires' | 'precedes' | 'contradicts' | 'related',
+                                number,
+                              ]
+                            >).map(([relationshipType, count]) => (
+                              <Badge key={relationshipType} variant="secondary">
+                                {RELATIONSHIP_TYPE_LABELS[relationshipType]}: {count}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              No org-to-org relationships in the current filter context.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="gap-3 py-4">
+                    <CardHeader className="px-4 pb-0">
+                      <CardTitle className="text-base">Cluster hull visualization</CardTitle>
+                      <CardDescription>
+                        Computed hulls summarize each cluster envelope, member pages, and
+                        connected vendor overlays.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-4 space-y-2">
+                      {clusterHulls.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No cluster hulls available in this filter context.
+                        </p>
+                      ) : (
+                        clusterHulls.slice(0, 8).map((hull, index) => {
+                          const accent = CLUSTER_HULL_COLORS[index % CLUSTER_HULL_COLORS.length];
+                          const isFocused = focusedClusterNodeId === hull.clusterNodeId;
+                          return (
+                            <button
+                              key={hull.clusterNodeId}
+                              type="button"
+                              onClick={() =>
+                                setFocusedClusterNodeId((current) =>
+                                  current === hull.clusterNodeId ? null : hull.clusterNodeId
+                                )
+                              }
+                              className={`w-full rounded-md border px-3 py-2 text-left transition hover:shadow-sm ${accent} ${
+                                isFocused ? 'ring-1 ring-primary' : ''
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-medium">{hull.clusterLabel}</p>
+                                <Badge variant={isFocused ? 'default' : 'outline'}>
+                                  {isFocused ? 'Focused' : 'Focus'}
+                                </Badge>
+                              </div>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {hull.memberCount} org pages · {hull.vendorNodeIds.length}{' '}
+                                vendor links · {hull.relationshipEdgeCount} internal relationships
+                              </p>
+                            </button>
+                          );
+                        })
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+                  <div className="rounded-xl border bg-card/20 p-2 sm:p-3">
+                    <KnowledgeGraphContainer
+                      nodes={filteredGraph.nodes}
+                      edges={filteredGraph.edges}
+                      onNodeClick={handleGraphNodeClick}
+                      selectedNodeId={selectedGraphNodeId}
+                      height={640}
+                    />
+                  </div>
+
+                  <Card className="gap-3 py-4">
+                    <CardHeader className="px-4 pb-0">
+                      <CardTitle className="text-base">Graph inspector</CardTitle>
+                      <CardDescription>
+                        Select a node to inspect routing metadata and jump through related
+                        records.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-4 space-y-4">
+                      {selectedGraphNode ? (
+                        <>
+                          <div className="space-y-2 rounded-md border p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold">{selectedGraphNode.name}</p>
+                              <Badge variant="outline">
+                                {selectedGraphNode.nodeKind
+                                  ? NODE_KIND_LABELS[selectedGraphNode.nodeKind]
+                                  : selectedGraphNode.typeLabel || selectedGraphNode.type}
+                              </Badge>
+                              {selectedGraphNode.status && (
+                                <Badge
+                                  variant={
+                                    selectedGraphNode.status === 'active'
+                                      ? 'secondary'
+                                      : 'outline'
+                                  }
+                                >
+                                  {selectedGraphNode.status}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              {selectedGraphNode.app && (
+                                <span>App: {selectedGraphNode.app}</span>
+                              )}
+                              {selectedGraphNode.screen && (
+                                <span>Screen: {selectedGraphNode.screen}</span>
+                              )}
+                              {typeof selectedGraphNode.confidence === 'number' && (
+                                <span>
+                                  Confidence: {Math.round(selectedGraphNode.confidence * 100)}%
+                                </span>
+                              )}
+                              {selectedGraphNode.memberCount && (
+                                <span>Members: {selectedGraphNode.memberCount}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {selectedGraphNodeKnowledgeHref && (
+                              <Button asChild size="sm" variant="outline">
+                                <Link href={selectedGraphNodeKnowledgeHref}>
+                                  Open page
+                                  <ArrowRight className="ml-2 h-3.5 w-3.5" />
+                                </Link>
+                              </Button>
+                            )}
+                            <Button asChild size="sm" variant="ghost">
+                              <Link href={selectedGraphNodeHealthHref}>Open health</Link>
+                            </Button>
+                            {selectedGraphNode.sourceUrl && (
+                              <Button asChild size="sm" variant="ghost">
+                                <a
+                                  href={selectedGraphNode.sourceUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Vendor source
+                                  <ExternalLink className="ml-2 h-3.5 w-3.5" />
+                                </a>
+                              </Button>
+                            )}
+                            {selectedGraphNode.nodeKind === 'cluster' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setFocusedClusterNodeId((current) =>
+                                    current === selectedGraphNode.id
+                                      ? null
+                                      : selectedGraphNode.id
+                                  )
+                                }
+                              >
+                                {focusedClusterNodeId === selectedGraphNode.id
+                                  ? 'Unfocus hull'
+                                  : 'Focus hull'}
+                              </Button>
+                            )}
+                            {selectedGraphNode.nodeKind === 'org_page' &&
+                              selectedGraphNode.clusterId && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    setFocusedClusterNodeId(
+                                      `cluster:${selectedGraphNode.clusterId}`
+                                    )
+                                  }
+                                >
+                                  Focus cluster hull
+                                </Button>
+                              )}
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              Connected nodes ({connectedGraphNodes.length})
+                            </p>
+                            {connectedGraphNodes.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                No visible connections for this node under current filters.
+                              </p>
+                            ) : (
+                              <div className="space-y-2">
+                                {connectedGraphNodes.slice(0, 12).map((connection) => (
+                                  <button
+                                    key={connection.node.id}
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedGraphNodeId(connection.node.id)
+                                    }
+                                    className="flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition hover:bg-muted/40"
+                                  >
+                                    <div className="space-y-1">
+                                      <p className="text-sm font-medium">
+                                        {connection.node.name}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {EDGE_KIND_STYLES[connection.edgeKind].label} ·{' '}
+                                        {connection.edgeType}
+                                      </p>
+                                    </div>
+                                    <ArrowRight
+                                      className="h-4 w-4 text-muted-foreground"
+                                      aria-hidden="true"
+                                    />
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                          Select a node in the graph to inspect metadata, jump to docs,
+                          focus cluster hulls, and step through related nodes.
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
             ) : (
               <ConceptListView
                 concepts={filteredConcepts}

@@ -179,6 +179,25 @@ export interface GraphNode {
   metricLabel?: string;
   /** Optional human-readable label for node subtype/category. */
   typeLabel?: string;
+  /** Optional page-centric node kind metadata from /api/knowledge/graph. */
+  nodeKind?: 'org_page' | 'vendor_page' | 'cluster';
+  /** Optional source identifier from page-centric graph payloads. */
+  rawId?: string;
+  /** Optional route metadata for org/vendor nodes. */
+  app?: string | null;
+  screen?: string | null;
+  /** Optional status and routing metadata for org pages. */
+  status?: 'active' | 'superseded';
+  clusterId?: string | null;
+  confidence?: number;
+  /** Optional source URL for vendor nodes. */
+  sourceUrl?: string | null;
+  /** Optional cluster node metadata. */
+  memberCount?: number;
+  centralPageId?: string | null;
+  /** Optional timestamps from operational graph payload. */
+  updatedAt?: string;
+  computedAt?: string;
   x?: number;
   y?: number;
 }
@@ -212,6 +231,13 @@ export interface GraphEdge {
   target: string;
   type: RelationshipType | string; // Allow any string for flexibility
   strength: number;
+  /** Optional page-centric edge kind metadata from /api/knowledge/graph. */
+  edgeKind?: 'org_relationship' | 'org_in_cluster' | 'org_matches_vendor';
+  /** Optional typed relationship metadata for org_relationship edges. */
+  relationshipType?: 'requires' | 'precedes' | 'contradicts' | 'related';
+  sourceType?: 'extracted' | 'inferred' | 'manual';
+  evidence?: string | null;
+  matchKey?: string;
 }
 
 /**
