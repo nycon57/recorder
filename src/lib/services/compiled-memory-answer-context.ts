@@ -144,6 +144,15 @@ export function buildCompiledMemoryAnswerContext(
   const sections: string[] = [];
   let nextIndex = 1;
 
+  sections.push(
+    [
+      'SOURCE PRECEDENCE:',
+      '- If guidance conflicts, YOUR TEAM\'S KNOWLEDGE overrides VENDOR TRAINING and VENDOR KNOWLEDGE.',
+      '- VENDOR TRAINING overrides VENDOR KNOWLEDGE when those two conflict.',
+      '- Prefer the highest-precedence source with explicit citations.',
+    ].join('\n'),
+  );
+
   const orgSection = renderSection("YOUR TEAM'S KNOWLEDGE", orgSources, nextIndex);
   if (orgSection) {
     sections.push(orgSection);
