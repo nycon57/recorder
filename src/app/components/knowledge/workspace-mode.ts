@@ -1,17 +1,17 @@
-export const KNOWLEDGE_WORKSPACE_DEFAULT_MODE = 'map' as const
+export const KNOWLEDGE_WORKSPACE_DEFAULT_MODE = 'docs' as const
 
 export const KNOWLEDGE_WORKSPACE_MODES = [
   {
     mode: 'map',
     label: 'Map',
     href: '/knowledge/map',
-    description: 'Concept relationships and graph view',
+    description: 'Operational page graph and typed relationships',
   },
   {
     mode: 'docs',
     label: 'Docs',
     href: '/knowledge/docs',
-    description: 'Compiled docs and source coverage',
+    description: 'Compiled pages and source coverage',
   },
   {
     mode: 'review',

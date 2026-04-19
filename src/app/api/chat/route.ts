@@ -50,7 +50,6 @@ import {
   recordKnowledgeTelemetryEvent,
   type KnowledgeChatTelemetryPayload,
 } from '@/lib/services/knowledge-telemetry';
-import { nanoid } from 'nanoid';
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
@@ -71,6 +70,13 @@ const sourcesCache = new Map<string, { sources: any[]; timestamp: number }>();
 
 // Cache TTL: 5 minutes (enough time for navigation between chat and detail pages)
 const SOURCES_CACHE_TTL = 5 * 60 * 1000;
+
+function createQueryId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 /**
  * Clean up expired cache entries
@@ -194,7 +200,7 @@ export async function POST(req: Request) {
     } = body;
 
     // Initialize monitoring if enabled
-    queryId = nanoid();
+    queryId = createQueryId();
     requestStartTime = Date.now();
 
     // Get the last user message for RAG
@@ -258,45 +264,21 @@ export async function POST(req: Request) {
     let actualRecordingsCount = 0;
     let answerMode: 'compiled-memory' | 'discovery' | 'tool-discovery' | 'empty' = 'empty';
     let isMetaDiscoveryQuery = false;
-    let isScopedDiscoveryMode = Array.isArray(recordingIds) && recordingIds.length > 0;
+    const isScopedDiscoveryMode = Array.isArray(recordingIds) && recordingIds.length > 0;
     let useToolDiscovery = false;
 
     if (userQuery) {
       console.log('[Chat API] Retrieving answer context for org:', orgId);
 
-      // Get recording count and summaries status for routing
+      // Keep a lightweight count for empty-state messaging. Do not use this
+      // count to implicitly route normal chat answers into raw-evidence mode.
       const { count: recordingsCount } = await supabaseAdmin
         .from('content')
         .select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
         .eq('status', 'completed');
 
-      const { count: summariesCount } = await supabaseAdmin
-        .from('content_summaries')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', orgId);
-
       actualRecordingsCount = recordingsCount || 0;
-      const hasSummaries = (summariesCount || 0) > 0;
-      const hasReranking = ENABLE_RERANKING && isCohereConfigured();
-
-      console.log('[Chat API] Context:', {
-        recordingsCount: actualRecordingsCount,
-        hasSummaries,
-        hasReranking,
-        agenticEnabled: ENABLE_AGENTIC_RAG,
-      });
-
-      // Route query using the SEARCHABLE query (preprocessed if needed)
-      // This ensures meta-questions like "Do I have recordings about X?" are treated as content searches
-      route = await routeQuery(searchableQuery, {
-        recordingsCount: actualRecordingsCount,
-        hasSummaries,
-        hasReranking,
-      });
-
-      console.log('[Chat API] Query routing:');
-      console.log(explainRoute(route));
 
       isMetaDiscoveryQuery =
         preprocessed.wasTransformed &&
@@ -308,6 +290,32 @@ export async function POST(req: Request) {
         selectedStrategy = isMetaDiscoveryQuery ? 'tool_discovery_meta' : 'tool_discovery';
         console.log('[Chat API] Using tool-based discovery strategy');
       } else if (isScopedDiscoveryMode) {
+        const { count: summariesCount } = await supabaseAdmin
+          .from('content_summaries')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', orgId);
+
+        const hasSummaries = (summariesCount || 0) > 0;
+        const hasReranking = ENABLE_RERANKING && isCohereConfigured();
+
+        console.log('[Chat API] Scoped discovery context:', {
+          recordingsCount: actualRecordingsCount,
+          hasSummaries,
+          hasReranking,
+          agenticEnabled: ENABLE_AGENTIC_RAG,
+        });
+
+        // Scoped retrieval is explicit discovery mode, so we still route for
+        // retrieval strategy tuning here.
+        route = await routeQuery(searchableQuery, {
+          recordingsCount: actualRecordingsCount,
+          hasSummaries,
+          hasReranking,
+        });
+
+        console.log('[Chat API] Query routing:');
+        console.log(explainRoute(route));
+
         // Get retrieval configuration from route
         const retrievalConfig = getRetrievalConfig(route);
 
