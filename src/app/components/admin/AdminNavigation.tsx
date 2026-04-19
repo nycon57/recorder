@@ -54,12 +54,12 @@ const navItems: NavItem[] = [
     icon: Lightbulb,
     description: 'Optimization suggestions',
   },
-  // TRIB-34: Wiki Review surfaces flagged contradictions for admin approval
+  // TRIB-110: Review Queue surfaces contradictions, routing gaps, and manual publication work
   {
-    title: 'Wiki Review',
+    title: 'Review Queue',
     href: '/admin/wiki-review',
     icon: FileWarning,
-    description: 'Resolve flagged contradictions',
+    description: 'Resolve knowledge review items',
   },
 ];
 

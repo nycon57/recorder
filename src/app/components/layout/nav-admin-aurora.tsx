@@ -35,7 +35,7 @@ import {
  * - Staggered entrance animation
  * - Icon scale on hover
  * - Aurora glow on active state
- * - TRIB-34: Wiki Review entry with pending-count badge
+ * - TRIB-110: Review Queue entry with pending-count badge
  */
 
 interface AdminItem {
@@ -43,8 +43,8 @@ interface AdminItem {
   url: string
   icon: IconSvgElement
   description: string
-  /** When set, the item key that this badge count applies to (e.g. "wikiReview"). */
-  badgeKey?: "wikiReview"
+  /** When set, the item key that this badge count applies to (e.g. "reviewQueue"). */
+  badgeKey?: "reviewQueue"
 }
 
 const adminItems: AdminItem[] = [
@@ -79,11 +79,11 @@ const adminItems: AdminItem[] = [
     description: "Quota management",
   },
   {
-    title: "Wiki Review",
+    title: "Review Queue",
     url: "/admin/wiki-review",
     icon: Edit02Icon,
-    description: "Flagged contradictions",
-    badgeKey: "wikiReview",
+    description: "Knowledge items awaiting review",
+    badgeKey: "reviewQueue",
   },
 ]
 
@@ -127,11 +127,11 @@ const labelVariants = {
 }
 
 interface NavAdminAuroraProps {
-  /** TRIB-34: pending wiki-contradiction count for the current org. */
-  wikiReviewCount?: number
+  /** TRIB-110: pending review-queue count for the current org. */
+  reviewQueueCount?: number
 }
 
-export function NavAdminAurora({ wikiReviewCount = 0 }: NavAdminAuroraProps = {}) {
+export function NavAdminAurora({ reviewQueueCount = 0 }: NavAdminAuroraProps = {}) {
   const pathname = usePathname()
   const [mounted, setMounted] = React.useState(false)
 
@@ -142,7 +142,7 @@ export function NavAdminAurora({ wikiReviewCount = 0 }: NavAdminAuroraProps = {}
   const MotionDiv = mounted ? motion.div : "div"
 
   const badgeCounts: Record<NonNullable<AdminItem["badgeKey"]>, number> = {
-    wikiReview: wikiReviewCount,
+    reviewQueue: reviewQueueCount,
   }
 
   return (
