@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { Brain, List, Network, Hash, AlertCircle, Info, Sparkles, Upload, Activity, Filter, ExternalLink, ArrowRight } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
@@ -123,8 +124,14 @@ const CLUSTER_HULL_COLORS = [
  * - Empty state when no concepts
  */
 function KnowledgePageContent() {
+  const searchParams = useSearchParams();
+  const requestedView = searchParams.get('view');
+  const originPageId = searchParams.get('originPage');
+
   // View state
-  const [viewMode, setViewMode] = useState<ViewMode>('graph');
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    requestedView === 'list' ? 'list' : 'graph'
+  );
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
   const [focusedClusterNodeId, setFocusedClusterNodeId] = useState<string | null>(
@@ -329,6 +336,14 @@ function KnowledgePageContent() {
       setSelectedGraphNodeId(null);
     }
   }, [filteredGraph.nodes, selectedGraphNodeId]);
+
+  useEffect(() => {
+    setViewMode(
+      requestedView === 'graph' || requestedView === 'list'
+        ? requestedView
+        : 'graph'
+    );
+  }, [requestedView]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -705,6 +720,23 @@ function KnowledgePageContent() {
               })}
             </div>
           </div>
+        )}
+
+        {viewMode === 'list' && originPageId && (
+          <Alert className="border-primary/30 bg-primary/5">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-sm">
+                Concept view is a secondary enrichment surface. Primary knowledge navigation remains
+                page-centric.
+              </span>
+              <Button asChild size="sm" variant="outline" className="min-h-[36px] w-fit">
+                <Link href={`/knowledge/pages/${encodeURIComponent(originPageId)}`}>
+                  Back to page detail
+                </Link>
+              </Button>
+            </AlertDescription>
+          </Alert>
         )}
       </div>
 
