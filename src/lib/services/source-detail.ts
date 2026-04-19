@@ -34,6 +34,8 @@ export interface SourceKnowledgePageCandidate {
   topic: string | null;
   app: string | null;
   screen: string | null;
+  confidence: number;
+  compilation_log: unknown;
   valid_until: string | null;
   updated_at: string;
 }
