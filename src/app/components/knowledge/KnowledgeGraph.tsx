@@ -17,21 +17,13 @@ import {
   Position,
 } from '@xyflow/react';
 import { ChevronDown, ChevronUp, Network, Info, X, HelpCircle } from 'lucide-react';
+import '@xyflow/react/dist/style.css';
+
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/app/components/ui/tooltip';
-import '@xyflow/react/dist/style.css';
-import './knowledge-graph.css';
-
-import { cn } from '@/lib/utils';
-import {
-  type ConceptType,
-  CONCEPT_TYPE_COLORS,
-  type GraphNode as BaseGraphNode,
-  type GraphEdge as BaseGraphEdge,
-} from '@/lib/validations/knowledge';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import {
   Empty,
@@ -41,6 +33,14 @@ import {
   EmptyDescription,
   EmptyContent,
 } from '@/app/components/ui/empty';
+import { cn } from '@/lib/utils';
+import {
+  CONCEPT_TYPE_COLORS,
+  type GraphNode as BaseGraphNode,
+  type GraphEdge as BaseGraphEdge,
+} from '@/lib/validations/knowledge';
+
+import './knowledge-graph.css';
 
 // ============================================================================
 // Types
@@ -118,7 +118,7 @@ function ConceptNode({ data, selected }: NodeProps<ConceptNodeData>) {
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
-      aria-label={`${nodeData.name} concept, ${nodeData.mentionCount} mentions, type: ${nodeData.type}`}
+      aria-label={`${nodeData.name}, ${nodeData.mentionCount} ${nodeData.metricLabel || 'mentions'}, type: ${nodeData.typeLabel || nodeData.type}`}
       aria-pressed={isSelected}
       className={cn(
         'relative rounded-lg border-2 bg-background px-4 py-3 shadow-md transition-all',
@@ -176,7 +176,7 @@ function ConceptNode({ data, selected }: NodeProps<ConceptNodeData>) {
             color: isDark ? '#ffffff' : '#000000',
           }}
         >
-          {nodeData.mentionCount} {nodeData.mentionCount === 1 ? 'mention' : 'mentions'}
+          {nodeData.mentionCount} {nodeData.metricLabel || (nodeData.mentionCount === 1 ? 'mention' : 'mentions')}
         </span>
       </div>
 
@@ -184,7 +184,7 @@ function ConceptNode({ data, selected }: NodeProps<ConceptNodeData>) {
       <div
         className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-background"
         style={{ backgroundColor: color }}
-        title={nodeData.type}
+        title={nodeData.typeLabel || nodeData.type}
         aria-hidden="true"
       />
     </div>
@@ -304,14 +304,6 @@ function EdgeLegend() {
 // ============================================================================
 
 /**
- * Get human-readable label for edge type
- */
-function getEdgeTypeLabel(type: string): string {
-  const edgeType = EDGE_TYPES.find((et) => et.types.includes(type as never));
-  return edgeType?.label || type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-/**
  * Get edge color by type
  */
 function getEdgeColor(type: string): string {
@@ -415,7 +407,7 @@ function EdgePopover({ selectedEdge, onClose, onNodeClick }: EdgePopoverProps) {
           </div>
           <div className="edge-popover-content">
             <span className="edge-popover-name">{sourceNode.name}</span>
-            <span className="edge-popover-type">{sourceNode.type.replace(/_/g, ' ')}</span>
+            <span className="edge-popover-type">{sourceNode.typeLabel || sourceNode.type.replace(/_/g, ' ')}</span>
           </div>
         </button>
 
@@ -456,7 +448,7 @@ function EdgePopover({ selectedEdge, onClose, onNodeClick }: EdgePopoverProps) {
           </div>
           <div className="edge-popover-content">
             <span className="edge-popover-name">{targetNode.name}</span>
-            <span className="edge-popover-type">{targetNode.type.replace(/_/g, ' ')}</span>
+            <span className="edge-popover-type">{targetNode.typeLabel || targetNode.type.replace(/_/g, ' ')}</span>
           </div>
         </button>
       </div>
@@ -598,8 +590,7 @@ function convertToFlowData(
  * Apply automatic layout to nodes using a simple force-directed algorithm
  */
 function applyAutoLayout(
-  nodes: BaseGraphNode[],
-  edges: BaseGraphEdge[]
+  nodes: BaseGraphNode[]
 ): BaseGraphNode[] {
   // If nodes already have positions, use them
   if (nodes.every((n) => n.x !== undefined && n.y !== undefined)) {
@@ -688,7 +679,6 @@ export function KnowledgeGraph({
   height = '600px',
 }: KnowledgeGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [selectedEdge, setSelectedEdge] = useState<SelectedEdgeInfo | null>(null);
 
   // Compute highlighted nodes based on selected edge
@@ -699,8 +689,8 @@ export function KnowledgeGraph({
 
   // Apply auto layout to nodes
   const layoutNodes = useMemo(() => {
-    return applyAutoLayout(propNodes, propEdges);
-  }, [propNodes, propEdges]);
+    return applyAutoLayout(propNodes);
+  }, [propNodes]);
 
   // Convert to ReactFlow format
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
@@ -765,24 +755,6 @@ export function KnowledgeGraph({
     setSelectedEdge(null);
   }, []);
 
-  // Handle responsive sizing
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        setContainerSize({ width, height });
-      }
-    });
-
-    resizeObserver.observe(containerRef.current);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, []);
-
   // Loading state
   if (isLoading) {
     return <KnowledgeGraphSkeleton className={className} />;
@@ -802,12 +774,14 @@ export function KnowledgeGraph({
             </EmptyMedia>
             <EmptyTitle>No Knowledge Graph Available</EmptyTitle>
             <EmptyDescription>
-              Start adding content to build your knowledge graph. Concepts will appear here as they are extracted from your recordings and documents.
+              Start adding content to build your knowledge graph. Operational
+              wiki pages and relationships will appear here as they are compiled.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <p className="text-xs text-muted-foreground">
-              The knowledge graph visualizes relationships between concepts, tools, processes, and people across your organization's content.
+              The knowledge graph visualizes relationships across org pages,
+              vendor pages, and clusters in your operational knowledge base.
             </p>
           </EmptyContent>
         </Empty>

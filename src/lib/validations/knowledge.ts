@@ -175,6 +175,10 @@ export interface GraphNode {
   name: string;
   type: ConceptType;
   mentionCount: number;
+  /** Optional label describing what `mentionCount` represents for this node. */
+  metricLabel?: string;
+  /** Optional human-readable label for node subtype/category. */
+  typeLabel?: string;
   x?: number;
   y?: number;
 }
