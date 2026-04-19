@@ -38,7 +38,17 @@ import {
   shouldAutoApplyWikiContradiction,
 } from '@/lib/services/agent-config';
 import { withAgentLogging } from '@/lib/services/agent-logger';
+import { requestApproval } from '@/lib/services/agent-permissions';
 import { generateOrgWikiPageEmbedding } from '@/lib/services/org-wiki-embedding';
+import {
+  ROUTING_REVIEW_AGENT_TYPE,
+  ROUTING_REVIEW_ACTION_TYPE,
+  buildRoutingReviewDescription,
+  buildRoutingReviewProposedAction,
+  getApprovedRoutingOverride,
+  requiresRoutingReview,
+  writeRoutingReviewState,
+} from '@/lib/services/routing-review';
 import {
   detectPII,
   logPIIDetection,
@@ -60,7 +70,7 @@ type WikiPageSourceInsert = Database['public']['Tables']['wiki_page_sources']['I
 // select arguments, so we annotate the fetched data explicitly.
 type ContentRowForCompile = Pick<
   Database['public']['Tables']['content']['Row'],
-  'id' | 'title' | 'description' | 'content_type'
+  'id' | 'title' | 'description' | 'content_type' | 'metadata'
 >;
 
 type WorkflowRowForCompile = Pick<
@@ -88,6 +98,8 @@ interface WikiClassification {
   app: string | null;
   screen: string | null;
   topic: string;
+  routeConfidence: number | null;
+  routeReason: string | null;
 }
 
 const AGENT_TYPE = 'wiki_compiler';
@@ -215,7 +227,7 @@ async function runCompilationPipeline(
 
   const recordingResponse = await supabase
     .from('content')
-    .select('id, title, description, content_type')
+    .select('id, title, description, content_type, metadata')
     .eq('id', recordingId)
     .eq('org_id', orgId)
     .single();
@@ -298,7 +310,7 @@ async function runCompilationPipeline(
   // ---- Step 2 — LLM classify -----------------------------------------------
   progressCallback?.(25, 'Classifying recording into app/screen/topic...');
 
-  const classification = await classifyRecording({
+  const baseClassification = await classifyRecording({
     recordingTitle: recording.title,
     recordingDescription: recording.description,
     workflowTitle: workflow?.title ?? null,
@@ -310,9 +322,31 @@ async function runCompilationPipeline(
     recordingId,
   });
 
+  const approvedRoutingOverride = getApprovedRoutingOverride(recording.metadata);
+  const classification = approvedRoutingOverride
+    ? {
+        ...baseClassification,
+        ...approvedRoutingOverride,
+        routeConfidence: 1,
+        routeReason: 'Approved by a reviewer in Needs Routing.',
+      }
+    : baseClassification;
+
   console.log(
-    `[compile-wiki] Classified recording ${recordingId} as app=${classification.app ?? '(none)'} screen=${classification.screen ?? '(none)'} topic="${classification.topic}"`
+    `[compile-wiki] Classified recording ${recordingId} as app=${classification.app ?? '(none)'} screen=${classification.screen ?? '(none)'} topic="${classification.topic}" confidence=${classification.routeConfidence ?? 'n/a'}`
   );
+
+  if (!approvedRoutingOverride && requiresRoutingReview(classification)) {
+    await queueRoutingReview({
+      supabase,
+      orgId,
+      recording,
+      recordingId,
+      classification,
+    });
+    progressCallback?.(100, 'Queued for routing review');
+    return;
+  }
 
   // ---- Step 3 — Look up existing page --------------------------------------
   progressCallback?.(40, 'Checking for existing wiki page...');
@@ -537,12 +571,17 @@ Respond with ONLY a JSON object of the form:
 {
   "app": "lowercased single-word application name, e.g. \\"salesforce\\", \\"hubspot\\", \\"notion\\". Use null if no single app is clearly the subject.",
   "screen": "lowercased, hyphenated screen identifier, e.g. \\"lead-detail\\", \\"opportunity-list\\". Use null if no single screen is the focus.",
-  "topic": "lowercased, hyphenated slug describing what the workflow accomplishes, e.g. \\"lead-disposition-web-inbound\\". This is required."
+  "topic": "lowercased, hyphenated slug describing what the workflow accomplishes, e.g. \\"lead-disposition-web-inbound\\". This is required.",
+  "route_confidence": 0.0,
+  "route_reason": "short explanation of why this route is or is not a stable match"
 }
 
 Rules:
 - topic is required and must be a short hyphenated slug (1-5 hyphenated words).
 - app and screen may be null when the recording is not about a specific software screen.
+- route_confidence must be a number between 0 and 1 that reflects confidence in the full topic/app/screen assignment.
+- Use a lower route_confidence when app or screen are missing, when multiple screens seem plausible, or when the title/transcript are too vague to trust.
+- route_reason should be a short single sentence that a human reviewer can use to understand why the route needs review.
 - Do not wrap the JSON in markdown fences or commentary.`;
 
   let responseText = '';
@@ -593,6 +632,15 @@ function parseClassification(
       app: normalizeLowercase(parsed.app),
       screen: normalizeSlug(parsed.screen),
       topic,
+      routeConfidence: clampConfidence(
+        typeof parsed.route_confidence === 'number'
+          ? parsed.route_confidence
+          : null
+      ),
+      routeReason:
+        typeof parsed.route_reason === 'string'
+          ? parsed.route_reason.trim().slice(0, 280)
+          : null,
     };
   } catch (error) {
     console.error(
@@ -618,6 +666,8 @@ function fallbackClassification(params: {
     app: null,
     screen: null,
     topic: normalizeSlug(source) || `recording-${params.recordingId.slice(0, 8)}`,
+    routeConfidence: 0.2,
+    routeReason: 'Fallback route inferred from the recording title because classification was incomplete.',
   };
 }
 
@@ -639,6 +689,87 @@ function normalizeSlug(value: unknown): string | null {
     .replace(/^-+|-+$/g, '');
   if (!slug || slug === 'null' || slug === 'none') return null;
   return slug.slice(0, 120);
+}
+
+async function queueRoutingReview(args: {
+  supabase: ReturnType<typeof createAdminClient>;
+  orgId: string;
+  recording: ContentRowForCompile;
+  recordingId: string;
+  classification: WikiClassification;
+}): Promise<void> {
+  const { supabase, orgId, recording, recordingId, classification } = args;
+  const proposedRoute = {
+    topic: classification.topic,
+    app: classification.app,
+    screen: classification.screen,
+  };
+
+  const description = buildRoutingReviewDescription({
+    contentTitle: recording.title,
+    proposedRoute,
+    routeConfidence: classification.routeConfidence,
+  });
+
+  const proposedAction = buildRoutingReviewProposedAction({
+    contentId: recordingId,
+    contentTitle: recording.title,
+    proposedRoute,
+    routeConfidence: classification.routeConfidence,
+    routeReason: classification.routeReason,
+  });
+
+  const approvalId = await requestApproval({
+    orgId,
+    agentType: ROUTING_REVIEW_AGENT_TYPE,
+    actionType: ROUTING_REVIEW_ACTION_TYPE,
+    contentId: recordingId,
+    description,
+    proposedAction: proposedAction as unknown as Json,
+  });
+
+  const nowIso = new Date().toISOString();
+  await supabase
+    .from('agent_approval_queue')
+    .update({
+      description,
+      proposed_action: proposedAction as unknown as Json,
+    } as never)
+    .eq('id', approvalId)
+    .eq('status', 'pending');
+
+  const nextMetadata = writeRoutingReviewState(recording.metadata, {
+    status: 'pending',
+    approvalId,
+    requestedAt: nowIso,
+    reviewedAt: null,
+    reviewedBy: null,
+    rejectionReason: null,
+    routeConfidence: classification.routeConfidence,
+    routeReason: classification.routeReason,
+    proposedRoute,
+    approvedRoute: null,
+  });
+
+  const { error: updateError } = await supabase
+    .from('content')
+    .update({
+      metadata: nextMetadata,
+      updated_at: nowIso,
+    } as never)
+    .eq('id', recordingId)
+    .eq('org_id', orgId);
+
+  if (updateError) {
+    throw new Error(
+      `Failed to persist routing review metadata for ${recordingId}: ${updateError.message}`
+    );
+  }
+
+  console.log(
+    `[compile-wiki] Queued routing review for recording ${recordingId} ` +
+      `(approval=${approvalId}, topic="${classification.topic}", app=${classification.app ?? 'null'}, screen=${classification.screen ?? 'null'})`
+  );
 }
 
 // ---------------------------------------------------------------------------

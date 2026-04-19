@@ -74,6 +74,7 @@ const AGENT_TYPES: AgentTypeConfig[] = [
       { id: 'detect_stale', name: 'Detect Stale Content', description: 'Flag outdated content' },
       { id: 'merge_content', name: 'Merge Content', description: 'Combine duplicate items' },
       { id: 'archive_content', name: 'Archive Content', description: 'Move stale content to archive' },
+      { id: 'reroute_content', name: 'Reroute Content', description: 'Hold low-confidence routing changes for review' },
     ],
   },
   {
@@ -130,6 +131,7 @@ const DEFAULT_TIERS: Record<string, PermissionTier> = {
   merge_content: 'approve',
   archive_content: 'approve',
   publish_external: 'approve',
+  reroute_content: 'approve',
 };
 
 const AGENT_NAMES: Record<string, string> = Object.fromEntries(

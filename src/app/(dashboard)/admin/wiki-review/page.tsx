@@ -35,6 +35,7 @@ import {
 import { requireAdmin } from '@/lib/utils/api';
 
 import { ReviewQueueItemCard } from './review-queue-item-card';
+import { RoutingReviewCard } from './routing-review-card';
 import { WikiReviewCard } from './wiki-review-card';
 
 export const dynamic = 'force-dynamic';
@@ -81,8 +82,9 @@ export default async function WikiReviewPage() {
         <AlertTitle>How this works</AlertTitle>
         <AlertDescription>
           Contradictions can still be approved, rejected, or edited directly here.
-          Routing and manual-publication items point you to the owning workflow so
-          reviewers can resolve the work without losing context.
+          Routing items now let reviewers approve or edit the proposed
+          topic/app/screen before a reroute-safe compile runs, while
+          manual-publication items still point you to the owning workflow.
         </AlertDescription>
       </Alert>
 
@@ -137,13 +139,16 @@ export default async function WikiReviewPage() {
               <div>
                 <h2 className="text-lg font-medium">Needs Routing</h2>
                 <p className="text-sm text-muted-foreground">
-                  Knowledge pages missing a stable app or screen assignment.
+                  Low-confidence routes pause here until a reviewer confirms the
+                  right topic, app, and screen.
                 </p>
               </div>
               {groupedItems.routing.map((item) =>
-                item.kind === 'routing' ? (
-                  <ReviewQueueItemCard key={item.id} item={item} />
-                ) : null
+                item.kind === 'routing'
+                  ? item.routingKind === 'approval'
+                    ? <RoutingReviewCard key={item.id} item={item} />
+                    : <ReviewQueueItemCard key={item.id} item={item} />
+                  : null
               )}
             </section>
           ) : null}

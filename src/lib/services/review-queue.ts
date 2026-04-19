@@ -10,6 +10,12 @@ import {
   readCompilationLog,
   type PendingReviewPage,
 } from './wiki-review';
+import { getPendingApprovals } from './agent-permissions';
+import {
+  ROUTING_REVIEW_ACTION_TYPE,
+  parseRoutingReviewProposedAction,
+  type RoutingRoute,
+} from './routing-review';
 
 export type ReviewQueueKind = 'contradiction' | 'routing' | 'manual-publication';
 
@@ -25,7 +31,7 @@ export interface RoutingReviewSourceLink {
   sourceTitle?: string | null;
 }
 
-export interface RoutingReviewCandidate {
+export interface LegacyRoutingReviewCandidate {
   pageId: string;
   topic: string;
   app: string | null;
@@ -34,6 +40,20 @@ export interface RoutingReviewCandidate {
   updatedAt: string;
   sourceLinks: RoutingReviewSourceLink[];
 }
+
+export interface ApprovalRoutingReviewCandidate {
+  approvalId: string;
+  contentId: string;
+  title: string | null;
+  createdAt: string;
+  routeConfidence: number | null;
+  routeReason: string | null;
+  proposedRoute: RoutingRoute;
+}
+
+export type RoutingReviewCandidate =
+  | LegacyRoutingReviewCandidate
+  | ApprovalRoutingReviewCandidate;
 
 export interface ManualPublicationReviewCandidate {
   contentId: string;
@@ -60,8 +80,9 @@ export interface ReviewQueueContradictionItem {
   mergedContentPreview?: string | null;
 }
 
-export interface ReviewQueueRoutingItem {
+export interface ReviewQueueRoutingLegacyItem {
   kind: 'routing';
+  routingKind: 'legacy';
   id: string;
   sortAt: string;
   pageId: string;
@@ -73,6 +94,28 @@ export interface ReviewQueueRoutingItem {
   primaryAction: ReviewQueueAction;
   secondaryAction?: ReviewQueueAction;
 }
+
+export interface ReviewQueueRoutingApprovalItem {
+  kind: 'routing';
+  routingKind: 'approval';
+  id: string;
+  sortAt: string;
+  approvalId: string;
+  contentId: string;
+  title: string;
+  topic: string;
+  app: string | null;
+  screen: string | null;
+  sourceCount: number;
+  summary: string;
+  primaryAction: ReviewQueueAction;
+  routeConfidence: number | null;
+  routeReason: string | null;
+}
+
+export type ReviewQueueRoutingItem =
+  | ReviewQueueRoutingLegacyItem
+  | ReviewQueueRoutingApprovalItem;
 
 export interface ReviewQueueManualPublicationItem {
   kind: 'manual-publication';
@@ -146,6 +189,13 @@ function pluralize(count: number, singular: string, plural = `${singular}s`): st
   return count === 1 ? singular : plural;
 }
 
+function formatRouteConfidence(value: number | null): string | null {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return null;
+  }
+  return `${Math.round(value * 100)}% confidence`;
+}
+
 export function buildReviewQueueItems(input: {
   contradictions: PendingReviewPage[];
   routing: RoutingReviewCandidate[];
@@ -172,6 +222,37 @@ export function buildReviewQueueItems(input: {
   );
 
   const routingItems: ReviewQueueRoutingItem[] = input.routing.map((candidate) => {
+    if ('approvalId' in candidate) {
+      const confidenceLabel = formatRouteConfidence(candidate.routeConfidence);
+      const summary = [
+        confidenceLabel ? `${confidenceLabel}.` : 'Low-confidence route detected.',
+        candidate.routeReason ?? 'Review and adjust the proposed topic, app, and screen before compile_wiki publishes.',
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      return {
+        kind: 'routing',
+        routingKind: 'approval',
+        id: `routing-approval:${candidate.approvalId}`,
+        sortAt: candidate.createdAt,
+        approvalId: candidate.approvalId,
+        contentId: candidate.contentId,
+        title: candidate.title?.trim() || 'Untitled source',
+        topic: candidate.proposedRoute.topic,
+        app: candidate.proposedRoute.app,
+        screen: candidate.proposedRoute.screen,
+        sourceCount: 1,
+        summary,
+        primaryAction: {
+          label: 'Open source detail',
+          href: `/library/${candidate.contentId}`,
+        },
+        routeConfidence: candidate.routeConfidence,
+        routeReason: candidate.routeReason,
+      };
+    }
+
     const [primarySource] = [...candidate.sourceLinks].sort(
       (left, right) => toTimestamp(right.contributedAt) - toTimestamp(left.contributedAt)
     );
@@ -186,6 +267,7 @@ export function buildReviewQueueItems(input: {
 
     return {
       kind: 'routing',
+      routingKind: 'legacy',
       id: `routing:${candidate.pageId}`,
       sortAt:
         primarySource?.contributedAt ??
@@ -260,9 +342,9 @@ export function splitReviewQueueItemsByKind(items: ReviewQueueItem[]): Record<
   );
 }
 
-async function listRoutingReviewCandidates(
+async function listLegacyRoutingReviewCandidates(
   orgId: string
-): Promise<RoutingReviewCandidate[]> {
+): Promise<LegacyRoutingReviewCandidate[]> {
   const { data: pages, error: pagesError } = await supabaseAdmin
     .from('org_wiki_pages')
     .select('id, topic, app, screen, created_at, updated_at, compilation_log')
@@ -343,6 +425,43 @@ async function listRoutingReviewCandidates(
         sourceTitle: contentTitles.get(link.source_id) ?? null,
       })),
   }));
+}
+
+async function listPendingRoutingApprovalCandidates(
+  orgId: string
+): Promise<ApprovalRoutingReviewCandidate[]> {
+  const approvals = await getPendingApprovals(orgId);
+
+  return approvals
+    .filter((approval) => approval.action_type === ROUTING_REVIEW_ACTION_TYPE)
+    .map((approval) => {
+      const proposedAction = parseRoutingReviewProposedAction(approval.proposed_action);
+      if (!proposedAction || !approval.content_id) {
+        return null;
+      }
+
+      return {
+        approvalId: approval.id,
+        contentId: approval.content_id,
+        title: proposedAction.contentTitle,
+        createdAt: approval.created_at,
+        routeConfidence: proposedAction.routeConfidence,
+        routeReason: proposedAction.routeReason,
+        proposedRoute: proposedAction.proposedRoute,
+      };
+    })
+    .filter((candidate): candidate is ApprovalRoutingReviewCandidate => candidate !== null);
+}
+
+async function listRoutingReviewCandidates(
+  orgId: string
+): Promise<RoutingReviewCandidate[]> {
+  const [approvalCandidates, legacyCandidates] = await Promise.all([
+    listPendingRoutingApprovalCandidates(orgId),
+    listLegacyRoutingReviewCandidates(orgId),
+  ]);
+
+  return [...approvalCandidates, ...legacyCandidates];
 }
 
 async function listManualPublicationReviewCandidates(

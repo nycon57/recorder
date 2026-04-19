@@ -31,10 +31,19 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { requireAdmin } from '@/lib/utils/api';
 import { logger } from '@/lib/utils/logger';
 import type { Database, Json } from '@/lib/types/database';
+import { reviewApproval } from '@/lib/services/agent-permissions';
 import {
   buildKnowledgeReviewTelemetry,
   recordKnowledgeTelemetryEvent,
 } from '@/lib/services/knowledge-telemetry';
+import {
+  ROUTING_REVIEW_ACTION_TYPE,
+  enqueueRoutingCompileWikiJob,
+  normalizeRoutingApp,
+  normalizeRoutingSlug,
+  parseRoutingReviewProposedAction,
+  writeRoutingReviewState,
+} from '@/lib/services/routing-review';
 import {
   applyContradictionsToContent,
   readCompilationLog,
@@ -43,6 +52,8 @@ import {
 } from '@/lib/services/wiki-review';
 
 type OrgWikiPageInsert = Database['public']['Tables']['org_wiki_pages']['Insert'];
+type AgentApprovalRow = Database['public']['Tables']['agent_approval_queue']['Row'];
+type ContentRow = Database['public']['Tables']['content']['Row'];
 
 const WIKI_REVIEW_PATH = '/admin/wiki-review';
 
@@ -59,6 +70,14 @@ interface LoadedTarget {
   page: OrgWikiPageRow;
   log: CompilationLogEntry[];
   entry: CompilationLogEntry;
+}
+
+interface LoadedRoutingApprovalTarget {
+  approval: Pick<
+    AgentApprovalRow,
+    'id' | 'org_id' | 'action_type' | 'content_id' | 'proposed_action' | 'status' | 'created_at'
+  >;
+  content: Pick<ContentRow, 'id' | 'org_id' | 'metadata' | 'title'>;
 }
 
 /**
@@ -111,6 +130,54 @@ async function loadAndValidateTarget(input: {
   }
 
   return { page, log, entry };
+}
+
+async function loadAndValidateRoutingApproval(input: {
+  approvalId: string;
+  contentId: string;
+  orgId: string;
+}): Promise<LoadedRoutingApprovalTarget> {
+  const { approvalId, contentId, orgId } = input;
+
+  const { data: approvalData, error: approvalError } = await supabaseAdmin
+    .from('agent_approval_queue')
+    .select('id, org_id, action_type, content_id, proposed_action, status, created_at')
+    .eq('id', approvalId)
+    .single();
+
+  if (approvalError || !approvalData) {
+    throw new Error('Routing review item not found');
+  }
+
+  const approval = approvalData as LoadedRoutingApprovalTarget['approval'];
+  if (approval.org_id !== orgId) {
+    throw new Error('Routing review item does not belong to your organization');
+  }
+  if (approval.action_type !== ROUTING_REVIEW_ACTION_TYPE) {
+    throw new Error('Review item is not a routing request');
+  }
+  if (approval.status !== 'pending') {
+    throw new Error(`Review item is already ${approval.status}`);
+  }
+  if (approval.content_id !== contentId) {
+    throw new Error('Review item does not match the selected source');
+  }
+
+  const { data: contentData, error: contentError } = await supabaseAdmin
+    .from('content')
+    .select('id, org_id, metadata, title')
+    .eq('id', contentId)
+    .eq('org_id', orgId)
+    .single();
+
+  if (contentError || !contentData) {
+    throw new Error('Source content not found');
+  }
+
+  return {
+    approval,
+    content: contentData as LoadedRoutingApprovalTarget['content'],
+  };
 }
 
 /**
@@ -329,6 +396,196 @@ export async function approveContradiction(input: {
         errorMessage: message,
       });
     }
+    return { ok: false, error: message };
+  }
+}
+
+export async function approveRoutingReview(input: {
+  approvalId: string;
+  contentId: string;
+  topic: string;
+  app: string | null;
+  screen: string | null;
+}): Promise<ActionResult> {
+  try {
+    const { orgId, userId } = await requireAdmin();
+    const { approval, content } = await loadAndValidateRoutingApproval({
+      approvalId: input.approvalId,
+      contentId: input.contentId,
+      orgId,
+    });
+
+    const proposedAction = parseRoutingReviewProposedAction(approval.proposed_action);
+    if (!proposedAction) {
+      return { ok: false, error: 'Routing review payload is invalid' };
+    }
+
+    const topic = normalizeRoutingSlug(input.topic);
+    const app = normalizeRoutingApp(input.app);
+    const screen = normalizeRoutingSlug(input.screen);
+
+    if (!topic) {
+      return { ok: false, error: 'Topic is required' };
+    }
+    if (!app) {
+      return { ok: false, error: 'App is required' };
+    }
+    if (!screen) {
+      return { ok: false, error: 'Screen is required' };
+    }
+
+    const nowIso = new Date().toISOString();
+    const nextMetadata = writeRoutingReviewState(content.metadata, {
+      status: 'approved',
+      approvalId: approval.id,
+      requestedAt: approval.created_at,
+      reviewedAt: nowIso,
+      reviewedBy: userId,
+      rejectionReason: null,
+      routeConfidence: proposedAction.routeConfidence,
+      routeReason: proposedAction.routeReason,
+      proposedRoute: proposedAction.proposedRoute,
+      approvedRoute: {
+        topic,
+        app,
+        screen,
+      },
+    });
+
+    const { error: contentUpdateError } = await supabaseAdmin
+      .from('content')
+      .update({
+        metadata: nextMetadata,
+        updated_at: nowIso,
+      } as never)
+      .eq('id', content.id)
+      .eq('org_id', orgId);
+
+    if (contentUpdateError) {
+      throw new Error(
+        `Failed to persist approved route: ${contentUpdateError.message}`
+      );
+    }
+
+    await enqueueRoutingCompileWikiJob({
+      recordingId: content.id,
+      orgId,
+      approvalId: approval.id,
+    });
+
+    const reviewed = await reviewApproval(
+      approval.id,
+      orgId,
+      userId,
+      'approved'
+    );
+
+    if (!reviewed) {
+      throw new Error('Routing review item is no longer pending');
+    }
+
+    logger.info('Routing review approved', {
+      context: {
+        orgId,
+        userId,
+        approvalId: approval.id,
+        contentId: content.id,
+        topic,
+        app,
+        screen,
+      },
+    });
+
+    revalidatePath(`/library/${content.id}`);
+    invalidate(orgId);
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('approveRoutingReview failed', {
+      error: error instanceof Error ? error : undefined,
+      context: { approvalId: input.approvalId, contentId: input.contentId },
+    });
+    return { ok: false, error: message };
+  }
+}
+
+export async function rejectRoutingReview(input: {
+  approvalId: string;
+  contentId: string;
+}): Promise<ActionResult> {
+  try {
+    const { orgId, userId } = await requireAdmin();
+    const { approval, content } = await loadAndValidateRoutingApproval({
+      approvalId: input.approvalId,
+      contentId: input.contentId,
+      orgId,
+    });
+
+    const proposedAction = parseRoutingReviewProposedAction(approval.proposed_action);
+    if (!proposedAction) {
+      return { ok: false, error: 'Routing review payload is invalid' };
+    }
+
+    const nowIso = new Date().toISOString();
+    const rejectionReason = 'Reviewer rejected the proposed route.';
+    const nextMetadata = writeRoutingReviewState(content.metadata, {
+      status: 'rejected',
+      approvalId: approval.id,
+      requestedAt: approval.created_at,
+      reviewedAt: nowIso,
+      reviewedBy: userId,
+      rejectionReason,
+      routeConfidence: proposedAction.routeConfidence,
+      routeReason: proposedAction.routeReason,
+      proposedRoute: proposedAction.proposedRoute,
+      approvedRoute: null,
+    });
+
+    const { error: contentUpdateError } = await supabaseAdmin
+      .from('content')
+      .update({
+        metadata: nextMetadata,
+        updated_at: nowIso,
+      } as never)
+      .eq('id', content.id)
+      .eq('org_id', orgId);
+
+    if (contentUpdateError) {
+      throw new Error(
+        `Failed to persist routing rejection: ${contentUpdateError.message}`
+      );
+    }
+
+    const reviewed = await reviewApproval(
+      approval.id,
+      orgId,
+      userId,
+      'rejected',
+      rejectionReason
+    );
+
+    if (!reviewed) {
+      throw new Error('Routing review item is no longer pending');
+    }
+
+    logger.info('Routing review rejected', {
+      context: {
+        orgId,
+        userId,
+        approvalId: approval.id,
+        contentId: content.id,
+      },
+    });
+
+    revalidatePath(`/library/${content.id}`);
+    invalidate(orgId);
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('rejectRoutingReview failed', {
+      error: error instanceof Error ? error : undefined,
+      context: { approvalId: input.approvalId, contentId: input.contentId },
+    });
     return { ok: false, error: message };
   }
 }
