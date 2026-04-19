@@ -841,12 +841,12 @@ function LintDetailLinks({
           />
         </div>
         <p className="mt-4 text-xs text-muted-foreground">
-          Note: the per-page route
+          Drilldowns open
           <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[11px]">
             /dashboard/knowledge/pages/[id]
           </code>
-          is a future drilldown target — if it does not yet exist in your build,
-          links will 404 until it ships.
+          for page-level context: content, vendor baseline, sources, relationships,
+          history, and approvals.
         </p>
       </CardContent>
     </Card>
