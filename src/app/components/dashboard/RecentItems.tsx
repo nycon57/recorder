@@ -51,7 +51,9 @@ export function RecentItems({ items, isLoading = false }: RecentItemsProps) {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <h2 className="text-heading-4 font-outfit">Recent Items</h2>
+        <h2 className="font-[var(--font-heading)] text-xl font-semibold tracking-tight">
+          Recent Items
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Card key={i} className="overflow-hidden">
@@ -73,7 +75,9 @@ export function RecentItems({ items, isLoading = false }: RecentItemsProps) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-bold">Recent Items</h2>
+      <h2 className="font-[var(--font-heading)] text-xl font-semibold tracking-tight">
+        Recent Items
+      </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {items.map((item) => {
           const contentType = item.content_type || 'recording';
@@ -85,12 +89,14 @@ export function RecentItems({ items, isLoading = false }: RecentItemsProps) {
             <Link
               key={item.id}
               href={`/library/${item.id}`}
-              className="group text-left focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-xl"
+              className="group text-left focus:outline-none focus:ring-2 focus:ring-ring/40 focus:ring-offset-2 rounded-xl"
               aria-label={`View ${item.title || 'Untitled'}`}
             >
               <Card className="h-full overflow-hidden card-interactive">
                 {/* Thumbnail or Icon */}
-                <div className={`relative h-32 ${colors.bg} flex items-center justify-center`}>
+                <div
+                  className={`relative h-32 ${colors.bg} flex items-center justify-center`}
+                >
                   {item.thumbnail_url ? (
                     <img
                       src={item.thumbnail_url}
@@ -121,7 +127,7 @@ export function RecentItems({ items, isLoading = false }: RecentItemsProps) {
                       <Clock className="size-3" />
                       <span>
                         {formatDistanceToNow(new Date(item.created_at), {
-                          addSuffix: true
+                          addSuffix: true,
                         })}
                       </span>
                     </div>
@@ -138,7 +144,10 @@ export function RecentItems({ items, isLoading = false }: RecentItemsProps) {
                         <VideoIcon className="size-3" />
                         <span>
                           {Math.floor(item.duration_sec / 60)}:
-                          {String(Math.floor(item.duration_sec % 60)).padStart(2, '0')}
+                          {String(Math.floor(item.duration_sec % 60)).padStart(
+                            2,
+                            '0',
+                          )}
                         </span>
                       </div>
                     )}

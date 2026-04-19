@@ -6,7 +6,7 @@
  * wiki-specific health metrics powered by:
  *
  *   - TRIB-42 daily lint results (`wiki_lint_results`)
- *   - TRIB-110 unified review queue count (`getPendingReviewQueueCount`)
+ *   - TRIB-41 pending contradictions count (`getPendingContradictionCount`)
  *   - TRIB-44 community-detection clusters (`wiki_clusters`)
  *   - TRIB-40 active / superseded `org_wiki_pages` rows
  *
@@ -14,7 +14,7 @@
  *
  *   1. Page metrics card      — active pages, superseded, avg confidence, clusters
  *   2. Lint health card       — orphan/stale/stale_link/coverage_gap/confidence_decay
- *   3. Pending review queue — count + link to /admin/wiki-review
+ *   3. Pending contradictions — count + link to /admin/wiki-review
  *   4. Coverage map           — "fully covered" vs "vendor-only gaps" (app, screen) pairs
  *   5. Lint detail drilldowns — first-N lists linking to per-page routes / vendor pages
  *
@@ -63,22 +63,14 @@ import {
   type StaleDetail,
   type StaleLinkDetail,
 } from '@/lib/services/wiki-lint';
-import {
-  fetchKnowledgeOperationalMetrics,
-  type KnowledgeOperationalMetrics,
-} from '@/lib/services/knowledge-health';
-import {
-  getKnowledgeStatusMeta,
-  KNOWLEDGE_STATUS_DISPLAY_ORDER,
-  type KnowledgeStatusCounts,
-} from '@/lib/services/knowledge-status';
+import { getPendingContradictionCount } from '@/lib/services/wiki-review';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Knowledge Health | Dashboard',
   description:
-    'Wiki health metrics — lint results, review load, coverage, and clusters.',
+    'Wiki health metrics — lint results, contradictions, coverage, and clusters.',
 };
 
 // ---------------------------------------------------------------------------
@@ -273,10 +265,10 @@ export default async function KnowledgeHealthPage() {
     redirect('/dashboard');
   }
 
-  const [pageMetrics, lintResult, operationalMetrics] = await Promise.all([
+  const [pageMetrics, lintResult, pendingContradictions] = await Promise.all([
     loadPageMetrics(orgId),
     getLatestLintResult(orgId),
-    fetchKnowledgeOperationalMetrics(orgId),
+    getPendingContradictionCount(orgId),
   ]);
 
   const coverageMap = await loadCoverageMap(orgId, lintResult);
@@ -291,15 +283,15 @@ export default async function KnowledgeHealthPage() {
     : null;
 
   return (
-    <div className="container mx-auto space-y-6 py-8">
+    <div className="trbd-page">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-3 text-3xl font-normal tracking-tight">
+          <h1 className="flex items-center gap-3 trbd-page-title tracking-tight">
             <Activity className="h-8 w-8 text-primary" />
             Knowledge Health
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Wiki health metrics — page counts, lint results, review load,
+            Wiki health metrics — page counts, lint results, contradictions,
             coverage, and clusters.
           </p>
         </div>
@@ -316,21 +308,18 @@ export default async function KnowledgeHealthPage() {
       {/* --- Row 1: Page metrics ------------------------------------------ */}
       <PageMetricsCard metrics={pageMetrics} />
 
-      {/* --- Row 2: Knowledge status -------------------------------------- */}
-      <KnowledgeStatusCard counts={operationalMetrics.knowledgeStatus.counts} />
-
-      {/* --- Row 3: Lint health + review queue --------------------------- */}
+      {/* --- Row 2: Lint health + Pending contradictions ----------------- */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <LintHealthCard lintResult={lintResult} lastRunLabel={lastRunLabel} />
         </div>
-        <PendingReviewCard metrics={operationalMetrics} />
+        <PendingContradictionsCard count={pendingContradictions} />
       </div>
 
-      {/* --- Row 4: Coverage map ----------------------------------------- */}
+      {/* --- Row 3: Coverage map ----------------------------------------- */}
       <CoverageMapCard data={coverageMap} vendorPageLinks={vendorPageLinks} />
 
-      {/* --- Row 5: Lint detail drilldowns ------------------------------- */}
+      {/* --- Row 4: Lint detail drilldowns ------------------------------- */}
       {lintResult && (
         <LintDetailLinks
           orphans={lintResult.details.orphans}
@@ -415,48 +404,6 @@ function Metric({
       <div className="mt-2 text-3xl font-semibold tabular-nums">{value}</div>
       <p className="mt-1 text-xs text-muted-foreground">{caption}</p>
     </div>
-  );
-}
-
-function KnowledgeStatusCard({ counts }: { counts: KnowledgeStatusCounts }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Layers className="h-5 w-5" />
-          Operational status
-        </CardTitle>
-        <CardDescription>
-          Shared knowledge-state buckets used across processing, review, graph,
-          and coverage surfaces.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {KNOWLEDGE_STATUS_DISPLAY_ORDER.map((status) => {
-            const meta = getKnowledgeStatusMeta(status);
-            return (
-              <div key={status} className="rounded-lg border bg-card/40 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Badge
-                    variant={meta.badgeVariant}
-                    className={meta.badgeClassName}
-                  >
-                    {meta.shortLabel}
-                  </Badge>
-                  <span className="text-2xl font-semibold tabular-nums">
-                    {counts[status].toLocaleString()}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {meta.description}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -572,11 +519,11 @@ function LintHealthCard({
 }
 
 // ---------------------------------------------------------------------------
-// Card: Pending review
+// Card: Pending contradictions
 // ---------------------------------------------------------------------------
 
-function PendingReviewCard({ metrics }: { metrics: KnowledgeOperationalMetrics }) {
-  const hasAny = metrics.pendingReviewCount > 0;
+function PendingContradictionsCard({ count }: { count: number }) {
+  const hasAny = count > 0;
 
   return (
     <Card className="h-full">
@@ -586,11 +533,10 @@ function PendingReviewCard({ metrics }: { metrics: KnowledgeOperationalMetrics }
           Pending review
         </CardTitle>
         <CardDescription>
-          Contradictions, routing gaps, and manual publication work awaiting
-          attention.
+          Flagged contradictions awaiting admin approval.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         <div
           className={
             hasAny
@@ -602,75 +548,22 @@ function PendingReviewCard({ metrics }: { metrics: KnowledgeOperationalMetrics }
             {hasAny ? 'Needs attention' : 'Status'}
           </div>
           <div className="mt-2 text-3xl font-semibold tabular-nums">
-            {hasAny ? metrics.pendingReviewCount.toLocaleString() : 'All clear'}
+            {hasAny ? count.toLocaleString() : 'All clear'}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             {hasAny
-              ? `${metrics.pendingReviewCount === 1 ? 'entry' : 'entries'} awaiting review`
-              : 'No review items waiting right now'}
+              ? `${count === 1 ? 'entry' : 'entries'} awaiting review`
+              : 'No pending contradictions to review'}
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <OperationalMetric
-            label="Routing backlog"
-            value={metrics.routingBacklog}
-            caption={`${
-              metrics.knowledgeStatus.counts.needs_routing
-            } unrouted + ${metrics.reviewQueueCounts.routing} in queue`}
-          />
-          <OperationalMetric
-            label="Review backlog"
-            value={metrics.reviewBacklog}
-            caption={`${
-              metrics.knowledgeStatus.counts.needs_review
-            } flagged + ${metrics.reviewQueueCounts.contradiction} queued`}
-          />
-          <OperationalMetric
-            label="Publication queue"
-            value={metrics.publicationBacklog}
-            caption={`${metrics.reviewQueueCounts['manual-publication']} manual publish`}
-          />
-          <OperationalMetric
-            label="Vendor-only gaps"
-            value={metrics.vendorGapCount}
-            caption="Coverage still missing in org pages"
-          />
-        </div>
-        <p className="rounded-md border bg-card/40 px-3 py-2 text-xs text-muted-foreground">
-          {metrics.primaryBottleneck
-            ? `Primary bottleneck: ${metrics.primaryBottleneck.label} (${metrics.primaryBottleneck.count.toLocaleString()}).`
-            : 'No routing, review, publication, or vendor-gap bottlenecks detected right now.'}
-        </p>
         <Button asChild variant="outline" size="sm" className="w-full">
           <Link href="/admin/wiki-review">
-            Open Review Queue
+            Open Wiki Review
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </Button>
       </CardContent>
     </Card>
-  );
-}
-
-function OperationalMetric({
-  label,
-  value,
-  caption,
-}: {
-  label: string;
-  value: number;
-  caption: string;
-}) {
-  return (
-    <div className="rounded-md border bg-card/40 px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-1 text-lg font-semibold tabular-nums">
-        {value.toLocaleString()}
-      </div>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">{caption}</p>
-    </div>
   );
 }
 
@@ -877,12 +770,12 @@ function LintDetailLinks({
           />
         </div>
         <p className="mt-4 text-xs text-muted-foreground">
-          Drilldowns open
+          Note: the per-page route
           <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[11px]">
             /dashboard/knowledge/pages/[id]
           </code>
-          for page-level context: content, vendor baseline, sources, relationships,
-          history, and approvals.
+          is a future drilldown target — if it does not yet exist in your build,
+          links will 404 until it ships.
         </p>
       </CardContent>
     </Card>

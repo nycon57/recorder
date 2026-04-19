@@ -8,7 +8,7 @@ import { Skeleton } from '@/app/components/ui/skeleton';
  */
 export default function AssistantLoading() {
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 h-[calc(100vh-8rem)] flex flex-col">
+    <div className="trbd-page h-[calc(100vh-8rem)] flex flex-col">
       {/* Header */}
       <div className="mb-6">
         <Skeleton className="h-9 w-40 mb-2" />

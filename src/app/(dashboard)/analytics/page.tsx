@@ -13,12 +13,23 @@ import {
   Download,
   Filter,
   Sparkles,
-  Activity
+  Activity,
 } from 'lucide-react';
 
 import { useFetchWithAbort } from '@/app/hooks/useFetchWithAbort';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/app/components/ui/tabs';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -36,8 +47,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/app/components/ui/table';
-
-// Import chart components
 import {
   SearchVolumeChart,
   SearchTypesChart,
@@ -91,7 +100,7 @@ export default function AnalyticsPage() {
   // ✅ Use memoized URL to trigger refetch when timeRange changes
   const analyticsUrl = useMemo(
     () => `/api/analytics/user?timeRange=${timeRange}`,
-    [timeRange]
+    [timeRange],
   );
 
   interface AnalyticsResponse {
@@ -116,10 +125,14 @@ export default function AnalyticsPage() {
 
   const getTimeRangeLabel = (range: TimeRange) => {
     switch (range) {
-      case '7d': return 'Last 7 days';
-      case '30d': return 'Last 30 days';
-      case '90d': return 'Last 90 days';
-      case 'all': return 'All time';
+      case '7d':
+        return 'Last 7 days';
+      case '30d':
+        return 'Last 30 days';
+      case '90d':
+        return 'Last 90 days';
+      case 'all':
+        return 'All time';
     }
   };
 
@@ -143,21 +156,26 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-8 p-4 md:p-8">
+    <div className="trbd-page">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
+          <div className="trbd-icon-chip">
             <Sparkles className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-heading-3 font-outfit tracking-tight">My Analytics</h1>
-            <p className="text-muted-foreground">Insights into your search and recording activity</p>
+            <h1 className="trbd-page-title tracking-tight">My Analytics</h1>
+            <p className="text-muted-foreground">
+              Insights into your search and recording activity
+            </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <Select value={timeRange} onValueChange={(value) => setTimeRange(value as TimeRange)}>
+          <Select
+            value={timeRange}
+            onValueChange={(value) => setTimeRange(value as TimeRange)}
+          >
             <SelectTrigger className="w-[180px]">
               <Calendar className="h-4 w-4" />
               <SelectValue />
@@ -279,7 +297,9 @@ export default function AnalyticsPage() {
               <>
                 <div className="text-2xl font-bold">
                   {summary?.avgSearchTime ?? 0}
-                  <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>
+                  <span className="text-sm font-normal text-muted-foreground ml-1">
+                    ms
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Response latency
@@ -343,7 +363,8 @@ export default function AnalyticsPage() {
             <CardHeader>
               <CardTitle>Search Volume Over Time</CardTitle>
               <CardDescription>
-                Number of searches performed over {getTimeRangeLabel(timeRange).toLowerCase()}
+                Number of searches performed over{' '}
+                {getTimeRangeLabel(timeRange).toLowerCase()}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -356,9 +377,7 @@ export default function AnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Search Types Distribution</CardTitle>
-                <CardDescription>
-                  Breakdown by search mode
-                </CardDescription>
+                <CardDescription>Breakdown by search mode</CardDescription>
               </CardHeader>
               <CardContent>
                 <SearchTypesChart timeRange={timeRange} />
@@ -383,9 +402,7 @@ export default function AnalyticsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Activity Heatmap</CardTitle>
-              <CardDescription>
-                Search activity by day and time
-              </CardDescription>
+              <CardDescription>Search activity by day and time</CardDescription>
             </CardHeader>
             <CardContent>
               <ActivityHeatmap timeRange={timeRange} />
@@ -406,7 +423,10 @@ export default function AnalyticsPage() {
               {loading ? (
                 <div className="space-y-2">
                   {[...Array(5)].map((_, i) => (
-                    <div key={i} className="h-12 bg-muted animate-pulse rounded" />
+                    <div
+                      key={i}
+                      className="h-12 bg-muted animate-pulse rounded"
+                    />
                   ))}
                 </div>
               ) : topQueries.length === 0 ? (
@@ -421,8 +441,12 @@ export default function AnalyticsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Query</TableHead>
-                      <TableHead className="text-center">Search Count</TableHead>
-                      <TableHead className="text-center">Last Searched</TableHead>
+                      <TableHead className="text-center">
+                        Search Count
+                      </TableHead>
+                      <TableHead className="text-center">
+                        Last Searched
+                      </TableHead>
                       <TableHead className="text-center">Feedback</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -440,7 +464,13 @@ export default function AnalyticsPage() {
                         </TableCell>
                         <TableCell className="text-center">
                           {query.avgFeedback !== null ? (
-                            <Badge variant={query.avgFeedback > 0 ? 'default' : 'destructive'}>
+                            <Badge
+                              variant={
+                                query.avgFeedback > 0
+                                  ? 'default'
+                                  : 'destructive'
+                              }
+                            >
                               {query.avgFeedback > 0 ? (
                                 <>
                                   <TrendingUp className="h-3 w-3" />
@@ -454,7 +484,9 @@ export default function AnalyticsPage() {
                               )}
                             </Badge>
                           ) : (
-                            <span className="text-sm text-muted-foreground">No feedback</span>
+                            <span className="text-sm text-muted-foreground">
+                              No feedback
+                            </span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -471,15 +503,16 @@ export default function AnalyticsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Most Viewed Recordings</CardTitle>
-              <CardDescription>
-                Recordings you view most often
-              </CardDescription>
+              <CardDescription>Recordings you view most often</CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="space-y-2">
                   {[...Array(5)].map((_, i) => (
-                    <div key={i} className="h-12 bg-muted animate-pulse rounded" />
+                    <div
+                      key={i}
+                      className="h-12 bg-muted animate-pulse rounded"
+                    />
                   ))}
                 </div>
               ) : topRecordings.length === 0 ? (
@@ -519,11 +552,7 @@ export default function AnalyticsPage() {
                           {formatDate(recording.lastViewed)}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            asChild
-                          >
+                          <Button variant="ghost" size="sm" asChild>
                             <a href={`/library/${recording.id}`}>View</a>
                           </Button>
                         </TableCell>

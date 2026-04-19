@@ -6,7 +6,7 @@ import { Skeleton } from '@/app/components/ui/skeleton';
  */
 export default function DashboardLoading() {
   return (
-    <div>
+    <div className="trbd-page">
       {/* Header with Search and Filters */}
       <div className="mb-8 space-y-4">
         {/* Top Row: Title and Actions */}

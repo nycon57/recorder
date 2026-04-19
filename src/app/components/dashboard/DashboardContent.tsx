@@ -4,9 +4,13 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
+import type { ContentType } from '@/lib/types/database';
 import CreateNoteModal from '@/app/components/create-note/CreateNoteModal';
 import UploadModal from '@/app/components/upload/UploadModal';
-import { KnowledgeInsightsCard, ConceptPanel } from '@/app/components/knowledge';
+import {
+  KnowledgeInsightsCard,
+  ConceptPanel,
+} from '@/app/components/knowledge';
 
 import { EmptyState } from './EmptyState';
 import { QuickActions } from './QuickActions';
@@ -24,7 +28,9 @@ interface DashboardRecentItem {
   id: string;
   title: string | null;
   description: string | null;
-  content_type: 'recording' | 'video' | 'audio' | 'document' | 'text' | 'imported' | null;
+  content_type:
+    | ContentType
+    | null;
   thumbnail_url: string | null;
   status: string;
   created_at: string;
@@ -40,7 +46,9 @@ export function DashboardContent() {
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isCreateNoteModalOpen, setIsCreateNoteModalOpen] = useState(false);
-  const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
+  const [selectedConceptId, setSelectedConceptId] = useState<string | null>(
+    null,
+  );
 
   /**
    * Fetch dashboard data
@@ -78,7 +86,8 @@ export function DashboardContent() {
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    const timeoutId = setTimeout(fetchDashboardData, 0);
+    return () => clearTimeout(timeoutId);
   }, []);
 
   /**
@@ -118,7 +127,7 @@ export function DashboardContent() {
   /**
    * Handle successful note creation
    */
-  const handleNoteCreated = (noteId: string) => {
+  const handleNoteCreated = () => {
     // Refresh dashboard data to show new note
     fetchDashboardData();
   };
@@ -127,14 +136,13 @@ export function DashboardContent() {
 
   return (
     <>
-      <div className="space-y-8">
+      <div className="trbd-stack">
         {/* Hero Section with Quick Actions */}
-        <section>
-          <div className="mb-6">
-            <h1 className="text-heading-3 font-outfit">
-              Welcome to your Knowledge Hub
-            </h1>
-            <p className="text-body-md text-muted-foreground mt-2">
+        <section className="trbd-stack">
+          <div className="trbd-page-heading">
+            <p className="trbd-kicker">Workspace</p>
+            <h1 className="trbd-page-title">Welcome to your Knowledge Hub</h1>
+            <p className="trbd-page-description">
               Record, upload, search, and manage all your content in one place
             </p>
           </div>
@@ -165,7 +173,10 @@ export function DashboardContent() {
               onUploadClick={handleUploadClick}
             />
           ) : (
-            <RecentItems items={recentItems as any} isLoading={isLoadingItems} />
+            <RecentItems
+              items={recentItems}
+              isLoading={isLoadingItems}
+            />
           )}
         </section>
       </div>

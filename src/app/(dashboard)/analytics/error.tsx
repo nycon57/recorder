@@ -4,7 +4,12 @@ import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 
 export default function AnalyticsError({
   error,
@@ -18,11 +23,11 @@ export default function AnalyticsError({
   }, [error]);
 
   return (
-    <div className="flex items-center justify-center min-h-[600px] p-8">
-      <Card className="max-w-md w-full">
+    <div className="trbd-page flex items-center justify-center min-h-[600px]">
+      <Card className="max-w-xl w-full">
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-lg bg-destructive/10 flex items-center justify-center">
+            <div className="trbd-icon-chip">
               <AlertTriangle className="h-6 w-6 text-destructive" />
             </div>
             <CardTitle>Something went wrong</CardTitle>
@@ -30,7 +35,8 @@ export default function AnalyticsError({
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            We encountered an error while loading your analytics. This could be a temporary issue.
+            We encountered an error while loading your analytics. This could be
+            a temporary issue.
           </p>
 
           {error.message && (
@@ -42,9 +48,7 @@ export default function AnalyticsError({
           )}
 
           <div className="flex gap-3">
-            <Button onClick={() => reset()}>
-              Try again
-            </Button>
+            <Button onClick={() => reset()}>Try again</Button>
             <Button variant="outline" asChild>
               <a href="/dashboard">Go to Dashboard</a>
             </Button>

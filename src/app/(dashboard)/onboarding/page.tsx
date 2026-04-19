@@ -22,7 +22,12 @@ import { Checkbox } from '@/app/components/ui/checkbox';
 import { Badge } from '@/app/components/ui/badge';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import type { ContentType, LearningPathItem } from '@/lib/types/database';
-import { staggerContainer, staggerItem, fadeIn, withReducedMotion } from '@/lib/utils/animations';
+import {
+  staggerContainer,
+  staggerItem,
+  fadeIn,
+  withReducedMotion,
+} from '@/lib/utils/animations';
 
 const CONTENT_ICONS: Record<ContentType, typeof Video> = {
   recording: Video,
@@ -78,7 +83,9 @@ export default function OnboardingPage() {
       if (err instanceof Error && err.name === 'AbortError') return;
       console.error('Error fetching onboarding plan:', err);
       if (!signal.aborted) {
-        setError(err instanceof Error ? err.message : 'Failed to load onboarding plan');
+        setError(
+          err instanceof Error ? err.message : 'Failed to load onboarding plan',
+        );
       }
     } finally {
       if (!signal.aborted) {
@@ -97,74 +104,96 @@ export default function OnboardingPage() {
     };
   }, [fetchPlan]);
 
-  const handleToggleComplete = useCallback(async (contentId: string, completed: boolean) => {
-    if (!plan) return;
+  const handleToggleComplete = useCallback(
+    async (contentId: string, completed: boolean) => {
+      if (!plan) return;
 
-    setUpdatingItems((prev) => new Set(prev).add(contentId));
+      setUpdatingItems((prev) => new Set(prev).add(contentId));
 
-    setPlan((prev) => {
-      if (!prev) return prev;
-      const updatedPath = prev.learning_path.map((item) =>
-        item.contentId === contentId
-          ? { ...item, completed, completedAt: completed ? new Date().toISOString() : null }
-          : item
-      );
-      const completedCount = updatedPath.filter((item) => item.completed).length;
-      const total = prev.total_items ?? updatedPath.length;
-      return {
-        ...prev,
-        learning_path: updatedPath,
-        completed_items: completedCount,
-        plan_status: completedCount >= total ? 'completed' : 'active',
-      };
-    });
-
-    try {
-      const response = await fetch('/api/onboarding/progress', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contentId, completed }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update progress');
-      }
-
-      const result = await response.json();
-      setPlan(result.data);
-    } catch (err) {
-      console.error('Error updating progress:', err);
-      // Revert only the failed item's optimistic state instead of re-fetching the entire plan.
       setPlan((prev) => {
         if (!prev) return prev;
-        const revertedPath = prev.learning_path.map((item) =>
+        const updatedPath = prev.learning_path.map((item) =>
           item.contentId === contentId
-            ? { ...item, completed: !completed, completedAt: !completed ? null : item.completedAt }
-            : item
+            ? {
+                ...item,
+                completed,
+                completedAt: completed ? new Date().toISOString() : null,
+              }
+            : item,
         );
-        const completedCount = revertedPath.filter((item) => item.completed).length;
-        const total = prev.total_items ?? revertedPath.length;
+        const completedCount = updatedPath.filter(
+          (item) => item.completed,
+        ).length;
+        const total = prev.total_items ?? updatedPath.length;
         return {
           ...prev,
-          learning_path: revertedPath,
+          learning_path: updatedPath,
           completed_items: completedCount,
           plan_status: completedCount >= total ? 'completed' : 'active',
         };
       });
-    } finally {
-      setUpdatingItems((prev) => {
-        const next = new Set(prev);
-        next.delete(contentId);
-        return next;
-      });
-    }
-  }, [plan]);
+
+      try {
+        const response = await fetch('/api/onboarding/progress', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contentId, completed }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update progress');
+        }
+
+        const result = await response.json();
+        setPlan(result.data);
+      } catch (err) {
+        console.error('Error updating progress:', err);
+        // Revert only the failed item's optimistic state instead of re-fetching the entire plan.
+        setPlan((prev) => {
+          if (!prev) return prev;
+          const revertedPath = prev.learning_path.map((item) =>
+            item.contentId === contentId
+              ? {
+                  ...item,
+                  completed: !completed,
+                  completedAt: !completed ? null : item.completedAt,
+                }
+              : item,
+          );
+          const completedCount = revertedPath.filter(
+            (item) => item.completed,
+          ).length;
+          const total = prev.total_items ?? revertedPath.length;
+          return {
+            ...prev,
+            learning_path: revertedPath,
+            completed_items: completedCount,
+            plan_status: completedCount >= total ? 'completed' : 'active',
+          };
+        });
+      } finally {
+        setUpdatingItems((prev) => {
+          const next = new Set(prev);
+          next.delete(contentId);
+          return next;
+        });
+      }
+    },
+    [plan],
+  );
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <div className="flex items-center justify-center py-24" role="status" aria-live="polite">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
+      <div className="trbd-page">
+        <div
+          className="flex items-center justify-center py-24"
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2
+            className="h-8 w-8 animate-spin text-muted-foreground"
+            aria-hidden="true"
+          />
           <span className="sr-only">Loading your onboarding plan</span>
         </div>
       </div>
@@ -173,7 +202,7 @@ export default function OnboardingPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <div className="trbd-page">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
@@ -188,14 +217,18 @@ export default function OnboardingPage() {
 
   const totalItems = plan.total_items ?? plan.learning_path.length;
   const completedItems = plan.completed_items ?? 0;
-  const progressPercent = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+  const progressPercent =
+    totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
   const sortedPath = [...plan.learning_path].sort((a, b) => a.order - b.order);
 
   return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+    <div className="trbd-page">
       <div className="space-y-2">
-        <h1 className="text-heading-3 font-outfit tracking-tight flex items-center gap-3">
-          <GraduationCap className="h-7 w-7 sm:h-8 sm:w-8 text-primary" aria-hidden="true" />
+        <h1 className="trbd-page-title tracking-tight flex items-center gap-3">
+          <GraduationCap
+            className="h-7 w-7 sm:h-8 sm:w-8 text-primary"
+            aria-hidden="true"
+          />
           Onboarding
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground">
@@ -216,7 +249,10 @@ export default function OnboardingPage() {
           aria-label={`Onboarding progress: ${completedItems} of ${totalItems} completed`}
         />
         {plan.plan_status === 'completed' && (
-          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400" role="status">
+          <div
+            className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400"
+            role="status"
+          >
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
             Onboarding complete!
           </div>
@@ -234,7 +270,8 @@ export default function OnboardingPage() {
         <AnimatePresence>
           {sortedPath.map((item, index) => {
             const Icon = CONTENT_ICONS[item.contentType] ?? FileText;
-            const colorClass = CONTENT_COLORS[item.contentType] ?? 'text-muted-foreground';
+            const colorClass =
+              CONTENT_COLORS[item.contentType] ?? 'text-muted-foreground';
             const label = CONTENT_LABELS[item.contentType] ?? item.contentType;
             const isUpdating = updatingItems.has(item.contentId);
 
@@ -266,13 +303,18 @@ export default function OnboardingPage() {
                     <Link
                       href={`/library/${item.contentId}`}
                       className={`text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded ${
-                        item.completed ? 'line-through text-muted-foreground' : ''
+                        item.completed
+                          ? 'line-through text-muted-foreground'
+                          : ''
                       }`}
                     >
                       {item.title}
                     </Link>
                     <Badge variant="outline" className="text-xs gap-1 shrink-0">
-                      <Icon className={`h-3 w-3 ${colorClass}`} aria-hidden="true" />
+                      <Icon
+                        className={`h-3 w-3 ${colorClass}`}
+                        aria-hidden="true"
+                      />
                       {label}
                     </Badge>
                     {item.estimatedMinutes > 0 && (
@@ -284,9 +326,13 @@ export default function OnboardingPage() {
                   </div>
 
                   {item.reason && (
-                    <p className={`text-xs leading-relaxed ${
-                      item.completed ? 'text-muted-foreground/80' : 'text-muted-foreground'
-                    }`}>
+                    <p
+                      className={`text-xs leading-relaxed ${
+                        item.completed
+                          ? 'text-muted-foreground/80'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
                       {item.reason}
                     </p>
                   )}
@@ -297,7 +343,10 @@ export default function OnboardingPage() {
                   className="shrink-0 p-2 rounded opacity-0 group-hover:opacity-100 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={`View ${item.title}`}
                 >
-                  <ExternalLink className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <ExternalLink
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
                 </Link>
               </motion.div>
             );
@@ -310,10 +359,13 @@ export default function OnboardingPage() {
 
 function EmptyState() {
   return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+    <div className="trbd-page">
       <div className="space-y-2 mb-8">
-        <h1 className="text-heading-3 font-outfit tracking-tight flex items-center gap-3">
-          <GraduationCap className="h-7 w-7 sm:h-8 sm:w-8 text-primary" aria-hidden="true" />
+        <h1 className="trbd-page-title tracking-tight flex items-center gap-3">
+          <GraduationCap
+            className="h-7 w-7 sm:h-8 sm:w-8 text-primary"
+            aria-hidden="true"
+          />
           Onboarding
         </h1>
       </div>
@@ -325,11 +377,15 @@ function EmptyState() {
       >
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
           <div className="bg-primary/5 rounded-full p-6 mb-6">
-            <GraduationCap className="h-12 w-12 text-primary" aria-hidden="true" />
+            <GraduationCap
+              className="h-12 w-12 text-primary"
+              aria-hidden="true"
+            />
           </div>
           <h3 className="text-xl font-semibold mb-3">No onboarding plan yet</h3>
           <p className="text-sm text-muted-foreground max-w-md">
-            Your onboarding plan has not been generated yet. Ask an admin or team lead to generate one for you.
+            Your onboarding plan has not been generated yet. Ask an admin or
+            team lead to generate one for you.
           </p>
         </div>
       </motion.div>

@@ -76,42 +76,44 @@ export function StatsRow({ stats, isLoading = false }: StatsRowProps) {
       label: 'Total Items',
       value: stats?.totalItems.toLocaleString() || '0',
       description: 'Items in your library',
-      iconBg: 'bg-secondary/10 dark:bg-secondary/20',
-      iconColor: 'text-secondary dark:text-secondary',
+      iconBg: 'bg-muted/70 border border-border',
+      iconColor: 'text-muted-foreground',
     },
     {
       icon: HardDrive,
       label: 'Storage Used',
       value: formatFileSize(stats?.storageUsedBytes || 0),
       description: 'Total storage consumed',
-      iconBg: 'bg-primary/10 dark:bg-primary/20',
-      iconColor: 'text-primary dark:text-primary',
+      iconBg: 'bg-muted/70 border border-border',
+      iconColor: 'text-muted-foreground',
     },
     {
       icon: TrendingUp,
       label: 'This Week',
       value: stats?.itemsThisWeek.toLocaleString() || '0',
       description: 'Items added this week',
-      iconBg: 'bg-accent/10 dark:bg-accent/20',
-      iconColor: 'text-accent dark:text-accent',
+      iconBg: 'bg-muted/70 border border-border',
+      iconColor: 'text-muted-foreground',
     },
     {
       icon: Clock,
       label: 'Processing',
       value: stats?.processingCount.toLocaleString() || '0',
       description: 'Items in queue',
-      iconBg: 'bg-secondary/10 dark:bg-secondary/20',
-      iconColor: 'text-secondary dark:text-secondary',
+      iconBg: 'bg-muted/70 border border-border',
+      iconColor: 'text-muted-foreground',
     },
   ];
 
   return (
     <MotionDiv
-      {...(mounted ? {
-        variants: containerVariants,
-        initial: 'hidden',
-        animate: 'visible',
-      } : {})}
+      {...(mounted
+        ? {
+            variants: containerVariants,
+            initial: 'hidden',
+            animate: 'visible',
+          }
+        : {})}
       className="grid grid-cols-2 lg:grid-cols-4 gap-4"
     >
       {statItems.map((item) => {
@@ -119,14 +121,18 @@ export function StatsRow({ stats, isLoading = false }: StatsRowProps) {
         return (
           <MotionDiv
             key={item.label}
-            {...(mounted ? {
-              variants: itemVariants,
-            } : {})}
+            {...(mounted
+              ? {
+                  variants: itemVariants,
+                }
+              : {})}
           >
             <Card className="overflow-hidden card-interactive h-full">
               <CardContent className="p-4 lg:p-6">
                 <div className="flex items-start justify-between mb-3">
-                  <div className={`inline-flex items-center justify-center rounded-xl ${item.iconBg} p-2.5 transition-all duration-300 hover:scale-110 hover:shadow-[0_0_15px_rgba(0,223,130,0.1)]`}>
+                  <div
+                    className={`inline-flex items-center justify-center rounded-lg ${item.iconBg} p-2.5 transition-colors`}
+                  >
                     <Icon className={`size-5 ${item.iconColor}`} />
                   </div>
                 </div>
@@ -134,7 +140,7 @@ export function StatsRow({ stats, isLoading = false }: StatsRowProps) {
                   <p className="text-body-sm text-muted-foreground mb-1">
                     {item.label}
                   </p>
-                  <p className="text-heading-4 font-outfit truncate">
+                  <p className="font-[var(--font-heading)] text-2xl font-semibold tracking-tight truncate">
                     {item.value}
                   </p>
                   <p className="text-body-xs text-muted-foreground mt-1 line-clamp-1">

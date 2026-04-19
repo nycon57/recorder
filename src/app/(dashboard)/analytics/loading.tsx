@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader } from '@/app/components/ui/card';
 
 export default function AnalyticsLoading() {
   return (
-    <div className="flex flex-col gap-8 p-4 md:p-8">
+    <div className="trbd-page">
       {/* Header Skeleton */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex items-center gap-3">

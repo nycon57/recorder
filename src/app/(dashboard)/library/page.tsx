@@ -1,8 +1,16 @@
-"use client"
+'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Loader2, Grid3x3, List, Search, SlidersHorizontal, FileX2, Settings, Upload, Download, Plus, Trash2, RotateCcw } from 'lucide-react';
+import {
+  Grid3x3,
+  List,
+  Search,
+  SlidersHorizontal,
+  FileX2,
+  Settings,
+  Upload,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { Input } from '@/app/components/ui/input';
@@ -25,13 +33,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
-import { ContentGridSkeleton, ContentListSkeleton } from '@/app/components/skeletons/ContentCardSkeleton';
 import { LibraryEmptyState } from '@/app/components/empty-states/LibraryEmptyState';
 import { BulkActionsToolbar } from '@/app/components/library/BulkActionsToolbar';
 import { BulkTagModal } from '@/app/components/library/BulkTagModal';
 import { TagManager } from '@/app/components/tags/TagManager';
 import { TagFilter } from '@/app/components/tags/TagFilter';
-import { AdvancedFilters, FilterState, StatusFilter } from '@/app/components/filters/AdvancedFilters';
+import {
+  AdvancedFilters,
+  FilterState,
+} from '@/app/components/filters/AdvancedFilters';
 import { FilterChips } from '@/app/components/filters/FilterChips';
 import { CollectionManager } from '@/app/components/collections/CollectionManager';
 import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/KeyboardShortcutsProvider';
@@ -39,27 +49,40 @@ import { useToast } from '@/app/components/ui/use-toast';
 import UploadWizard from '@/app/components/recorder/UploadWizard';
 import ExportModal from '@/app/components/library/ExportModal';
 import GoogleDriveImportModal from '@/app/components/library/GoogleDriveImportModal';
-import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/app/hooks/useKeyboardShortcuts';
-
-// New folder navigation components
-import { LibraryRootView, LibraryRootViewSkeleton, QuickAccessTab } from '@/app/components/library/LibraryRootView';
-import { CollectionFolderView, CollectionFolderViewSkeleton } from '@/app/components/collections/CollectionFolderView';
+import {
+  useKeyboardShortcuts,
+  COMMON_SHORTCUTS,
+} from '@/app/hooks/useKeyboardShortcuts';
+import {
+  LibraryRootView,
+  LibraryRootViewSkeleton,
+  QuickAccessTab,
+} from '@/app/components/library/LibraryRootView';
+import {
+  CollectionFolderView,
+  CollectionFolderViewSkeleton,
+} from '@/app/components/collections/CollectionFolderView';
 import { CollectionFolder } from '@/app/components/collections/CollectionFolderCard';
 import { MoveToCollectionModal } from '@/app/components/collections/MoveToCollectionModal';
-
 import { SelectableContentCard, LibraryTable } from '@/app/components/library';
 import { ContentItem } from '@/app/components/content';
 import {
   Pagination,
   PaginationContent,
-  PaginationEllipsis,
   PaginationItem,
-  PaginationLink,
   PaginationNext,
   PaginationPrevious,
 } from '@/app/components/ui/pagination';
 
-type SortOption = 'recent' | 'oldest' | 'name-asc' | 'name-desc' | 'size-asc' | 'size-desc' | 'duration-asc' | 'duration-desc';
+type SortOption =
+  | 'recent'
+  | 'oldest'
+  | 'name-asc'
+  | 'name-desc'
+  | 'size-asc'
+  | 'size-desc'
+  | 'duration-asc'
+  | 'duration-desc';
 type ViewMode = 'grid' | 'list';
 
 const ITEMS_PER_PAGE = 25;
@@ -70,7 +93,10 @@ interface BreadcrumbItem {
 }
 
 interface CollectionViewData {
-  collection: CollectionFolder & { item_count: number; subcollection_count: number };
+  collection: CollectionFolder & {
+    item_count: number;
+    subcollection_count: number;
+  };
   breadcrumb: BreadcrumbItem[];
   subcollections: CollectionFolder[];
   items: ContentItem[];
@@ -84,12 +110,35 @@ interface CollectionViewData {
 
 interface HomeViewData {
   collections: CollectionFolder[];
-  recentItems: any[];
+  recentItems: {
+    id: string;
+    title: string | null;
+    content_type: string;
+    file_type?: string | null;
+    status: string;
+    thumbnail_url?: string | null;
+    duration_sec?: number | null;
+    created_at: string;
+    collection_id?: string | null;
+  }[];
   counts: {
     uncategorized: number;
     favorites: number;
     total: number;
   };
+}
+
+interface LibraryTag {
+  id: string;
+  name: string;
+  color: string;
+  usage_count?: number;
+}
+
+interface CollectionSaveData {
+  name: string;
+  description: string;
+  parent_id: string | null;
 }
 
 /**
@@ -111,14 +160,17 @@ function LibraryPageContent() {
   const { toast } = useToast();
 
   // Navigation state - current collection (null = root/home view)
-  const [currentCollectionId, setCurrentCollectionId] = useState<string | null>(null);
+  const [currentCollectionId, setCurrentCollectionId] = useState<string | null>(
+    null,
+  );
 
   // Quick access tab for root view
   const [activeTab, setActiveTab] = useState<QuickAccessTab>('recent');
 
   // Data state
   const [homeData, setHomeData] = useState<HomeViewData | null>(null);
-  const [collectionData, setCollectionData] = useState<CollectionViewData | null>(null);
+  const [collectionData, setCollectionData] =
+    useState<CollectionViewData | null>(null);
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -148,19 +200,21 @@ function LibraryPageContent() {
   const [showGoogleDriveImport, setShowGoogleDriveImport] = useState(false);
   const [showCollectionManager, setShowCollectionManager] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
-  const [editingCollection, setEditingCollection] = useState<CollectionFolder | null>(null);
+  const [editingCollection, setEditingCollection] =
+    useState<CollectionFolder | null>(null);
 
   // Delete confirmation state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
-  const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = useState(false);
-  const [showDeleteCollectionDialog, setShowDeleteCollectionDialog] = useState(false);
+  const [showDeleteCollectionDialog, setShowDeleteCollectionDialog] =
+    useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
-  const [collectionToDelete, setCollectionToDelete] = useState<CollectionFolder | null>(null);
+  const [collectionToDelete, setCollectionToDelete] =
+    useState<CollectionFolder | null>(null);
   const [isDeletingCollection, setIsDeletingCollection] = useState(false);
 
   // Tag filter state
-  const [availableTags, setAvailableTags] = useState<any[]>([]);
+  const [availableTags, setAvailableTags] = useState<LibraryTag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [tagFilterMode, setTagFilterMode] = useState<'and' | 'or'>('or');
 
@@ -171,7 +225,7 @@ function LibraryPageContent() {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Search input ref
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize from URL params
   useEffect(() => {
@@ -182,7 +236,10 @@ function LibraryPageContent() {
     if (collectionParam) {
       setCurrentCollectionId(collectionParam);
     }
-    if (tabParam && ['recent', 'favorites', 'all', 'uncategorized'].includes(tabParam)) {
+    if (
+      tabParam &&
+      ['recent', 'favorites', 'all', 'uncategorized'].includes(tabParam)
+    ) {
       setActiveTab(tabParam);
     }
     if (searchParam) {
@@ -191,7 +248,9 @@ function LibraryPageContent() {
 
     // Load saved preferences
     if (typeof window !== 'undefined') {
-      const savedViewMode = localStorage.getItem('library-view-mode') as ViewMode;
+      const savedViewMode = localStorage.getItem(
+        'library-view-mode',
+      ) as ViewMode;
       const savedSortBy = localStorage.getItem('library-sort-by') as SortOption;
       if (savedViewMode) setViewMode(savedViewMode);
       if (savedSortBy) setSortBy(savedSortBy);
@@ -210,7 +269,8 @@ function LibraryPageContent() {
   useEffect(() => {
     const params = new URLSearchParams();
     if (currentCollectionId) params.set('collection', currentCollectionId);
-    if (!currentCollectionId && activeTab !== 'recent') params.set('tab', activeTab);
+    if (!currentCollectionId && activeTab !== 'recent')
+      params.set('tab', activeTab);
     if (searchQuery) params.set('q', searchQuery);
 
     const newUrl = params.toString() ? `?${params.toString()}` : '/library';
@@ -272,7 +332,9 @@ function LibraryPageContent() {
         sort: sortBy,
       });
 
-      const response = await fetch(`/api/collections/${collectionId}/view?${params}`);
+      const response = await fetch(
+        `/api/collections/${collectionId}/view?${params}`,
+      );
       if (!response.ok) {
         if (response.status === 404) {
           setCurrentCollectionId(null);
@@ -292,7 +354,9 @@ function LibraryPageContent() {
       setHomeData(null);
     } catch (err) {
       console.error('Error fetching collection:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load collection');
+      setError(
+        err instanceof Error ? err.message : 'Failed to load collection',
+      );
     } finally {
       setLoading(false);
     }
@@ -312,13 +376,13 @@ function LibraryPageContent() {
       if (!response.ok) throw new Error('Failed to fetch content');
 
       const result = await response.json();
-      let allItems = result.data?.data || [];
+      let allItems: ContentItem[] = result.data?.data || [];
 
       // Filter by tab
       if (activeTab === 'favorites') {
-        allItems = allItems.filter((item: any) => item.is_favorite);
+        allItems = allItems.filter((item) => Boolean(item.metadata?.is_favorite));
       } else if (activeTab === 'uncategorized') {
-        allItems = allItems.filter((item: any) => !item.collection_id);
+        allItems = allItems.filter((item) => !item.collection_id);
       }
       // 'all' tab shows everything
 
@@ -333,7 +397,9 @@ function LibraryPageContent() {
 
   async function fetchTags() {
     try {
-      const response = await fetch('/api/tags?includeUsageCount=true&limit=100');
+      const response = await fetch(
+        '/api/tags?includeUsageCount=true&limit=100',
+      );
       if (!response.ok) throw new Error('Failed to fetch tags');
 
       const data = await response.json();
@@ -363,7 +429,9 @@ function LibraryPageContent() {
   const handleNavigateBack = useCallback(() => {
     if (collectionData?.breadcrumb && collectionData.breadcrumb.length > 1) {
       // Navigate to parent
-      const parentId = collectionData.breadcrumb[collectionData.breadcrumb.length - 2]?.id || null;
+      const parentId =
+        collectionData.breadcrumb[collectionData.breadcrumb.length - 2]?.id ||
+        null;
       setCurrentCollectionId(parentId);
     } else {
       // Navigate to root
@@ -387,41 +455,50 @@ function LibraryPageContent() {
     let filtered = [...items];
 
     // Filter by content types
-    if (advancedFilters.contentTypes.length > 0) {
-      filtered = filtered.filter(item =>
-        advancedFilters.contentTypes.includes(item.content_type as any)
-      );
-    }
+      if (advancedFilters.contentTypes.length > 0) {
+        filtered = filtered.filter((item) =>
+          item.content_type
+            ? advancedFilters.contentTypes.includes(item.content_type)
+            : false,
+        );
+      }
 
     // Filter by tags
-    if (selectedTagIds.length > 0) {
-      filtered = filtered.filter(item => {
-        const itemTagIds = (item as any).tags?.map((t: any) => t.id) || [];
-        if (tagFilterMode === 'and') {
-          return selectedTagIds.every(tagId => itemTagIds.includes(tagId));
-        } else {
-          return selectedTagIds.some(tagId => itemTagIds.includes(tagId));
-        }
+      if (selectedTagIds.length > 0) {
+        filtered = filtered.filter((item) => {
+          const itemTagIds = item.metadata?.tags?.map((tag) => tag.id) || [];
+          if (tagFilterMode === 'and') {
+            return selectedTagIds.every((tagId) => itemTagIds.includes(tagId));
+          } else {
+            return selectedTagIds.some((tagId) => itemTagIds.includes(tagId));
+          }
       });
     }
 
     // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(item =>
-        item.title?.toLowerCase().includes(query) ||
-        item.description?.toLowerCase().includes(query) ||
-        item.original_filename?.toLowerCase().includes(query)
+      filtered = filtered.filter(
+        (item) =>
+          item.title?.toLowerCase().includes(query) ||
+          item.description?.toLowerCase().includes(query) ||
+          item.original_filename?.toLowerCase().includes(query),
       );
     }
 
     // Sort items
     switch (sortBy) {
       case 'recent':
-        filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        filtered.sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
         break;
       case 'oldest':
-        filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        filtered.sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        );
         break;
       case 'name-asc':
         filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
@@ -444,13 +521,23 @@ function LibraryPageContent() {
     }
 
     return filtered;
-  }, [items, sortBy, searchQuery, selectedTagIds, tagFilterMode, advancedFilters]);
+  }, [
+    items,
+    sortBy,
+    searchQuery,
+    selectedTagIds,
+    tagFilterMode,
+    advancedFilters,
+  ]);
 
   // Pagination
   const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
-  const paginatedItems = viewMode === 'list' ? filteredItems.slice(startIndex, endIndex) : filteredItems;
+  const paginatedItems =
+    viewMode === 'list'
+      ? filteredItems.slice(startIndex, endIndex)
+      : filteredItems;
 
   // Action handlers
   const handleDelete = (id: string) => {
@@ -471,7 +558,7 @@ function LibraryPageContent() {
         throw new Error(errorData.message || 'Failed to delete');
       }
 
-      setItems(prev => prev.filter(item => item.id !== itemToDelete));
+      setItems((prev) => prev.filter((item) => item.id !== itemToDelete));
       toast({
         description: 'Item moved to trash.',
       });
@@ -480,7 +567,8 @@ function LibraryPageContent() {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to delete item',
+        description:
+          err instanceof Error ? err.message : 'Failed to delete item',
       });
     } finally {
       setShowDeleteDialog(false);
@@ -498,15 +586,19 @@ function LibraryPageContent() {
 
   // Bulk selection handlers
   const handleSelect = useCallback((id: string, selected: boolean) => {
-    setSelectedIds(prev =>
-      selected ? [...prev, id] : prev.filter(itemId => itemId !== id)
+    setSelectedIds((prev) =>
+      selected ? [...prev, id] : prev.filter((itemId) => itemId !== id),
     );
   }, []);
 
-  const handleSelectAll = useCallback((checked: boolean) => {
-    const itemsToSelect = viewMode === 'list' ? paginatedItems : filteredItems;
-    setSelectedIds(checked ? itemsToSelect.map(item => item.id) : []);
-  }, [filteredItems, paginatedItems, viewMode]);
+  const handleSelectAll = useCallback(
+    (checked: boolean) => {
+      const itemsToSelect =
+        viewMode === 'list' ? paginatedItems : filteredItems;
+      setSelectedIds(checked ? itemsToSelect.map((item) => item.id) : []);
+    },
+    [filteredItems, paginatedItems, viewMode],
+  );
 
   const handleClearSelection = useCallback(() => {
     setSelectedIds([]);
@@ -529,63 +621,70 @@ function LibraryPageContent() {
   }, []);
 
   // Move items to collection handler
-  const handleMoveToCollection = useCallback(async (collectionId: string | null) => {
-    if (selectedIds.length === 0) return;
+  const handleMoveToCollection = useCallback(
+    async (collectionId: string | null) => {
+      if (selectedIds.length === 0) return;
 
-    try {
-      const response = await fetch('/api/content/bulk-move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content_ids: selectedIds,
-          collection_id: collectionId,
-        }),
-      });
+      try {
+        const response = await fetch('/api/content/bulk-move', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content_ids: selectedIds,
+            collection_id: collectionId,
+          }),
+        });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error?.message || 'Failed to move items');
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error?.message || 'Failed to move items');
+        }
+
+        // Update local state
+        setItems((prev) =>
+          prev.map((item) =>
+            selectedIds.includes(item.id)
+              ? { ...item, collection_id: collectionId }
+              : item,
+          ),
+        );
+
+        // Refresh data
+        if (currentCollectionId) {
+          fetchCollectionView(currentCollectionId);
+        } else {
+          fetchHomeView();
+        }
+
+        setSelectedIds([]);
+        toast({
+          description: `Moved ${selectedIds.length} item${selectedIds.length === 1 ? '' : 's'} successfully`,
+        });
+      } catch (err) {
+        console.error('Move failed:', err);
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description:
+            err instanceof Error ? err.message : 'Failed to move items',
+        });
+        throw err;
       }
-
-      // Update local state
-      setItems((prev) =>
-        prev.map((item) =>
-          selectedIds.includes(item.id)
-            ? { ...item, collection_id: collectionId }
-            : item
-        )
-      );
-
-      // Refresh data
-      if (currentCollectionId) {
-        fetchCollectionView(currentCollectionId);
-      } else {
-        fetchHomeView();
-      }
-
-      setSelectedIds([]);
-      toast({
-        description: `Moved ${selectedIds.length} item${selectedIds.length === 1 ? '' : 's'} successfully`,
-      });
-    } catch (err) {
-      console.error('Move failed:', err);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to move items',
-      });
-      throw err;
-    }
-  }, [selectedIds, currentCollectionId, toast]);
+    },
+    [selectedIds, currentCollectionId, toast],
+  );
 
   const confirmDeleteCollection = async () => {
     if (!collectionToDelete) return;
 
     setIsDeletingCollection(true);
     try {
-      const response = await fetch(`/api/collections/${collectionToDelete.id}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(
+        `/api/collections/${collectionToDelete.id}`,
+        {
+          method: 'DELETE',
+        },
+      );
 
       if (!response.ok) {
         const data = await response.json();
@@ -608,7 +707,8 @@ function LibraryPageContent() {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to delete collection',
+        description:
+          err instanceof Error ? err.message : 'Failed to delete collection',
       });
     } finally {
       setIsDeletingCollection(false);
@@ -618,7 +718,7 @@ function LibraryPageContent() {
   };
 
   // Save collection handler
-  const handleSaveCollection = async (data: any) => {
+  const handleSaveCollection = async (data: CollectionSaveData) => {
     try {
       const isEditing = !!editingCollection;
       const url = isEditing
@@ -667,7 +767,9 @@ function LibraryPageContent() {
     const newFilters = { ...advancedFilters };
 
     if (key === 'contentTypes' && value) {
-      newFilters.contentTypes = newFilters.contentTypes.filter(t => t !== value);
+      newFilters.contentTypes = newFilters.contentTypes.filter(
+        (t) => t !== value,
+      );
     } else if (key === 'favoritesOnly') {
       newFilters.favoritesOnly = false;
     } else if (key === 'hasTranscript') {
@@ -748,7 +850,9 @@ function LibraryPageContent() {
           <FileX2 className="h-12 w-12 text-muted-foreground mb-6" />
           <h3 className="text-lg font-semibold mb-3">No items found</h3>
           <p className="text-sm text-muted-foreground mb-6 max-w-md">
-            {searchQuery ? 'Try adjusting your search' : 'No content in this view'}
+            {searchQuery
+              ? 'Try adjusting your search'
+              : 'No content in this view'}
           </p>
           {searchQuery && (
             <Button onClick={() => setSearchQuery('')} variant="outline">
@@ -776,7 +880,9 @@ function LibraryPageContent() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Showing {startIndex + 1} to {Math.min(endIndex, filteredItems.length)} of {filteredItems.length}
+              Showing {startIndex + 1} to{' '}
+              {Math.min(endIndex, filteredItems.length)} of{' '}
+              {filteredItems.length}
             </p>
             <Pagination>
               <PaginationContent>
@@ -784,19 +890,29 @@ function LibraryPageContent() {
                   <PaginationPrevious
                     onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                     disabled={currentPage === 1}
-                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    {...({} as any)}
+                    className={
+                      currentPage === 1
+                        ? 'pointer-events-none opacity-50'
+                        : 'cursor-pointer'
+                    }
                   />
                 </PaginationItem>
                 <PaginationItem>
-                  <span className="px-4 text-sm">{currentPage} / {totalPages}</span>
+                  <span className="px-4 text-sm">
+                    {currentPage} / {totalPages}
+                  </span>
                 </PaginationItem>
                 <PaginationItem>
                   <PaginationNext
-                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    onClick={() =>
+                      setCurrentPage(Math.min(totalPages, currentPage + 1))
+                    }
                     disabled={currentPage === totalPages}
-                    className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    {...({} as any)}
+                    className={
+                      currentPage === totalPages
+                        ? 'pointer-events-none opacity-50'
+                        : 'cursor-pointer'
+                    }
                   />
                 </PaginationItem>
               </PaginationContent>
@@ -829,7 +945,10 @@ function LibraryPageContent() {
         {filteredItems.length > 0 && (
           <div className="flex items-center gap-2">
             <Checkbox
-              checked={selectedIds.length === filteredItems.length && filteredItems.length > 0}
+              checked={
+                selectedIds.length === filteredItems.length &&
+                filteredItems.length > 0
+              }
               onCheckedChange={handleSelectAll}
               aria-label="Select all items"
             />
@@ -867,7 +986,10 @@ function LibraryPageContent() {
 
       <div className="flex items-center gap-4">
         {/* Sort */}
-        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+        <Select
+          value={sortBy}
+          onValueChange={(v) => setSortBy(v as SortOption)}
+        >
           <SelectTrigger className="w-[180px]">
             <SlidersHorizontal className="mr-2 h-4 w-4" />
             <SelectValue />
@@ -909,11 +1031,11 @@ function LibraryPageContent() {
 
   return (
     <div className="min-h-screen">
-      <div className="container mx-auto p-6 sm:p-8 space-y-6">
+      <div className="trbd-page">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-heading-3 font-outfit tracking-tight">Library</h1>
+            <h1 className="trbd-page-title tracking-tight">Library</h1>
             <p className="text-sm text-muted-foreground">
               Your recordings, documents, and content organized in folders
             </p>
@@ -954,9 +1076,18 @@ function LibraryPageContent() {
               className="flex flex-col items-center justify-center py-16 px-4 text-center"
             >
               <FileX2 className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Error Loading Library</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                Error Loading Library
+              </h3>
               <p className="text-sm text-muted-foreground mb-4">{error}</p>
-              <Button onClick={() => currentCollectionId ? fetchCollectionView(currentCollectionId) : fetchHomeView()} variant="outline">
+              <Button
+                onClick={() =>
+                  currentCollectionId
+                    ? fetchCollectionView(currentCollectionId)
+                    : fetchHomeView()
+                }
+                variant="outline"
+              >
                 Try Again
               </Button>
             </motion.div>
@@ -1051,10 +1182,7 @@ function LibraryPageContent() {
         selectedIds={selectedIds}
       />
 
-      <TagManager
-        open={showTagManager}
-        onOpenChange={setShowTagManager}
-      />
+      <TagManager open={showTagManager} onOpenChange={setShowTagManager} />
 
       <CollectionManager
         open={showCollectionManager}
@@ -1063,7 +1191,9 @@ function LibraryPageContent() {
           if (!open) setEditingCollection(null);
         }}
         collection={editingCollection}
-        collections={homeData?.collections || collectionData?.subcollections || []}
+        collections={
+          homeData?.collections || collectionData?.subcollections || []
+        }
         onSave={handleSaveCollection}
       />
 
@@ -1104,11 +1234,13 @@ function LibraryPageContent() {
       <MoveToCollectionModal
         open={showMoveModal}
         onOpenChange={setShowMoveModal}
-        items={items.filter((item) => selectedIds.includes(item.id)).map((item) => ({
-          id: item.id,
-          title: item.title,
-          collection_id: item.collection_id,
-        }))}
+        items={items
+          .filter((item) => selectedIds.includes(item.id))
+          .map((item) => ({
+            id: item.id,
+            title: item.title,
+            collection_id: item.collection_id,
+          }))}
         collections={allCollections}
         onMove={handleMoveToCollection}
         maxDepth={2}
@@ -1125,17 +1257,25 @@ function LibraryPageContent() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-red-500 hover:bg-red-600">
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-500 hover:bg-red-600"
+            >
               Move to Trash
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+      <AlertDialog
+        open={showBulkDeleteDialog}
+        onOpenChange={setShowBulkDeleteDialog}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Move {selectedIds.length} items to Trash?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Move {selectedIds.length} items to Trash?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               These items will be moved to trash. You can restore them later.
             </AlertDialogDescription>
@@ -1144,14 +1284,18 @@ function LibraryPageContent() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
-                const promises = selectedIds.map(id =>
-                  fetch(`/api/recordings/${id}`, { method: 'DELETE' })
+                const promises = selectedIds.map((id) =>
+                  fetch(`/api/recordings/${id}`, { method: 'DELETE' }),
                 );
                 await Promise.allSettled(promises);
-                setItems(prev => prev.filter(item => !selectedIds.includes(item.id)));
+                setItems((prev) =>
+                  prev.filter((item) => !selectedIds.includes(item.id)),
+                );
                 setSelectedIds([]);
                 setShowBulkDeleteDialog(false);
-                toast({ description: `Moved ${selectedIds.length} items to trash` });
+                toast({
+                  description: `Moved ${selectedIds.length} items to trash`,
+                });
               }}
               className="bg-red-500 hover:bg-red-600"
             >
@@ -1161,16 +1305,24 @@ function LibraryPageContent() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showDeleteCollectionDialog} onOpenChange={setShowDeleteCollectionDialog}>
+      <AlertDialog
+        open={showDeleteCollectionDialog}
+        onOpenChange={setShowDeleteCollectionDialog}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete &ldquo;{collectionToDelete?.name}&rdquo;?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete &ldquo;{collectionToDelete?.name}&rdquo;?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This will delete the collection. Items in this collection will not be deleted.
+              This will delete the collection. Items in this collection will not
+              be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeletingCollection}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeletingCollection}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDeleteCollection}
               disabled={isDeletingCollection}
