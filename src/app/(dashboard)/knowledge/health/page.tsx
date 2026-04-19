@@ -63,9 +63,11 @@ import {
   type StaleDetail,
   type StaleLinkDetail,
 } from '@/lib/services/wiki-lint';
-import { getPendingReviewQueueCount } from '@/lib/services/review-queue';
 import {
-  fetchKnowledgeStatusSummary,
+  fetchKnowledgeOperationalMetrics,
+  type KnowledgeOperationalMetrics,
+} from '@/lib/services/knowledge-health';
+import {
   getKnowledgeStatusMeta,
   KNOWLEDGE_STATUS_DISPLAY_ORDER,
   type KnowledgeStatusCounts,
@@ -271,19 +273,11 @@ export default async function KnowledgeHealthPage() {
     redirect('/dashboard');
   }
 
-  const [pageMetrics, lintResult, knowledgeStatus, pendingReviewCount] =
-    await Promise.all([
-      loadPageMetrics(orgId),
-      getLatestLintResult(orgId),
-      fetchKnowledgeStatusSummary(orgId),
-      getPendingReviewQueueCount(orgId).catch((error) => {
-        console.warn(
-          '[KnowledgeHealth] Failed to load review queue count:',
-          error,
-        );
-        return null;
-      }),
-    ]);
+  const [pageMetrics, lintResult, operationalMetrics] = await Promise.all([
+    loadPageMetrics(orgId),
+    getLatestLintResult(orgId),
+    fetchKnowledgeOperationalMetrics(orgId),
+  ]);
 
   const coverageMap = await loadCoverageMap(orgId, lintResult);
   const vendorPageLinks = await resolveVendorPageLinks(
@@ -323,14 +317,14 @@ export default async function KnowledgeHealthPage() {
       <PageMetricsCard metrics={pageMetrics} />
 
       {/* --- Row 2: Knowledge status -------------------------------------- */}
-      <KnowledgeStatusCard counts={knowledgeStatus.counts} />
+      <KnowledgeStatusCard counts={operationalMetrics.knowledgeStatus.counts} />
 
       {/* --- Row 3: Lint health + review queue --------------------------- */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <LintHealthCard lintResult={lintResult} lastRunLabel={lastRunLabel} />
         </div>
-        <PendingReviewCard count={pendingReviewCount} />
+        <PendingReviewCard metrics={operationalMetrics} />
       </div>
 
       {/* --- Row 4: Coverage map ----------------------------------------- */}
@@ -581,9 +575,8 @@ function LintHealthCard({
 // Card: Pending review
 // ---------------------------------------------------------------------------
 
-function PendingReviewCard({ count }: { count: number | null }) {
-  const isUnavailable = count === null;
-  const hasAny = (count ?? 0) > 0;
+function PendingReviewCard({ metrics }: { metrics: KnowledgeOperationalMetrics }) {
+  const hasAny = metrics.pendingReviewCount > 0;
 
   return (
     <Card className="h-full">
@@ -597,7 +590,7 @@ function PendingReviewCard({ count }: { count: number | null }) {
           attention.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3">
         <div
           className={
             hasAny
@@ -606,27 +599,48 @@ function PendingReviewCard({ count }: { count: number | null }) {
           }
         >
           <div className="text-xs uppercase tracking-wide text-muted-foreground">
-            {isUnavailable
-              ? 'Unavailable'
-              : hasAny
-                ? 'Needs attention'
-                : 'Status'}
+            {hasAny ? 'Needs attention' : 'Status'}
           </div>
           <div className="mt-2 text-3xl font-semibold tabular-nums">
-            {isUnavailable
-              ? '—'
-              : hasAny
-                ? count.toLocaleString()
-                : 'All clear'}
+            {hasAny ? metrics.pendingReviewCount.toLocaleString() : 'All clear'}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {isUnavailable
-              ? 'Review queue count could not be loaded right now.'
-              : hasAny
-                ? `${count === 1 ? 'entry' : 'entries'} awaiting review`
-                : 'No review items waiting right now'}
+            {hasAny
+              ? `${metrics.pendingReviewCount === 1 ? 'entry' : 'entries'} awaiting review`
+              : 'No review items waiting right now'}
           </p>
         </div>
+        <div className="grid grid-cols-2 gap-2">
+          <OperationalMetric
+            label="Routing backlog"
+            value={metrics.routingBacklog}
+            caption={`${
+              metrics.knowledgeStatus.counts.needs_routing
+            } unrouted + ${metrics.reviewQueueCounts.routing} in queue`}
+          />
+          <OperationalMetric
+            label="Review backlog"
+            value={metrics.reviewBacklog}
+            caption={`${
+              metrics.knowledgeStatus.counts.needs_review
+            } flagged + ${metrics.reviewQueueCounts.contradiction} queued`}
+          />
+          <OperationalMetric
+            label="Publication queue"
+            value={metrics.publicationBacklog}
+            caption={`${metrics.reviewQueueCounts['manual-publication']} manual publish`}
+          />
+          <OperationalMetric
+            label="Vendor-only gaps"
+            value={metrics.vendorGapCount}
+            caption="Coverage still missing in org pages"
+          />
+        </div>
+        <p className="rounded-md border bg-card/40 px-3 py-2 text-xs text-muted-foreground">
+          {metrics.primaryBottleneck
+            ? `Primary bottleneck: ${metrics.primaryBottleneck.label} (${metrics.primaryBottleneck.count.toLocaleString()}).`
+            : 'No routing, review, publication, or vendor-gap bottlenecks detected right now.'}
+        </p>
         <Button asChild variant="outline" size="sm" className="w-full">
           <Link href="/admin/wiki-review">
             Open Review Queue
@@ -635,6 +649,28 @@ function PendingReviewCard({ count }: { count: number | null }) {
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+function OperationalMetric({
+  label,
+  value,
+  caption,
+}: {
+  label: string;
+  value: number;
+  caption: string;
+}) {
+  return (
+    <div className="rounded-md border bg-card/40 px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 text-lg font-semibold tabular-nums">
+        {value.toLocaleString()}
+      </div>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">{caption}</p>
+    </div>
   );
 }
 
