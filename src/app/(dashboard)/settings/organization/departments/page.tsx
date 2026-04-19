@@ -1,7 +1,6 @@
-"use client";
+'use client';
 
-import React, { useState, useMemo, useEffect } from "react";
-import { useSession } from "@/lib/auth/auth-client";
+import React, { useState, useEffect } from 'react';
 import {
   Building2,
   Plus,
@@ -15,30 +14,23 @@ import {
   Lock,
   Globe,
   Shield,
-  AlertCircle,
   FolderOpen,
-} from "lucide-react";
-import { toast } from "sonner";
+} from 'lucide-react';
+import { toast } from 'sonner';
 
-import { Button } from "@/app/components/ui/button";
-import { Input } from "@/app/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/app/components/ui/card";
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
+import { Card, CardContent } from '@/app/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from "@/app/components/ui/dropdown-menu";
-import { Badge } from "@/app/components/ui/badge";
-import { ScrollArea } from "@/app/components/ui/scroll-area";
-import { Skeleton } from "@/app/components/ui/skeleton";
+} from '@/app/components/ui/dropdown-menu';
+import { Badge } from '@/app/components/ui/badge';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
+import { Skeleton } from '@/app/components/ui/skeleton';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -46,15 +38,14 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/app/components/ui/breadcrumb";
-import { Alert, AlertDescription } from "@/app/components/ui/alert";
-import { Department } from "@/lib/validations/departments";
-import { cn } from "@/lib/utils/cn";
+} from '@/app/components/ui/breadcrumb';
+import { Department } from '@/lib/validations/departments';
+import { cn } from '@/lib/utils/cn';
 
-import { CreateDepartmentModal } from "./CreateDepartmentModal";
-import { EditDepartmentModal } from "./EditDepartmentModal";
-import { DeleteDepartmentModal } from "./DeleteDepartmentModal";
-import { DepartmentMembersModal } from "./DepartmentMembersModal";
+import { CreateDepartmentModal } from './CreateDepartmentModal';
+import { EditDepartmentModal } from './EditDepartmentModal';
+import { DeleteDepartmentModal } from './DeleteDepartmentModal';
+import { DepartmentMembersModal } from './DepartmentMembersModal';
 
 // Visibility configuration
 const visibilityIcons = {
@@ -65,17 +56,16 @@ const visibilityIcons = {
 };
 
 const visibilityLabels = {
-  private: "Private",
-  department: "Department",
-  org: "Organization",
-  public: "Public",
+  private: 'Private',
+  department: 'Department',
+  org: 'Organization',
+  public: 'Public',
 };
 
 export default function DepartmentsPage() {
-  const { data: session } = useSession();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [selectedPath, setSelectedPath] = useState<Department[]>([]);
 
@@ -84,16 +74,21 @@ export default function DepartmentsPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [membersModalOpen, setMembersModalOpen] = useState(false);
-  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
-  const [parentDepartment, setParentDepartment] = useState<Department | null>(null);
+  const [selectedDepartment, setSelectedDepartment] =
+    useState<Department | null>(null);
+  const [parentDepartment, setParentDepartment] = useState<Department | null>(
+    null,
+  );
 
   // Fetch departments
   const fetchDepartments = async () => {
     try {
-      const response = await fetch("/api/organizations/departments?includeTree=true&includeMembers=true");
+      const response = await fetch(
+        '/api/organizations/departments?includeTree=true&includeMembers=true',
+      );
 
       if (!response.ok) {
-        throw new Error("Failed to fetch departments");
+        throw new Error('Failed to fetch departments');
       }
 
       const data = await response.json();
@@ -104,8 +99,8 @@ export default function DepartmentsPage() {
       const firstLevelIds = departments.map((d: Department) => d.id);
       setExpandedIds(new Set(firstLevelIds));
     } catch (error) {
-      console.error("Error fetching departments:", error);
-      toast.error("Failed to load departments");
+      console.error('Error fetching departments:', error);
+      toast.error('Failed to load departments');
     } finally {
       setLoading(false);
     }
@@ -172,7 +167,10 @@ export default function DepartmentsPage() {
   };
 
   // Filter departments recursively
-  const filterDepartments = (deps: Department[], query: string): Department[] => {
+  const filterDepartments = (
+    deps: Department[],
+    query: string,
+  ): Department[] => {
     if (!query) return deps;
 
     const lowerQuery = query.toLowerCase();
@@ -183,12 +181,14 @@ export default function DepartmentsPage() {
         dept.description?.toLowerCase().includes(lowerQuery) ||
         dept.slug?.toLowerCase().includes(lowerQuery);
 
-      const filteredChildren = dept.children ? filterDepartments(dept.children, query) : [];
+      const filteredChildren = dept.children
+        ? filterDepartments(dept.children, query)
+        : [];
 
       if (matchesQuery || filteredChildren.length > 0) {
         // Auto-expand when searching
         if (matchesQuery && dept.children && dept.children.length > 0) {
-          setExpandedIds(prev => new Set([...prev, dept.id]));
+          setExpandedIds((prev) => new Set([...prev, dept.id]));
         }
 
         acc.push({
@@ -202,7 +202,11 @@ export default function DepartmentsPage() {
   };
 
   // Render department tree
-  const renderDepartmentTree = (deps: Department[], path: Department[] = [], level = 0) => {
+  const renderDepartmentTree = (
+    deps: Department[],
+    path: Department[] = [],
+    level = 0,
+  ) => {
     const filteredDeps = filterDepartments(deps, searchQuery);
 
     return filteredDeps.map((dept) => {
@@ -211,13 +215,13 @@ export default function DepartmentsPage() {
       const VisibilityIcon = visibilityIcons[dept.defaultVisibility];
 
       return (
-        <div key={dept.id} className={cn("select-none", level > 0 && "ml-6")}>
+        <div key={dept.id} className={cn('select-none', level > 0 && 'ml-6')}>
           <div className="group flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-accent/50 transition-colors">
             <button
               onClick={() => hasChildren && toggleExpanded(dept.id)}
               className={cn(
-                "p-0.5 hover:bg-accent rounded transition-colors",
-                !hasChildren && "invisible"
+                'p-0.5 hover:bg-accent rounded transition-colors',
+                !hasChildren && 'invisible',
               )}
             >
               {isExpanded ? (
@@ -282,7 +286,7 @@ export default function DepartmentsPage() {
           </div>
 
           {isExpanded && hasChildren && (
-            <div className="border-l-2 border-accent ml-3">
+            <div className="border-l border-border ml-3">
               {renderDepartmentTree(dept.children!, [...path, dept], level + 1)}
             </div>
           )}
@@ -292,25 +296,30 @@ export default function DepartmentsPage() {
   };
 
   // Get display departments based on navigation
-  const displayDepartments = selectedPath.length > 0
-    ? selectedPath[selectedPath.length - 1].children || []
-    : departments;
+  const displayDepartments =
+    selectedPath.length > 0
+      ? selectedPath[selectedPath.length - 1].children || []
+      : departments;
 
   return (
     <>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-2xl font-bold">Departments</h2>
-            <p className="text-muted-foreground mt-1">
+      <div className="trbd-stack">
+        <div className="trbd-page-header">
+          <div className="trbd-page-heading">
+            <h1 className="trbd-page-title">Departments</h1>
+            <p className="trbd-page-description">
               Organize your team into departments and manage access permissions
             </p>
           </div>
-          <Button onClick={() => handleCreateDepartment()}>
-            <Plus className="w-4 h-4 mr-2" />
-            Create Department
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="trbd-icon-chip" aria-hidden="true">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <Button onClick={() => handleCreateDepartment()}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Department
+            </Button>
+          </div>
         </div>
 
         {/* Breadcrumbs */}
@@ -386,11 +395,17 @@ export default function DepartmentsPage() {
                     <div className="rounded-full bg-muted p-3 mb-4">
                       <Search className="w-8 h-8 text-muted-foreground" />
                     </div>
-                    <h3 className="text-lg font-semibold mb-2">No departments found</h3>
+                    <h3 className="text-lg font-semibold mb-2">
+                      No departments found
+                    </h3>
                     <p className="text-muted-foreground text-center max-w-sm mb-6">
-                      No departments match your search &quot;{searchQuery}&quot;. Try adjusting your search terms.
+                      No departments match your search &quot;{searchQuery}
+                      &quot;. Try adjusting your search terms.
                     </p>
-                    <Button variant="outline" onClick={() => setSearchQuery("")}>
+                    <Button
+                      variant="outline"
+                      onClick={() => setSearchQuery('')}
+                    >
                       Clear Search
                     </Button>
                   </>
@@ -399,11 +414,20 @@ export default function DepartmentsPage() {
                     <div className="rounded-full bg-muted p-3 mb-4">
                       <Building2 className="w-8 h-8 text-muted-foreground" />
                     </div>
-                    <h3 className="text-lg font-semibold mb-2">No sub-departments</h3>
+                    <h3 className="text-lg font-semibold mb-2">
+                      No sub-departments
+                    </h3>
                     <p className="text-muted-foreground text-center max-w-sm mb-6">
-                      This department doesn&apos;t have any sub-departments yet. Create one to organize your team further.
+                      This department doesn&apos;t have any sub-departments yet.
+                      Create one to organize your team further.
                     </p>
-                    <Button onClick={() => handleCreateDepartment(selectedPath[selectedPath.length - 1])}>
+                    <Button
+                      onClick={() =>
+                        handleCreateDepartment(
+                          selectedPath[selectedPath.length - 1],
+                        )
+                      }
+                    >
                       <Plus className="w-4 h-4 mr-2" />
                       Add Sub-Department
                     </Button>
@@ -413,9 +437,12 @@ export default function DepartmentsPage() {
                     <div className="rounded-full bg-primary/10 p-3 mb-4">
                       <Building2 className="w-8 h-8 text-primary" />
                     </div>
-                    <h3 className="text-lg font-semibold mb-2">No departments yet</h3>
+                    <h3 className="text-lg font-semibold mb-2">
+                      No departments yet
+                    </h3>
                     <p className="text-muted-foreground text-center max-w-sm mb-6">
-                      Get started by creating your first department. Organize your team and manage access permissions effectively.
+                      Get started by creating your first department. Organize
+                      your team and manage access permissions effectively.
                     </p>
                     <Button onClick={() => handleCreateDepartment()} size="lg">
                       <Plus className="w-4 h-4 mr-2" />
@@ -440,19 +467,28 @@ export default function DepartmentsPage() {
               <ul className="space-y-1 ml-4">
                 <li className="flex items-start gap-2">
                   <span className="text-primary">•</span>
-                  <span>Click on a department name to view its sub-departments</span>
+                  <span>
+                    Click on a department name to view its sub-departments
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-primary">•</span>
-                  <span>Use the dropdown menu to edit, delete, or manage members</span>
+                  <span>
+                    Use the dropdown menu to edit, delete, or manage members
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-primary">•</span>
-                  <span>Departments can be nested to create organizational hierarchies</span>
+                  <span>
+                    Departments can be nested to create organizational
+                    hierarchies
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-primary">•</span>
-                  <span>Set default visibility to control content access levels</span>
+                  <span>
+                    Set default visibility to control content access levels
+                  </span>
                 </li>
               </ul>
             </div>
@@ -497,7 +533,7 @@ export default function DepartmentsPage() {
               setDeleteModalOpen(false);
               setSelectedDepartment(null);
               // Reset path if deleted department was in path
-              if (selectedPath.some(d => d.id === selectedDepartment.id)) {
+              if (selectedPath.some((d) => d.id === selectedDepartment.id)) {
                 setSelectedPath([]);
               }
             }}

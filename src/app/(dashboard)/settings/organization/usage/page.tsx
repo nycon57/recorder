@@ -160,16 +160,34 @@ export default function UsagePage() {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-10">
-          <AlertCircle className="h-8 w-8 text-muted-foreground mb-3" aria-hidden="true" />
-          <p className="text-sm text-muted-foreground">Failed to load usage data.</p>
+          <AlertCircle
+            className="h-8 w-8 text-muted-foreground mb-3"
+            aria-hidden="true"
+          />
+          <p className="text-sm text-muted-foreground">
+            Failed to load usage data.
+          </p>
         </CardContent>
       </Card>
     );
   }
 
-  const { summary, byAgent, byDay, topContent, planTier, creditLimit, projectedCredits, projectedCostUsd, month } = data;
+  const {
+    summary,
+    byAgent,
+    byDay,
+    topContent,
+    planTier,
+    creditLimit,
+    projectedCredits,
+    projectedCostUsd,
+    month,
+  } = data;
   const planName = PLAN_DISPLAY_NAMES[planTier] ?? planTier;
-  const usagePercent = creditLimit > 0 ? Math.min(100, Math.round((summary.totalCredits / creditLimit) * 100)) : 0;
+  const usagePercent =
+    creditLimit > 0
+      ? Math.min(100, Math.round((summary.totalCredits / creditLimit) * 100))
+      : 0;
   const isFreePlan = planTier === 'free';
 
   const agentChartData = byAgent.map((row) => ({
@@ -183,15 +201,21 @@ export default function UsagePage() {
   }));
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-semibold text-balance">AI Credit Usage</h2>
-        <p className="text-muted-foreground mt-1">
-          Credit consumption for {month} on the{' '}
-          <Badge variant="secondary" className="text-xs">{planName}</Badge>{' '}
-          plan.
-        </p>
+    <div className="trbd-stack">
+      <div className="trbd-page-header">
+        <div className="trbd-page-heading">
+          <h1 className="trbd-page-title">AI Credit Usage</h1>
+          <p className="trbd-page-description">
+            Credit consumption for {month} on the{' '}
+            <Badge variant="secondary" className="text-xs">
+              {planName}
+            </Badge>{' '}
+            plan.
+          </p>
+        </div>
+        <div className="trbd-icon-chip" aria-hidden="true">
+          <Zap className="h-5 w-5" />
+        </div>
       </div>
 
       <UsageAlertBanner />
@@ -200,12 +224,18 @@ export default function UsagePage() {
       {isFreePlan && (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="flex items-start gap-3 pt-6">
-            <AlertCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <AlertCircle
+              className="h-5 w-5 text-primary flex-shrink-0 mt-0.5"
+              aria-hidden="true"
+            />
             <div>
               <p className="font-medium">Agent features require a paid plan</p>
               <p className="text-sm text-muted-foreground mt-1">
                 Upgrade to Starter or higher to enable AI agents.{' '}
-                <Link href="/settings/billing" className="text-primary underline underline-offset-2">
+                <Link
+                  href="/settings/billing"
+                  className="text-primary underline underline-offset-2"
+                >
                   View plans
                 </Link>
               </p>
@@ -219,7 +249,11 @@ export default function UsagePage() {
         <StatCard
           title="Credits used this month"
           value={formatCredits(summary.totalCredits)}
-          description={creditLimit > 0 ? `of ${formatCredits(creditLimit)} limit` : 'Unlimited'}
+          description={
+            creditLimit > 0
+              ? `of ${formatCredits(creditLimit)} limit`
+              : 'Unlimited'
+          }
           icon={Zap}
         />
         <StatCard
@@ -242,12 +276,19 @@ export default function UsagePage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Monthly Limit</CardTitle>
             <CardDescription>
-              {formatCredits(summary.totalCredits)} of {formatCredits(creditLimit)} credits used
+              {formatCredits(summary.totalCredits)} of{' '}
+              {formatCredits(creditLimit)} credits used
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Progress value={usagePercent} className="h-2" aria-label="Credit usage progress" />
-            <p className="text-xs text-muted-foreground mt-2">{usagePercent}% consumed</p>
+            <Progress
+              value={usagePercent}
+              className="h-2"
+              aria-label="Credit usage progress"
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              {usagePercent}% consumed
+            </p>
           </CardContent>
         </Card>
       )}
@@ -256,17 +297,31 @@ export default function UsagePage() {
       <Card>
         <CardHeader>
           <CardTitle>Credits by Agent</CardTitle>
-          <CardDescription>Consumption breakdown across agent types this month</CardDescription>
+          <CardDescription>
+            Consumption breakdown across agent types this month
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {agentChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={agentChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <BarChart
+                data={agentChartData}
+                margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v: number) => [`${v.toLocaleString()} credits`, 'Credits']} />
-                <Bar dataKey="credits" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                <Tooltip
+                  formatter={(v: number) => [
+                    `${v.toLocaleString()} credits`,
+                    'Credits',
+                  ]}
+                />
+                <Bar
+                  dataKey="credits"
+                  fill="hsl(var(--primary))"
+                  radius={[3, 3, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -286,11 +341,19 @@ export default function UsagePage() {
         <CardContent>
           {dayChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={dayChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <LineChart
+                data={dayChartData}
+                margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="day" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v: number) => [`${v.toLocaleString()} credits`, 'Credits']} />
+                <Tooltip
+                  formatter={(v: number) => [
+                    `${v.toLocaleString()} credits`,
+                    'Credits',
+                  ]}
+                />
                 <Line
                   type="monotone"
                   dataKey="credits"
@@ -314,7 +377,9 @@ export default function UsagePage() {
         <Card>
           <CardHeader>
             <CardTitle>Top Content by Credit Usage</CardTitle>
-            <CardDescription>Content items that consumed the most credits this month</CardDescription>
+            <CardDescription>
+              Content items that consumed the most credits this month
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -324,14 +389,21 @@ export default function UsagePage() {
                   className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xs text-muted-foreground w-5 shrink-0">{idx + 1}</span>
+                    <span className="text-xs text-muted-foreground w-5 shrink-0">
+                      {idx + 1}
+                    </span>
                     <span className="text-sm font-mono truncate text-muted-foreground">
                       {item.contentId}
                     </span>
                   </div>
                   <div className="text-right shrink-0 ml-4 tabular-nums">
-                    <div className="text-sm font-medium">{formatCredits(item.totalCredits)} credits</div>
-                    <div className="text-xs text-muted-foreground">{item.actionCount} action{item.actionCount !== 1 ? 's' : ''}</div>
+                    <div className="text-sm font-medium">
+                      {formatCredits(item.totalCredits)} credits
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {item.actionCount} action
+                      {item.actionCount !== 1 ? 's' : ''}
+                    </div>
                   </div>
                 </div>
               ))}

@@ -3,7 +3,6 @@
 import * as React from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useSession } from '@/lib/auth/auth-client';
 import {
   Building2,
   Users,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
+import { useSession } from '@/lib/auth/auth-client';
 import { cn } from '@/lib/utils/cn';
 
 interface NavItem {
@@ -123,7 +123,9 @@ export default function OrganizationSettingsLayout({
       <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
         <div className="text-center">
           <div className="inline-flex h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]" />
-          <p className="mt-2 text-sm text-muted-foreground">Loading settings...</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Loading settings...
+          </p>
         </div>
       </div>
     );
@@ -152,21 +154,23 @@ export default function OrganizationSettingsLayout({
   }
 
   return (
-    <div className="container max-w-7xl py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-normal mb-2">Organization Settings</h1>
-        <p className="text-muted-foreground">
+    <div className="trbd-page">
+      <div className="trbd-page-heading">
+        <h1 className="trbd-page-title">Organization Settings</h1>
+        <p className="trbd-page-description">
           Manage your organization, team, and preferences
         </p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8">
         <aside className="lg:w-64 flex-shrink-0">
-          <nav className="space-y-1">
+          <nav className="space-y-1.5">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href ||
-                (item.href === '/settings/organization/general' && pathname === '/settings/organization');
+              const isActive =
+                pathname === item.href ||
+                (item.href === '/settings/organization/general' &&
+                  pathname === '/settings/organization');
 
               if (item.requiredRole && !hasAdminAccess) {
                 return null;
@@ -177,16 +181,16 @@ export default function OrganizationSettingsLayout({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors group',
+                    'group flex items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors',
                     isActive
-                      ? 'bg-primary/10 text-primary font-medium'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      ? 'border-sidebar-ring/35 bg-sidebar-accent text-foreground font-medium'
+                      : 'border-transparent text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
                   )}
                 >
                   <Icon
                     className={cn(
                       'w-5 h-5 mt-0.5 flex-shrink-0',
-                      isActive ? 'text-primary' : 'text-muted-foreground/70'
+                      isActive ? 'text-primary' : 'text-muted-foreground/80',
                     )}
                   />
                   <div className="flex-1 min-w-0">
@@ -203,9 +207,7 @@ export default function OrganizationSettingsLayout({
           </nav>
         </aside>
 
-        <main className="flex-1 min-w-0">
-          {children}
-        </main>
+        <main className="flex-1 min-w-0">{children}</main>
       </div>
     </div>
   );

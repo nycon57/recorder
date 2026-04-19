@@ -58,7 +58,7 @@ export default function BillingSettingsPage() {
   return (
     <div className="max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-normal mb-2">Billing & Subscription</h1>
+        <h1 className="trbd-page-title mb-2">Billing & Subscription</h1>
         <p className="text-muted-foreground">
           Manage your subscription, billing information, and usage
         </p>
@@ -85,7 +85,8 @@ export default function BillingSettingsPage() {
                   Upgrade to unlock more features
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Get unlimited recordings, advanced AI features, and team collaboration with Pro.
+                  Get unlimited recordings, advanced AI features, and team
+                  collaboration with Pro.
                 </p>
               </div>
             </div>
@@ -134,7 +135,10 @@ export default function BillingSettingsPage() {
               </span>
             </div>
             <div className="w-full bg-muted rounded-full h-2">
-              <div className="bg-primary h-2 rounded-full" style={{ width: '15%' }} />
+              <div
+                className="bg-primary h-2 rounded-full"
+                style={{ width: '15%' }}
+              />
             </div>
           </div>
         </div>

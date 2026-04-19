@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow, format } from 'date-fns';
 import {
   Shield,
@@ -20,8 +21,19 @@ import {
   Clock,
 } from 'lucide-react';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/app/components/ui/tabs';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Badge } from '@/app/components/ui/badge';
@@ -53,7 +65,6 @@ import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { useToast } from '@/app/components/ui/use-toast';
 import { SessionsTable } from '@/app/components/shared/SessionsTable';
 import { AuditLogEntry } from '@/app/components/shared/AuditLogEntry';
-import { ColumnDef } from '@tanstack/react-table';
 import { DateRangePicker } from '@/app/components/shared/DateRangePicker';
 import { UserAvatar } from '@/app/components/shared/UserAvatar';
 
@@ -65,12 +76,12 @@ type AuditLog = {
   action: string;
   resource_type: string;
   resource_id: string | null;
-  old_values: any | null;
-  new_values: any | null;
+  old_values: unknown | null;
+  new_values: unknown | null;
   ip_address: string | null;
   user_agent: string | null;
   request_id: string | null;
-  metadata: any;
+  metadata: unknown;
   created_at: string;
   user?: {
     name: string | null;
@@ -90,7 +101,10 @@ type UserSession = {
   device_type: string | null;
   browser: string | null;
   os: string | null;
-  location: any | null;
+  location: {
+    city?: string;
+    country?: string;
+  } | null;
   created_at: string;
   last_active_at: string;
   expires_at: string;
@@ -106,29 +120,45 @@ type UserSession = {
 export default function SecurityPage() {
   const [activeTab, setActiveTab] = useState('audit-logs');
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Audit log filters
   const [auditSearch, setAuditSearch] = useState('');
   const [auditDateFrom, setAuditDateFrom] = useState<Date | undefined>();
   const [auditDateTo, setAuditDateTo] = useState<Date | undefined>();
-  const [auditUserFilter, setAuditUserFilter] = useState('');
+  const [auditUserFilter] = useState('');
   const [auditActionFilter, setAuditActionFilter] = useState('');
   const [auditResourceFilter, setAuditResourceFilter] = useState('');
   const [auditPage, setAuditPage] = useState(1);
 
   // Session filters
-  const [sessionUserFilter, setSessionUserFilter] = useState('');
+  const [sessionUserFilter] = useState('');
   const [sessionDeviceFilter, setSessionDeviceFilter] = useState('');
-  const [sessionActiveFilter, setSessionActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [sessionActiveFilter, setSessionActiveFilter] = useState<
+    'all' | 'active' | 'inactive'
+  >('all');
   const [sessionPage, setSessionPage] = useState(1);
 
   // Revoke session dialog
-  const [sessionToRevoke, setSessionToRevoke] = useState<UserSession | null>(null);
+  const [sessionToRevoke, setSessionToRevoke] = useState<UserSession | null>(
+    null,
+  );
 
   // Fetch audit logs
-  const { data: auditData, isLoading: auditLoading, refetch: refetchAudit } = useQuery({
-    queryKey: ['audit-logs', auditPage, auditSearch, auditDateFrom, auditDateTo, auditUserFilter, auditActionFilter, auditResourceFilter],
+  const {
+    data: auditData,
+    isLoading: auditLoading,
+    refetch: refetchAudit,
+  } = useQuery({
+    queryKey: [
+      'audit-logs',
+      auditPage,
+      auditSearch,
+      auditDateFrom,
+      auditDateTo,
+      auditUserFilter,
+      auditActionFilter,
+      auditResourceFilter,
+    ],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: auditPage.toString(),
@@ -140,7 +170,8 @@ export default function SecurityPage() {
       if (auditDateTo) params.append('to', auditDateTo.toISOString());
       if (auditUserFilter) params.append('userId', auditUserFilter);
       if (auditActionFilter) params.append('action', auditActionFilter);
-      if (auditResourceFilter) params.append('resourceType', auditResourceFilter);
+      if (auditResourceFilter)
+        params.append('resourceType', auditResourceFilter);
 
       const response = await fetch(`/api/organizations/audit-logs?${params}`);
       if (!response.ok) throw new Error('Failed to fetch audit logs');
@@ -149,8 +180,18 @@ export default function SecurityPage() {
   });
 
   // Fetch sessions
-  const { data: sessionData, isLoading: sessionLoading, refetch: refetchSessions } = useQuery({
-    queryKey: ['sessions', sessionPage, sessionUserFilter, sessionDeviceFilter, sessionActiveFilter],
+  const {
+    data: sessionData,
+    isLoading: sessionLoading,
+    refetch: refetchSessions,
+  } = useQuery({
+    queryKey: [
+      'sessions',
+      sessionPage,
+      sessionUserFilter,
+      sessionDeviceFilter,
+      sessionActiveFilter,
+    ],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: sessionPage.toString(),
@@ -160,7 +201,10 @@ export default function SecurityPage() {
       if (sessionUserFilter) params.append('userId', sessionUserFilter);
       if (sessionDeviceFilter) params.append('deviceType', sessionDeviceFilter);
       if (sessionActiveFilter !== 'all') {
-        params.append('active', sessionActiveFilter === 'active' ? 'true' : 'false');
+        params.append(
+          'active',
+          sessionActiveFilter === 'active' ? 'true' : 'false',
+        );
       }
 
       const response = await fetch(`/api/organizations/sessions?${params}`);
@@ -217,9 +261,12 @@ export default function SecurityPage() {
   // Revoke session mutation
   const revokeSessionMutation = useMutation({
     mutationFn: async (sessionId: string) => {
-      const response = await fetch(`/api/organizations/sessions?sessionId=${sessionId}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(
+        `/api/organizations/sessions?sessionId=${sessionId}`,
+        {
+          method: 'DELETE',
+        },
+      );
       if (!response.ok) throw new Error('Failed to revoke session');
       return response.json();
     },
@@ -268,19 +315,21 @@ export default function SecurityPage() {
   });
 
   // CSV conversion utility
-  const convertToCSV = (data: any[]) => {
+  const convertToCSV = (data: Record<string, unknown>[]) => {
     if (data.length === 0) return '';
 
     const headers = Object.keys(data[0]);
     const csvHeaders = headers.join(',');
 
-    const csvRows = data.map(row =>
-      headers.map(header => {
-        const value = row[header];
-        // Escape quotes and wrap in quotes if contains comma
-        const escaped = String(value || '').replace(/"/g, '""');
-        return escaped.includes(',') ? `"${escaped}"` : escaped;
-      }).join(',')
+    const csvRows = data.map((row) =>
+      headers
+        .map((header) => {
+          const value = row[header];
+          // Escape quotes and wrap in quotes if contains comma
+          const escaped = String(value || '').replace(/"/g, '""');
+          return escaped.includes(',') ? `"${escaped}"` : escaped;
+        })
+        .join(','),
     );
 
     return [csvHeaders, ...csvRows].join('\n');
@@ -292,17 +341,24 @@ export default function SecurityPage() {
       id: 'user',
       header: 'User',
       cell: ({ row }) => {
-        const user = row.original.user || { name: 'Unknown User', email: '', avatar_url: null };
+        const user = row.original.user || {
+          name: 'Unknown User',
+          email: '',
+          avatar_url: null,
+        };
         return (
           <div className="flex items-center gap-2">
-            <UserAvatar name={user.name || 'Unknown User'} avatarUrl={user.avatar_url} email={user.email} size="sm" />
+            <UserAvatar
+              name={user.name || 'Unknown User'}
+              avatarUrl={user.avatar_url}
+              email={user.email}
+              size="sm"
+            />
             <div>
               <div className="font-medium text-sm">
                 {user.name || 'Unknown User'}
               </div>
-              <div className="text-xs text-muted-foreground">
-                {user.email}
-              </div>
+              <div className="text-xs text-muted-foreground">{user.email}</div>
             </div>
           </div>
         );
@@ -320,7 +376,9 @@ export default function SecurityPage() {
           )}
           <div>
             <div className="text-sm">{row.original.browser || 'Unknown'}</div>
-            <div className="text-xs text-muted-foreground">{row.original.os || 'Unknown OS'}</div>
+            <div className="text-xs text-muted-foreground">
+              {row.original.os || 'Unknown OS'}
+            </div>
           </div>
         </div>
       ),
@@ -332,7 +390,9 @@ export default function SecurityPage() {
         <div className="flex items-center gap-2">
           <Globe className="h-4 w-4 text-muted-foreground" />
           <div>
-            <div className="text-sm">{row.original.ip_address || 'Unknown'}</div>
+            <div className="text-sm">
+              {row.original.ip_address || 'Unknown'}
+            </div>
             {row.original.location?.city && (
               <div className="text-xs text-muted-foreground">
                 {row.original.location.city}, {row.original.location.country}
@@ -349,20 +409,21 @@ export default function SecurityPage() {
       enableSorting: true,
       cell: ({ row }) => (
         <div className="text-sm">
-          {formatDistanceToNow(new Date(row.original.last_active_at), { addSuffix: true })}
+          {formatDistanceToNow(new Date(row.original.last_active_at), {
+            addSuffix: true,
+          })}
         </div>
       ),
     },
     {
       id: 'status',
       header: 'Status',
-      cell: ({ row }) => (
+      cell: ({ row }) =>
         row.original.isActive ? (
           <Badge className="bg-green-100 text-green-700">Active</Badge>
         ) : (
           <Badge variant="secondary">Inactive</Badge>
-        )
-      ),
+        ),
     },
     {
       id: 'actions',
@@ -385,12 +446,17 @@ export default function SecurityPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium">Security & Audit</h3>
-        <p className="text-sm text-muted-foreground">
-          Monitor security events and manage active sessions
-        </p>
+    <div className="trbd-stack">
+      <div className="trbd-page-header">
+        <div className="trbd-page-heading">
+          <h1 className="trbd-page-title">Security & Audit</h1>
+          <p className="trbd-page-description">
+            Monitor security events and manage active sessions
+          </p>
+        </div>
+        <div className="trbd-icon-chip" aria-hidden="true">
+          <Shield className="h-5 w-5" />
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -426,7 +492,9 @@ export default function SecurityPage() {
                     onClick={() => refetchAudit()}
                     disabled={auditLoading}
                   >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${auditLoading ? 'animate-spin' : ''}`} />
+                    <RefreshCw
+                      className={`h-4 w-4 mr-2 ${auditLoading ? 'animate-spin' : ''}`}
+                    />
                     Refresh
                   </Button>
                   <Button
@@ -462,7 +530,12 @@ export default function SecurityPage() {
                   }}
                 />
 
-                <Select value={auditActionFilter || 'all'} onValueChange={(value) => setAuditActionFilter(value === 'all' ? '' : value)}>
+                <Select
+                  value={auditActionFilter || 'all'}
+                  onValueChange={(value) =>
+                    setAuditActionFilter(value === 'all' ? '' : value)
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="All actions" />
                   </SelectTrigger>
@@ -476,7 +549,12 @@ export default function SecurityPage() {
                   </SelectContent>
                 </Select>
 
-                <Select value={auditResourceFilter || 'all'} onValueChange={(value) => setAuditResourceFilter(value === 'all' ? '' : value)}>
+                <Select
+                  value={auditResourceFilter || 'all'}
+                  onValueChange={(value) =>
+                    setAuditResourceFilter(value === 'all' ? '' : value)
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="All resources" />
                   </SelectTrigger>
@@ -516,13 +594,14 @@ export default function SecurityPage() {
               {auditData?.pagination && auditData.pagination.totalPages > 1 && (
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
-                    Page {auditData.pagination.page} of {auditData.pagination.totalPages}
+                    Page {auditData.pagination.page} of{' '}
+                    {auditData.pagination.totalPages}
                   </div>
                   <div className="flex gap-2">
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setAuditPage(p => Math.max(1, p - 1))}
+                      onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
                       disabled={auditPage === 1}
                     >
                       Previous
@@ -530,7 +609,7 @@ export default function SecurityPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setAuditPage(p => p + 1)}
+                      onClick={() => setAuditPage((p) => p + 1)}
                       disabled={auditPage === auditData.pagination.totalPages}
                     >
                       Next
@@ -580,7 +659,9 @@ export default function SecurityPage() {
               <div className="flex gap-4">
                 <Select
                   value={sessionActiveFilter}
-                  onValueChange={(value: any) => setSessionActiveFilter(value)}
+                  onValueChange={(value: 'all' | 'active' | 'inactive') =>
+                    setSessionActiveFilter(value)
+                  }
                 >
                   <SelectTrigger className="w-[180px]">
                     <SelectValue />
@@ -593,7 +674,12 @@ export default function SecurityPage() {
                 </Select>
 
                 {sessionData?.filters?.deviceTypes?.length > 0 && (
-                  <Select value={sessionDeviceFilter || 'all'} onValueChange={(value) => setSessionDeviceFilter(value === 'all' ? '' : value)}>
+                  <Select
+                    value={sessionDeviceFilter || 'all'}
+                    onValueChange={(value) =>
+                      setSessionDeviceFilter(value === 'all' ? '' : value)
+                    }
+                  >
                     <SelectTrigger className="w-[180px]">
                       <SelectValue placeholder="All devices" />
                     </SelectTrigger>
@@ -618,31 +704,37 @@ export default function SecurityPage() {
               />
 
               {/* Pagination */}
-              {sessionData?.pagination && sessionData.pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">
-                    Page {sessionData.pagination.page} of {sessionData.pagination.totalPages}
+              {sessionData?.pagination &&
+                sessionData.pagination.totalPages > 1 && (
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-muted-foreground">
+                      Page {sessionData.pagination.page} of{' '}
+                      {sessionData.pagination.totalPages}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setSessionPage((p) => Math.max(1, p - 1))
+                        }
+                        disabled={sessionPage === 1}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSessionPage((p) => p + 1)}
+                        disabled={
+                          sessionPage === sessionData.pagination.totalPages
+                        }
+                      >
+                        Next
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSessionPage(p => Math.max(1, p - 1))}
-                      disabled={sessionPage === 1}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSessionPage(p => p + 1)}
-                      disabled={sessionPage === sessionData.pagination.totalPages}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              )}
+                )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -659,7 +751,8 @@ export default function SecurityPage() {
               <Alert>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  Advanced security settings are coming soon. These will include:
+                  Advanced security settings are coming soon. These will
+                  include:
                 </AlertDescription>
               </Alert>
 
@@ -668,11 +761,15 @@ export default function SecurityPage() {
                   <div className="flex items-start gap-3">
                     <Lock className="h-5 w-5 text-muted-foreground mt-0.5" />
                     <div className="space-y-1">
-                      <div className="font-medium">Two-Factor Authentication</div>
+                      <div className="font-medium">
+                        Two-Factor Authentication
+                      </div>
                       <div className="text-sm text-muted-foreground">
                         Require 2FA for all users in your organization
                       </div>
-                      <Badge variant="outline" className="mt-2">Coming Soon</Badge>
+                      <Badge variant="outline" className="mt-2">
+                        Coming Soon
+                      </Badge>
                     </div>
                   </div>
                 </div>
@@ -685,7 +782,9 @@ export default function SecurityPage() {
                       <div className="text-sm text-muted-foreground">
                         Set minimum password requirements and rotation policies
                       </div>
-                      <Badge variant="outline" className="mt-2">Coming Soon</Badge>
+                      <Badge variant="outline" className="mt-2">
+                        Coming Soon
+                      </Badge>
                     </div>
                   </div>
                 </div>
@@ -698,7 +797,9 @@ export default function SecurityPage() {
                       <div className="text-sm text-muted-foreground">
                         Restrict access to specific IP addresses or ranges
                       </div>
-                      <Badge variant="outline" className="mt-2">Coming Soon</Badge>
+                      <Badge variant="outline" className="mt-2">
+                        Coming Soon
+                      </Badge>
                     </div>
                   </div>
                 </div>
@@ -711,7 +812,9 @@ export default function SecurityPage() {
                       <div className="text-sm text-muted-foreground">
                         Automatically log out users after a period of inactivity
                       </div>
-                      <Badge variant="outline" className="mt-2">Coming Soon</Badge>
+                      <Badge variant="outline" className="mt-2">
+                        Coming Soon
+                      </Badge>
                     </div>
                   </div>
                 </div>
@@ -722,18 +825,25 @@ export default function SecurityPage() {
       </Tabs>
 
       {/* Revoke session confirmation dialog */}
-      <AlertDialog open={!!sessionToRevoke} onOpenChange={() => setSessionToRevoke(null)}>
+      <AlertDialog
+        open={!!sessionToRevoke}
+        onOpenChange={() => setSessionToRevoke(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke Session</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to revoke this session? The user will be logged out immediately.
+              Are you sure you want to revoke this session? The user will be
+              logged out immediately.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => sessionToRevoke && revokeSessionMutation.mutate(sessionToRevoke.id)}
+              onClick={() =>
+                sessionToRevoke &&
+                revokeSessionMutation.mutate(sessionToRevoke.id)
+              }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Revoke Session
