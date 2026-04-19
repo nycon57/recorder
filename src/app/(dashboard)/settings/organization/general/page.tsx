@@ -1,28 +1,36 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Upload, Loader2, X, Users, HardDrive, Activity, Badge as BadgeIcon, Check } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import {
+  Upload,
+  Loader2,
+  X,
+  Users,
+  HardDrive,
+  Activity,
+  Badge as BadgeIcon,
+  Check,
+} from 'lucide-react';
+import Image from 'next/image';
+import Link from 'next/link';
 
-import { Button } from "@/app/components/ui/button";
-import { Input } from "@/app/components/ui/input";
-import { Textarea } from "@/app/components/ui/textarea";
-import { Label } from "@/app/components/ui/label";
-import { Badge } from "@/app/components/ui/badge";
-import { Progress } from "@/app/components/ui/progress";
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
+import { Textarea } from '@/app/components/ui/textarea';
+import { Label } from '@/app/components/ui/label';
+import { Progress } from '@/app/components/ui/progress';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/app/components/ui/card";
+} from '@/app/components/ui/card';
 import {
   Form,
   FormControl,
@@ -31,27 +39,27 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/app/components/ui/form";
+} from '@/app/components/ui/form';
 
 // Schema based on updateOrganizationSchema
 const generalSettingsSchema = z.object({
-  name: z.string().min(1, "Name is required").max(100, "Name is too long"),
-  logo_url: z.string().url("Invalid URL").nullable().optional(),
+  name: z.string().min(1, 'Name is required').max(100, 'Name is too long'),
+  logo_url: z.string().url('Invalid URL').nullable().optional(),
   primary_color: z
     .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid hex color (e.g., #3b82f6)")
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g., #3b82f6)')
     .optional(),
   billing_email: z
     .string()
-    .email("Invalid email address")
+    .email('Invalid email address')
     .nullable()
     .optional(),
   domain: z
     .string()
-    .regex(/^[a-z0-9.-]+\.[a-z]{2,}$/, "Must be a valid domain")
+    .regex(/^[a-z0-9.-]+\.[a-z]{2,}$/, 'Must be a valid domain')
     .nullable()
     .optional()
-    .or(z.literal("")),
+    .or(z.literal('')),
   settings: z
     .object({
       description: z.string().max(500).optional(),
@@ -84,11 +92,11 @@ export default function GeneralSettingsPage() {
 
   // Fetch organization data
   const { data: organizationResponse, isLoading } = useQuery({
-    queryKey: ["organization", "current"],
+    queryKey: ['organization', 'current'],
     queryFn: async () => {
-      const response = await fetch("/api/organizations/current");
+      const response = await fetch('/api/organizations/current');
       if (!response.ok) {
-        throw new Error("Failed to fetch organization");
+        throw new Error('Failed to fetch organization');
       }
       const data = await response.json();
       return data.data;
@@ -99,9 +107,9 @@ export default function GeneralSettingsPage() {
 
   // Fetch organization stats
   const { data: stats } = useQuery({
-    queryKey: ["organization-stats"],
+    queryKey: ['organization-stats'],
     queryFn: async () => {
-      const response = await fetch("/api/organizations/stats");
+      const response = await fetch('/api/organizations/stats');
       if (!response.ok) return null;
       const data = await response.json();
       return data.data;
@@ -112,25 +120,25 @@ export default function GeneralSettingsPage() {
   // Update organization mutation
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<GeneralSettingsFormData>) => {
-      const response = await fetch("/api/organizations/current", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch('/api/organizations/current', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Failed to update organization");
+        throw new Error(error.error || 'Failed to update organization');
       }
 
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["organization", "current"] });
-      toast.success("Settings updated successfully");
+      queryClient.invalidateQueries({ queryKey: ['organization', 'current'] });
+      toast.success('Settings updated successfully');
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to update settings");
+      toast.error(error.message || 'Failed to update settings');
     },
   });
 
@@ -138,24 +146,24 @@ export default function GeneralSettingsPage() {
   const form = useForm<GeneralSettingsFormData>({
     resolver: zodResolver(generalSettingsSchema),
     defaultValues: {
-      name: "",
+      name: '',
       logo_url: null,
-      primary_color: "#3b82f6",
+      primary_color: '#3b82f6',
       billing_email: null,
-      domain: "",
+      domain: '',
       settings: {
-        description: "",
+        description: '',
       },
     },
     values: organization
       ? {
           name: organization.name,
           logo_url: organization.logo_url,
-          primary_color: organization.primary_color || "#3b82f6",
+          primary_color: organization.primary_color || '#3b82f6',
           billing_email: organization.billing_email,
-          domain: organization.domain || "",
+          domain: organization.domain || '',
           settings: {
-            description: organization.settings?.description || "",
+            description: organization.settings?.description || '',
           },
         }
       : undefined,
@@ -165,27 +173,27 @@ export default function GeneralSettingsPage() {
     // Transform empty strings to null
     const payload = {
       ...data,
-      domain: data.domain === "" ? null : data.domain,
+      domain: data.domain === '' ? null : data.domain,
       billing_email: data.billing_email || null,
     };
     updateMutation.mutate(payload);
   };
 
   const handleLogoUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     // Validate file type
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please upload an image file");
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
       return;
     }
 
     // Validate file size (2MB)
     if (file.size > 2 * 1024 * 1024) {
-      toast.error("Image must be less than 2MB");
+      toast.error('Image must be less than 2MB');
       return;
     }
 
@@ -194,29 +202,29 @@ export default function GeneralSettingsPage() {
     try {
       // Create form data
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append('file', file);
 
       // Upload to storage
-      const response = await fetch("/api/upload", {
-        method: "POST",
+      const response = await fetch('/api/upload', {
+        method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        throw new Error("Failed to upload logo");
+        throw new Error('Failed to upload logo');
       }
 
       const { url } = await response.json();
 
       // Update form and preview
-      form.setValue("logo_url", url);
+      form.setValue('logo_url', url);
       setLogoPreview(url);
-      toast.success("Logo uploaded successfully");
+      toast.success('Logo uploaded successfully');
 
       // Auto-save
       updateMutation.mutate({ logo_url: url });
     } catch (error) {
-      toast.error("Failed to upload logo");
+      toast.error('Failed to upload logo');
       console.error(error);
     } finally {
       setIsUploadingLogo(false);
@@ -224,29 +232,34 @@ export default function GeneralSettingsPage() {
   };
 
   const handleRemoveLogo = () => {
-    form.setValue("logo_url", null);
+    form.setValue('logo_url', null);
     setLogoPreview(null);
     updateMutation.mutate({ logo_url: null });
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="trbd-stack flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   const currentLogo = logoPreview || organization?.logo_url;
-  const isPlanEnterprise = organization?.plan === "enterprise";
+  const isPlanEnterprise = organization?.plan === 'enterprise';
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold mb-1">General Settings</h2>
-        <p className="text-sm text-muted-foreground">
-          Manage your organization's basic information
-        </p>
+    <div className="trbd-stack">
+      <div className="trbd-page-header">
+        <div className="trbd-page-heading">
+          <h1 className="trbd-page-title">General Settings</h1>
+          <p className="trbd-page-description">
+            Manage your organization&apos;s basic information
+          </p>
+        </div>
+        <div className="trbd-icon-chip" aria-hidden="true">
+          <BadgeIcon className="h-5 w-5" />
+        </div>
       </div>
 
       {/* Organization Stats Overview */}
@@ -279,7 +292,9 @@ export default function GeneralSettingsPage() {
               <HardDrive className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.storage.used_gb} GB</div>
+              <div className="text-2xl font-bold">
+                {stats.storage.used_gb} GB
+              </div>
               {stats.storage.quota_gb && (
                 <>
                   <p className="text-xs text-muted-foreground">
@@ -296,11 +311,15 @@ export default function GeneralSettingsPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Sessions</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Active Sessions
+              </CardTitle>
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.activity.active_sessions_24h}</div>
+              <div className="text-2xl font-bold">
+                {stats.activity.active_sessions_24h}
+              </div>
               <p className="text-xs text-muted-foreground">Last 24 hours</p>
             </CardContent>
           </Card>
@@ -311,9 +330,13 @@ export default function GeneralSettingsPage() {
               <BadgeIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold capitalize">{organization?.plan || "Free"}</div>
+              <div className="text-2xl font-bold capitalize">
+                {organization?.plan || 'Free'}
+              </div>
               <Link href="/settings/organization/stats">
-                <p className="text-xs text-blue-600 hover:underline">View detailed stats →</p>
+                <p className="text-xs text-primary hover:underline">
+                  View detailed stats →
+                </p>
               </Link>
             </CardContent>
           </Card>
@@ -373,7 +396,9 @@ export default function GeneralSettingsPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => document.getElementById("logo-upload")?.click()}
+                  onClick={() =>
+                    document.getElementById('logo-upload')?.click()
+                  }
                   disabled={isUploadingLogo}
                 >
                   {isUploadingLogo ? (
@@ -408,12 +433,12 @@ export default function GeneralSettingsPage() {
                       <input
                         type="color"
                         {...field}
-                        value={field.value || "#3b82f6"}
+                        value={field.value || '#3b82f6'}
                         className="w-12 h-10 rounded border cursor-pointer"
                       />
                       <Input
                         {...field}
-                        value={field.value || "#3b82f6"}
+                        value={field.value || '#3b82f6'}
                         placeholder="#3b82f6"
                         className="w-32"
                       />
@@ -440,7 +465,7 @@ export default function GeneralSettingsPage() {
                     type="email"
                     placeholder="billing@acme.com"
                     {...field}
-                    value={field.value || ""}
+                    value={field.value || ''}
                   />
                 </FormControl>
                 <FormDescription>
@@ -491,14 +516,14 @@ export default function GeneralSettingsPage() {
                   <Input
                     placeholder="app.yourdomain.com"
                     {...field}
-                    value={field.value || ""}
+                    value={field.value || ''}
                     disabled={!isPlanEnterprise}
                   />
                 </FormControl>
                 <FormDescription>
                   {isPlanEnterprise
                     ? "Custom domain for your organization's app"
-                    : "Upgrade to Enterprise to use a custom domain"}
+                    : 'Upgrade to Enterprise to use a custom domain'}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -519,11 +544,11 @@ export default function GeneralSettingsPage() {
                 </>
               ) : updateMutation.isSuccess && !form.formState.isDirty ? (
                 <span className="inline-flex items-center gap-2 animate-in fade-in slide-in-from-bottom-1 duration-200">
-                  <Check className="w-4 h-4 text-green-500" />
+                  <Check className="w-4 h-4 text-primary" />
                   Saved
                 </span>
               ) : (
-                "Save Changes"
+                'Save Changes'
               )}
             </Button>
             {form.formState.isDirty && (
@@ -532,7 +557,7 @@ export default function GeneralSettingsPage() {
               </p>
             )}
             {updateMutation.isSuccess && !form.formState.isDirty && (
-              <p className="text-sm text-green-600 animate-in fade-in slide-in-from-left-2 duration-200 flex items-center gap-1.5">
+              <p className="text-sm text-primary animate-in fade-in slide-in-from-left-2 duration-200 flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5" />
                 Changes saved successfully
               </p>
@@ -553,13 +578,13 @@ export default function GeneralSettingsPage() {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {Object.entries(organization.features)
-                .filter(([_, enabled]) => enabled)
+                .filter((entry) => entry[1])
                 .map(([feature]) => (
                   <div key={feature} className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full" />
+                    <div className="w-2 h-2 bg-primary rounded-full" />
                     <span className="text-sm">
                       {feature
-                        .replace(/_/g, " ")
+                        .replace(/_/g, ' ')
                         .replace(/\b\w/g, (l) => l.toUpperCase())}
                     </span>
                   </div>

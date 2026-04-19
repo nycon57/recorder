@@ -1,34 +1,23 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search,
   Filter,
   UserPlus,
   Download,
-  Trash2,
   X,
   ChevronLeft,
   ChevronRight,
-  Users2
+  Users2,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 
 import { useDebounce } from '@/lib/hooks/use-debounce';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Badge } from '@/app/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/app/components/ui/select';
-
 import {
   InviteMemberModal,
   MemberDetailDrawer,
@@ -36,6 +25,7 @@ import {
   MemberFilters,
 } from '@/app/components/settings';
 import { MemberDataTable } from '@/app/components/settings/organization/members/MemberDataTable';
+
 import type { OrganizationMember, MemberFiltersState } from './types';
 
 export default function MembersPage() {
@@ -50,7 +40,8 @@ export default function MembersPage() {
   });
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<OrganizationMember | null>(null);
+  const [selectedMember, setSelectedMember] =
+    useState<OrganizationMember | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
@@ -59,14 +50,22 @@ export default function MembersPage() {
 
   // Fetch members
   const { data: membersData, isLoading } = useQuery({
-    queryKey: ['organization-members', debouncedSearch, filters, page, pageSize],
+    queryKey: [
+      'organization-members',
+      debouncedSearch,
+      filters,
+      page,
+      pageSize,
+    ],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: pageSize.toString(),
         ...(debouncedSearch && { search: debouncedSearch }),
         ...(filters.roles.length > 0 && { role: filters.roles[0] }), // API expects single role
-        ...(filters.departments.length > 0 && { department_id: filters.departments[0] }), // API expects single department_id
+        ...(filters.departments.length > 0 && {
+          department_id: filters.departments[0],
+        }), // API expects single department_id
         ...(filters.statuses.length > 0 && { status: filters.statuses[0] }), // API expects single status
       });
 
@@ -97,27 +96,34 @@ export default function MembersPage() {
       setSelectedMemberIds([]);
       toast.success('Members removed successfully');
     },
-    onError: (error: any) => {
-      toast.error(error.message || 'Failed to remove members');
+    onError: (error: unknown) => {
+      const message =
+        error instanceof Error ? error.message : 'Failed to remove members';
+      toast.error(message);
     },
   });
 
   // Export to CSV
   const handleExportCSV = () => {
-    const selectedMembers = selectedMemberIds.length > 0
-      ? members.filter(m => selectedMemberIds.includes(m.id))
-      : members;
+    const selectedMembers =
+      selectedMemberIds.length > 0
+        ? members.filter((m) => selectedMemberIds.includes(m.id))
+        : members;
 
     const csvContent = [
-      ['Name', 'Email', 'Role', 'Department', 'Status', 'Last Active'].join(','),
-      ...selectedMembers.map(m => [
-        m.name || '',
-        m.email,
-        m.role,
-        m.department_name || '',
-        m.status,
-        m.last_active_at ? new Date(m.last_active_at).toISOString() : '',
-      ].join(',')),
+      ['Name', 'Email', 'Role', 'Department', 'Status', 'Last Active'].join(
+        ',',
+      ),
+      ...selectedMembers.map((m) =>
+        [
+          m.name || '',
+          m.email,
+          m.role,
+          m.department_name || '',
+          m.status,
+          m.last_active_at ? new Date(m.last_active_at).toISOString() : '',
+        ].join(','),
+      ),
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -149,12 +155,12 @@ export default function MembersPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-normal flex items-center gap-3">
+          <h1 className="trbd-page-title flex items-center gap-3">
             <Users2 className="h-8 w-8 text-primary" />
             Team Members
           </h1>
           <p className="text-muted-foreground mt-2">
-            Manage your organization's team members, roles, and access
+            Manage your organization&apos;s team members, roles, and access
           </p>
         </div>
         <Button onClick={() => setShowInviteModal(true)} className="gap-2">
@@ -172,19 +178,19 @@ export default function MembersPage() {
         <div className="border rounded-lg p-4">
           <div className="text-sm text-muted-foreground">Active</div>
           <div className="text-2xl font-bold mt-1 text-green-600">
-            {members.filter(m => m.status === 'active').length}
+            {members.filter((m) => m.status === 'active').length}
           </div>
         </div>
         <div className="border rounded-lg p-4">
           <div className="text-sm text-muted-foreground">Pending</div>
           <div className="text-2xl font-bold mt-1 text-yellow-600">
-            {members.filter(m => m.status === 'pending').length}
+            {members.filter((m) => m.status === 'pending').length}
           </div>
         </div>
         <div className="border rounded-lg p-4">
           <div className="text-sm text-muted-foreground">Suspended</div>
           <div className="text-2xl font-bold mt-1 text-red-600">
-            {members.filter(m => m.status === 'suspended').length}
+            {members.filter((m) => m.status === 'suspended').length}
           </div>
         </div>
       </div>
@@ -202,7 +208,7 @@ export default function MembersPage() {
         </div>
 
         <Button
-          variant={showFilters ? "default" : "outline"}
+          variant={showFilters ? 'default' : 'outline'}
           onClick={() => setShowFilters(!showFilters)}
           className="gap-2"
         >
@@ -214,14 +220,18 @@ export default function MembersPage() {
                 filters.roles.length,
                 filters.departments.length,
                 filters.statuses.length,
-                searchQuery ? 1 : 0
+                searchQuery ? 1 : 0,
               ].reduce((a, b) => a + b, 0)}
             </Badge>
           )}
         </Button>
 
         {hasActiveFilters && (
-          <Button variant="ghost" onClick={handleClearFilters} className="gap-2">
+          <Button
+            variant="ghost"
+            onClick={handleClearFilters}
+            className="gap-2"
+          >
             <X className="h-4 w-4" />
             Clear
           </Button>
@@ -237,7 +247,9 @@ export default function MembersPage() {
       {showFilters && (
         <MemberFilters
           filters={filters}
-          onFiltersChange={(f: any) => setFilters(f)}
+          onFiltersChange={(nextFilters: MemberFiltersState) =>
+            setFilters(nextFilters)
+          }
           onClose={() => setShowFilters(false)}
         />
       )}
@@ -248,7 +260,11 @@ export default function MembersPage() {
           selectedCount={selectedMemberIds.length}
           onExport={handleExportCSV}
           onDelete={() => {
-            if (confirm(`Are you sure you want to remove ${selectedMemberIds.length} member(s)?`)) {
+            if (
+              confirm(
+                `Are you sure you want to remove ${selectedMemberIds.length} member(s)?`,
+              )
+            ) {
               deleteMembersMutation.mutate(selectedMemberIds);
             }
           }}
@@ -271,13 +287,14 @@ export default function MembersPage() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            Showing {((page - 1) * pageSize) + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} members
+            Showing {(page - 1) * pageSize + 1} to{' '}
+            {Math.min(page * pageSize, totalCount)} of {totalCount} members
           </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPage(p => Math.max(1, p - 1))}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -288,7 +305,7 @@ export default function MembersPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
             >
               <ChevronRight className="h-4 w-4" />
@@ -305,7 +322,15 @@ export default function MembersPage() {
       />
 
       <MemberDetailDrawer
-        member={selectedMember as any}
+        member={
+          selectedMember
+            ? {
+                ...selectedMember,
+                status: selectedMember.status ?? 'active',
+                departments: selectedMember.departments ?? [],
+              }
+            : null
+        }
         open={!!selectedMember}
         onClose={() => setSelectedMember(null)}
         onUpdate={() => {

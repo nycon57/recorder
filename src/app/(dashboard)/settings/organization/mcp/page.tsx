@@ -59,7 +59,12 @@ export default function McpSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: keys, isLoading, error, refetch } = useQuery<McpKey[]>({
+  const {
+    data: keys,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery<McpKey[]>({
     queryKey: ['mcp-keys'],
     queryFn: async () => {
       const res = await fetch('/api/organizations/mcp-keys');
@@ -101,7 +106,10 @@ export default function McpSettingsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mcp-keys'] });
-      toast({ title: 'Key revoked', description: 'The MCP key has been revoked.' });
+      toast({
+        title: 'Key revoked',
+        description: 'The MCP key has been revoked.',
+      });
     },
     onError: () => {
       toast({
@@ -125,7 +133,11 @@ export default function McpSettingsPage() {
       setTimeout(() => setCopied(false), 2000);
       toast({ title: 'Copied', description: 'Key copied to clipboard.' });
     } catch {
-      toast({ title: 'Error', description: 'Failed to copy.', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Failed to copy.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -140,7 +152,10 @@ export default function McpSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12" role="status">
+      <div
+        className="trbd-stack flex items-center justify-center py-12"
+        role="status"
+      >
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         <span className="sr-only">Loading MCP keys...</span>
       </div>
@@ -149,7 +164,7 @@ export default function McpSettingsPage() {
 
   if (error) {
     return (
-      <div className="text-center py-12" role="alert">
+      <div className="trbd-stack text-center py-12" role="alert">
         <Server className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
         <h3 className="text-lg font-semibold mb-2">Failed to load MCP keys</h3>
         <p className="text-muted-foreground mb-4">
@@ -166,12 +181,18 @@ export default function McpSettingsPage() {
   const hasKeys = keys && keys.length > 0;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-normal">MCP Server</h2>
-        <p className="text-muted-foreground mt-1">
-          Connect AI agents to your knowledge base via the Model Context Protocol.
-        </p>
+    <div className="trbd-stack">
+      <div className="trbd-page-header">
+        <div className="trbd-page-heading">
+          <h1 className="trbd-page-title">MCP Server</h1>
+          <p className="trbd-page-description">
+            Connect AI agents to your knowledge base via the Model Context
+            Protocol.
+          </p>
+        </div>
+        <div className="trbd-icon-chip" aria-hidden="true">
+          <Server className="h-5 w-5" />
+        </div>
       </div>
 
       <div className="rounded-lg border p-4 space-y-3">
@@ -180,15 +201,21 @@ export default function McpSettingsPage() {
           <p>
             Your MCP server URL:{' '}
             <code className="bg-muted px-1.5 py-0.5 rounded text-xs">
-              {typeof window !== 'undefined' ? window.location.origin : ''}/api/mcp
+              {typeof window !== 'undefined' ? window.location.origin : ''}
+              /api/mcp
             </code>
           </p>
           <p>
-            Generate an API key below, then add this to your MCP client configuration:
+            Generate an API key below, then add this to your MCP client
+            configuration:
           </p>
         </div>
-        <pre className="bg-muted p-3 rounded-md text-xs overflow-x-auto" tabIndex={0} aria-label="MCP client configuration example">
-{`{
+        <pre
+          className="bg-muted p-3 rounded-md text-xs overflow-x-auto"
+          tabIndex={0}
+          aria-label="MCP client configuration example"
+        >
+          {`{
   "mcpServers": {
     "tribora": {
       "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}/api/mcp",
@@ -200,8 +227,10 @@ export default function McpSettingsPage() {
 }`}
         </pre>
         <p className="text-xs text-muted-foreground">
-          Works with Claude Desktop, Cursor, Windsurf, and any MCP-compatible client.
-          For stdio mode, set the <code className="bg-muted px-1 py-0.5 rounded">TRIBORA_API_KEY</code> environment variable.
+          Works with Claude Desktop, Cursor, Windsurf, and any MCP-compatible
+          client. For stdio mode, set the{' '}
+          <code className="bg-muted px-1 py-0.5 rounded">TRIBORA_API_KEY</code>{' '}
+          environment variable.
         </p>
       </div>
 
@@ -250,7 +279,9 @@ export default function McpSettingsPage() {
                     <TableCell>{k.request_count.toLocaleString()}</TableCell>
                     <TableCell>
                       {k.last_used_at
-                        ? formatDistanceToNow(new Date(k.last_used_at), { addSuffix: true })
+                        ? formatDistanceToNow(new Date(k.last_used_at), {
+                            addSuffix: true,
+                          })
                         : 'Never'}
                     </TableCell>
                     <TableCell className="text-right">
@@ -331,12 +362,19 @@ export default function McpSettingsPage() {
                     <code className="flex-1 p-3 bg-muted rounded-md text-sm break-all select-all">
                       {generatedKey}
                     </code>
-                    <Button size="icon" variant="outline" onClick={handleCopy} aria-label="Copy API key to clipboard">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={handleCopy}
+                      aria-label="Copy API key to clipboard"
+                    >
                       <Copy className="h-4 w-4" />
                     </Button>
                   </div>
                   {copied && (
-                    <p className="text-sm text-green-600">Copied to clipboard!</p>
+                    <p className="text-sm text-green-600">
+                      Copied to clipboard!
+                    </p>
                   )}
                 </div>
               </div>

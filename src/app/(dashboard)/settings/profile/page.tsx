@@ -1,16 +1,29 @@
 'use client';
 
 import { useState } from 'react';
-import { useSession } from '@/lib/auth/auth-client';
-import { User, ImageIcon, Settings2, Smartphone, Shield, AlertTriangle } from 'lucide-react';
+import {
+  User,
+  ImageIcon,
+  Settings2,
+  Smartphone,
+  Shield,
+  AlertTriangle,
+} from 'lucide-react';
 
+import { useSession } from '@/lib/auth/auth-client';
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from '@/app/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import {
   ProfileForm,
   AvatarUpload,
@@ -30,24 +43,58 @@ export default function ProfilePage() {
   }
 
   const tabs = [
-    { value: 'general', label: 'General', icon: User, description: 'Personal details' },
-    { value: 'avatar', label: 'Avatar', icon: ImageIcon, description: 'Profile picture' },
-    { value: 'preferences', label: 'Preferences', icon: Settings2, description: 'App settings' },
-    { value: 'sessions', label: 'Sessions', icon: Smartphone, description: 'Active devices' },
-    { value: 'security', label: 'Security', icon: Shield, description: 'Authentication' },
-    { value: 'danger', label: 'Danger', icon: AlertTriangle, description: 'Delete account' },
+    {
+      value: 'general',
+      label: 'General',
+      icon: User,
+      description: 'Personal details',
+    },
+    {
+      value: 'avatar',
+      label: 'Avatar',
+      icon: ImageIcon,
+      description: 'Profile picture',
+    },
+    {
+      value: 'preferences',
+      label: 'Preferences',
+      icon: Settings2,
+      description: 'App settings',
+    },
+    {
+      value: 'sessions',
+      label: 'Sessions',
+      icon: Smartphone,
+      description: 'Active devices',
+    },
+    {
+      value: 'security',
+      label: 'Security',
+      icon: Shield,
+      description: 'Authentication',
+    },
+    {
+      value: 'danger',
+      label: 'Danger',
+      icon: AlertTriangle,
+      description: 'Delete account',
+    },
   ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-normal">Profile Settings</h1>
+        <h1 className="trbd-page-title">Profile Settings</h1>
         <p className="text-muted-foreground">
           Manage your personal information and preferences
         </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="space-y-6"
+      >
         <TabsList className="flex flex-wrap justify-start gap-1 h-auto p-1 bg-muted/50">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -56,8 +103,9 @@ export default function ProfilePage() {
                 key={tab.value}
                 value={tab.value}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-2 text-sm data-[state=active]:bg-background",
-                  tab.value === 'danger' && "data-[state=active]:text-destructive"
+                  'flex items-center gap-1.5 px-3 py-2 text-sm data-[state=active]:bg-background',
+                  tab.value === 'danger' &&
+                    'data-[state=active]:text-destructive',
                 )}
               >
                 <Icon className="size-4" />

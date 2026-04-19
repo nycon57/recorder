@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -39,13 +39,18 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/app/components/ui/collapsible';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/app/components/ui/tabs';
 import { cn } from '@/lib/utils/cn';
 import type { AgentApproval } from '@/lib/services/agent-permissions';
 import type { ApprovalStatus, PermissionTier } from '@/lib/types/database';
+import { UsageAlertBanner } from '@/app/components/UsageAlertBanner';
 
 import { GoalsTab } from './goals-tab';
-import { UsageAlertBanner } from '@/app/components/UsageAlertBanner';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -66,15 +71,46 @@ const AGENT_TYPES: AgentTypeConfig[] = [
     description: 'Organizes and categorizes your knowledge base',
     settingsKey: 'curator_enabled',
     actions: [
-      { id: 'extract_concepts', name: 'Extract Concepts', description: 'Identify key topics from content' },
-      { id: 'generate_metadata', name: 'Generate Metadata', description: 'Create titles and summaries' },
-      { id: 'suggest_tags', name: 'Suggest Tags', description: 'Recommend tags based on content' },
-      { id: 'auto_apply_tags', name: 'Auto-Apply Tags', description: 'Apply suggested tags automatically' },
-      { id: 'detect_duplicate', name: 'Detect Duplicates', description: 'Find duplicate content' },
-      { id: 'detect_stale', name: 'Detect Stale Content', description: 'Flag outdated content' },
-      { id: 'merge_content', name: 'Merge Content', description: 'Combine duplicate items' },
-      { id: 'archive_content', name: 'Archive Content', description: 'Move stale content to archive' },
-      { id: 'reroute_content', name: 'Reroute Content', description: 'Hold low-confidence routing changes for review' },
+      {
+        id: 'extract_concepts',
+        name: 'Extract Concepts',
+        description: 'Identify key topics from content',
+      },
+      {
+        id: 'generate_metadata',
+        name: 'Generate Metadata',
+        description: 'Create titles and summaries',
+      },
+      {
+        id: 'suggest_tags',
+        name: 'Suggest Tags',
+        description: 'Recommend tags based on content',
+      },
+      {
+        id: 'auto_apply_tags',
+        name: 'Auto-Apply Tags',
+        description: 'Apply suggested tags automatically',
+      },
+      {
+        id: 'detect_duplicate',
+        name: 'Detect Duplicates',
+        description: 'Find duplicate content',
+      },
+      {
+        id: 'detect_stale',
+        name: 'Detect Stale Content',
+        description: 'Flag outdated content',
+      },
+      {
+        id: 'merge_content',
+        name: 'Merge Content',
+        description: 'Combine duplicate items',
+      },
+      {
+        id: 'archive_content',
+        name: 'Archive Content',
+        description: 'Move stale content to archive',
+      },
     ],
   },
   {
@@ -83,10 +119,26 @@ const AGENT_TYPES: AgentTypeConfig[] = [
     description: 'Identifies knowledge gaps and missing documentation',
     settingsKey: 'gap_intelligence_enabled',
     actions: [
-      { id: 'detect_bus_factor', name: 'Detect Bus Factor', description: 'Find knowledge concentrated in few people' },
-      { id: 'gap_alert', name: 'Gap Alerts', description: 'Notify about knowledge gaps' },
-      { id: 'suggest_merge', name: 'Suggest Merge', description: 'Recommend merging related content' },
-      { id: 'publish_external', name: 'Publish External', description: 'Share knowledge externally' },
+      {
+        id: 'detect_bus_factor',
+        name: 'Detect Bus Factor',
+        description: 'Find knowledge concentrated in few people',
+      },
+      {
+        id: 'gap_alert',
+        name: 'Gap Alerts',
+        description: 'Notify about knowledge gaps',
+      },
+      {
+        id: 'suggest_merge',
+        name: 'Suggest Merge',
+        description: 'Recommend merging related content',
+      },
+      {
+        id: 'publish_external',
+        name: 'Publish External',
+        description: 'Share knowledge externally',
+      },
     ],
   },
   {
@@ -112,10 +164,22 @@ const AGENT_TYPES: AgentTypeConfig[] = [
   },
 ];
 
-const PERMISSION_TIERS: { value: PermissionTier; label: string; description: string }[] = [
+const PERMISSION_TIERS: {
+  value: PermissionTier;
+  label: string;
+  description: string;
+}[] = [
   { value: 'auto', label: 'Auto', description: 'Agent acts immediately' },
-  { value: 'notify', label: 'Notify', description: 'Agent acts and notifies you' },
-  { value: 'approve', label: 'Approve', description: 'Agent requests your approval first' },
+  {
+    value: 'notify',
+    label: 'Notify',
+    description: 'Agent acts and notifies you',
+  },
+  {
+    value: 'approve',
+    label: 'Approve',
+    description: 'Agent requests your approval first',
+  },
 ];
 
 const DEFAULT_TIERS: Record<string, PermissionTier> = {
@@ -131,7 +195,6 @@ const DEFAULT_TIERS: Record<string, PermissionTier> = {
   merge_content: 'approve',
   archive_content: 'approve',
   publish_external: 'approve',
-  reroute_content: 'approve',
 };
 
 const AGENT_NAMES: Record<string, string> = Object.fromEntries(
@@ -176,7 +239,10 @@ function getApprovalCost(approval: AgentApproval): ApprovalCost | null {
   const cost = (approval.proposed_action as Record<string, unknown> | null)
     ?.estimatedCost as ApprovalCost | undefined;
   if (typeof cost?.estimatedCostUsd !== 'number') return null;
-  return { estimatedCostUsd: cost.estimatedCostUsd, breakdown: cost.breakdown ?? '' };
+  return {
+    estimatedCostUsd: cost.estimatedCostUsd,
+    breakdown: cost.breakdown ?? '',
+  };
 }
 
 function formatExpiresIn(dateStr: string): string {
@@ -196,24 +262,12 @@ interface AgentSettings {
   global_agent_enabled: boolean | null;
   wiki_auto_publish?: boolean | null;
   wiki_stale_threshold_days?: number | null;
-  wiki_contradiction_routing_mode?: WikiContradictionRoutingMode | null;
-  wiki_hybrid_auto_publish_enabled?: boolean | null;
-  wiki_hybrid_max_contradictions?: number | null;
-  wiki_hybrid_min_confidence_delta?: number | null;
   [key: string]: unknown;
 }
 
 const WIKI_STALE_THRESHOLD_MIN = 1;
 const WIKI_STALE_THRESHOLD_MAX = 365;
 const WIKI_STALE_THRESHOLD_DEFAULT = 90;
-const WIKI_HYBRID_MAX_CONTRADICTIONS_MIN = 1;
-const WIKI_HYBRID_MAX_CONTRADICTIONS_MAX = 10;
-const WIKI_HYBRID_MAX_CONTRADICTIONS_DEFAULT = 1;
-const WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MIN = -0.2;
-const WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MAX = 0.2;
-const WIKI_HYBRID_MIN_CONFIDENCE_DELTA_DEFAULT = 0;
-
-type WikiContradictionRoutingMode = 'manual' | 'auto' | 'hybrid';
 
 interface AgentPermissionRow {
   agent_type: string;
@@ -227,36 +281,35 @@ interface AgentPermissionRow {
 
 export default function AgentsSettingsPage() {
   const queryClient = useQueryClient();
-  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({
-    curator: true,
-  });
+  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>(
+    {
+      curator: true,
+    },
+  );
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   // Local draft state for the stale-threshold number input so typing feels
   // instant; commits on blur / Enter via a PATCH.
-  const [staleThresholdDraft, setStaleThresholdDraft] = useState<string>(
-    String(WIKI_STALE_THRESHOLD_DEFAULT),
-  );
-  const [hybridMaxContradictionsDraft, setHybridMaxContradictionsDraft] = useState<string>(
-    String(WIKI_HYBRID_MAX_CONTRADICTIONS_DEFAULT),
-  );
-  const [hybridMinConfidenceDeltaDraft, setHybridMinConfidenceDeltaDraft] = useState<string>(
-    String(WIKI_HYBRID_MIN_CONFIDENCE_DELTA_DEFAULT),
+  const [staleThresholdDraft, setStaleThresholdDraft] = useState<string | null>(
+    null,
   );
 
   // --- Queries ---
 
-  const { data: settings, isLoading: settingsLoading } = useQuery<AgentSettings>({
-    queryKey: ['agent-settings'],
-    queryFn: async () => {
-      const res = await fetch('/api/organizations/agent-settings');
-      if (!res.ok) throw new Error('Failed to load agent settings');
-      const json = await res.json();
-      return json.data;
-    },
-  });
+  const { data: settings, isLoading: settingsLoading } =
+    useQuery<AgentSettings>({
+      queryKey: ['agent-settings'],
+      queryFn: async () => {
+        const res = await fetch('/api/organizations/agent-settings');
+        if (!res.ok) throw new Error('Failed to load agent settings');
+        const json = await res.json();
+        return json.data;
+      },
+    });
 
-  const { data: permissions, isLoading: permissionsLoading } = useQuery<AgentPermissionRow[]>({
+  const { data: permissions, isLoading: permissionsLoading } = useQuery<
+    AgentPermissionRow[]
+  >({
     queryKey: ['agent-permissions'],
     queryFn: async () => {
       const res = await fetch('/api/organizations/agent-permissions');
@@ -266,7 +319,9 @@ export default function AgentsSettingsPage() {
     },
   });
 
-  const { data: approvals, isLoading: approvalsLoading } = useQuery<AgentApproval[]>({
+  const { data: approvals, isLoading: approvalsLoading } = useQuery<
+    AgentApproval[]
+  >({
     queryKey: ['agent-approvals'],
     queryFn: async () => {
       const res = await fetch('/api/organizations/agent-approvals');
@@ -309,7 +364,9 @@ export default function AgentsSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['agent-settings'] });
       const field = Object.keys(variables)[0];
       if (field === 'global_agent_enabled') {
-        toast.success(variables[field] ? 'All agents resumed' : 'All agents paused');
+        toast.success(
+          variables[field] ? 'All agents resumed' : 'All agents paused',
+        );
       } else {
         toast.success('Agent setting updated');
       }
@@ -321,7 +378,11 @@ export default function AgentsSettingsPage() {
   });
 
   const permissionMutation = useMutation({
-    mutationFn: async (payload: { agent_type: string; action_type: string; permission_tier: PermissionTier }) => {
+    mutationFn: async (payload: {
+      agent_type: string;
+      action_type: string;
+      permission_tier: PermissionTier;
+    }) => {
       const res = await fetch('/api/organizations/agent-permissions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -335,18 +396,28 @@ export default function AgentsSettingsPage() {
     },
     onMutate: async (payload) => {
       await queryClient.cancelQueries({ queryKey: ['agent-permissions'] });
-      const previous = queryClient.getQueryData<AgentPermissionRow[]>(['agent-permissions']);
+      const previous = queryClient.getQueryData<AgentPermissionRow[]>([
+        'agent-permissions',
+      ]);
 
-      queryClient.setQueryData<AgentPermissionRow[]>(['agent-permissions'], (old) => {
-        if (!old) return old;
-        const idx = old.findIndex(
-          (p) => p.agent_type === payload.agent_type && p.action_type === payload.action_type,
-        );
-        if (idx < 0) return old;
-        const updated = [...old];
-        updated[idx] = { ...updated[idx], permission_tier: payload.permission_tier };
-        return updated;
-      });
+      queryClient.setQueryData<AgentPermissionRow[]>(
+        ['agent-permissions'],
+        (old) => {
+          if (!old) return old;
+          const idx = old.findIndex(
+            (p) =>
+              p.agent_type === payload.agent_type &&
+              p.action_type === payload.action_type,
+          );
+          if (idx < 0) return old;
+          const updated = [...old];
+          updated[idx] = {
+            ...updated[idx],
+            permission_tier: payload.permission_tier,
+          };
+          return updated;
+        },
+      );
 
       return { previous };
     },
@@ -365,12 +436,22 @@ export default function AgentsSettingsPage() {
   });
 
   const approvalMutation = useMutation({
-    mutationFn: async (payload: { id: string; action: 'approved' | 'rejected'; rejection_reason?: string }) => {
-      const res = await fetch(`/api/organizations/agent-approvals/${payload.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: payload.action, rejection_reason: payload.rejection_reason }),
-      });
+    mutationFn: async (payload: {
+      id: string;
+      action: 'approved' | 'rejected';
+      rejection_reason?: string;
+    }) => {
+      const res = await fetch(
+        `/api/organizations/agent-approvals/${payload.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: payload.action,
+            rejection_reason: payload.rejection_reason,
+          }),
+        },
+      );
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || 'Failed to review approval');
@@ -379,7 +460,9 @@ export default function AgentsSettingsPage() {
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['agent-approvals'] });
-      toast.success(variables.action === 'approved' ? 'Action approved' : 'Action rejected');
+      toast.success(
+        variables.action === 'approved' ? 'Action approved' : 'Action rejected',
+      );
       setRejectingId(null);
       setRejectionReason('');
     },
@@ -388,33 +471,19 @@ export default function AgentsSettingsPage() {
     },
   });
 
-  // Sync numeric drafts from server values whenever they change.
-  useEffect(() => {
-    if (typeof settings?.wiki_stale_threshold_days === 'number') {
-      setStaleThresholdDraft(String(settings.wiki_stale_threshold_days));
-    }
-  }, [settings?.wiki_stale_threshold_days]);
-
-  useEffect(() => {
-    setHybridMaxContradictionsDraft(
-      String(settings?.wiki_hybrid_max_contradictions ?? WIKI_HYBRID_MAX_CONTRADICTIONS_DEFAULT),
-    );
-  }, [settings?.wiki_hybrid_max_contradictions]);
-
-  useEffect(() => {
-    setHybridMinConfidenceDeltaDraft(
-      String(settings?.wiki_hybrid_min_confidence_delta ?? WIKI_HYBRID_MIN_CONFIDENCE_DELTA_DEFAULT),
-    );
-  }, [settings?.wiki_hybrid_min_confidence_delta]);
-
   // --- Loading state ---
 
   if (settingsLoading || permissionsLoading) {
     return (
       <div className="flex items-center justify-center py-16" role="status">
         <div className="text-center">
-          <div className="inline-flex h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]" aria-hidden="true" />
-          <p className="mt-2 text-sm text-muted-foreground">Loading agent settings...</p>
+          <div
+            className="inline-flex h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]"
+            aria-hidden="true"
+          />
+          <p className="mt-2 text-sm text-muted-foreground">
+            Loading agent settings...
+          </p>
         </div>
       </div>
     );
@@ -423,18 +492,16 @@ export default function AgentsSettingsPage() {
   // --- Helpers ---
 
   const globalEnabled = settings?.global_agent_enabled ?? true;
-  const wikiRoutingMode: WikiContradictionRoutingMode =
-    settings?.wiki_contradiction_routing_mode ?? 'manual';
+  const wikiAutoPublish = settings?.wiki_auto_publish ?? false;
   const wikiStaleThresholdServerValue =
     settings?.wiki_stale_threshold_days ?? WIKI_STALE_THRESHOLD_DEFAULT;
-  const wikiHybridMaxContradictionsServerValue =
-    settings?.wiki_hybrid_max_contradictions ?? WIKI_HYBRID_MAX_CONTRADICTIONS_DEFAULT;
-  const wikiHybridMinConfidenceDeltaServerValue =
-    settings?.wiki_hybrid_min_confidence_delta ?? WIKI_HYBRID_MIN_CONFIDENCE_DELTA_DEFAULT;
-  const pendingCount = approvals?.filter(a => a.status === 'pending').length ?? 0;
+  const staleThresholdInputValue =
+    staleThresholdDraft ?? String(wikiStaleThresholdServerValue);
+  const pendingCount =
+    approvals?.filter((a) => a.status === 'pending').length ?? 0;
 
   function commitStaleThreshold(): void {
-    const parsed = Number.parseInt(staleThresholdDraft, 10);
+    const parsed = Number.parseInt(staleThresholdInputValue, 10);
     if (
       !Number.isInteger(parsed) ||
       parsed < WIKI_STALE_THRESHOLD_MIN ||
@@ -448,75 +515,17 @@ export default function AgentsSettingsPage() {
       return;
     }
     if (parsed === wikiStaleThresholdServerValue) {
+      setStaleThresholdDraft(null);
       return;
     }
+    setStaleThresholdDraft(String(parsed));
     settingsMutation.mutate({ wiki_stale_threshold_days: parsed });
   }
 
-  function updateWikiRoutingMode(mode: WikiContradictionRoutingMode): void {
-    if (mode === wikiRoutingMode) return;
-
-    if (mode === 'manual') {
-      settingsMutation.mutate({
-        wiki_auto_publish: false,
-        wiki_hybrid_auto_publish_enabled: false,
-      });
-      return;
-    }
-
-    if (mode === 'auto') {
-      settingsMutation.mutate({
-        wiki_auto_publish: true,
-        wiki_hybrid_auto_publish_enabled: false,
-      });
-      return;
-    }
-
-    settingsMutation.mutate({
-      wiki_auto_publish: true,
-      wiki_hybrid_auto_publish_enabled: true,
-    });
-  }
-
-  function commitHybridMaxContradictions(): void {
-    const parsed = Number.parseInt(hybridMaxContradictionsDraft, 10);
-    if (
-      !Number.isInteger(parsed) ||
-      parsed < WIKI_HYBRID_MAX_CONTRADICTIONS_MIN ||
-      parsed > WIKI_HYBRID_MAX_CONTRADICTIONS_MAX
-    ) {
-      setHybridMaxContradictionsDraft(String(wikiHybridMaxContradictionsServerValue));
-      toast.error(
-        `Auto-publish contradiction threshold must be between ${WIKI_HYBRID_MAX_CONTRADICTIONS_MIN} and ${WIKI_HYBRID_MAX_CONTRADICTIONS_MAX}`,
-      );
-      return;
-    }
-    if (parsed === wikiHybridMaxContradictionsServerValue) {
-      return;
-    }
-    settingsMutation.mutate({ wiki_hybrid_max_contradictions: parsed });
-  }
-
-  function commitHybridMinConfidenceDelta(): void {
-    const parsed = Number.parseFloat(hybridMinConfidenceDeltaDraft);
-    if (
-      !Number.isFinite(parsed) ||
-      parsed < WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MIN ||
-      parsed > WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MAX
-    ) {
-      setHybridMinConfidenceDeltaDraft(String(wikiHybridMinConfidenceDeltaServerValue));
-      toast.error(
-        `Minimum confidence delta must be between ${WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MIN} and ${WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MAX}`,
-      );
-      return;
-    }
-    if (parsed === wikiHybridMinConfidenceDeltaServerValue) {
-      return;
-    }
-    settingsMutation.mutate({ wiki_hybrid_min_confidence_delta: parsed });
-  }
-
-  function getPermissionTier(agentType: string, actionType: string): PermissionTier {
+  function getPermissionTier(
+    agentType: string,
+    actionType: string,
+  ): PermissionTier {
     const row = permissions?.find(
       (p) => p.agent_type === agentType && p.action_type === actionType,
     );
@@ -534,12 +543,18 @@ export default function AgentsSettingsPage() {
   // --- Render ---
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold">Agents</h2>
-        <p className="text-muted-foreground mt-1">
-          Control what AI agents do automatically, what they notify about, and what requires your approval.
-        </p>
+    <div className="trbd-stack">
+      <div className="trbd-page-header">
+        <div className="trbd-page-heading">
+          <h1 className="trbd-page-title">Agents</h1>
+          <p className="trbd-page-description">
+            Control what AI agents do automatically, what they notify about, and
+            what requires your approval.
+          </p>
+        </div>
+        <div className="trbd-icon-chip" aria-hidden="true">
+          <Bot className="h-5 w-5" />
+        </div>
       </div>
 
       <UsageAlertBanner />
@@ -547,7 +562,9 @@ export default function AgentsSettingsPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div>
-            <CardTitle className="text-base font-medium">Enable all agents</CardTitle>
+            <CardTitle className="text-base font-medium">
+              Enable all agents
+            </CardTitle>
             <CardDescription>
               Master switch for all AI agent activity in your organization
             </CardDescription>
@@ -565,121 +582,39 @@ export default function AgentsSettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-medium">Wiki compilation</CardTitle>
+          <CardTitle className="text-base font-medium">
+            Wiki compilation
+          </CardTitle>
           <CardDescription>
-            Control how the compilation engine updates your organization&apos;s wiki when
-            new content contradicts existing documentation.
+            Control how the compilation engine updates your organization&apos;s
+            wiki when new content contradicts existing documentation.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <Label
-                htmlFor="wiki-contradiction-routing-mode"
+                htmlFor="wiki-auto-publish"
                 className="text-sm font-medium cursor-pointer"
               >
-                Contradiction routing mode
+                Auto-publish wiki updates
               </Label>
               <p className="text-xs text-muted-foreground mt-1">
-                Choose whether contradictory updates always route to review, always auto-apply,
-                or use hybrid routing with thresholds.
+                When on, contradictory updates are applied automatically and
+                previous versions are superseded. When off, contradictions are
+                flagged for admin review before any change is published.
               </p>
             </div>
-            <Select
-              value={wikiRoutingMode}
-              onValueChange={(value) =>
-                updateWikiRoutingMode(value as WikiContradictionRoutingMode)
+            <Switch
+              id="wiki-auto-publish"
+              checked={wikiAutoPublish}
+              onCheckedChange={(checked) =>
+                settingsMutation.mutate({ wiki_auto_publish: checked })
               }
               disabled={settingsMutation.isPending}
-            >
-              <SelectTrigger
-                id="wiki-contradiction-routing-mode"
-                className="w-[220px] shrink-0"
-                aria-label="Wiki contradiction routing mode"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="manual">Manual review</SelectItem>
-                <SelectItem value="auto">Always auto-apply</SelectItem>
-                <SelectItem value="hybrid">Hybrid thresholds</SelectItem>
-              </SelectContent>
-            </Select>
+              aria-label="Auto-publish wiki updates"
+            />
           </div>
-
-          {wikiRoutingMode === 'hybrid' && (
-            <>
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <Label
-                    htmlFor="wiki-hybrid-max-contradictions"
-                    className="text-sm font-medium cursor-pointer"
-                  >
-                    Auto-apply up to N contradictions
-                  </Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Contradictions above this count route to admin review. Must be between{' '}
-                    {WIKI_HYBRID_MAX_CONTRADICTIONS_MIN} and{' '}
-                    {WIKI_HYBRID_MAX_CONTRADICTIONS_MAX}.
-                  </p>
-                </div>
-                <Input
-                  id="wiki-hybrid-max-contradictions"
-                  type="number"
-                  inputMode="numeric"
-                  min={WIKI_HYBRID_MAX_CONTRADICTIONS_MIN}
-                  max={WIKI_HYBRID_MAX_CONTRADICTIONS_MAX}
-                  step={1}
-                  className="w-24 shrink-0"
-                  value={hybridMaxContradictionsDraft}
-                  onChange={(e) => setHybridMaxContradictionsDraft(e.target.value)}
-                  onBlur={commitHybridMaxContradictions}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  disabled={settingsMutation.isPending}
-                  aria-label="Hybrid max contradictions for auto-apply"
-                />
-              </div>
-
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <Label
-                    htmlFor="wiki-hybrid-min-confidence-delta"
-                    className="text-sm font-medium cursor-pointer"
-                  >
-                    Minimum confidence delta for auto-apply
-                  </Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Contradictions below this confidence delta route to review. Must be between{' '}
-                    {WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MIN} and{' '}
-                    {WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MAX}.
-                  </p>
-                </div>
-                <Input
-                  id="wiki-hybrid-min-confidence-delta"
-                  type="number"
-                  inputMode="decimal"
-                  min={WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MIN}
-                  max={WIKI_HYBRID_MIN_CONFIDENCE_DELTA_MAX}
-                  step={0.01}
-                  className="w-28 shrink-0"
-                  value={hybridMinConfidenceDeltaDraft}
-                  onChange={(e) => setHybridMinConfidenceDeltaDraft(e.target.value)}
-                  onBlur={commitHybridMinConfidenceDelta}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  disabled={settingsMutation.isPending}
-                  aria-label="Hybrid minimum confidence delta for auto-apply"
-                />
-              </div>
-            </>
-          )}
 
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
@@ -690,9 +625,9 @@ export default function AgentsSettingsPage() {
                 Stale threshold (days)
               </Label>
               <p className="text-xs text-muted-foreground mt-1">
-                Number of days after which a wiki page is flagged as stale by the wiki
-                lint job. Must be between {WIKI_STALE_THRESHOLD_MIN} and{' '}
-                {WIKI_STALE_THRESHOLD_MAX} days.
+                Number of days after which a wiki page is flagged as stale by
+                the wiki lint job. Must be between {WIKI_STALE_THRESHOLD_MIN}{' '}
+                and {WIKI_STALE_THRESHOLD_MAX} days.
               </p>
             </div>
             <Input
@@ -703,7 +638,7 @@ export default function AgentsSettingsPage() {
               max={WIKI_STALE_THRESHOLD_MAX}
               step={1}
               className="w-24 shrink-0"
-              value={staleThresholdDraft}
+              value={staleThresholdInputValue}
               onChange={(e) => setStaleThresholdDraft(e.target.value)}
               onBlur={commitStaleThreshold}
               onKeyDown={(e) => {
@@ -721,13 +656,19 @@ export default function AgentsSettingsPage() {
       {costEstimate && (
         <Card>
           <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
-            <DollarSign className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+            <DollarSign
+              className="h-5 w-5 text-muted-foreground"
+              aria-hidden="true"
+            />
             <div>
               <CardTitle className="text-base font-medium">
-                Estimated monthly agent cost: {formatCostUsd(costEstimate.estimatedMonthlyCostUsd)}
+                Estimated monthly agent cost:{' '}
+                {formatCostUsd(costEstimate.estimatedMonthlyCostUsd)}
               </CardTitle>
               <CardDescription>
-                Based on {costEstimate.contentCount} content item{costEstimate.contentCount !== 1 ? 's' : ''} in your organization
+                Based on {costEstimate.contentCount} content item
+                {costEstimate.contentCount !== 1 ? 's' : ''} in your
+                organization
               </CardDescription>
             </div>
           </CardHeader>
@@ -738,7 +679,8 @@ export default function AgentsSettingsPage() {
         <Alert variant="warning">
           <Pause className="h-4 w-4" />
           <AlertDescription>
-            All agents are paused. Individual settings are preserved but inactive until you re-enable agents.
+            All agents are paused. Individual settings are preserved but
+            inactive until you re-enable agents.
           </AlertDescription>
         </Alert>
       )}
@@ -749,7 +691,10 @@ export default function AgentsSettingsPage() {
           <TabsTrigger value="approvals" className="gap-1.5">
             Approval Queue
             {pendingCount > 0 && (
-              <Badge variant="destructive" className="ml-1 h-5 min-w-5 px-1.5 text-[10px]">
+              <Badge
+                variant="destructive"
+                className="ml-1 h-5 min-w-5 px-1.5 text-[10px]"
+              >
                 {pendingCount}
               </Badge>
             )}
@@ -763,7 +708,9 @@ export default function AgentsSettingsPage() {
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
               {PERMISSION_TIERS.map((tier) => (
                 <span key={tier.value} className="flex items-center gap-1.5">
-                  <span className="font-medium text-foreground">{tier.label}:</span>
+                  <span className="font-medium text-foreground">
+                    {tier.label}:
+                  </span>
                   {tier.description}
                 </span>
               ))}
@@ -781,22 +728,30 @@ export default function AgentsSettingsPage() {
                     open={isExpanded}
                     onOpenChange={() => toggleExpanded(agent.id)}
                   >
-                    <Card className={cn(disabled && "opacity-60")}>
+                    <Card className={cn(disabled && 'opacity-60')}>
                       <CardHeader className="pb-0">
                         <div className="flex items-center justify-between">
                           <CollapsibleTrigger
                             className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
-                            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${agent.name} settings`}
+                            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${agent.name} settings`}
                           >
                             {isExpanded ? (
-                              <ChevronDown className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                              <ChevronDown
+                                className="h-4 w-4 flex-shrink-0"
+                                aria-hidden="true"
+                              />
                             ) : (
-                              <ChevronRight className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                              <ChevronRight
+                                className="h-4 w-4 flex-shrink-0"
+                                aria-hidden="true"
+                              />
                             )}
                             <div>
                               <div className="flex items-center gap-2">
                                 <Bot className="h-4 w-4" aria-hidden="true" />
-                                <span className="text-sm font-medium">{agent.name}</span>
+                                <span className="text-sm font-medium">
+                                  {agent.name}
+                                </span>
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5 ml-6">
                                 {agent.description}
@@ -807,9 +762,13 @@ export default function AgentsSettingsPage() {
                           <Switch
                             checked={enabled}
                             onCheckedChange={(checked) =>
-                              settingsMutation.mutate({ [agent.settingsKey]: checked })
+                              settingsMutation.mutate({
+                                [agent.settingsKey]: checked,
+                              })
                             }
-                            disabled={settingsMutation.isPending || !globalEnabled}
+                            disabled={
+                              settingsMutation.isPending || !globalEnabled
+                            }
                             aria-label={`Enable ${agent.name} agent`}
                           />
                         </div>
@@ -825,7 +784,8 @@ export default function AgentsSettingsPage() {
                         <CardContent className="pt-4">
                           {agent.actions.length === 0 ? (
                             <p className="text-xs text-muted-foreground">
-                              No configurable actions yet. Actions will appear here as this agent gains capabilities.
+                              No configurable actions yet. Actions will appear
+                              here as this agent gains capabilities.
                             </p>
                           ) : (
                             <div className="space-y-2">
@@ -833,8 +793,8 @@ export default function AgentsSettingsPage() {
                                 <div
                                   key={action.id}
                                   className={cn(
-                                    "flex items-center justify-between rounded-md px-3 py-2 transition-colors",
-                                    disabled ? "bg-muted/30" : "bg-muted/50",
+                                    'flex items-center justify-between rounded-md px-3 py-2 transition-colors',
+                                    disabled ? 'bg-muted/30' : 'bg-muted/50',
                                   )}
                                 >
                                   <div className="min-w-0 flex-1 mr-4">
@@ -844,22 +804,32 @@ export default function AgentsSettingsPage() {
                                     </div>
                                   </div>
                                   <Select
-                                    value={getPermissionTier(agent.id, action.id)}
+                                    value={getPermissionTier(
+                                      agent.id,
+                                      action.id,
+                                    )}
                                     onValueChange={(value) =>
                                       permissionMutation.mutate({
                                         agent_type: agent.id,
                                         action_type: action.id,
-                                        permission_tier: value as PermissionTier,
+                                        permission_tier:
+                                          value as PermissionTier,
                                       })
                                     }
                                     disabled={disabled}
                                   >
-                                    <SelectTrigger className="w-[120px]" aria-label={`Permission tier for ${action.name}`}>
+                                    <SelectTrigger
+                                      className="w-[120px]"
+                                      aria-label={`Permission tier for ${action.name}`}
+                                    >
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
                                       {PERMISSION_TIERS.map((tier) => (
-                                        <SelectItem key={tier.value} value={tier.value}>
+                                        <SelectItem
+                                          key={tier.value}
+                                          value={tier.value}
+                                        >
                                           {tier.label}
                                         </SelectItem>
                                       ))}
@@ -883,18 +853,30 @@ export default function AgentsSettingsPage() {
         <TabsContent value="approvals">
           <div className="space-y-4">
             {approvalsLoading ? (
-              <div className="flex items-center justify-center py-12" role="status">
+              <div
+                className="flex items-center justify-center py-12"
+                role="status"
+              >
                 <div className="text-center">
-                  <div className="inline-flex h-6 w-6 animate-spin rounded-full border-2 border-solid border-current border-r-transparent" aria-hidden="true" />
-                  <p className="mt-2 text-sm text-muted-foreground">Loading approvals...</p>
+                  <div
+                    className="inline-flex h-6 w-6 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"
+                    aria-hidden="true"
+                  />
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Loading approvals...
+                  </p>
                 </div>
               </div>
             ) : !approvals?.length ? (
               <Card>
                 <CardContent className="py-12 text-center">
-                  <Clock className="mx-auto h-8 w-8 text-muted-foreground/50" aria-hidden="true" />
+                  <Clock
+                    className="mx-auto h-8 w-8 text-muted-foreground/50"
+                    aria-hidden="true"
+                  />
                   <p className="mt-3 text-sm text-muted-foreground">
-                    No pending approvals. Actions requiring approval will appear here.
+                    No pending approvals. Actions requiring approval will appear
+                    here.
                   </p>
                 </CardContent>
               </Card>
@@ -906,33 +888,55 @@ export default function AgentsSettingsPage() {
                 const cost = getApprovalCost(approval);
 
                 return (
-                  <Card key={approval.id} className={cn(!isPending && 'opacity-60')}>
+                  <Card
+                    key={approval.id}
+                    className={cn(!isPending && 'opacity-60')}
+                  >
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
+                            <Badge variant={statusCfg.variant}>
+                              {statusCfg.label}
+                            </Badge>
                             <span className="text-xs text-muted-foreground">
-                              {AGENT_NAMES[approval.agent_type] ?? approval.agent_type}
+                              {AGENT_NAMES[approval.agent_type] ??
+                                approval.agent_type}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {ACTION_NAMES[approval.action_type] ?? approval.action_type}
+                              {ACTION_NAMES[approval.action_type] ??
+                                approval.action_type}
                             </span>
                             {cost && (
-                              <Badge variant="outline" className="text-[10px] gap-1" title={cost.breakdown}>
-                                <DollarSign className="h-3 w-3" aria-hidden="true" />
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] gap-1"
+                                title={cost.breakdown}
+                              >
+                                <DollarSign
+                                  className="h-3 w-3"
+                                  aria-hidden="true"
+                                />
                                 {formatCostUsd(cost.estimatedCostUsd)}
                               </Badge>
                             )}
                           </div>
                           <p className="text-sm mt-1">{approval.description}</p>
                           <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-                            <span>Created {formatRelativeTime(approval.created_at)}</span>
+                            <span>
+                              Created {formatRelativeTime(approval.created_at)}
+                            </span>
                             {isPending && (
-                              <span>Expires in {formatExpiresIn(approval.expires_at)}</span>
+                              <span>
+                                Expires in{' '}
+                                {formatExpiresIn(approval.expires_at)}
+                              </span>
                             )}
                             {approval.reviewed_at && (
-                              <span>Reviewed {formatRelativeTime(approval.reviewed_at)}</span>
+                              <span>
+                                Reviewed{' '}
+                                {formatRelativeTime(approval.reviewed_at)}
+                              </span>
                             )}
                           </div>
                           {approval.rejection_reason && (
@@ -947,11 +951,19 @@ export default function AgentsSettingsPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => approvalMutation.mutate({ id: approval.id, action: 'approved' })}
+                              onClick={() =>
+                                approvalMutation.mutate({
+                                  id: approval.id,
+                                  action: 'approved',
+                                })
+                              }
                               disabled={approvalMutation.isPending}
                               aria-label="Approve this action"
                             >
-                              <Check className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
+                              <Check
+                                className="h-3.5 w-3.5 mr-1"
+                                aria-hidden="true"
+                              />
                               Approve
                             </Button>
                             <Button
@@ -961,7 +973,10 @@ export default function AgentsSettingsPage() {
                               disabled={approvalMutation.isPending}
                               aria-label="Reject this action"
                             >
-                              <X className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
+                              <X
+                                className="h-3.5 w-3.5 mr-1"
+                                aria-hidden="true"
+                              />
                               Reject
                             </Button>
                           </div>
@@ -973,7 +988,10 @@ export default function AgentsSettingsPage() {
                       <CardContent className="pt-0">
                         <div className="flex items-end gap-2">
                           <div className="flex-1">
-                            <label htmlFor={`reject-reason-${approval.id}`} className="text-xs text-muted-foreground mb-1 block">
+                            <label
+                              htmlFor={`reject-reason-${approval.id}`}
+                              className="text-xs text-muted-foreground mb-1 block"
+                            >
                               Rejection reason (optional)
                             </label>
                             <textarea
@@ -981,7 +999,9 @@ export default function AgentsSettingsPage() {
                               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                               rows={2}
                               value={rejectionReason}
-                              onChange={(e) => setRejectionReason(e.target.value)}
+                              onChange={(e) =>
+                                setRejectionReason(e.target.value)
+                              }
                               placeholder="Why is this action being rejected?"
                             />
                           </div>
@@ -993,7 +1013,8 @@ export default function AgentsSettingsPage() {
                                 approvalMutation.mutate({
                                   id: approval.id,
                                   action: 'rejected',
-                                  rejection_reason: rejectionReason || undefined,
+                                  rejection_reason:
+                                    rejectionReason || undefined,
                                 })
                               }
                               disabled={approvalMutation.isPending}

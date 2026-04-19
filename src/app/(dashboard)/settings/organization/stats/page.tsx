@@ -1,12 +1,10 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import * as React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   BarChart,
   Bar,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell,
@@ -14,9 +12,8 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
-} from "recharts";
+} from 'recharts';
 import {
   Users,
   HardDrive,
@@ -26,9 +23,8 @@ import {
   TrendingUp,
   Clock,
   Zap,
-  FileText,
   MessageSquare,
-} from "lucide-react";
+} from 'lucide-react';
 
 import {
   Card,
@@ -36,11 +32,16 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/app/components/ui/card";
-import { Progress } from "@/app/components/ui/progress";
-import { Badge } from "@/app/components/ui/badge";
-import { Skeleton } from "@/app/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
+} from '@/app/components/ui/card';
+import { Progress } from '@/app/components/ui/progress';
+import { Badge } from '@/app/components/ui/badge';
+import { Skeleton } from '@/app/components/ui/skeleton';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/app/components/ui/tabs';
 
 interface OrgStats {
   members: {
@@ -110,13 +111,16 @@ function StatCard({
         {trend !== undefined && (
           <p className="text-xs text-muted-foreground mt-2 flex items-center">
             <TrendingUp className="h-3 w-3 mr-1" />
-            {trend > 0 ? "+" : ""}{trend}% from last month
+            {trend > 0 ? '+' : ''}
+            {trend}% from last month
           </p>
         )}
         {quota && (
           <div className="mt-3">
             <div className="flex items-center justify-between text-xs mb-1">
-              <span>{quota.used} / {quota.total}</span>
+              <span>
+                {quota.used} / {quota.total}
+              </span>
               <span>{percentage}%</span>
             </div>
             <Progress value={percentage} className="h-2" />
@@ -151,11 +155,15 @@ function StatsLoading() {
 
 export default function OrganizationStatsPage() {
   // Fetch organization stats
-  const { data: stats, isLoading, error } = useQuery<OrgStats>({
-    queryKey: ["organization-stats"],
+  const {
+    data: stats,
+    isLoading,
+    error,
+  } = useQuery<OrgStats>({
+    queryKey: ['organization-stats'],
     queryFn: async () => {
-      const response = await fetch("/api/organizations/stats");
-      if (!response.ok) throw new Error("Failed to fetch stats");
+      const response = await fetch('/api/organizations/stats');
+      if (!response.ok) throw new Error('Failed to fetch stats');
       const data = await response.json();
       return data.data;
     },
@@ -170,7 +178,9 @@ export default function OrganizationStatsPage() {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-10">
-          <p className="text-sm text-muted-foreground">Failed to load statistics</p>
+          <p className="text-sm text-muted-foreground">
+            Failed to load statistics
+          </p>
         </CardContent>
       </Card>
     );
@@ -179,50 +189,59 @@ export default function OrganizationStatsPage() {
   // Prepare chart data
   const storageChartData = [
     {
-      name: "Used",
+      name: 'Used',
       value: stats.storage.used_gb,
-      fill: "#3b82f6",
+      fill: 'oklch(0.78 0.155 72)',
     },
     {
-      name: "Available",
+      name: 'Available',
       value: (stats.storage.quota_gb || 10) - stats.storage.used_gb,
-      fill: "#e5e7eb",
+      fill: 'oklch(0.31 0.011 64 / 0.5)',
     },
   ];
 
   const usageChartData = stats.usage
     ? [
-        { name: "Transcriptions", value: stats.usage.minutes_transcribed, unit: "min" },
-        { name: "Queries", value: stats.usage.queries_count, unit: "" },
-        { name: "Recordings", value: stats.usage.recordings_count, unit: "" },
+        {
+          name: 'Transcriptions',
+          value: stats.usage.minutes_transcribed,
+          unit: 'min',
+        },
+        { name: 'Queries', value: stats.usage.queries_count, unit: '' },
+        { name: 'Recordings', value: stats.usage.recordings_count, unit: '' },
       ]
     : [];
 
   const tokenChartData = stats.usage
     ? [
-        { name: "Tokens In", value: stats.usage.tokens_in },
-        { name: "Tokens Out", value: stats.usage.tokens_out },
+        { name: 'Tokens In', value: stats.usage.tokens_in },
+        { name: 'Tokens Out', value: stats.usage.tokens_out },
       ]
     : [];
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Organization Analytics</h2>
-        <p className="text-muted-foreground">
-          Monitor your organization's usage and performance metrics
-        </p>
+    <div className="trbd-stack">
+      <div className="trbd-page-header">
+        <div className="trbd-page-heading">
+          <h1 className="trbd-page-title">Organization Analytics</h1>
+          <p className="trbd-page-description">
+            Monitor your organization&apos;s usage and performance metrics.
+          </p>
+        </div>
+        <div className="trbd-icon-chip" aria-hidden="true">
+          <Activity className="h-5 w-5" />
+        </div>
       </div>
 
       {/* Plan Badge */}
       {stats.quotas && (
         <div className="flex items-center space-x-4">
-          <Badge variant="default" className="text-sm py-1 px-3">
+          <Badge variant="secondary" className="text-sm py-1 px-3">
             {stats.quotas.plan.toUpperCase()} PLAN
           </Badge>
           <span className="text-sm text-muted-foreground">
-            {stats.quotas.max_users} users • {stats.quotas.max_storage_gb} GB storage
+            {stats.quotas.max_users} users • {stats.quotas.max_storage_gb} GB
+            storage
           </span>
         </div>
       )}
@@ -232,7 +251,7 @@ export default function OrganizationStatsPage() {
         <StatCard
           title="Total Members"
           value={stats.members.total}
-          description={`of ${stats.members.quota || "∞"} allowed`}
+          description={`of ${stats.members.quota || '∞'} allowed`}
           icon={Users}
           quota={
             stats.members.quota
@@ -245,7 +264,7 @@ export default function OrganizationStatsPage() {
         <StatCard
           title="Storage Used"
           value={`${stats.storage.used_gb} GB`}
-          description={`of ${stats.storage.quota_gb || "∞"} GB`}
+          description={`of ${stats.storage.quota_gb || '∞'} GB`}
           icon={HardDrive}
           quota={
             stats.storage.quota_gb
@@ -311,7 +330,7 @@ export default function OrganizationStatsPage() {
             <CardHeader>
               <CardTitle>Monthly Usage</CardTitle>
               <CardDescription>
-                Activity breakdown for {stats.usage?.period || "current period"}
+                Activity breakdown for {stats.usage?.period || 'current period'}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -322,7 +341,7 @@ export default function OrganizationStatsPage() {
                     <XAxis dataKey="name" />
                     <YAxis />
                     <Tooltip />
-                    <Bar dataKey="value" fill="#3b82f6" />
+                    <Bar dataKey="value" fill="oklch(0.78 0.155 72)" />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -338,9 +357,7 @@ export default function OrganizationStatsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Storage Distribution</CardTitle>
-              <CardDescription>
-                Current storage usage breakdown
-              </CardDescription>
+              <CardDescription>Current storage usage breakdown</CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -383,10 +400,10 @@ export default function OrganizationStatsPage() {
                     <YAxis />
                     <Tooltip
                       formatter={(value: number) =>
-                        value.toLocaleString() + " tokens"
+                        value.toLocaleString() + ' tokens'
                       }
                     />
-                    <Bar dataKey="value" fill="#10b981" />
+                    <Bar dataKey="value" fill="oklch(0.66 0.07 72)" />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -402,17 +419,21 @@ export default function OrganizationStatsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {((stats.usage.tokens_in + stats.usage.tokens_out) / 1000).toFixed(1)}K
+                    {(
+                      (stats.usage.tokens_in + stats.usage.tokens_out) /
+                      1000
+                    ).toFixed(1)}
+                    K
                   </div>
                   <div className="flex items-center space-x-4 mt-3 text-xs">
                     <div className="flex items-center">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-1" />
+                      <div className="w-2 h-2 rounded-full mr-1 bg-primary" />
                       <span className="text-muted-foreground">
                         Input: {(stats.usage.tokens_in / 1000).toFixed(1)}K
                       </span>
                     </div>
                     <div className="flex items-center">
-                      <div className="w-2 h-2 bg-green-500 rounded-full mr-1" />
+                      <div className="w-2 h-2 rounded-full mr-1 bg-muted-foreground" />
                       <span className="text-muted-foreground">
                         Output: {(stats.usage.tokens_out / 1000).toFixed(1)}K
                       </span>
@@ -432,9 +453,9 @@ export default function OrganizationStatsPage() {
                     {stats.usage.queries_count > 0
                       ? Math.round(
                           (stats.usage.tokens_in + stats.usage.tokens_out) /
-                            stats.usage.queries_count
+                            stats.usage.queries_count,
                         )
-                      : 0}{" "}
+                      : 0}{' '}
                     <span className="text-sm font-normal text-muted-foreground">
                       tokens/query
                     </span>
@@ -461,12 +482,14 @@ export default function OrganizationStatsPage() {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {Object.entries(stats.quotas.features)
-                .filter(([_, enabled]) => enabled)
+                .filter((entry) => entry[1])
                 .map(([feature]) => (
                   <div key={feature} className="flex items-center space-x-2">
-                    <Zap className="h-4 w-4 text-green-500" />
+                    <Zap className="h-4 w-4 text-primary" />
                     <span className="text-sm">
-                      {feature.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                      {feature
+                        .replace(/_/g, ' ')
+                        .replace(/\b\w/g, (l) => l.toUpperCase())}
                     </span>
                   </div>
                 ))}

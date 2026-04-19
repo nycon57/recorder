@@ -26,7 +26,7 @@ export interface Department {
 }
 
 export interface MemberFiltersState {
-  roles: UserRole[];
+  roles: string[];
   departments: string[];
   statuses: string[];
 }
