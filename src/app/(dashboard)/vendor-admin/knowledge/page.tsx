@@ -34,9 +34,7 @@ export default function KnowledgePage() {
   const [configExists, setConfigExists] = useState(false);
 
   const [availableApps, setAvailableApps] = useState<string[]>([]);
-  const [selectedApps, setSelectedApps] = useState<Set<string>>(
-    new Set()
-  );
+  const [selectedApps, setSelectedApps] = useState<Set<string>>(new Set());
 
   // Fetch config + available apps on mount
   useEffect(() => {
@@ -52,9 +50,7 @@ export default function KnowledgePage() {
           const configJson = await configRes.json();
           const config = configJson.data;
           setConfigExists(true);
-          setSelectedApps(
-            new Set(config.knowledge_scope ?? [])
-          );
+          setSelectedApps(new Set(config.knowledge_scope ?? []));
         } else if (configRes.status === 404) {
           setConfigExists(false);
         }
@@ -87,7 +83,7 @@ export default function KnowledgePage() {
   async function handleSave() {
     if (!configExists) {
       toast.error(
-        'Please set up your white-label configuration in Branding first.'
+        'Please set up your white-label configuration in Branding first.',
       );
       return;
     }
@@ -105,18 +101,14 @@ export default function KnowledgePage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(
-          err.error?.message ?? err.message ?? 'Failed to save'
-        );
+        throw new Error(err.error?.message ?? err.message ?? 'Failed to save');
       }
 
       toast.success('Knowledge scope updated successfully');
       router.refresh();
     } catch (err) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : 'Failed to save knowledge scope'
+        err instanceof Error ? err.message : 'Failed to save knowledge scope',
       );
     } finally {
       setSaving(false);
@@ -125,10 +117,7 @@ export default function KnowledgePage() {
 
   if (loading) {
     return (
-      <div
-        className="flex items-center justify-center py-16"
-        role="status"
-      >
+      <div className="flex items-center justify-center py-16" role="status">
         <div className="text-center">
           <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">
@@ -141,9 +130,9 @@ export default function KnowledgePage() {
 
   if (!configExists) {
     return (
-      <div className="container mx-auto space-y-6 py-8">
+      <div className="trbd-page">
         <header>
-          <h1 className="text-3xl font-normal tracking-tight flex items-center gap-2">
+          <h1 className="trbd-page-title tracking-tight flex items-center gap-2">
             <BookOpen className="h-7 w-7" />
             Knowledge Scope
           </h1>
@@ -152,9 +141,9 @@ export default function KnowledgePage() {
           <CardHeader>
             <CardTitle>Configuration required</CardTitle>
             <CardDescription>
-              You need to set up your white-label configuration first.
-              Go to Branding to create your config, then come back here
-              to configure knowledge scoping.
+              You need to set up your white-label configuration first. Go to
+              Branding to create your config, then come back here to configure
+              knowledge scoping.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -171,15 +160,14 @@ export default function KnowledgePage() {
   }
 
   return (
-    <div className="container mx-auto space-y-6 py-8">
+    <div className="trbd-page">
       <header>
-        <h1 className="text-3xl font-normal tracking-tight flex items-center gap-2">
+        <h1 className="trbd-page-title tracking-tight flex items-center gap-2">
           <BookOpen className="h-7 w-7" />
           Knowledge Scope
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Select which apps are included in your customers' knowledge
-          base.
+          Select which apps are included in your customers&apos; knowledge base.
         </p>
       </header>
 
@@ -187,8 +175,8 @@ export default function KnowledgePage() {
         <CardHeader>
           <CardTitle className="text-base">Available Apps</CardTitle>
           <CardDescription>
-            Check the apps you want to include in the knowledge scope.
-            Unchecked apps will be excluded from vendor wiki queries.
+            Check the apps you want to include in the knowledge scope. Unchecked
+            apps will be excluded from vendor wiki queries.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -196,8 +184,8 @@ export default function KnowledgePage() {
             <div className="flex flex-col items-center gap-3 py-8 text-center">
               <Inbox className="h-8 w-8 text-muted-foreground/50" />
               <p className="text-sm text-muted-foreground">
-                No vendor wiki pages found. Apps will appear here once
-                vendor documentation has been ingested.
+                No vendor wiki pages found. Apps will appear here once vendor
+                documentation has been ingested.
               </p>
             </div>
           ) : (
@@ -231,9 +219,7 @@ export default function KnowledgePage() {
                 {availableApps.length !== 1 ? 's' : ''} selected
               </p>
               <Button onClick={handleSave} disabled={saving}>
-                {saving && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Save knowledge scope
               </Button>
             </div>
