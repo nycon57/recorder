@@ -338,9 +338,11 @@ function KnowledgePageContent() {
   }, [filteredGraph.nodes, selectedGraphNodeId]);
 
   useEffect(() => {
-    if (requestedView === 'graph' || requestedView === 'list') {
-      setViewMode(requestedView);
-    }
+    setViewMode(
+      requestedView === 'graph' || requestedView === 'list'
+        ? requestedView
+        : 'graph'
+    );
   }, [requestedView]);
 
   // Calculate stats
