@@ -16,6 +16,8 @@ import { OnboardingViewTracker } from '@/app/components/onboarding/OnboardingVie
 import { fetchKnowledgeStatusForSource } from '@/lib/services/knowledge-status';
 import type { WorkflowStep } from '@/lib/types/database';
 import WorkflowViewer from '@/app/components/workflow/WorkflowViewer';
+import SourceDetailProgressPanel from '@/app/components/library/detail-views/SourceDetailProgressPanel';
+import { resolvePreferredSourceKnowledgePage } from '@/lib/services/source-detail';
 
 async function getContentItem(id: string, internalOrgId: string) {
   const { data: item, error } = await supabaseAdmin
@@ -201,6 +203,28 @@ export default async function LibraryItemDetailPage({
     }
   }
 
+  const { data: sourceLinks } = await supabaseAdmin
+    .from('wiki_page_sources')
+    .select('page_id')
+    .eq('source_id', id);
+
+  const linkedPageIds = Array.from(
+    new Set((sourceLinks ?? []).map((link) => link.page_id).filter(Boolean))
+  );
+
+  let linkedKnowledgePage: ReturnType<typeof resolvePreferredSourceKnowledgePage> =
+    null;
+
+  if (linkedPageIds.length > 0) {
+    const { data: linkedPages } = await supabaseAdmin
+      .from('org_wiki_pages')
+      .select('id, topic, app, screen, valid_until, updated_at')
+      .eq('org_id', orgId)
+      .in('id', linkedPageIds);
+
+    linkedKnowledgePage = resolvePreferredSourceKnowledgePage(linkedPages ?? []);
+  }
+
   const sharedProps = {
     recording: item,
     transcript,
@@ -242,6 +266,23 @@ export default async function LibraryItemDetailPage({
     <>
       <OnboardingViewTracker contentId={id} />
       {detailView}
+      <section className="mt-8 px-4 container mx-auto" aria-labelledby="processing-artifacts-heading">
+        <h2 id="processing-artifacts-heading" className="sr-only">
+          Processing and artifacts
+        </h2>
+        <SourceDetailProgressPanel
+          contentId={id}
+          contentType={item.content_type}
+          status={item.status}
+          createdAt={item.created_at}
+          updatedAt={item.updated_at}
+          completedAt={item.completed_at}
+          transcript={transcript}
+          document={document}
+          workflow={workflow}
+          knowledgePage={linkedKnowledgePage}
+        />
+      </section>
       {workflow && (
         <section className="mt-8 px-4 container mx-auto" aria-labelledby="workflow-heading">
           <h2 id="workflow-heading" className="text-lg font-light mb-4">Workflow</h2>
