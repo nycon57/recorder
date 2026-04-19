@@ -12,6 +12,7 @@ import {
   History,
   Link2,
   ShieldAlert,
+  Sparkles,
   Workflow,
 } from 'lucide-react';
 
@@ -77,6 +78,8 @@ export default async function KnowledgePageDetailPage({ params }: RouteParams) {
   }
 
   const isOrgPage = detail.kind === 'org';
+  const conceptEnrichmentHref = `/knowledge/map?view=list&originPage=${encodeURIComponent(detail.page.id)}`;
+  const primaryGraphHref = '/knowledge/map?view=graph';
 
   return (
     <div className="container mx-auto space-y-6 py-6">
@@ -182,6 +185,10 @@ export default async function KnowledgePageDetailPage({ params }: RouteParams) {
           <TabsTrigger value="relationships">
             <ArrowRightLeft className="h-4 w-4" />
             Relationships
+          </TabsTrigger>
+          <TabsTrigger value="concept-enrichment">
+            <Sparkles className="h-4 w-4" />
+            Concept Enrichment
           </TabsTrigger>
           <TabsTrigger value="history">
             <History className="h-4 w-4" />
@@ -426,6 +433,38 @@ export default async function KnowledgePageDetailPage({ params }: RouteParams) {
                   Relationship edges are modeled between org wiki pages. Open a mapped org page to inspect graph links.
                 </p>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="concept-enrichment">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg font-medium">Concept enrichment</CardTitle>
+              <CardDescription>
+                Extracted concept signals are secondary enrichment data. Canonical navigation stays
+                on compiled pages and operational relationships.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Use concept mode when you need exploratory context, then return to page-centric views
+                for routing, review, and publication decisions.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <Link href={conceptEnrichmentHref}>Open concept enrichment view</Link>
+                </Button>
+                <Button asChild variant="ghost" size="sm">
+                  <Link href={primaryGraphHref}>Open primary operational graph</Link>
+                </Button>
+              </div>
+              {!isOrgPage ? (
+                <p className="rounded-md border border-dashed bg-muted/20 p-3 text-sm text-muted-foreground">
+                  Vendor baselines remain reference material. Use mapped org pages for canonical
+                  routing and governance actions.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>
