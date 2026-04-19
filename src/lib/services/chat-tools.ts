@@ -10,27 +10,21 @@
  * - Proper error handling with user-friendly messages
  *
  * Tools:
- * 1. searchRecordings - RAG-powered semantic search across content
- * 2. getDocument - Retrieve full document content by ID
- * 3. getTranscript - Get transcript with timestamps
- * 4. getRecordingMetadata - Fetch content metadata
- * 5. listRecordings - List recent content items
+ * 1. answerQuestion - Compiled-memory Q&A with citation-ordered context
+ * 2. searchRecordings - Raw evidence discovery across recordings/transcripts
+ * 3. getDocument - Retrieve full document content by ID
+ * 4. getTranscript - Get transcript with timestamps
+ * 5. getRecordingMetadata - Fetch content metadata
+ * 6. listRecordings - List recent content items
  */
 
-import { tool } from 'ai';
-import { z } from 'zod';
-
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/types/database';
-import {
-  searchRecordingsInputSchema,
-  getDocumentInputSchema,
-  getTranscriptInputSchema,
-  getRecordingMetadataInputSchema,
-  listRecordingsInputSchema,
-} from '@/lib/validations/chat';
 
 import { injectRAGContext, type SourceCitation } from './chat-rag-integration';
+import {
+  buildCompiledMemoryCitations,
+  resolveCompiledMemoryAnswerContext,
+} from './compiled-memory-answer-context';
 
 /**
  * Tool execution context
@@ -72,6 +66,67 @@ function formatDuration(seconds: number): string {
 }
 
 /**
+ * Answer Question Execute Function
+ *
+ * Uses compiled memory as the canonical Q&A path, preserving citation order
+ * and source precedence from the dashboard chat experience.
+ */
+export async function executeAnswerQuestion(
+  { question, app, screen, limit }: any,
+  { orgId, userId }: ToolContext
+): Promise<ToolResponse> {
+  try {
+    if (!orgId) {
+      return {
+        success: false,
+        error: 'Organization context is required for answer operations',
+      };
+    }
+
+    const compiledMemory = await resolveCompiledMemoryAnswerContext({
+      orgId,
+      userId,
+      question,
+      app,
+      screen,
+      limit,
+    });
+
+    if (!compiledMemory.context || compiledMemory.sources.length === 0) {
+      return {
+        success: true,
+        data: {
+          message:
+            'No compiled memory matched this question yet. Use raw evidence tools if you need transcripts or document excerpts.',
+          answerContext: '',
+          citations: [],
+          priorTopics: [],
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        message: 'Compiled-memory answer context ready for grounded Q&A.',
+        answerContext: compiledMemory.context,
+        citations: buildCompiledMemoryCitations(compiledMemory.sources),
+        priorTopics: compiledMemory.priorTopics,
+      },
+    };
+  } catch (error) {
+    console.error('[ChatTools] answerQuestion error:', error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? `Failed to prepare compiled-memory answer: ${error.message}`
+          : 'An unexpected error occurred while preparing the answer context',
+    };
+  }
+}
+
+/**
  * Search Recordings Execute Function
  *
  * Uses RAG integration to perform semantic search across recordings and transcripts.
@@ -98,13 +153,15 @@ export async function executeSearchRecordings(
         };
       }
 
+      const scopedContentIds = contentIds ?? recordingIds;
+
       // Perform RAG search
       const ragContext = await injectRAGContext(query, orgId, {
         limit: limit || 5,
         minRelevance: minRelevance || 0.7,
         includeTranscripts: includeTranscripts !== false,
         includeDocuments: includeDocuments !== false,
-        contentIds: recordingIds ?? contentIds,
+        contentIds: scopedContentIds,
         useHierarchical: true,
         enableCache: true,
       });
@@ -114,13 +171,9 @@ export async function executeSearchRecordings(
         return {
           success: true,
           data: {
-            message: 'No raw evidence found for your discovery query. Try different keywords or broaden the search.',
+            message: 'No relevant content found for your query. Try different keywords or check if you have any content.',
             results: [],
-            searchMetadata: {
-              retrievalMode: 'discovery',
-              evidenceLayer: 'raw',
-              ...ragContext.metadata,
-            },
+            searchMetadata: ragContext.metadata,
           },
           sources: [],
         };
@@ -142,11 +195,9 @@ export async function executeSearchRecordings(
       return {
         success: true,
         data: {
-          message: `Found ${ragContext.sources.length} raw evidence result(s)`,
+          message: `Found ${ragContext.sources.length} relevant result(s)`,
           results: formattedResults,
           searchMetadata: {
-            retrievalMode: 'discovery',
-            evidenceLayer: 'raw',
             searchMode: ragContext.metadata?.searchMode,
             searchTimeMs: ragContext.metadata?.searchTimeMs,
             cacheHit: ragContext.metadata?.cacheHit,
@@ -264,10 +315,18 @@ export async function executeGetDocument(
  * Returns formatted transcript with word-level timing information.
  */
 export async function executeGetTranscript(
-  { contentId, includeTimestamps, formatTimestamps }: any,
+  { contentId, recordingId, includeTimestamps, formatTimestamps }: any,
   { orgId }: ToolContext
 ): Promise<ToolResponse> {
     try {
+      const scopedContentId = contentId ?? recordingId;
+      if (!scopedContentId) {
+        return {
+          success: false,
+          error: 'A content ID is required to retrieve a transcript',
+        };
+      }
+
       // Use admin client - auth already verified in API route
       const { data: transcript, error } = await supabaseAdmin
         .from('transcripts')
@@ -291,7 +350,7 @@ export async function executeGetTranscript(
           )
         `
         )
-        .eq('content_id', contentId)
+        .eq('content_id', scopedContentId)
         .single();
 
       if (error || !transcript) {
@@ -407,10 +466,18 @@ export async function executeGetTranscript(
  * status, and creation date.
  */
 export async function executeGetRecordingMetadata(
-  { contentId, includeStats }: any,
+  { contentId, recordingId, includeStats }: any,
   { orgId }: ToolContext
 ): Promise<ToolResponse> {
     try {
+      const scopedContentId = contentId ?? recordingId;
+      if (!scopedContentId) {
+        return {
+          success: false,
+          error: 'A content ID is required to retrieve recording metadata',
+        };
+      }
+
       // Use admin client - auth already verified in API route
       const { data: content, error } = await supabaseAdmin
         .from('content')
@@ -428,7 +495,7 @@ export async function executeGetRecordingMetadata(
           metadata
         `
         )
-        .eq('id', contentId)
+        .eq('id', scopedContentId)
         .eq('org_id', orgId)
         .single();
 
@@ -467,7 +534,7 @@ export async function executeGetRecordingMetadata(
         const { data: transcript } = await supabaseAdmin
           .from('transcripts')
           .select('text')
-          .eq('content_id', contentId)
+          .eq('content_id', scopedContentId)
           .single();
 
         if (transcript?.text) {
@@ -478,7 +545,7 @@ export async function executeGetRecordingMetadata(
         const { count: chunkCount } = await supabaseAdmin
           .from('transcript_chunks')
           .select('*', { count: 'exact', head: true })
-          .eq('content_id', contentId);
+          .eq('content_id', scopedContentId);
 
         if (chunkCount !== null) {
           stats.chunks = chunkCount;
@@ -488,7 +555,7 @@ export async function executeGetRecordingMetadata(
         const { data: document } = await supabaseAdmin
           .from('documents')
           .select('status, version')
-          .eq('content_id', contentId)
+          .eq('content_id', scopedContentId)
           .single();
 
         if (document) {
@@ -933,10 +1000,14 @@ export async function executeExploreKnowledgeGraph(
  * Tool descriptions for AI SDK
  */
 export const toolDescriptions = {
+  answerQuestion:
+    'Answer a user question using compiled memory with citation-ordered context. ' +
+    'Use this as the default Q&A path when the user wants an explanation or answer grounded in the knowledge base. ' +
+    'Compiled memory follows dashboard chat precedence: team knowledge first, then vendor training, then vendor docs.',
   searchRecordings:
-    'Search raw transcript and document evidence in discovery mode. ' +
-    'Use this when the user explicitly wants to audit exact snippets, verify whether recordings mention something, ' +
-    'or inspect raw evidence rather than the canonical compiled-memory answer layer. Returns relevant excerpts with timestamps.',
+    'Search raw recordings, transcripts, and documents to discover evidence. ' +
+    'Use this when the user wants to find recordings, browse excerpts, or inspect raw evidence before answering. ' +
+    'Do not treat this as the primary Q&A path when compiled-memory answering is available.',
   getDocument:
     'Retrieve the full content of a specific document or summary. ' +
     'Use this when the user asks to see a complete document, wants to read a full summary, ' +
@@ -946,12 +1017,12 @@ export const toolDescriptions = {
     'Get the full transcript with timestamps for a recording. ' +
     'Use this when the user wants to see the complete transcript, ' +
     'needs specific timing information, or wants to reference exact words spoken. ' +
-    'Requires the recording ID (UUID).',
+    'Requires the content item ID (UUID).',
   getRecordingMetadata:
     'Get metadata about a specific recording including title, duration, status, and creation date. ' +
     "Use this when the user asks about a specific recording's details, " +
     'wants to know when something was recorded, or needs basic information about a recording. ' +
-    'Requires the recording ID (UUID).',
+    'Requires the content item ID (UUID).',
   listRecordings:
     'List recent recordings with optional filtering by status and sorting. ' +
     'Use this when the user wants to see their recordings, ' +

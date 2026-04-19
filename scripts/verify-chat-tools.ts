@@ -9,6 +9,7 @@
  */
 
 import {
+  executeAnswerQuestion,
   executeSearchRecordings,
   executeGetDocument,
   executeGetTranscript,
@@ -18,6 +19,7 @@ import {
   type ToolContext,
 } from '../src/lib/services/chat-tools';
 import {
+  answerQuestionInputSchema,
   searchRecordingsInputSchema,
   getDocumentInputSchema,
   getTranscriptInputSchema,
@@ -117,6 +119,11 @@ function verifyToolDefinitions(): boolean {
   logSection('Tool Definitions');
 
   const tools = {
+    answerQuestion: {
+      execute: executeAnswerQuestion,
+      description: toolDescriptions.answerQuestion,
+      parameters: answerQuestionInputSchema,
+    },
     searchRecordings: {
       execute: executeSearchRecordings,
       description: toolDescriptions.searchRecordings,
@@ -197,6 +204,39 @@ function testParameterSchemas(): boolean {
 
   // Test searchRecordings schema
   try {
+    const validInput = { question: 'How do enterprise leads route?', limit: 3 };
+    answerQuestionInputSchema.parse(validInput);
+    logResult({
+      name: 'answerQuestion schema (valid input)',
+      success: true,
+      message: 'Parsed successfully',
+    });
+  } catch (error) {
+    logResult({
+      name: 'answerQuestion schema (valid input)',
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+    allValid = false;
+  }
+
+  try {
+    answerQuestionInputSchema.parse({ question: '' });
+    logResult({
+      name: 'answerQuestion schema (invalid input)',
+      success: false,
+      message: 'Should have rejected empty question',
+    });
+    allValid = false;
+  } catch (error) {
+    logResult({
+      name: 'answerQuestion schema (invalid input)',
+      success: true,
+      message: 'Correctly rejected invalid input',
+    });
+  }
+
+  try {
     const validInput = { query: 'test', limit: 5 };
     searchRecordingsInputSchema.parse(validInput);
     logResult({
@@ -272,6 +312,7 @@ function checkTypes(): boolean {
 
     // Verify tool functions are properly exported
     const toolFunctions = [
+      executeAnswerQuestion,
       executeSearchRecordings,
       executeGetDocument,
       executeGetTranscript,
@@ -283,7 +324,7 @@ function checkTypes(): boolean {
     logResult({
       name: 'Exported tool functions',
       success: allFunctions,
-      message: `Found ${toolFunctions.length} functions (expected 5)`,
+      message: `Found ${toolFunctions.length} functions (expected 6)`,
     });
 
     return allFunctions;
@@ -354,6 +395,7 @@ async function performanceCheck(): Promise<boolean> {
   // Note: These will fail with database errors in test mode
   // but we're measuring initialization time
   const tools = {
+    answerQuestion: executeAnswerQuestion,
     searchRecordings: executeSearchRecordings,
     getDocument: executeGetDocument,
     getTranscript: executeGetTranscript,

@@ -10,10 +10,15 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { injectRAGContext } from '@/lib/services/chat-rag-integration';
+import {
+  buildCompiledMemoryCitations,
+  resolveCompiledMemoryAnswerContext,
+} from '@/lib/services/compiled-memory-answer-context';
 
 /** Org context passed to every handler. */
 export interface McpToolContext {
   orgId: string;
+  userId?: string;
 }
 
 /** MCP error with a machine-readable code. */
@@ -70,6 +75,43 @@ function verifyOrgAccess(joinedContent: unknown, orgId: string): ContentJoinRow 
     throw new McpToolError('not_found', 'Content not found or not accessible');
   }
   return joined;
+}
+
+// ---------------------------------------------------------------------------
+// answerQuestion
+// ---------------------------------------------------------------------------
+
+interface AnswerQuestionInput {
+  question: string;
+  app?: string;
+  screen?: string;
+  limit?: number;
+}
+
+interface AnswerQuestionResult {
+  answerContext: string;
+  citations: ReturnType<typeof buildCompiledMemoryCitations>;
+  priorTopics: string[];
+}
+
+export async function handleAnswerQuestion(
+  input: AnswerQuestionInput,
+  ctx: McpToolContext
+): Promise<AnswerQuestionResult> {
+  const compiledMemory = await resolveCompiledMemoryAnswerContext({
+    orgId: ctx.orgId,
+    userId: ctx.userId,
+    question: input.question,
+    app: input.app,
+    screen: input.screen,
+    limit: input.limit,
+  });
+
+  return {
+    answerContext: compiledMemory.context,
+    citations: buildCompiledMemoryCitations(compiledMemory.sources),
+    priorTopics: compiledMemory.priorTopics,
+  };
 }
 
 // ---------------------------------------------------------------------------

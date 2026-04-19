@@ -27,7 +27,7 @@ export interface CompiledMemoryCitation {
 
 export interface ResolveCompiledMemoryContextArgs {
   orgId: string;
-  userId: string;
+  userId?: string;
   app: string;
   screen: string;
   questionEmbedding: number[];
@@ -94,7 +94,7 @@ async function resolveVendorTrainingPages(args: {
 
 async function resolveOrgKnowledge(args: {
   orgId: string;
-  userId: string;
+  userId?: string;
   questionEmbedding: number[];
   asOf?: string | null;
   limit: number;
@@ -168,6 +168,13 @@ async function resolveOrgKnowledge(args: {
         clusterError,
       );
     }
+  }
+
+  if (!userId) {
+    return {
+      pages,
+      priorTopics: [],
+    };
   }
 
   let priorTopics: string[] = [];

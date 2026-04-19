@@ -8,6 +8,36 @@
 import { z } from 'zod';
 
 /**
+ * Schema for answerQuestion tool input
+ */
+export const answerQuestionInputSchema = z.object({
+  question: z
+    .string()
+    .min(1, 'Question is required')
+    .max(1000, 'Question too long')
+    .describe('The question to answer using compiled memory'),
+  app: z
+    .string()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Optional app scope for compiled memory resolution'),
+  screen: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('Optional screen scope for compiled memory resolution'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(10)
+    .default(3)
+    .describe('Maximum number of compiled-memory citations to include'),
+});
+
+/**
  * Schema for searchRecordings tool input
  */
 export const searchRecordingsInputSchema = z.object({
@@ -23,10 +53,14 @@ export const searchRecordingsInputSchema = z.object({
     .max(20)
     .default(5)
     .describe('Maximum number of results to return'),
+  contentIds: z
+    .array(z.string().uuid())
+    .optional()
+    .describe('Limit search to specific content IDs'),
   recordingIds: z
     .array(z.string().uuid())
     .optional()
-    .describe('Limit search to specific recording IDs'),
+    .describe('Deprecated alias for contentIds; kept for compatibility'),
   includeTranscripts: z
     .boolean()
     .default(true)
@@ -61,10 +95,16 @@ export const getDocumentInputSchema = z.object({
  * Schema for getTranscript tool input
  */
 export const getTranscriptInputSchema = z.object({
+  contentId: z
+    .string()
+    .uuid('Invalid content ID format')
+    .optional()
+    .describe('The UUID of the content item'),
   recordingId: z
     .string()
     .uuid('Invalid recording ID format')
-    .describe('The UUID of the recording'),
+    .optional()
+    .describe('Deprecated alias for contentId'),
   includeTimestamps: z
     .boolean()
     .default(true)
@@ -73,20 +113,30 @@ export const getTranscriptInputSchema = z.object({
     .boolean()
     .default(true)
     .describe('Format timestamps as MM:SS'),
+}).refine((value) => value.contentId || value.recordingId, {
+  message: 'contentId or recordingId is required',
 });
 
 /**
  * Schema for getRecordingMetadata tool input
  */
 export const getRecordingMetadataInputSchema = z.object({
+  contentId: z
+    .string()
+    .uuid('Invalid content ID format')
+    .optional()
+    .describe('The UUID of the content item'),
   recordingId: z
     .string()
     .uuid('Invalid recording ID format')
-    .describe('The UUID of the recording'),
+    .optional()
+    .describe('Deprecated alias for contentId'),
   includeStats: z
     .boolean()
     .default(true)
     .describe('Include statistics like duration, word count, etc.'),
+}).refine((value) => value.contentId || value.recordingId, {
+  message: 'contentId or recordingId is required',
 });
 
 /**
@@ -211,6 +261,7 @@ export const toolResponseSchema = z.object({
  * Type exports for TypeScript
  */
 export type SearchRecordingsInput = z.infer<typeof searchRecordingsInputSchema>;
+export type AnswerQuestionInput = z.infer<typeof answerQuestionInputSchema>;
 export type GetDocumentInput = z.infer<typeof getDocumentInputSchema>;
 export type GetTranscriptInput = z.infer<typeof getTranscriptInputSchema>;
 export type GetRecordingMetadataInput = z.infer<typeof getRecordingMetadataInputSchema>;

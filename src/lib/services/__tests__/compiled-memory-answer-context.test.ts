@@ -88,11 +88,92 @@ test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor l
   assert.deepEqual(result.priorTopics, ['Deal routing']);
 });
 
+test('buildCompiledMemoryAnswerContext applies citation limits globally across layers', () => {
+  const compiledMemory: CompiledMemoryContext = {
+    vendorKnowledge: {
+      page: {
+        id: 'vendor-1',
+        app: 'hubspot',
+        screen: 'deals',
+        content: 'Vendor documentation for the general deal screen.',
+        source_url: 'https://docs.example.com/deals',
+      } as CompiledMemoryContext['vendorKnowledge']['page'],
+    },
+    vendorTraining: {
+      pages: [
+        {
+          id: 'training-1',
+          app: 'hubspot',
+          screen: 'deals',
+          topic: 'Vendor rollout playbook',
+          content: 'Vendor training says to stage new deals before assignment.',
+          confidence: 0.82,
+          distance: 0.18,
+        },
+      ],
+    },
+    orgKnowledge: {
+      pages: [
+        {
+          id: 'org-1',
+          app: 'hubspot',
+          screen: 'deals',
+          topic: 'Deal routing',
+          content: 'Team knowledge says enterprise leads skip the SDR queue.',
+          confidence: 0.94,
+          distance: 0.06,
+        },
+        {
+          id: 'org-2',
+          app: 'hubspot',
+          screen: 'deals',
+          topic: 'Discount approvals',
+          content: 'Managers approve discounts above twenty percent.',
+          confidence: 0.89,
+          distance: 0.11,
+        },
+      ],
+      priorTopics: [],
+    },
+    citationsBySourceId: {
+      'org-1': {
+        sourceId: 'org-1',
+        title: 'Deal routing',
+        layer: 'org',
+      },
+      'org-2': {
+        sourceId: 'org-2',
+        title: 'Discount approvals',
+        layer: 'org',
+      },
+      'training-1': {
+        sourceId: 'training-1',
+        title: 'Vendor rollout playbook',
+        layer: 'vendor_training',
+      },
+      'vendor-1': {
+        sourceId: 'vendor-1',
+        title: 'hubspot — deals',
+        layer: 'vendor',
+      },
+    },
+  };
+
+  const result = buildCompiledMemoryAnswerContext(compiledMemory, 2);
+
+  assert.deepEqual(
+    result.sources.map((source) => source.sourceId),
+    ['org-1', 'org-2'],
+  );
+  assert.doesNotMatch(result.context, /VENDOR TRAINING:/);
+  assert.doesNotMatch(result.context, /VENDOR KNOWLEDGE:/);
+});
+
 test('resolveCompiledMemoryAnswerContext passes the default chat scope into the shared compiled-memory resolver', async () => {
   let receivedArgs:
     | {
         orgId: string;
-        userId: string;
+        userId?: string;
         app: string;
         screen: string;
         questionEmbedding: number[];
