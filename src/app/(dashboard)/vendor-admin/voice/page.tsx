@@ -47,9 +47,7 @@ export default function VoicePage() {
           setConfigExists(true);
           setVoiceId(config.voice_config?.elevenlabs_voice_id ?? '');
           setStability(config.voice_config?.stability ?? 0.5);
-          setSimilarityBoost(
-            config.voice_config?.similarity_boost ?? 0.75
-          );
+          setSimilarityBoost(config.voice_config?.similarity_boost ?? 0.75);
         } else if (res.status === 404) {
           setConfigExists(false);
         }
@@ -65,7 +63,7 @@ export default function VoicePage() {
   async function handleSave() {
     if (!configExists) {
       toast.error(
-        'Please set up your white-label configuration in Branding first.'
+        'Please set up your white-label configuration in Branding first.',
       );
       return;
     }
@@ -73,8 +71,7 @@ export default function VoicePage() {
     setSaving(true);
     try {
       const voice_config: Record<string, string | number> = {};
-      if (voiceId.trim())
-        voice_config.elevenlabs_voice_id = voiceId.trim();
+      if (voiceId.trim()) voice_config.elevenlabs_voice_id = voiceId.trim();
       voice_config.stability = stability;
       voice_config.similarity_boost = similarityBoost;
 
@@ -86,18 +83,14 @@ export default function VoicePage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(
-          err.error?.message ?? err.message ?? 'Failed to save'
-        );
+        throw new Error(err.error?.message ?? err.message ?? 'Failed to save');
       }
 
       toast.success('Voice settings updated successfully');
       router.refresh();
     } catch (err) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : 'Failed to save voice settings'
+        err instanceof Error ? err.message : 'Failed to save voice settings',
       );
     } finally {
       setSaving(false);
@@ -106,10 +99,7 @@ export default function VoicePage() {
 
   if (loading) {
     return (
-      <div
-        className="flex items-center justify-center py-16"
-        role="status"
-      >
+      <div className="flex items-center justify-center py-16" role="status">
         <div className="text-center">
           <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">
@@ -122,9 +112,9 @@ export default function VoicePage() {
 
   if (!configExists) {
     return (
-      <div className="container mx-auto space-y-6 py-8">
+      <div className="trbd-page">
         <header>
-          <h1 className="text-3xl font-normal tracking-tight flex items-center gap-2">
+          <h1 className="trbd-page-title tracking-tight flex items-center gap-2">
             <Mic className="h-7 w-7" />
             Voice Settings
           </h1>
@@ -133,9 +123,9 @@ export default function VoicePage() {
           <CardHeader>
             <CardTitle>Configuration required</CardTitle>
             <CardDescription>
-              You need to set up your white-label configuration first.
-              Go to Branding to create your config, then come back here
-              to configure voice settings.
+              You need to set up your white-label configuration first. Go to
+              Branding to create your config, then come back here to configure
+              voice settings.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -152,9 +142,9 @@ export default function VoicePage() {
   }
 
   return (
-    <div className="container mx-auto space-y-6 py-8">
+    <div className="trbd-page">
       <header>
-        <h1 className="text-3xl font-normal tracking-tight flex items-center gap-2">
+        <h1 className="trbd-page-title tracking-tight flex items-center gap-2">
           <Mic className="h-7 w-7" />
           Voice Settings
         </h1>
@@ -169,8 +159,7 @@ export default function VoicePage() {
             ElevenLabs Voice Configuration
           </CardTitle>
           <CardDescription>
-            Set the voice ID and tune stability and similarity boost
-            parameters.
+            Set the voice ID and tune stability and similarity boost parameters.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -185,8 +174,7 @@ export default function VoicePage() {
               onChange={(e) => setVoiceId(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Find voice IDs in your ElevenLabs dashboard under Voice
-              Lab.
+              Find voice IDs in your ElevenLabs dashboard under Voice Lab.
             </p>
           </div>
 
@@ -207,17 +195,15 @@ export default function VoicePage() {
               onValueChange={([v]) => setStability(v)}
             />
             <p className="text-xs text-muted-foreground">
-              Higher values produce more consistent output. Lower
-              values add more expressiveness.
+              Higher values produce more consistent output. Lower values add
+              more expressiveness.
             </p>
           </div>
 
           {/* Similarity Boost */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label htmlFor="similarity-boost">
-                Similarity Boost
-              </Label>
+              <Label htmlFor="similarity-boost">Similarity Boost</Label>
               <span className="text-sm text-muted-foreground tabular-nums">
                 {similarityBoost.toFixed(2)}
               </span>
@@ -231,17 +217,15 @@ export default function VoicePage() {
               onValueChange={([v]) => setSimilarityBoost(v)}
             />
             <p className="text-xs text-muted-foreground">
-              Higher values make the voice more closely match the
-              original. Lower values allow more variation.
+              Higher values make the voice more closely match the original.
+              Lower values allow more variation.
             </p>
           </div>
 
           {/* Save */}
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={saving}>
-              {saving && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save voice settings
             </Button>
           </div>

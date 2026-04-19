@@ -12,6 +12,7 @@ import { BarChart3 } from 'lucide-react';
 
 import { requireAdmin } from '@/lib/utils/api';
 import { getWhiteLabelConfig } from '@/lib/services/white-label';
+
 import { AnalyticsCharts } from './analytics-charts';
 
 export const dynamic = 'force-dynamic';
@@ -36,9 +37,9 @@ export default async function VendorAnalyticsPage() {
   }
 
   return (
-    <div className="container mx-auto space-y-6 py-8">
+    <div className="trbd-page">
       <header>
-        <h1 className="flex items-center gap-2 text-3xl font-normal tracking-tight">
+        <h1 className="flex items-center gap-2 trbd-page-title tracking-tight">
           <BarChart3 className="h-7 w-7" />
           Usage Analytics
         </h1>

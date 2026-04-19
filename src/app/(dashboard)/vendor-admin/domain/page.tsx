@@ -111,13 +111,17 @@ export default function DomainPage() {
 
       const json = await res.json();
       if (!res.ok) {
-        throw new Error(json.message ?? json.error ?? 'Failed to start verification');
+        throw new Error(
+          json.message ?? json.error ?? 'Failed to start verification',
+        );
       }
 
       setStatus(json.data);
       toast.success('Verification started. Add the TXT record to your DNS.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to start verification');
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to start verification',
+      );
     } finally {
       setSaving(false);
     }
@@ -138,7 +142,9 @@ export default function DomainPage() {
       if (json.data.dnsRecordFound) {
         toast.success('DNS record found. You can now confirm verification.');
       } else {
-        toast.info('DNS record not found yet. It may take up to 48 hours to propagate.');
+        toast.info(
+          'DNS record not found yet. It may take up to 48 hours to propagate.',
+        );
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to check DNS');
@@ -182,7 +188,9 @@ export default function DomainPage() {
       setDomain('');
       toast.success('Custom domain removed');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to remove domain');
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to remove domain',
+      );
     } finally {
       setRemoving(false);
     }
@@ -219,9 +227,9 @@ export default function DomainPage() {
   const dnsFound = status?.dnsRecordFound === true;
 
   return (
-    <div className="container mx-auto space-y-6 py-8">
+    <div className="trbd-page">
       <header>
-        <h1 className="flex items-center gap-2 text-3xl font-normal tracking-tight">
+        <h1 className="flex items-center gap-2 trbd-page-title tracking-tight">
           <Globe className="h-7 w-7" />
           Custom Domain
         </h1>
@@ -295,14 +303,18 @@ export default function DomainPage() {
                     onClick={handleCheckDns}
                     disabled={checking}
                   >
-                    {checking && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {checking && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     Check DNS
                   </Button>
                   <Button
                     onClick={handleConfirmVerification}
                     disabled={confirming || !dnsFound}
                   >
-                    {confirming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {confirming && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     Confirm verification
                   </Button>
                 </>
@@ -404,7 +416,8 @@ export default function DomainPage() {
               Integration Instructions
             </CardTitle>
             <CardDescription>
-              Embed the Tribora SDK on your website using the code snippet below.
+              Embed the Tribora SDK on your website using the code snippet
+              below.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -467,8 +480,8 @@ export default function DomainPage() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Point your custom domain to <code>app.tribora.ai</code> via CNAME
-                so SDK requests are routed through Tribora.
+                Point your custom domain to <code>app.tribora.ai</code> via
+                CNAME so SDK requests are routed through Tribora.
               </p>
             </div>
           </CardContent>

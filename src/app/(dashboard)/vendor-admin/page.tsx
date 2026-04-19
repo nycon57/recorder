@@ -10,7 +10,6 @@
 
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-
 import {
   CheckCircle2,
   XCircle,
@@ -70,21 +69,17 @@ export default async function VendorAdminPage() {
       config.branding.primary_color ||
       config.branding.product_name);
 
-  const hasVoice =
-    hasConfig && config.voice_config.elevenlabs_voice_id;
+  const hasVoice = hasConfig && config.voice_config.elevenlabs_voice_id;
 
   const knowledgeScopeCount = config?.knowledge_scope?.length ?? 0;
 
   return (
-    <div className="container mx-auto space-y-6 py-8">
+    <div className="trbd-page">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-normal tracking-tight">
-            Vendor Admin
-          </h1>
+          <h1 className="trbd-page-title tracking-tight">Vendor Admin</h1>
           <p className="mt-1 text-muted-foreground">
-            Manage your white-label configuration, branding, and voice
-            settings.
+            Manage your white-label configuration, branding, and voice settings.
           </p>
         </div>
         {hasConfig ? (
@@ -117,16 +112,13 @@ export default async function VendorAdminPage() {
               No white-label configuration
             </CardTitle>
             <CardDescription>
-              Set up your white-label configuration to customize the
-              experience for your customers. Start by configuring your
-              branding.
+              Set up your white-label configuration to customize the experience
+              for your customers. Start by configuring your branding.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <Link href="/vendor-admin/branding">
-                Set up white-label
-              </Link>
+              <Link href="/vendor-admin/branding">Set up white-label</Link>
             </Button>
           </CardContent>
         </Card>
@@ -136,9 +128,7 @@ export default async function VendorAdminPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Status
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Status</CardTitle>
             {hasConfig && config.is_active ? (
               <CheckCircle2 className="h-4 w-4 text-green-500" />
             ) : (
@@ -147,23 +137,15 @@ export default async function VendorAdminPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {hasConfig
-                ? config.is_active
-                  ? 'Active'
-                  : 'Inactive'
-                : 'None'}
+              {hasConfig ? (config.is_active ? 'Active' : 'Inactive') : 'None'}
             </div>
-            <p className="text-xs text-muted-foreground">
-              White-label config
-            </p>
+            <p className="text-xs text-muted-foreground">White-label config</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Customers
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Customers</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -197,12 +179,8 @@ export default async function VendorAdminPage() {
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {knowledgeScopeCount}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Apps in scope
-            </p>
+            <div className="text-2xl font-bold">{knowledgeScopeCount}</div>
+            <p className="text-xs text-muted-foreground">Apps in scope</p>
           </CardContent>
         </Card>
       </div>

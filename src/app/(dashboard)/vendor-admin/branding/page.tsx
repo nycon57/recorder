@@ -51,9 +51,7 @@ export default function BrandingPage() {
           setConfigExists(true);
           setLogoUrl(config.branding?.logo_url ?? '');
           setPrimaryColor(config.branding?.primary_color ?? '#000000');
-          setSecondaryColor(
-            config.branding?.secondary_color ?? '#000000'
-          );
+          setSecondaryColor(config.branding?.secondary_color ?? '#000000');
           setProductName(config.branding?.product_name ?? '');
           setSupportEmail(config.branding?.support_email ?? '');
         } else if (res.status === 404) {
@@ -78,8 +76,7 @@ export default function BrandingPage() {
       if (secondaryColor && secondaryColor !== '#000000')
         branding.secondary_color = secondaryColor;
       if (productName.trim()) branding.product_name = productName.trim();
-      if (supportEmail.trim())
-        branding.support_email = supportEmail.trim();
+      if (supportEmail.trim()) branding.support_email = supportEmail.trim();
 
       const method = configExists ? 'PUT' : 'POST';
       const res = await fetch('/api/vendor/config', {
@@ -90,15 +87,13 @@ export default function BrandingPage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(
-          err.error?.message ?? err.message ?? 'Failed to save'
-        );
+        throw new Error(err.error?.message ?? err.message ?? 'Failed to save');
       }
 
       toast.success(
         configExists
           ? 'Branding updated successfully'
-          : 'White-label configuration created'
+          : 'White-label configuration created',
       );
 
       if (!configExists) {
@@ -108,7 +103,7 @@ export default function BrandingPage() {
       router.refresh();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : 'Failed to save branding'
+        err instanceof Error ? err.message : 'Failed to save branding',
       );
     } finally {
       setSaving(false);
@@ -117,10 +112,7 @@ export default function BrandingPage() {
 
   if (loading) {
     return (
-      <div
-        className="flex items-center justify-center py-16"
-        role="status"
-      >
+      <div className="flex items-center justify-center py-16" role="status">
         <div className="text-center">
           <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">
@@ -132,9 +124,9 @@ export default function BrandingPage() {
   }
 
   return (
-    <div className="container mx-auto space-y-6 py-8">
+    <div className="trbd-page">
       <header>
-        <h1 className="text-3xl font-normal tracking-tight flex items-center gap-2">
+        <h1 className="trbd-page-title tracking-tight flex items-center gap-2">
           <Paintbrush className="h-7 w-7" />
           Branding
         </h1>
@@ -168,14 +160,12 @@ export default function BrandingPage() {
             {logoUrl.trim() && (
               <div className="mt-2 flex items-center gap-3">
                 <div className="h-12 w-12 rounded-md border bg-muted flex items-center justify-center overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={logoUrl}
                     alt="Logo preview"
                     className="h-full w-full object-contain"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).style.display =
-                        'none';
+                      (e.target as HTMLImageElement).style.display = 'none';
                     }}
                   />
                 </div>
@@ -263,13 +253,8 @@ export default function BrandingPage() {
 
           {/* Save */}
           <div className="flex justify-end">
-            <Button
-              onClick={handleSave}
-              disabled={saving}
-            >
-              {saving && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
+            <Button onClick={handleSave} disabled={saving}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {configExists ? 'Save changes' : 'Create configuration'}
             </Button>
           </div>
