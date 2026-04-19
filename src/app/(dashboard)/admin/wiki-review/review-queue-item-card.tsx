@@ -13,13 +13,13 @@ import {
 } from '@/app/components/ui/card';
 import type {
   ReviewQueueManualPublicationItem,
-  ReviewQueueRoutingItem,
+  ReviewQueueRoutingLegacyItem,
 } from '@/lib/services/review-queue';
 
 export function ReviewQueueItemCard({
   item,
 }: {
-  item: ReviewQueueRoutingItem | ReviewQueueManualPublicationItem;
+  item: ReviewQueueRoutingLegacyItem | ReviewQueueManualPublicationItem;
 }) {
   const isRoutingItem = item.kind === 'routing';
   const secondaryAction = isRoutingItem ? item.secondaryAction : undefined;

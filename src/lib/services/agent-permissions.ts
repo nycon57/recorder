@@ -35,6 +35,7 @@ const DEFAULT_TIERS: Record<string, PermissionTier> = {
   merge_content: 'approve',
   archive_content: 'approve',
   publish_external: 'approve',
+  reroute_content: 'approve',
 };
 
 /**
