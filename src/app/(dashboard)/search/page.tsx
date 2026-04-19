@@ -1,17 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
-import {
-  AlertCircle,
-  Search,
-  Sparkles,
-  Clock,
-  ExternalLink,
-} from 'lucide-react';
+import { AlertCircle, Search, Sparkles } from 'lucide-react';
 
 import { Loader } from '@/app/components/ai-elements/loader';
 import {
@@ -23,7 +16,6 @@ import {
 import { SearchInitialState, SearchNoResultsState } from '@/app/components/empty-states/SearchEmptyState';
 import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/KeyboardShortcutsProvider';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {
@@ -36,27 +28,15 @@ import {
   SearchUiMode,
   parseSearchUiMode,
 } from '@/app/components/search/search-modes';
+import { DocsModeResults } from '@/app/components/search/DocsModeResults';
+import { SourcesModeResults } from '@/app/components/search/SourcesModeResults';
+import type { SearchResultItem } from '@/app/components/search/search-result-types';
 import { trackSearchQuery } from '@/lib/hooks/useEngagementTracking';
-import { CONTENT_TYPE_EMOJI } from '@/lib/types/content';
-import { fadeIn, staggerContainer, staggerItem } from '@/lib/utils/animations';
-
-interface SearchResult {
-  id: string;
-  contentId: string;
-  contentTitle: string;
-  contentType: string;
-  chunkText: string;
-  similarity: number;
-  metadata: {
-    source?: 'transcript' | 'document';
-    startTime?: number;
-    isFavorite?: boolean;
-  };
-}
+import { fadeIn } from '@/lib/utils/animations';
 
 interface SearchApiResponse {
   data?: {
-    results?: SearchResult[];
+    results?: SearchResultItem[];
   };
   error?: {
     message?: string;
@@ -73,12 +53,6 @@ interface GroupedSource {
   topSnippet: string;
 }
 
-function formatTime(seconds: number) {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
 function truncateText(value: string, maxLength = 260) {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength).trimEnd()}...`;
@@ -89,7 +63,7 @@ function buildLibraryHref(contentId: string, startTime?: number) {
   return `/library/${contentId}?t=${Math.floor(startTime)}`;
 }
 
-function groupResultsBySource(results: SearchResult[]): GroupedSource[] {
+function groupResultsBySource(results: SearchResultItem[]): GroupedSource[] {
   const grouped = new Map<string, GroupedSource>();
 
   for (const result of results) {
@@ -129,7 +103,7 @@ function SearchPageContent() {
 
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<SearchUiMode>(SEARCH_UI_DEFAULT_MODE);
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<SearchResultItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
@@ -335,7 +309,7 @@ function SearchPageContent() {
             <Loader size={48} className="text-primary mb-4" />
             <p className="text-muted-foreground">Searching your knowledge base...</p>
           </motion.div>
-        ) : groupedSources.length === 0 && hasSearched && query ? (
+        ) : results.length === 0 && hasSearched && query ? (
           <motion.div key="no-results" variants={fadeIn} initial="hidden" animate="show" exit="exit">
             <SearchNoResultsState
               query={query}
@@ -348,7 +322,7 @@ function SearchPageContent() {
               }}
             />
           </motion.div>
-        ) : groupedSources.length === 0 ? (
+        ) : results.length === 0 ? (
           <motion.div key="initial" variants={fadeIn} initial="hidden" animate="show" exit="exit">
             <SearchInitialState />
           </motion.div>
@@ -385,88 +359,9 @@ function SearchPageContent() {
             </Sources>
           </motion.div>
         ) : mode === 'docs' ? (
-          <motion.div
-            key="docs-mode"
-            variants={staggerContainer}
-            initial="hidden"
-            animate="show"
-            exit="exit"
-            className="space-y-4"
-          >
-            {groupedSources.map((source) => (
-              <motion.div key={source.contentId} variants={staggerItem}>
-                <Link
-                  href={buildLibraryHref(source.contentId, source.startTime)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-xl border p-5 transition-all hover:border-primary/40 hover:shadow-sm"
-                >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <h3 className="text-base font-semibold text-primary hover:underline">
-                      {source.contentTitle}
-                    </h3>
-                    <Badge variant="secondary">
-                      {Math.round(source.bestSimilarity * 100)}% match
-                    </Badge>
-                  </div>
-                  <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 capitalize">
-                      {CONTENT_TYPE_EMOJI[source.contentType as keyof typeof CONTENT_TYPE_EMOJI]}
-                      <span>{source.contentType}</span>
-                    </span>
-                    <span>{source.matchCount} matching snippet{source.matchCount === 1 ? '' : 's'}</span>
-                    {source.startTime !== undefined ? (
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {formatTime(source.startTime)}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="text-sm text-foreground/90 leading-relaxed">
-                    {truncateText(source.topSnippet, 340)}
-                  </p>
-                </Link>
-              </motion.div>
-            ))}
-          </motion.div>
+          <DocsModeResults results={results} query={query} />
         ) : (
-          <motion.div
-            key="sources-mode"
-            variants={staggerContainer}
-            initial="hidden"
-            animate="show"
-            exit="exit"
-            className="space-y-3"
-          >
-            {groupedSources.map((source) => (
-              <motion.div key={source.contentId} variants={staggerItem}>
-                <div className="rounded-xl border bg-card/40 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="space-y-1">
-                      <p className="font-medium">{source.contentTitle}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {source.matchCount} matching snippet
-                        {source.matchCount === 1 ? '' : 's'} • {Math.round(source.bestSimilarity * 100)}% best match
-                      </p>
-                    </div>
-                    <Button asChild size="sm" variant="outline">
-                      <Link
-                        href={buildLibraryHref(source.contentId, source.startTime)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Open Source
-                        <ExternalLink className="ml-2 h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
-                  </div>
-                  <p className="mt-3 text-sm text-foreground/90">
-                    {truncateText(source.topSnippet, 260)}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
+          <SourcesModeResults results={results} query={query} />
         )}
       </AnimatePresence>
     </div>
