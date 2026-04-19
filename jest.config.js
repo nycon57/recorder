@@ -15,7 +15,7 @@ const customJestConfig = {
     '^hooks/(.*)$': '<rootDir>/src/hooks/$1',
     '^contexts/(.*)$': '<rootDir>/src/app/contexts/$1',
     '^services/(.*)$': '<rootDir>/src/lib/services/$1',
-    '^@google/genai$': '<rootDir>/__mocks__/@google/genai.ts',
+    '^@google/genai$': '<rootDir>/src/test-support/mocks/google-genai.ts',
     '^cohere-ai$': '<rootDir>/__mocks__/cohere-ai.ts',
     '^@xenova/transformers$': '<rootDir>/__mocks__/@xenova/transformers.ts',
   },
