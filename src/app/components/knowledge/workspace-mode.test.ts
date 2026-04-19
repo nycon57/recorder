@@ -17,6 +17,9 @@ describe('knowledge workspace mode helpers', () => {
   it('resolves known workspace routes', () => {
     expect(getKnowledgeWorkspaceModeFromPathname('/knowledge/map')).toBe('map')
     expect(getKnowledgeWorkspaceModeFromPathname('/knowledge/docs')).toBe('docs')
+    expect(getKnowledgeWorkspaceModeFromPathname('/knowledge/pages/page-123')).toBe(
+      'docs',
+    )
     expect(getKnowledgeWorkspaceModeFromPathname('/knowledge/review')).toBe(
       'review',
     )
