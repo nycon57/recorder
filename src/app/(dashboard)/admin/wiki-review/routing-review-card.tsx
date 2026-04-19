@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-
 import {
   AlertTriangle,
   CheckIcon,
@@ -27,6 +26,11 @@ type ViewState =
   | { kind: 'submitting' }
   | { kind: 'error'; message: string };
 
+function normalizeDraftRouteValue(value: string | null | undefined): string | null {
+  const trimmed = value?.trim().toLowerCase() ?? '';
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export function RoutingReviewCard({
   item,
 }: {
@@ -42,15 +46,24 @@ export function RoutingReviewCard({
     typeof item.routeConfidence === 'number'
       ? `${Math.round(item.routeConfidence * 100)}% confidence`
       : null;
+  const hasRouteEdits = React.useMemo(
+    () =>
+      normalizeDraftRouteValue(topic) !== normalizeDraftRouteValue(item.topic) ||
+      normalizeDraftRouteValue(app) !== normalizeDraftRouteValue(item.app) ||
+      normalizeDraftRouteValue(screen) !== normalizeDraftRouteValue(item.screen),
+    [topic, app, screen, item.topic, item.app, item.screen]
+  );
 
   const handleApprove = async () => {
     setView({ kind: 'submitting' });
+    const decisionAction = hasRouteEdits ? 'reroute' : 'approve';
     const result = await approveRoutingReview({
       approvalId: item.approvalId,
       contentId: item.contentId,
       topic,
       app,
       screen,
+      decisionAction,
     });
 
     if (!result.ok) {
@@ -158,6 +171,11 @@ export function RoutingReviewCard({
             />
           </div>
         </div>
+        {hasRouteEdits ? (
+          <p className="text-xs text-muted-foreground">
+            Route edits detected. Submitting now records this decision as a reroute.
+          </p>
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           <Button onClick={handleApprove} disabled={isSubmitting}>
@@ -166,7 +184,9 @@ export function RoutingReviewCard({
             ) : (
               <Route className="h-4 w-4" />
             )}
-            <span className="ml-2">Approve &amp; Queue Recompile</span>
+            <span className="ml-2">
+              {hasRouteEdits ? 'Reroute & Queue Recompile' : 'Approve & Queue Recompile'}
+            </span>
           </Button>
           <Button variant="destructive" onClick={handleReject} disabled={isSubmitting}>
             {isSubmitting ? (

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildRoutingCompileWikiDedupeKey,
+  determineRoutingReviewDecisionAction,
   getApprovedRoutingOverride,
   parseRoutingReviewProposedAction,
   parseRoutingReviewState,
@@ -64,12 +65,39 @@ test('writeRoutingReviewState round-trips approved overrides', () => {
         app: 'hubspot',
         screen: 'contact-record',
       },
+      decisionVersion: 1,
+      lastAction: 'reroute',
+      history: [
+        {
+          version: 1,
+          action: 'reroute',
+          decidedAt: '2026-04-19T04:05:00.000Z',
+          decidedBy: 'user-1',
+          approvalId: 'approval-1',
+          rejectionReason: null,
+          routeConfidence: 0.44,
+          routeReason: 'The transcript mentions multiple queue views.',
+          proposedRoute: {
+            topic: 'assign-owner',
+            app: 'hubspot',
+            screen: null,
+          },
+          approvedRoute: {
+            topic: 'assign-owner',
+            app: 'hubspot',
+            screen: 'contact-record',
+          },
+        },
+      ],
     }
   );
 
   const parsed = parseRoutingReviewState(metadata);
   assert.ok(parsed);
   assert.equal(parsed.status, 'approved');
+  assert.equal(parsed.decisionVersion, 1);
+  assert.equal(parsed.lastAction, 'reroute');
+  assert.equal(parsed.history.length, 1);
   assert.deepEqual(parsed.approvedRoute, {
     topic: 'assign-owner',
     app: 'hubspot',
@@ -104,6 +132,73 @@ test('parseRoutingReviewProposedAction validates the approval payload shape', ()
     app: 'hubspot',
     screen: null,
   });
+});
+
+test('determineRoutingReviewDecisionAction distinguishes approve, reroute, and reject', () => {
+  assert.equal(
+    determineRoutingReviewDecisionAction({
+      status: 'approved',
+      proposedRoute: {
+        topic: 'assign-owner',
+        app: 'hubspot',
+        screen: 'contact-record',
+      },
+      approvedRoute: {
+        topic: 'assign-owner',
+        app: 'hubspot',
+        screen: 'contact-record',
+      },
+    }),
+    'approve'
+  );
+
+  assert.equal(
+    determineRoutingReviewDecisionAction({
+      status: 'approved',
+      proposedRoute: {
+        topic: 'assign-owner',
+        app: 'hubspot',
+        screen: 'contact-record',
+      },
+      approvedRoute: {
+        topic: 'assign-owner',
+        app: 'hubspot',
+        screen: 'deal-record',
+      },
+    }),
+    'reroute'
+  );
+
+  assert.equal(
+    determineRoutingReviewDecisionAction({
+      status: 'approved',
+      proposedRoute: {
+        topic: 'assign-owner',
+        app: 'hubspot',
+        screen: 'contact-record',
+      },
+      approvedRoute: {
+        topic: 'assign-owner',
+        app: 'hubspot',
+        screen: 'deal-record',
+      },
+      decisionHint: 'edit_and_approve',
+    }),
+    'edit_and_approve'
+  );
+
+  assert.equal(
+    determineRoutingReviewDecisionAction({
+      status: 'rejected',
+      proposedRoute: {
+        topic: 'assign-owner',
+        app: 'hubspot',
+        screen: 'contact-record',
+      },
+      approvedRoute: null,
+    }),
+    'reject'
+  );
 });
 
 test('buildRoutingCompileWikiDedupeKey is approval-specific', () => {

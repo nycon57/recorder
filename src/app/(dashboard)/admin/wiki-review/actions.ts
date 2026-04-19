@@ -37,11 +37,15 @@ import {
   recordKnowledgeTelemetryEvent,
 } from '@/lib/services/knowledge-telemetry';
 import {
+  determineRoutingReviewDecisionAction,
   ROUTING_REVIEW_ACTION_TYPE,
   enqueueRoutingCompileWikiJob,
   normalizeRoutingApp,
   normalizeRoutingSlug,
+  parseRoutingReviewState,
   parseRoutingReviewProposedAction,
+  type RoutingReviewDecisionAction,
+  type RoutingReviewState,
   writeRoutingReviewState,
 } from '@/lib/services/routing-review';
 import {
@@ -78,6 +82,22 @@ interface LoadedRoutingApprovalTarget {
     'id' | 'org_id' | 'action_type' | 'content_id' | 'proposed_action' | 'status' | 'created_at'
   >;
   content: Pick<ContentRow, 'id' | 'org_id' | 'metadata' | 'title'>;
+}
+
+interface ReviewAuditLogInput {
+  orgId: string;
+  userId: string;
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  oldValues?: Json | null;
+  newValues?: Json | null;
+  metadata?: Record<string, Json>;
+}
+
+interface RoutingDecisionStateResult {
+  state: RoutingReviewState;
+  decisionAction: RoutingReviewDecisionAction;
 }
 
 /**
@@ -188,6 +208,98 @@ function clampConfidence(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+async function writeReviewAuditLog(input: ReviewAuditLogInput): Promise<void> {
+  const { error } = await supabaseAdmin.from('audit_logs').insert({
+    org_id: input.orgId,
+    user_id: input.userId,
+    action: input.action,
+    resource_type: input.resourceType,
+    resource_id: input.resourceId,
+    old_values: input.oldValues ?? null,
+    new_values: input.newValues ?? null,
+    metadata: (input.metadata ?? {}) as Json,
+  });
+
+  if (error) {
+    logger.error('Failed to write review audit log', {
+      context: {
+        orgId: input.orgId,
+        action: input.action,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+      },
+      error,
+    });
+  }
+}
+
+function buildRoutingDecisionState(input: {
+  existingMetadata: Json | null;
+  approvalId: string;
+  requestedAt: string | null;
+  reviewedAt: string;
+  reviewedBy: string;
+  status: 'approved' | 'rejected';
+  rejectionReason: string | null;
+  routeConfidence: number | null;
+  routeReason: string | null;
+  proposedRoute: {
+    topic: string;
+    app: string | null;
+    screen: string | null;
+  };
+  approvedRoute: {
+    topic: string;
+    app: string | null;
+    screen: string | null;
+  } | null;
+  decisionHint?: RoutingReviewDecisionAction | null;
+}): RoutingDecisionStateResult {
+  const previousState = parseRoutingReviewState(input.existingMetadata);
+  const decisionVersion = (previousState?.decisionVersion ?? 0) + 1;
+  const decisionAction = determineRoutingReviewDecisionAction({
+    status: input.status,
+    proposedRoute: input.proposedRoute,
+    approvedRoute: input.approvedRoute,
+    decisionHint: input.decisionHint,
+  });
+
+  const history = [
+    ...(previousState?.history ?? []),
+    {
+      version: decisionVersion,
+      action: decisionAction,
+      decidedAt: input.reviewedAt,
+      decidedBy: input.reviewedBy,
+      approvalId: input.approvalId,
+      rejectionReason: input.rejectionReason,
+      routeConfidence: input.routeConfidence,
+      routeReason: input.routeReason,
+      proposedRoute: input.proposedRoute,
+      approvedRoute: input.approvedRoute,
+    },
+  ].slice(-50);
+
+  return {
+    decisionAction,
+    state: {
+      status: input.status,
+      approvalId: input.approvalId,
+      requestedAt: input.requestedAt,
+      reviewedAt: input.reviewedAt,
+      reviewedBy: input.reviewedBy,
+      rejectionReason: input.rejectionReason,
+      routeConfidence: input.routeConfidence,
+      routeReason: input.routeReason,
+      proposedRoute: input.proposedRoute,
+      approvedRoute: input.approvedRoute,
+      decisionVersion,
+      lastAction: decisionAction,
+      history,
+    },
+  };
+}
+
 /**
  * Supersede the current page and insert a new row with the given content.
  * Writes an `applied` log entry on the new row that carries `resolved_at`
@@ -200,7 +312,7 @@ async function supersedeWithContent(input: {
   newContent: string;
   userId: string;
   nowIso: string;
-}): Promise<void> {
+}): Promise<{ newPageId: string }> {
   const { existingPage, existingLog, entryIndex, newContent, userId, nowIso } = input;
   const originalEntry = existingLog[entryIndex];
 
@@ -240,13 +352,17 @@ async function supersedeWithContent(input: {
     compilation_log: carriedLog as unknown as Json,
   };
 
-  const { error: insertError } = await supabaseAdmin
+  const { data: insertedPage, error: insertError } = await supabaseAdmin
     .from('org_wiki_pages')
-    .insert(newPageInsert as never);
+    .insert(newPageInsert as never)
+    .select('id')
+    .single();
 
   if (insertError) {
     throw new Error(`Failed to insert superseding page for ${existingPage.id}: ${insertError.message}`);
   }
+
+  return { newPageId: (insertedPage as { id: string }).id };
 }
 
 /**
@@ -334,14 +450,32 @@ export async function approveContradiction(input: {
     if (nextContent === page.content) {
       // Nothing would actually change — treat as a no-op and reject the
       // entry so it stops re-appearing in the review queue.
+      const resolvedAt = new Date().toISOString();
       await patchLogEntryInPlace({
         pageId: page.id,
         existingLog: log,
         entryIndex: input.logEntryIndex,
-        patch: { action: 'rejected', resolved_at: new Date().toISOString(), resolved_by: userId },
+        patch: { action: 'rejected', resolved_at: resolvedAt, resolved_by: userId },
       });
       logger.warn('Approve resulted in no content change; auto-rejected', {
         context: { orgId, userId, pageId: page.id, logEntryIndex: input.logEntryIndex },
+      });
+      await writeReviewAuditLog({
+        orgId,
+        userId,
+        action: 'wiki_review.auto_reject_noop',
+        resourceType: 'org_wiki_page',
+        resourceId: page.id,
+        oldValues: entry as unknown as Json,
+        newValues: {
+          action: 'rejected',
+          resolved_at: resolvedAt,
+          resolved_by: userId,
+        } as unknown as Json,
+        metadata: {
+          logEntryIndex: input.logEntryIndex,
+          sourceRecordingId: entry.source_recording_id,
+        },
       });
       await recordReviewOutcome({
         orgId,
@@ -355,7 +489,7 @@ export async function approveContradiction(input: {
       return { ok: true };
     }
 
-    await supersedeWithContent({
+    const { newPageId } = await supersedeWithContent({
       existingPage: page,
       existingLog: log,
       entryIndex: input.logEntryIndex,
@@ -366,6 +500,24 @@ export async function approveContradiction(input: {
 
     logger.info('Wiki contradiction approved', {
       context: { orgId, userId, pageId: page.id, logEntryIndex: input.logEntryIndex },
+    });
+    await writeReviewAuditLog({
+      orgId,
+      userId,
+      action: 'wiki_review.approve',
+      resourceType: 'org_wiki_page',
+      resourceId: page.id,
+      oldValues: entry as unknown as Json,
+      newValues: {
+        action: 'applied',
+        resolved_by: userId,
+        superseded_page_id: page.id,
+        new_page_id: newPageId,
+      } as unknown as Json,
+      metadata: {
+        logEntryIndex: input.logEntryIndex,
+        sourceRecordingId: entry.source_recording_id,
+      },
     });
 
     await recordReviewOutcome({
@@ -406,6 +558,7 @@ export async function approveRoutingReview(input: {
   topic: string;
   app: string | null;
   screen: string | null;
+  decisionAction?: 'approve' | 'edit_and_approve' | 'reroute';
 }): Promise<ActionResult> {
   try {
     const { orgId, userId } = await requireAdmin();
@@ -435,7 +588,9 @@ export async function approveRoutingReview(input: {
     }
 
     const nowIso = new Date().toISOString();
-    const nextMetadata = writeRoutingReviewState(content.metadata, {
+    const previousRoutingState = parseRoutingReviewState(content.metadata);
+    const { state: routingState, decisionAction } = buildRoutingDecisionState({
+      existingMetadata: content.metadata,
       status: 'approved',
       approvalId: approval.id,
       requestedAt: approval.created_at,
@@ -450,7 +605,9 @@ export async function approveRoutingReview(input: {
         app,
         screen,
       },
+      decisionHint: input.decisionAction ?? null,
     });
+    const nextMetadata = writeRoutingReviewState(content.metadata, routingState);
 
     const { error: contentUpdateError } = await supabaseAdmin
       .from('content')
@@ -484,12 +641,27 @@ export async function approveRoutingReview(input: {
       throw new Error('Routing review item is no longer pending');
     }
 
+    await writeReviewAuditLog({
+      orgId,
+      userId,
+      action: `routing_review.${decisionAction}`,
+      resourceType: 'content',
+      resourceId: content.id,
+      oldValues: (previousRoutingState as unknown as Json) ?? null,
+      newValues: routingState as unknown as Json,
+      metadata: {
+        approvalId: approval.id,
+        contentTitle: content.title ?? null,
+      },
+    });
+
     logger.info('Routing review approved', {
       context: {
         orgId,
         userId,
         approvalId: approval.id,
         contentId: content.id,
+        decisionAction,
         topic,
         app,
         screen,
@@ -512,6 +684,7 @@ export async function approveRoutingReview(input: {
 export async function rejectRoutingReview(input: {
   approvalId: string;
   contentId: string;
+  rejectionReason?: string | null;
 }): Promise<ActionResult> {
   try {
     const { orgId, userId } = await requireAdmin();
@@ -527,8 +700,11 @@ export async function rejectRoutingReview(input: {
     }
 
     const nowIso = new Date().toISOString();
-    const rejectionReason = 'Reviewer rejected the proposed route.';
-    const nextMetadata = writeRoutingReviewState(content.metadata, {
+    const rejectionReason =
+      input.rejectionReason?.trim() || 'Reviewer rejected the proposed route.';
+    const previousRoutingState = parseRoutingReviewState(content.metadata);
+    const { state: routingState, decisionAction } = buildRoutingDecisionState({
+      existingMetadata: content.metadata,
       status: 'rejected',
       approvalId: approval.id,
       requestedAt: approval.created_at,
@@ -539,7 +715,9 @@ export async function rejectRoutingReview(input: {
       routeReason: proposedAction.routeReason,
       proposedRoute: proposedAction.proposedRoute,
       approvedRoute: null,
+      decisionHint: 'reject',
     });
+    const nextMetadata = writeRoutingReviewState(content.metadata, routingState);
 
     const { error: contentUpdateError } = await supabaseAdmin
       .from('content')
@@ -568,12 +746,27 @@ export async function rejectRoutingReview(input: {
       throw new Error('Routing review item is no longer pending');
     }
 
+    await writeReviewAuditLog({
+      orgId,
+      userId,
+      action: `routing_review.${decisionAction}`,
+      resourceType: 'content',
+      resourceId: content.id,
+      oldValues: (previousRoutingState as unknown as Json) ?? null,
+      newValues: routingState as unknown as Json,
+      metadata: {
+        approvalId: approval.id,
+        contentTitle: content.title ?? null,
+      },
+    });
+
     logger.info('Routing review rejected', {
       context: {
         orgId,
         userId,
         approvalId: approval.id,
         contentId: content.id,
+        decisionAction,
       },
     });
 
@@ -602,7 +795,8 @@ export async function rejectContradiction(input: {
   try {
     const { userId, orgId } = await requireAdmin();
     authContext = { orgId, userId };
-    const { page, log } = await loadAndValidateTarget({ ...input, orgId });
+    const { page, log, entry } = await loadAndValidateTarget({ ...input, orgId });
+    const resolvedAt = new Date().toISOString();
 
     await patchLogEntryInPlace({
       pageId: page.id,
@@ -610,13 +804,30 @@ export async function rejectContradiction(input: {
       entryIndex: input.logEntryIndex,
       patch: {
         action: 'rejected',
-        resolved_at: new Date().toISOString(),
+        resolved_at: resolvedAt,
         resolved_by: userId,
       },
     });
 
     logger.info('Wiki contradiction rejected', {
       context: { orgId, userId, pageId: page.id, logEntryIndex: input.logEntryIndex },
+    });
+    await writeReviewAuditLog({
+      orgId,
+      userId,
+      action: 'wiki_review.reject',
+      resourceType: 'org_wiki_page',
+      resourceId: page.id,
+      oldValues: entry as unknown as Json,
+      newValues: {
+        action: 'rejected',
+        resolved_at: resolvedAt,
+        resolved_by: userId,
+      } as unknown as Json,
+      metadata: {
+        logEntryIndex: input.logEntryIndex,
+        sourceRecordingId: entry.source_recording_id,
+      },
     });
 
     await recordReviewOutcome({
@@ -665,7 +876,7 @@ export async function editAndApproveContradiction(input: {
   try {
     const { userId, orgId } = await requireAdmin();
     authContext = { orgId, userId };
-    const { page, log } = await loadAndValidateTarget({
+    const { page, log, entry } = await loadAndValidateTarget({
       pageId: input.pageId,
       logEntryIndex: input.logEntryIndex,
       orgId,
@@ -676,7 +887,7 @@ export async function editAndApproveContradiction(input: {
       return { ok: false, error: 'Edited content cannot be empty' };
     }
 
-    await supersedeWithContent({
+    const { newPageId } = await supersedeWithContent({
       existingPage: page,
       existingLog: log,
       entryIndex: input.logEntryIndex,
@@ -692,6 +903,25 @@ export async function editAndApproveContradiction(input: {
         pageId: page.id,
         logEntryIndex: input.logEntryIndex,
         contentLength: editedContent.length,
+      },
+    });
+    await writeReviewAuditLog({
+      orgId,
+      userId,
+      action: 'wiki_review.edit_and_approve',
+      resourceType: 'org_wiki_page',
+      resourceId: page.id,
+      oldValues: entry as unknown as Json,
+      newValues: {
+        action: 'applied',
+        resolved_by: userId,
+        superseded_page_id: page.id,
+        new_page_id: newPageId,
+        editedContentLength: editedContent.length,
+      } as unknown as Json,
+      metadata: {
+        logEntryIndex: input.logEntryIndex,
+        sourceRecordingId: entry.source_recording_id,
       },
     });
 
