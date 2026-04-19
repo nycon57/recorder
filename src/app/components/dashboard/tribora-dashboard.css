@@ -1,0 +1,379 @@
+@layer components {
+  .tribora-dashboard {
+    --trbd-surface-0: oklch(0.145 0.008 60);
+    --trbd-surface-1: oklch(0.176 0.009 60);
+    --trbd-surface-2: oklch(0.216 0.011 62);
+    --trbd-surface-3: oklch(0.258 0.012 64);
+
+    --trbd-ink: oklch(0.965 0.005 80);
+    --trbd-ink-muted: oklch(0.748 0.01 72);
+    --trbd-ink-dim: oklch(0.56 0.011 70);
+
+    --trbd-line: oklch(0.31 0.011 64 / 0.64);
+    --trbd-line-strong: oklch(0.38 0.013 64 / 0.84);
+
+    --trbd-signal: oklch(0.78 0.155 72);
+    --trbd-signal-ink: oklch(0.145 0.02 70);
+
+    --background: var(--trbd-surface-0);
+    --foreground: var(--trbd-ink);
+    --card: var(--trbd-surface-1);
+    --card-foreground: var(--trbd-ink);
+    --popover: var(--trbd-surface-2);
+    --popover-foreground: var(--trbd-ink);
+    --primary: var(--trbd-signal);
+    --primary-foreground: var(--trbd-signal-ink);
+    --secondary: var(--trbd-surface-2);
+    --secondary-foreground: var(--trbd-ink);
+    --muted: color-mix(in oklch, var(--trbd-surface-2) 76%, black);
+    --muted-foreground: var(--trbd-ink-muted);
+    --accent: color-mix(in oklch, var(--trbd-signal) 15%, var(--trbd-surface-2));
+    --accent-foreground: var(--trbd-ink);
+    --border: var(--trbd-line);
+    --input: color-mix(in oklch, var(--trbd-surface-2) 80%, black);
+    --ring: var(--trbd-signal);
+
+    --sidebar: var(--trbd-surface-1);
+    --sidebar-foreground: var(--trbd-ink);
+    --sidebar-primary: var(--trbd-signal);
+    --sidebar-primary-foreground: var(--trbd-signal-ink);
+    --sidebar-accent: var(--trbd-surface-2);
+    --sidebar-accent-foreground: var(--trbd-ink);
+    --sidebar-border: var(--trbd-line);
+    --sidebar-ring: var(--trbd-signal);
+
+    --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+    --font-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --radius: 0.375rem;
+
+    color-scheme: dark;
+    min-height: 100dvh;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11", "calt";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .tribora-dashboard ::selection {
+    background: color-mix(in oklch, var(--trbd-signal) 36%, transparent);
+    color: var(--trbd-ink);
+  }
+
+  .tribora-dashboard .container,
+  .tribora-dashboard [class*="max-w-6xl"],
+  .tribora-dashboard [class*="max-w-7xl"] {
+    width: min(76rem, 100%);
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 2vw, 2rem);
+  }
+
+  .tribora-dashboard .trbd-shell-header {
+    border-bottom: 1px solid var(--trbd-line);
+    background: color-mix(in oklch, var(--trbd-surface-1) 82%, transparent);
+    backdrop-filter: blur(14px);
+  }
+
+  .tribora-dashboard .trbd-shell-main {
+    padding: 1rem;
+    gap: 1.25rem;
+  }
+
+  .tribora-dashboard .trbd-shell-main > * {
+    animation: trbd-fade-up 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .tribora-dashboard .trbd-page {
+    width: min(76rem, 100%);
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 2vw, 2rem);
+    padding-block: clamp(1rem, 2.5vw, 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .tribora-dashboard .trbd-page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .tribora-dashboard .trbd-page-heading {
+    display: grid;
+    gap: 0.35rem;
+    max-width: 72ch;
+  }
+
+  .tribora-dashboard .trbd-page-title,
+  .tribora-dashboard h1.text-3xl.font-normal,
+  .tribora-dashboard .text-heading-3 {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: clamp(1.62rem, 1.1rem + 1.6vw, 2.24rem);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+    color: var(--trbd-ink);
+  }
+
+  .tribora-dashboard .text-heading-4 {
+    font-family: var(--font-heading);
+    font-size: clamp(1.35rem, 1rem + 0.9vw, 1.75rem);
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    font-weight: 600;
+  }
+
+  .tribora-dashboard .font-outfit {
+    font-family: var(--font-heading);
+  }
+
+  .tribora-dashboard .trbd-page-description {
+    margin: 0;
+    color: var(--trbd-ink-muted);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    max-width: 72ch;
+  }
+
+  .tribora-dashboard .trbd-mono,
+  .tribora-dashboard [class*="font-mono"] {
+    font-family: var(--font-mono);
+  }
+
+  .tribora-dashboard .trbd-kicker {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--trbd-ink-dim);
+  }
+
+  .tribora-dashboard .trbd-icon-chip {
+    display: inline-flex;
+    height: 2.5rem;
+    width: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    border: 1px solid var(--trbd-line);
+    background: color-mix(in oklch, var(--trbd-signal) 12%, var(--trbd-surface-2));
+    color: var(--trbd-signal);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+  }
+
+  .tribora-dashboard .trbd-stat-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  }
+
+  .tribora-dashboard .trbd-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .tribora-dashboard .trbd-stack {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .tribora-dashboard .card-interactive {
+    border-color: var(--trbd-line);
+    background: color-mix(in oklch, var(--trbd-surface-1) 92%, transparent);
+    transition: border-color 200ms, transform 200ms, box-shadow 200ms;
+  }
+
+  .tribora-dashboard .card-interactive:hover {
+    border-color: var(--trbd-line-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 14px 30px -24px rgb(0 0 0 / 88%);
+  }
+
+  .tribora-dashboard [data-slot="card"] {
+    border-color: var(--trbd-line);
+    background: color-mix(in oklch, var(--trbd-surface-1) 92%, transparent);
+    box-shadow: 0 14px 30px -24px rgb(0 0 0 / 88%);
+  }
+
+  .tribora-dashboard [data-slot="card"] [data-slot="card-title"] {
+    font-family: var(--font-heading);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .tribora-dashboard [data-slot="button"] {
+    border-radius: 0.45rem;
+    border-color: var(--trbd-line);
+    font-family: var(--font-sans);
+  }
+
+  .tribora-dashboard [data-slot="button"][class*="bg-primary"] {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 15%), 0 10px 20px -14px color-mix(in oklch, var(--trbd-signal) 80%, black);
+  }
+
+  .tribora-dashboard [data-slot="button"][class*="bg-primary"]:hover {
+    background: color-mix(in oklch, var(--trbd-signal) 88%, black);
+  }
+
+  .tribora-dashboard [data-slot="input"],
+  .tribora-dashboard [data-slot="textarea"],
+  .tribora-dashboard [data-slot="select-trigger"],
+  .tribora-dashboard select {
+    border-color: var(--trbd-line) !important;
+    background: color-mix(in oklch, var(--trbd-surface-2) 78%, black) !important;
+    color: var(--trbd-ink);
+    box-shadow: none !important;
+  }
+
+  .tribora-dashboard [data-slot="input"]::placeholder,
+  .tribora-dashboard [data-slot="textarea"]::placeholder {
+    color: var(--trbd-ink-dim);
+  }
+
+  .tribora-dashboard [data-slot="input"]:focus-visible,
+  .tribora-dashboard [data-slot="textarea"]:focus-visible,
+  .tribora-dashboard [data-slot="select-trigger"]:focus-visible,
+  .tribora-dashboard select:focus-visible {
+    border-color: color-mix(in oklch, var(--trbd-signal) 44%, var(--trbd-line-strong)) !important;
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--trbd-signal) 22%, transparent) !important;
+  }
+
+  .tribora-dashboard [data-slot="select-content"],
+  .tribora-dashboard [data-slot="dropdown-menu-content"],
+  .tribora-dashboard [data-slot="dropdown-menu-sub-content"],
+  .tribora-dashboard [data-slot="dialog-content"],
+  .tribora-dashboard [data-slot="sheet-content"] {
+    border-color: var(--trbd-line) !important;
+    background: color-mix(in oklch, var(--trbd-surface-2) 90%, black) !important;
+    box-shadow: 0 24px 48px -32px rgb(0 0 0 / 88%) !important;
+  }
+
+  .tribora-dashboard [data-slot="tabs-list"] {
+    border: 1px solid var(--trbd-line);
+    background: color-mix(in oklch, var(--trbd-surface-2) 84%, black);
+  }
+
+  .tribora-dashboard [data-slot="tabs-trigger"] {
+    color: var(--trbd-ink-muted);
+  }
+
+  .tribora-dashboard [data-slot="tabs-trigger"][data-state="active"] {
+    border-color: var(--trbd-line-strong);
+    background: color-mix(in oklch, var(--trbd-surface-1) 88%, black);
+    color: var(--trbd-ink);
+  }
+
+  .tribora-dashboard [data-slot="table"] {
+    color: var(--trbd-ink);
+  }
+
+  .tribora-dashboard [data-slot="table-head"] {
+    color: var(--trbd-ink-muted);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding-top: 0.8rem;
+    padding-bottom: 0.8rem;
+  }
+
+  .tribora-dashboard [data-slot="table-cell"] {
+    border-color: color-mix(in oklch, var(--trbd-line) 78%, transparent);
+    color: var(--trbd-ink);
+  }
+
+  .tribora-dashboard [data-slot="table-row"]:hover {
+    background: color-mix(in oklch, var(--trbd-surface-2) 70%, black);
+  }
+
+  .tribora-dashboard [data-slot="badge"] {
+    border-color: var(--trbd-line);
+    border-radius: 999px;
+  }
+
+  .tribora-dashboard [data-slot="alert"] {
+    border-color: var(--trbd-line-strong);
+    background: color-mix(in oklch, var(--trbd-surface-2) 86%, black);
+    color: var(--trbd-ink);
+  }
+
+  .tribora-dashboard [data-slot="alert"][class*="destructive"] {
+    border-color: color-mix(in oklch, oklch(0.62 0.22 27) 55%, var(--trbd-line));
+    background: color-mix(in oklch, oklch(0.62 0.22 27) 12%, var(--trbd-surface-2));
+  }
+
+  .tribora-dashboard [class*="bg-gradient-to-br"] {
+    background-image: none !important;
+    background-color: color-mix(in oklch, var(--trbd-surface-2) 84%, black) !important;
+    border: 1px solid var(--trbd-line);
+  }
+
+  .tribora-dashboard [class*="animate-pulse"] {
+    animation-duration: 1.3s;
+  }
+
+  .tribora-dashboard [class*="text-green-"],
+  .tribora-dashboard [class*="text-blue-"],
+  .tribora-dashboard [class*="text-purple-"],
+  .tribora-dashboard [class*="text-yellow-"] {
+    color: var(--trbd-ink-muted);
+  }
+
+  .tribora-dashboard .trbd-brand-lockup {
+    font-family: var(--font-heading);
+    letter-spacing: -0.012em;
+  }
+
+  .tribora-dashboard .trbd-mono {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--trbd-ink-dim);
+  }
+
+  @media (min-width: 768px) {
+    .tribora-dashboard .trbd-shell-main {
+      padding: 1.5rem;
+      gap: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .tribora-dashboard .trbd-shell-main {
+      padding: 2rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tribora-dashboard .trbd-shell-main > * {
+      animation: none;
+    }
+
+    .tribora-dashboard * {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+    }
+  }
+}
+
+@keyframes trbd-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

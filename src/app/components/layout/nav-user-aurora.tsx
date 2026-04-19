@@ -1,17 +1,22 @@
-"use client"
+'use client';
 
-import * as React from "react"
-import Link from "next/link"
-import { useSession, signOut } from "@/lib/auth/auth-client"
-import * as motion from "motion/react-client"
-import { ChevronsUpDown, Settings, LogOut, User as UserIcon } from "lucide-react"
+import * as React from 'react';
+import Link from 'next/link';
+import * as motion from 'motion/react-client';
+import {
+  ChevronsUpDown,
+  Settings,
+  LogOut,
+  User as UserIcon,
+} from 'lucide-react';
 
-import { cn } from "@/lib/utils"
+import { useSession, signOut } from '@/lib/auth/auth-client';
+import { cn } from '@/lib/utils';
 import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-} from "@/app/components/ui/sidebar"
+} from '@/app/components/ui/sidebar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,22 +24,21 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/app/components/ui/dropdown-menu"
+} from '@/app/components/ui/dropdown-menu';
 import {
   Avatar,
   AvatarImage,
   AvatarFallback,
-} from "@/app/components/ui/avatar"
+} from '@/app/components/ui/avatar';
 
 /**
  * NavUserAurora Component
- * Motion-enhanced user dropdown with glass-morphism effects
+ * Motion-enhanced user dropdown for dashboard sidebar
  *
  * Features:
- * - Glass effect dropdown menu
- * - Avatar glow on hover
+ * - Consistent app-surface dropdown styling
+ * - Lightweight hover/focus feedback
  * - Staggered menu item animations
- * - Aurora accent colors
  */
 
 // Motion variants for dropdown items
@@ -49,7 +53,7 @@ const menuItemVariants = {
       ease: [0.25, 0.46, 0.45, 0.94],
     },
   }),
-}
+};
 
 // Motion variants for entrance animation
 const containerVariants = {
@@ -58,52 +62,54 @@ const containerVariants = {
     opacity: 1,
     y: 0,
     transition: {
-      type: "spring" as const,
+      type: 'spring' as const,
       stiffness: 400,
       damping: 30,
       delay: 0.35,
     },
   },
-}
+};
 
 export function NavUserAurora() {
-  const { data: session, isPending } = useSession()
-  const [mounted, setMounted] = React.useState(false)
+  const { data: session, isPending } = useSession();
+  const [mounted, setMounted] = React.useState(false);
 
   // Prevent hydration mismatch by only rendering motion after mount
   React.useEffect(() => {
-    setMounted(true)
-  }, [])
+    setMounted(true);
+  }, []);
 
   // Wait for session to load
   if (isPending || !session?.user) {
-    return null
+    return null;
   }
 
-  const user = session.user
+  const user = session.user;
 
   // Get user display information
-  const userName = user.name || "User"
-  const userEmail = user.email || ""
+  const userName = user.name || 'User';
+  const userEmail = user.email || '';
   const userInitials = userName
-    .split(" ")
+    .split(' ')
     .map((n) => n[0])
-    .join("")
+    .join('')
     .toUpperCase()
-    .slice(0, 2)
+    .slice(0, 2);
 
   const handleSignOut = async () => {
-    await signOut()
-    window.location.href = "/"
-  }
+    await signOut();
+    window.location.href = '/';
+  };
 
   // Wrapper component - use motion only after mount to prevent hydration mismatch
-  const Wrapper = mounted ? motion.div : "div"
-  const wrapperProps = mounted ? {
-    initial: "hidden",
-    animate: "visible",
-    variants: containerVariants,
-  } : {}
+  const Wrapper = mounted ? motion.div : 'div';
+  const wrapperProps = mounted
+    ? {
+        initial: 'hidden',
+        animate: 'visible',
+        variants: containerVariants,
+      }
+    : {};
 
   return (
     <Wrapper {...wrapperProps}>
@@ -114,25 +120,24 @@ export function NavUserAurora() {
               <SidebarMenuButton
                 size="lg"
                 className={cn(
-                  "transition-all duration-300",
-                  "data-[state=open]:bg-accent/15 data-[state=open]:text-accent",
-                  "data-[state=open]:shadow-[0_0_15px_rgba(0,223,130,0.15)]"
+                  'transition-all duration-300',
+                  'data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground',
+                  'data-[state=open]:border-sidebar-border',
                 )}
               >
                 <motion.div
                   whileHover={{ scale: 1.05 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                 >
-                  <Avatar className={cn(
-                    "size-8 rounded-lg",
-                    "transition-shadow duration-300",
-                    "hover:shadow-[0_0_15px_rgba(0,223,130,0.25)]"
-                  )}>
-                    <AvatarImage
-                      src={user.image || undefined}
-                      alt={userName}
-                    />
-                    <AvatarFallback className="rounded-lg bg-accent/20 text-accent">
+                  <Avatar
+                    className={cn(
+                      'size-8 rounded-lg',
+                      'transition-shadow duration-300',
+                      'hover:shadow-[0_10px_18px_-14px_rgba(0,0,0,0.85)]',
+                    )}
+                  >
+                    <AvatarImage src={user.image || undefined} alt={userName} />
+                    <AvatarFallback className="rounded-lg bg-muted text-foreground">
                       {userInitials}
                     </AvatarFallback>
                   </Avatar>
@@ -148,10 +153,9 @@ export function NavUserAurora() {
             </DropdownMenuTrigger>
             <DropdownMenuContent
               className={cn(
-                "w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg",
-                "bg-popover/95 backdrop-blur-xl",
-                "border-accent/20",
-                "shadow-[0_0_30px_rgba(0,223,130,0.1)]"
+                'w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg',
+                'bg-popover/95 backdrop-blur-xl border-border',
+                'shadow-[0_18px_44px_-30px_rgba(0,0,0,0.9)]',
               )}
               side="bottom"
               align="end"
@@ -160,11 +164,8 @@ export function NavUserAurora() {
               <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                   <Avatar className="size-8 rounded-lg">
-                    <AvatarImage
-                      src={user.image || undefined}
-                      alt={userName}
-                    />
-                    <AvatarFallback className="rounded-lg bg-accent/20 text-accent">
+                    <AvatarImage src={user.image || undefined} alt={userName} />
+                    <AvatarFallback className="rounded-lg bg-muted text-foreground">
                       {userInitials}
                     </AvatarFallback>
                   </Avatar>
@@ -176,19 +177,22 @@ export function NavUserAurora() {
                   </div>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-accent/10" />
+              <DropdownMenuSeparator className="bg-border" />
               <motion.div
                 custom={0}
                 initial="hidden"
                 animate="visible"
                 variants={menuItemVariants}
               >
-                <DropdownMenuItem asChild className={cn(
-                  "cursor-pointer",
-                  "transition-all duration-200",
-                  "hover:bg-accent/10 hover:text-accent",
-                  "focus:bg-accent/10 focus:text-accent"
-                )}>
+                <DropdownMenuItem
+                  asChild
+                  className={cn(
+                    'cursor-pointer',
+                    'transition-all duration-200',
+                    'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                    'focus:bg-sidebar-accent focus:text-sidebar-accent-foreground',
+                  )}
+                >
                   <Link href="/settings/profile">
                     <UserIcon className="mr-2 size-4" />
                     Profile
@@ -201,19 +205,22 @@ export function NavUserAurora() {
                 animate="visible"
                 variants={menuItemVariants}
               >
-                <DropdownMenuItem asChild className={cn(
-                  "cursor-pointer",
-                  "transition-all duration-200",
-                  "hover:bg-accent/10 hover:text-accent",
-                  "focus:bg-accent/10 focus:text-accent"
-                )}>
+                <DropdownMenuItem
+                  asChild
+                  className={cn(
+                    'cursor-pointer',
+                    'transition-all duration-200',
+                    'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                    'focus:bg-sidebar-accent focus:text-sidebar-accent-foreground',
+                  )}
+                >
                   <Link href="/settings">
                     <Settings className="mr-2 size-4" />
                     Settings
                   </Link>
                 </DropdownMenuItem>
               </motion.div>
-              <DropdownMenuSeparator className="bg-accent/10" />
+              <DropdownMenuSeparator className="bg-border" />
               <motion.div
                 custom={2}
                 initial="hidden"
@@ -223,10 +230,10 @@ export function NavUserAurora() {
                 <DropdownMenuItem
                   onClick={handleSignOut}
                   className={cn(
-                    "cursor-pointer",
-                    "transition-all duration-200",
-                    "hover:bg-destructive/10 hover:text-destructive",
-                    "focus:bg-destructive/10 focus:text-destructive"
+                    'cursor-pointer',
+                    'transition-all duration-200',
+                    'hover:bg-destructive/10 hover:text-destructive',
+                    'focus:bg-destructive/10 focus:text-destructive',
                   )}
                 >
                   <LogOut className="mr-2 size-4" />
@@ -238,5 +245,5 @@ export function NavUserAurora() {
         </SidebarMenuItem>
       </SidebarMenu>
     </Wrapper>
-  )
+  );
 }
