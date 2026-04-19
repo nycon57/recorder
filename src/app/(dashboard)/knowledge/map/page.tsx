@@ -729,7 +729,7 @@ function KnowledgePageContent() {
                 page-centric.
               </span>
               <Button asChild size="sm" variant="outline" className="min-h-[36px] w-fit">
-                <Link href={`/knowledge/pages/${originPageId}`}>
+                <Link href={`/knowledge/pages/${encodeURIComponent(originPageId)}`}>
                   Back to page detail
                 </Link>
               </Button>
