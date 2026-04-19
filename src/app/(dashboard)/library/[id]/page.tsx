@@ -1,8 +1,8 @@
 import { Suspense } from 'react';
 import { headers } from 'next/headers';
-import { auth } from '@/lib/auth/auth';
 import { redirect, notFound } from 'next/navigation';
 
+import { auth } from '@/lib/auth/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   VideoDetailView,
@@ -14,7 +14,7 @@ import { RelatedContent } from '@/app/components/content/RelatedContent';
 import { ContentChatWidget } from '@/app/components/content/ContentChatWidget';
 import { OnboardingViewTracker } from '@/app/components/onboarding/OnboardingViewTracker';
 import { fetchKnowledgeStatusForSource } from '@/lib/services/knowledge-status';
-import type { WorkflowStep } from '@/lib/types/database';
+import type { Tag, WorkflowStep } from '@/lib/types/database';
 import WorkflowViewer from '@/app/components/workflow/WorkflowViewer';
 import SourceDetailProgressPanel from '@/app/components/library/detail-views/SourceDetailProgressPanel';
 import { resolvePreferredSourceKnowledgePage } from '@/lib/services/source-detail';
@@ -157,9 +157,10 @@ export default async function LibraryItemDetailPage({
     `)
     .eq('content_id', id);
 
-  const tags = itemTags
-    ?.map((rt: any) => rt.tags)
-    .filter(Boolean) || [];
+  const tags =
+    itemTags
+      ?.map((relation: { tags: Tag | null }) => relation.tags)
+      .filter((tag): tag is Tag => tag !== null) || [];
 
   // Fetch the most recent non-archived workflow for this content
   const { data: rawWorkflow } = await supabaseAdmin
