@@ -5,16 +5,16 @@
  */
 
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+
 import { SearchMonitor, searchMonitor, monitoredSearch } from '../search-monitoring';
-import type { SearchPerformanceMetrics, AlertCondition } from '../search-monitoring';
 
 describe('Search Monitor', () => {
   let monitor: SearchMonitor;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Create fresh monitor instance for each test
     monitor = new SearchMonitor();
-    monitor.clearBuffer();
+    await monitor.clearBuffer();
   });
 
   afterEach(() => {
@@ -22,7 +22,7 @@ describe('Search Monitor', () => {
   });
 
   describe('Search Tracking Lifecycle', () => {
-    it('should track search from start to finish', () => {
+    it('should track search from start to finish', async () => {
       const queryId = 'test-query-123';
       const query = 'test query';
       const orgId = 'test-org-id';
@@ -55,7 +55,7 @@ describe('Search Monitor', () => {
       });
 
       // Verify metrics were stored
-      const recent = monitor.getRecentMetrics(1);
+      const recent = await monitor.getRecentMetrics(undefined, 1);
       expect(recent).toHaveLength(1);
       expect(recent[0]).toMatchObject({
         queryId,
@@ -71,25 +71,22 @@ describe('Search Monitor', () => {
       });
     });
 
-    it('should calculate total time automatically if not provided', () => {
+    it('should calculate total time automatically if not provided', async () => {
       const queryId = 'test-query-456';
 
       monitor.startSearch(queryId, 'test', 'org-1', 'user-1');
-
-      // Wait a bit to simulate processing time
-      const startTime = Date.now();
 
       // End without providing totalTimeMs
       monitor.endSearch(queryId, {
         sourcesFound: 3,
       });
 
-      const recent = monitor.getRecentMetrics(1);
+      const recent = await monitor.getRecentMetrics(undefined, 1);
       expect(recent[0].totalTimeMs).toBeGreaterThanOrEqual(0);
       expect(recent[0].totalTimeMs).toBeLessThan(1000);
     });
 
-    it('should determine success based on sources found', () => {
+    it('should determine success based on sources found', async () => {
       const queryId1 = 'query-1';
       const queryId2 = 'query-2';
 
@@ -101,14 +98,14 @@ describe('Search Monitor', () => {
       monitor.startSearch(queryId2, 'test 2', 'org-1', 'user-1');
       monitor.endSearch(queryId2, { sourcesFound: 0 });
 
-      const recent = monitor.getRecentMetrics(2);
+      const recent = await monitor.getRecentMetrics(undefined, 2);
       expect(recent[0].success).toBe(true); // 5 sources
       expect(recent[1].success).toBe(false); // 0 sources
     });
   });
 
   describe('Retry Tracking', () => {
-    it('should record lower threshold retry', () => {
+    it('should record lower threshold retry', async () => {
       const queryId = 'test-query';
 
       monitor.startSearch(queryId, 'test', 'org-1', 'user-1');
@@ -116,12 +113,12 @@ describe('Search Monitor', () => {
 
       monitor.endSearch(queryId, { sourcesFound: 3 });
 
-      const recent = monitor.getRecentMetrics(1);
+      const recent = await monitor.getRecentMetrics(undefined, 1);
       expect(recent[0].retrievalAttempts).toBe(1);
       expect(recent[0].retriedWithLowerThreshold).toBe(true);
     });
 
-    it('should record hybrid search retry', () => {
+    it('should record hybrid search retry', async () => {
       const queryId = 'test-query';
 
       monitor.startSearch(queryId, 'test', 'org-1', 'user-1');
@@ -129,12 +126,12 @@ describe('Search Monitor', () => {
 
       monitor.endSearch(queryId, { sourcesFound: 2 });
 
-      const recent = monitor.getRecentMetrics(1);
+      const recent = await monitor.getRecentMetrics(undefined, 1);
       expect(recent[0].retrievalAttempts).toBe(1);
       expect(recent[0].retriedWithHybrid).toBe(true);
     });
 
-    it('should record keyword-only retry', () => {
+    it('should record keyword-only retry', async () => {
       const queryId = 'test-query';
 
       monitor.startSearch(queryId, 'test', 'org-1', 'user-1');
@@ -142,12 +139,12 @@ describe('Search Monitor', () => {
 
       monitor.endSearch(queryId, { sourcesFound: 1 });
 
-      const recent = monitor.getRecentMetrics(1);
+      const recent = await monitor.getRecentMetrics(undefined, 1);
       expect(recent[0].retrievalAttempts).toBe(1);
       expect(recent[0].retriedWithKeyword).toBe(true);
     });
 
-    it('should track multiple retry attempts', () => {
+    it('should track multiple retry attempts', async () => {
       const queryId = 'test-query';
 
       monitor.startSearch(queryId, 'test', 'org-1', 'user-1');
@@ -157,7 +154,7 @@ describe('Search Monitor', () => {
 
       monitor.endSearch(queryId, { sourcesFound: 0 });
 
-      const recent = monitor.getRecentMetrics(1);
+      const recent = await monitor.getRecentMetrics(undefined, 1);
       expect(recent[0].retrievalAttempts).toBe(3);
       expect(recent[0].retriedWithLowerThreshold).toBe(true);
       expect(recent[0].retriedWithHybrid).toBe(true);
@@ -166,7 +163,7 @@ describe('Search Monitor', () => {
   });
 
   describe('Metrics Summary', () => {
-    it('should calculate metrics summary correctly', () => {
+    it('should calculate metrics summary correctly', async () => {
       // Add multiple searches with varying success rates
       for (let i = 0; i < 10; i++) {
         const queryId = `query-${i}`;
@@ -181,7 +178,7 @@ describe('Search Monitor', () => {
         });
       }
 
-      const summary = monitor.getMetricsSummary();
+      const summary = await monitor.getMetricsSummary();
 
       expect(summary.totalSearches).toBe(10);
       expect(summary.successRate).toBe(0.7); // 7/10
@@ -190,8 +187,8 @@ describe('Search Monitor', () => {
       expect(summary.retryRate).toBe(0.3); // 3/10 required retries
     });
 
-    it('should handle empty buffer gracefully', () => {
-      const summary = monitor.getMetricsSummary();
+    it('should handle empty buffer gracefully', async () => {
+      const summary = await monitor.getMetricsSummary();
 
       expect(summary.totalSearches).toBe(0);
       expect(summary.successRate).toBe(0);
@@ -200,7 +197,7 @@ describe('Search Monitor', () => {
       expect(summary.retryRate).toBe(0);
     });
 
-    it('should calculate correct average similarity', () => {
+    it('should calculate correct average similarity', async () => {
       monitor.startSearch('q1', 'test 1', 'org-1', 'user-1');
       monitor.endSearch('q1', { sourcesFound: 2, avgSimilarity: 0.8 });
 
@@ -210,13 +207,13 @@ describe('Search Monitor', () => {
       monitor.startSearch('q3', 'test 3', 'org-1', 'user-1');
       monitor.endSearch('q3', { sourcesFound: 1, avgSimilarity: 0.9 });
 
-      const summary = monitor.getMetricsSummary();
+      const summary = await monitor.getMetricsSummary();
 
       // Average: (0.8 + 0.6 + 0.9) / 3 = 0.7667
       expect(summary.avgSimilarity).toBeCloseTo(0.7667, 2);
     });
 
-    it('should calculate median and percentiles', () => {
+    it('should calculate median and percentiles', async () => {
       // Add searches with known latencies
       const latencies = [100, 150, 200, 250, 300, 350, 400, 450, 500, 1000];
 
@@ -229,7 +226,7 @@ describe('Search Monitor', () => {
         });
       });
 
-      const summary = monitor.getMetricsSummary();
+      const summary = await monitor.getMetricsSummary();
 
       // Average should be around 370
       expect(summary.avgTimeMs).toBeCloseTo(370, 0);
@@ -239,16 +236,16 @@ describe('Search Monitor', () => {
   describe('Alert System', () => {
     beforeEach(() => {
       // Spy on console methods
-      jest.spyOn(console, 'warn').mockImplementation();
-      jest.spyOn(console, 'error').mockImplementation();
-      jest.spyOn(console, 'info').mockImplementation();
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      jest.spyOn(console, 'info').mockImplementation(() => undefined);
     });
 
     afterEach(() => {
       jest.restoreAllMocks();
     });
 
-    it('should trigger slow search alert', () => {
+    it('should trigger slow search alert', async () => {
       const queryId = 'slow-query';
 
       monitor.startSearch(queryId, 'slow test query', 'org-1', 'user-1');
@@ -267,7 +264,7 @@ describe('Search Monitor', () => {
       );
     });
 
-    it('should trigger low similarity alert', () => {
+    it('should trigger low similarity alert', async () => {
       const queryId = 'low-sim-query';
 
       monitor.startSearch(queryId, 'test query', 'org-1', 'user-1');
@@ -287,7 +284,7 @@ describe('Search Monitor', () => {
       );
     });
 
-    it('should trigger retry failure alert', () => {
+    it('should trigger retry failure alert', async () => {
       const queryId = 'failed-query';
 
       monitor.startSearch(queryId, 'test query', 'org-1', 'user-1');
@@ -310,7 +307,7 @@ describe('Search Monitor', () => {
       );
     });
 
-    it('should trigger excessive retries alert', () => {
+    it('should trigger excessive retries alert', async () => {
       const queryId = 'retry-query';
 
       monitor.startSearch(queryId, 'test query', 'org-1', 'user-1');
@@ -333,7 +330,7 @@ describe('Search Monitor', () => {
       );
     });
 
-    it('should trigger tool fallback alert', () => {
+    it('should trigger tool fallback alert', async () => {
       const queryId = 'tool-query';
 
       monitor.startSearch(queryId, 'test query', 'org-1', 'user-1');
@@ -352,7 +349,7 @@ describe('Search Monitor', () => {
       );
     });
 
-    it('should support custom alerts', () => {
+    it('should support custom alerts', async () => {
       // Register custom alert
       monitor.registerAlert({
         name: 'custom_alert',
@@ -379,7 +376,7 @@ describe('Search Monitor', () => {
       );
     });
 
-    it('should NOT trigger alerts when conditions not met', () => {
+    it('should NOT trigger alerts when conditions not met', async () => {
       const queryId = 'good-query';
 
       monitor.startSearch(queryId, 'test query', 'org-1', 'user-1');
@@ -398,7 +395,7 @@ describe('Search Monitor', () => {
   });
 
   describe('Buffer Management', () => {
-    it('should buffer metrics up to max size', () => {
+    it('should buffer metrics up to max size', async () => {
       const BUFFER_SIZE = 100;
 
       // Add more than buffer size
@@ -409,11 +406,11 @@ describe('Search Monitor', () => {
       }
 
       // Verify buffer is capped at max size
-      const recent = monitor.getRecentMetrics(BUFFER_SIZE + 20);
+      const recent = await monitor.getRecentMetrics(undefined, BUFFER_SIZE + 20);
       expect(recent.length).toBe(BUFFER_SIZE);
     });
 
-    it('should evict oldest entries when buffer is full (FIFO)', () => {
+    it('should evict oldest entries when buffer is full (FIFO)', async () => {
       const BUFFER_SIZE = 100;
 
       // Fill buffer
@@ -427,7 +424,7 @@ describe('Search Monitor', () => {
       monitor.startSearch('newest', 'newest query', 'org-1', 'user-1');
       monitor.endSearch('newest', { sourcesFound: 1 });
 
-      const all = monitor.getRecentMetrics(BUFFER_SIZE + 1);
+      const all = await monitor.getRecentMetrics(undefined, BUFFER_SIZE + 1);
 
       // First entry (query-0) should be evicted
       expect(all.some(m => m.queryId === 'query-0')).toBe(false);
@@ -436,7 +433,7 @@ describe('Search Monitor', () => {
       expect(all[all.length - 1].queryId).toBe('newest');
     });
 
-    it('should clear buffer on command', () => {
+    it('should clear buffer on command', async () => {
       // Add some metrics
       for (let i = 0; i < 10; i++) {
         const queryId = `query-${i}`;
@@ -444,15 +441,15 @@ describe('Search Monitor', () => {
         monitor.endSearch(queryId, { sourcesFound: 1 });
       }
 
-      expect(monitor.getRecentMetrics(10).length).toBe(10);
+      expect((await monitor.getRecentMetrics(undefined, 10)).length).toBe(10);
 
       // Clear buffer
-      monitor.clearBuffer();
+      await monitor.clearBuffer();
 
-      expect(monitor.getRecentMetrics(10).length).toBe(0);
+      expect((await monitor.getRecentMetrics(undefined, 10)).length).toBe(0);
     });
 
-    it('should retrieve recent metrics with limit', () => {
+    it('should retrieve recent metrics with limit', async () => {
       // Add 20 metrics
       for (let i = 0; i < 20; i++) {
         const queryId = `query-${i}`;
@@ -461,7 +458,7 @@ describe('Search Monitor', () => {
       }
 
       // Get last 5
-      const recent5 = monitor.getRecentMetrics(5);
+      const recent5 = await monitor.getRecentMetrics(undefined, 5);
       expect(recent5.length).toBe(5);
 
       // Verify they're the newest ones
@@ -501,7 +498,7 @@ describe('Search Monitor', () => {
       expect(result).toEqual({ results: [1, 2, 3] });
 
       // Verify metrics were tracked (using singleton searchMonitor)
-      const recent = searchMonitor.getRecentMetrics(1);
+      const recent = await searchMonitor.getRecentMetrics(undefined, 1);
       expect(recent.length).toBeGreaterThan(0);
     });
 
@@ -521,7 +518,7 @@ describe('Search Monitor', () => {
       ).rejects.toThrow('Search failed');
 
       // Verify failure was tracked
-      const recent = searchMonitor.getRecentMetrics(1);
+      const recent = await searchMonitor.getRecentMetrics(undefined, 1);
       expect(recent.length).toBeGreaterThan(0);
       expect(recent[0].success).toBe(false);
       expect(recent[0].sourcesFound).toBe(0);
@@ -541,14 +538,14 @@ describe('Search Monitor', () => {
 
       await monitoredSearch(queryId, query, orgId, userId, searchFn);
 
-      const recent = searchMonitor.getRecentMetrics(1);
+      const recent = await searchMonitor.getRecentMetrics(undefined, 1);
       expect(recent[0].totalTimeMs).toBeGreaterThanOrEqual(100);
       expect(recent[0].totalTimeMs).toBeLessThan(200);
     });
   });
 
   describe('Edge Cases', () => {
-    it('should handle update before start gracefully', () => {
+    it('should handle update before start gracefully', async () => {
       const queryId = 'orphan-query';
 
       // Update config without starting
@@ -561,7 +558,7 @@ describe('Search Monitor', () => {
       expect(() => monitor.endSearch(queryId, { sourcesFound: 0 })).not.toThrow();
     });
 
-    it('should handle duplicate end calls gracefully', () => {
+    it('should handle duplicate end calls gracefully', async () => {
       const queryId = 'duplicate-query';
 
       monitor.startSearch(queryId, 'test', 'org-1', 'user-1');
@@ -571,12 +568,12 @@ describe('Search Monitor', () => {
       expect(() => monitor.endSearch(queryId, { sourcesFound: 3 })).not.toThrow();
 
       // Should only have one entry
-      const recent = monitor.getRecentMetrics(10);
+      const recent = await monitor.getRecentMetrics(undefined, 10);
       const matches = recent.filter(m => m.queryId === queryId);
       expect(matches.length).toBe(1);
     });
 
-    it('should handle missing similarity metrics', () => {
+    it('should handle missing similarity metrics', async () => {
       const queryId = 'missing-sim-query';
 
       monitor.startSearch(queryId, 'test', 'org-1', 'user-1');
@@ -585,11 +582,11 @@ describe('Search Monitor', () => {
         // avgSimilarity not provided
       });
 
-      const recent = monitor.getRecentMetrics(1);
+      const recent = await monitor.getRecentMetrics(undefined, 1);
       expect(recent[0].avgSimilarity).toBeUndefined();
 
       // Summary should handle undefined values
-      const summary = monitor.getMetricsSummary();
+      const summary = await monitor.getMetricsSummary();
       expect(summary.avgSimilarity).toBe(0);
     });
   });

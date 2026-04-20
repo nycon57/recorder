@@ -1,20 +1,26 @@
 /**
  * Sharing Service
  *
- * Manages public and password-protected shares for recordings and conversations.
+ * Manages public and password-protected shares for supported targets.
  */
 
 import { randomBytes } from 'crypto';
 
-import bcrypt from 'bcryptjs';
+import { compare, hash } from 'bcryptjs';
 
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/types/database';
+
+type ShareRow = Database['public']['Tables']['shares']['Row'];
+type ShareTargetType = ShareRow['target_type'];
 
 export interface ShareLink {
   id: string;
   shareId: string;
-  resourceType: 'recording' | 'conversation';
+  targetType: ShareTargetType;
+  targetId: string;
+  resourceType: ShareTargetType;
   resourceId: string;
   shareType: 'public' | 'password';
   expiresAt?: Date;
@@ -42,7 +48,7 @@ function generateShareId(): string {
  * Hash password for storage
  */
 async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10);
+  return hash(password, 10);
 }
 
 /**
@@ -52,7 +58,24 @@ export async function verifySharePassword(
   password: string,
   hash: string
 ): Promise<boolean> {
-  return bcrypt.compare(password, hash);
+  return compare(password, hash);
+}
+
+function toShareLink(share: ShareRow): ShareLink {
+  return {
+    id: share.id,
+    shareId: share.share_id,
+    targetType: share.target_type,
+    targetId: share.target_id,
+    resourceType: share.target_type,
+    resourceId: share.target_id,
+    shareType: share.password_hash ? 'password' : 'public',
+    expiresAt: share.expires_at ? new Date(share.expires_at) : undefined,
+    viewCount: share.access_count,
+    maxViews: undefined,
+    createdBy: share.created_by,
+    createdAt: new Date(share.created_at),
+  };
 }
 
 /**
@@ -66,7 +89,6 @@ export async function createRecordingShare(
 ): Promise<ShareLink> {
   const supabase = createAdminClient();
 
-  // Verify content exists and belongs to org
   const { data: content, error: contentError } = await supabase
     .from('content')
     .select('id')
@@ -78,27 +100,22 @@ export async function createRecordingShare(
     throw new Error('Content not found');
   }
 
-  // Generate share ID
   const shareId = generateShareId();
-
-  // Hash password if provided
   let passwordHash: string | undefined;
+
   if (options.shareType === 'password' && options.password) {
     passwordHash = await hashPassword(options.password);
   }
 
-  // Create share record
   const { data: share, error: shareError } = await supabase
     .from('shares')
     .insert({
       share_id: shareId,
-      resource_type: 'recording',
-      resource_id: recordingId,
+      target_type: 'recording',
+      target_id: recordingId,
       org_id: orgId,
-      share_type: options.shareType,
       password_hash: passwordHash,
       expires_at: options.expiresAt?.toISOString(),
-      max_views: options.maxViews,
       created_by: userId,
     })
     .select()
@@ -108,85 +125,7 @@ export async function createRecordingShare(
     throw new Error(`Failed to create share: ${shareError.message}`);
   }
 
-  return {
-    id: share.id,
-    shareId: share.share_id,
-    resourceType: share.resource_type,
-    resourceId: share.resource_id,
-    shareType: share.share_type,
-    expiresAt: share.expires_at ? new Date(share.expires_at) : undefined,
-    viewCount: share.view_count,
-    maxViews: share.max_views,
-    createdBy: share.created_by,
-    createdAt: new Date(share.created_at),
-  };
-}
-
-/**
- * Create a share link for a conversation
- */
-export async function createConversationShare(
-  conversationId: string,
-  orgId: string,
-  userId: string,
-  options: ShareOptions
-): Promise<ShareLink> {
-  const supabase = createAdminClient();
-
-  // Verify conversation exists and belongs to org
-  const { data: conversation, error: conversationError } = await supabase
-    .from('chat_conversations')
-    .select('id')
-    .eq('id', conversationId)
-    .eq('org_id', orgId)
-    .single();
-
-  if (conversationError || !conversation) {
-    throw new Error('Conversation not found');
-  }
-
-  // Generate share ID
-  const shareId = generateShareId();
-
-  // Hash password if provided
-  let passwordHash: string | undefined;
-  if (options.shareType === 'password' && options.password) {
-    passwordHash = await hashPassword(options.password);
-  }
-
-  // Create share record
-  const { data: share, error: shareError } = await supabase
-    .from('shares')
-    .insert({
-      share_id: shareId,
-      resource_type: 'conversation',
-      resource_id: conversationId,
-      org_id: orgId,
-      share_type: options.shareType,
-      password_hash: passwordHash,
-      expires_at: options.expiresAt?.toISOString(),
-      max_views: options.maxViews,
-      created_by: userId,
-    })
-    .select()
-    .single();
-
-  if (shareError) {
-    throw new Error(`Failed to create share: ${shareError.message}`);
-  }
-
-  return {
-    id: share.id,
-    shareId: share.share_id,
-    resourceType: share.resource_type,
-    resourceId: share.resource_id,
-    shareType: share.share_type,
-    expiresAt: share.expires_at ? new Date(share.expires_at) : undefined,
-    viewCount: share.view_count,
-    maxViews: share.max_views,
-    createdBy: share.created_by,
-    createdAt: new Date(share.created_at),
-  };
+  return toShareLink(share);
 }
 
 /**
@@ -205,18 +144,7 @@ export async function getShare(shareId: string): Promise<ShareLink | null> {
     return null;
   }
 
-  return {
-    id: share.id,
-    shareId: share.share_id,
-    resourceType: share.resource_type,
-    resourceId: share.resource_id,
-    shareType: share.share_type,
-    expiresAt: share.expires_at ? new Date(share.expires_at) : undefined,
-    viewCount: share.view_count,
-    maxViews: share.max_views,
-    createdBy: share.created_by,
-    createdAt: new Date(share.created_at),
-  };
+  return toShareLink(share);
 }
 
 /**
@@ -227,35 +155,27 @@ export async function validateShareAccess(
   password?: string
 ): Promise<{
   valid: boolean;
-  reason?: 'not_found' | 'expired' | 'max_views' | 'invalid_password';
+  reason?: 'not_found' | 'expired' | 'invalid_password';
   share?: ShareLink;
 }> {
   const supabase = createAdminClient();
 
-  // Get share
   const { data: share, error } = await supabase
     .from('shares')
     .select('*')
     .eq('share_id', shareId)
     .single();
 
-  if (error || !share) {
+  if (error || !share || share.revoked_at) {
     return { valid: false, reason: 'not_found' };
   }
 
-  // Check expiration
   if (share.expires_at && new Date(share.expires_at) < new Date()) {
     return { valid: false, reason: 'expired' };
   }
 
-  // Check max views
-  if (share.max_views && share.view_count >= share.max_views) {
-    return { valid: false, reason: 'max_views' };
-  }
-
-  // Check password
-  if (share.share_type === 'password') {
-    if (!password || !share.password_hash) {
+  if (share.password_hash) {
+    if (!password) {
       return { valid: false, reason: 'invalid_password' };
     }
 
@@ -267,18 +187,7 @@ export async function validateShareAccess(
 
   return {
     valid: true,
-    share: {
-      id: share.id,
-      shareId: share.share_id,
-      resourceType: share.resource_type,
-      resourceId: share.resource_id,
-      shareType: share.share_type,
-      expiresAt: share.expires_at ? new Date(share.expires_at) : undefined,
-      viewCount: share.view_count,
-      maxViews: share.max_views,
-      createdBy: share.created_by,
-      createdAt: new Date(share.created_at),
-    },
+    share: toShareLink(share),
   };
 }
 
@@ -288,7 +197,6 @@ export async function validateShareAccess(
 export async function incrementShareView(shareId: string): Promise<void> {
   const supabase = createAdminClient();
 
-  // Use RPC for atomic increment to avoid race conditions
   await supabase.rpc('increment_share_view_count', {
     p_share_id: shareId,
   });
@@ -298,8 +206,8 @@ export async function incrementShareView(shareId: string): Promise<void> {
  * List shares for a resource
  */
 export async function listResourceShares(
-  resourceType: 'recording' | 'conversation',
-  resourceId: string,
+  targetType: ShareTargetType,
+  targetId: string,
   orgId: string
 ): Promise<ShareLink[]> {
   const supabase = await createClient();
@@ -307,8 +215,8 @@ export async function listResourceShares(
   const { data: shares, error } = await supabase
     .from('shares')
     .select('*')
-    .eq('resource_type', resourceType)
-    .eq('resource_id', resourceId)
+    .eq('target_type', targetType)
+    .eq('target_id', targetId)
     .eq('org_id', orgId)
     .order('created_at', { ascending: false });
 
@@ -316,18 +224,7 @@ export async function listResourceShares(
     throw new Error(`Failed to list shares: ${error.message}`);
   }
 
-  return shares.map((share) => ({
-    id: share.id,
-    shareId: share.share_id,
-    resourceType: share.resource_type,
-    resourceId: share.resource_id,
-    shareType: share.share_type,
-    expiresAt: share.expires_at ? new Date(share.expires_at) : undefined,
-    viewCount: share.view_count,
-    maxViews: share.max_views,
-    createdBy: share.created_by,
-    createdAt: new Date(share.created_at),
-  }));
+  return shares.map(toShareLink);
 }
 
 /**
@@ -367,7 +264,6 @@ export async function updateShare(
     .from('shares')
     .update({
       expires_at: updates.expiresAt?.toISOString() || null,
-      max_views: updates.maxViews,
     })
     .eq('id', shareId)
     .eq('org_id', orgId);
