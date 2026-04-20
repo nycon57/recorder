@@ -1,18 +1,18 @@
 /**
  * POST /api/admin/vendor-docs/ingest
  *
- * Admin-only route that enqueues an `ingest_vendor_docs` background job.
+ * System-admin-only route that enqueues an `ingest_vendor_docs` background job.
  * Accepts { url, app, maxPages? } and creates a pending job row that the
  * worker will pick up and execute.
  *
- * TRIB-45
+ * TRIB-45 | Security hardened: TRIB-156
  */
 
 import { NextRequest } from 'next/server';
 
 import {
   apiHandler,
-  requireAdmin,
+  requireSystemAdmin,
   successResponse,
   errors,
 } from '@/lib/utils/api';
@@ -26,8 +26,8 @@ import { createVendorSourceSyncService } from '@/lib/services/vendor-source-sync
  * Enqueue a vendor doc ingestion job
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  // Auth: require org admin role
-  const { orgId } = await requireAdmin();
+  // Auth: require system admin role (platform-wide vendor corpus access — TRIB-156)
+  await requireSystemAdmin();
 
   let body: {
     url?: string;
@@ -173,7 +173,6 @@ export const POST = apiHandler(async (request: NextRequest) => {
       type: job!.type,
       status: job!.status,
       message: `Vendor doc ingestion job enqueued for ${app} (${url})`,
-      orgId,
     },
     undefined,
     201
