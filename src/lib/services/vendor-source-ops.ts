@@ -7,7 +7,10 @@ import {
 } from './vendor-source-sync';
 import type { VendorSourceRow } from './vendor-source-registry';
 
-type VendorSourceIdRow = { vendor_source_id: string | null };
+type VendorSourcePageCountRow =
+  Database['public']['Views']['vendor_corpus_page_counts']['Row'];
+type LegacyVendorSourcePageCountRow =
+  Database['public']['Views']['vendor_wiki_page_counts']['Row'];
 type VendorSourceJobRow = Pick<
   Database['public']['Tables']['jobs']['Row'],
   'status' | 'dedupe_key'
@@ -63,16 +66,20 @@ export interface VendorSourceOpsSnapshot {
 
 interface VendorSourceOpsSnapshotInput {
   sources: VendorSourceRow[];
-  corpusPages: VendorSourceIdRow[];
-  legacyPages: VendorSourceIdRow[];
+  corpusPages: VendorSourcePageCountRow[];
+  legacyPages: LegacyVendorSourcePageCountRow[];
   activeJobs: VendorSourceJobRow[];
   generatedAt?: string;
   now?: Date;
 }
 
-function incrementCount(map: Map<string, number>, key: string | null): void {
+function setCount(
+  map: Map<string, number>,
+  key: string | null,
+  count: number,
+): void {
   if (!key) return;
-  map.set(key, (map.get(key) ?? 0) + 1);
+  map.set(key, count);
 }
 
 function getStatusRank(status: VendorSourceOpsStatus): number {
@@ -112,11 +119,11 @@ export function buildVendorSourceOpsSnapshot({
   const activeJobsByDedupeKey = new Map<string, 'pending' | 'processing'>();
 
   for (const page of corpusPages) {
-    incrementCount(corpusPagesBySourceId, page.vendor_source_id);
+    setCount(corpusPagesBySourceId, page.vendor_source_id, page.page_count);
   }
 
   for (const page of legacyPages) {
-    incrementCount(legacyPagesBySourceId, page.vendor_source_id);
+    setCount(legacyPagesBySourceId, page.vendor_source_id, page.page_count);
   }
 
   for (const job of activeJobs) {
@@ -209,13 +216,19 @@ export function createVendorSourceOpsService(supabase = createAdminClient()) {
     async getSnapshot(): Promise<VendorSourceOpsSnapshot> {
       const [sourcesResult, corpusPagesResult, legacyPagesResult, jobsResult] =
         await Promise.all([
-          (supabase.from('vendor_doc_sources') as any)
+          supabase
+            .from('vendor_doc_sources')
             .select('*')
             .order('app', { ascending: true })
             .order('source_url', { ascending: true }),
-          (supabase.from('vendor_corpus_pages') as any).select('vendor_source_id'),
-          (supabase.from('vendor_wiki_pages') as any).select('vendor_source_id'),
-          (supabase.from('jobs') as any)
+          supabase
+            .from('vendor_corpus_page_counts')
+            .select('vendor_source_id, page_count'),
+          supabase
+            .from('vendor_wiki_page_counts')
+            .select('vendor_source_id, page_count'),
+          supabase
+            .from('jobs')
             .select('status, dedupe_key')
             .eq('type', 'ingest_vendor_docs')
             .in('status', ['pending', 'processing']),
@@ -246,10 +259,10 @@ export function createVendorSourceOpsService(supabase = createAdminClient()) {
       }
 
       return buildVendorSourceOpsSnapshot({
-        sources: (sourcesResult.data ?? []) as VendorSourceRow[],
-        corpusPages: (corpusPagesResult.data ?? []) as VendorSourceIdRow[],
-        legacyPages: (legacyPagesResult.data ?? []) as VendorSourceIdRow[],
-        activeJobs: (jobsResult.data ?? []) as VendorSourceJobRow[],
+        sources: sourcesResult.data ?? [],
+        corpusPages: corpusPagesResult.data ?? [],
+        legacyPages: legacyPagesResult.data ?? [],
+        activeJobs: jobsResult.data ?? [],
       });
     },
   };

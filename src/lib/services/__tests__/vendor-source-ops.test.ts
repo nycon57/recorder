@@ -66,16 +66,15 @@ describe('vendor-source-ops', () => {
         }),
       ],
       corpusPages: [
-        { vendor_source_id: 'source-1' },
-        { vendor_source_id: 'source-1' },
-        { vendor_source_id: 'source-2' },
-        { vendor_source_id: 'source-5' },
+        { vendor_source_id: 'source-1', page_count: 2 },
+        { vendor_source_id: 'source-2', page_count: 1 },
+        { vendor_source_id: 'source-5', page_count: 1 },
       ],
       legacyPages: [
-        { vendor_source_id: 'source-1' },
-        { vendor_source_id: 'source-3' },
-        { vendor_source_id: 'source-5' },
-        { vendor_source_id: null },
+        { vendor_source_id: 'source-1', page_count: 1 },
+        { vendor_source_id: 'source-3', page_count: 1 },
+        { vendor_source_id: 'source-5', page_count: 1 },
+        { vendor_source_id: null, page_count: 99 },
       ],
       activeJobs: [
         {

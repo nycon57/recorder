@@ -183,6 +183,11 @@ export default function AdminVendorSourcesPage() {
   }>('/api/admin/vendor-sources', 60000);
 
   const snapshot = data?.data ?? null;
+  const inlineErrorMessage = error
+    ? error.message.includes('403')
+      ? 'Access denied. System admin privileges required.'
+      : error.message
+    : null;
 
   if (loading && !snapshot) {
     return (
@@ -197,23 +202,28 @@ export default function AdminVendorSourcesPage() {
     );
   }
 
-  if (error) {
+  if (inlineErrorMessage && !snapshot) {
     return (
       <div className="trbd-page">
         <Alert variant="destructive">
           <ShieldAlert className="h-4 w-4" />
-          <AlertDescription>
-            {error.message.includes('403')
-              ? 'Access denied. System admin privileges required.'
-              : error.message}
-          </AlertDescription>
+          <AlertDescription>{inlineErrorMessage}</AlertDescription>
         </Alert>
       </div>
     );
   }
 
   if (!snapshot) {
-    return null;
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="mt-2 text-sm text-muted-foreground">
+            Loading vendor source health...
+          </p>
+        </div>
+      </div>
+    );
   }
 
   const needsAttention =
@@ -249,6 +259,13 @@ export default function AdminVendorSourcesPage() {
           </button>
         </div>
       </div>
+
+      {inlineErrorMessage ? (
+        <Alert variant="destructive">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertDescription>{inlineErrorMessage}</AlertDescription>
+        </Alert>
+      ) : null}
 
       {needsAttention ? (
         <Alert>

@@ -161,7 +161,7 @@ export function useFetchWithInterval<T = any>(
 
   const [state, setState] = useState<FetchState<T>>({
     data: null,
-    loading: false,
+    loading: Boolean(url && enabled),
     error: null,
   });
 
@@ -232,7 +232,7 @@ export function useFetchWithInterval<T = any>(
       }
 
       const errorObj = error instanceof Error ? error : new Error('Unknown error');
-      setState({ data: null, loading: false, error: errorObj });
+      setState(prev => ({ data: prev.data, loading: false, error: errorObj }));
       onErrorRef.current?.(errorObj);
     }
   }, [url, enabled]);
