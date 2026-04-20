@@ -10,34 +10,68 @@
  * - Storage file existence
  */
 
-import { createClient } from '@supabase/supabase-js';
-import * as dotenv from 'dotenv';
 import { resolve } from 'path';
+
+import * as dotenv from 'dotenv';
+
+import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import type { Database, Json } from '@/lib/types/database';
 
 // Load environment variables
 dotenv.config({ path: resolve(process.cwd(), '.env.local') });
 
 const RECORDING_ID = '80e70735-9b25-4c8a-8345-c7d41545ccc7';
 
-// Initialize Supabase Admin Client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
+type RecordingRow = Database['public']['Tables']['recordings']['Row'];
+type JobRow = Database['public']['Tables']['jobs']['Row'];
+type TranscriptRow = Database['public']['Tables']['transcripts']['Row'];
+type DocumentRow = Database['public']['Tables']['documents']['Row'];
+type TranscriptChunkRow = Database['public']['Tables']['transcript_chunks']['Row'];
+
+interface StorageFileEntry {
+  metadata: { size?: number } | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+interface JobPayloadRef {
+  recording_id?: string;
+  recordingId?: string;
+}
+
+function getJobPayloadRef(payload: Json): JobPayloadRef {
+  if (!payload || Array.isArray(payload) || typeof payload !== 'object') {
+    return {};
   }
-);
+
+  const payloadRecord = payload as Record<string, Json | undefined>;
+
+  return {
+    recording_id: typeof payloadRecord.recording_id === 'string' ? payloadRecord.recording_id : undefined,
+    recordingId: typeof payloadRecord.recordingId === 'string' ? payloadRecord.recordingId : undefined
+  };
+}
+
+function getTranscriptWordCount(transcript: TranscriptRow): number {
+  const trimmedText = transcript.text.trim();
+
+  if (trimmedText.length === 0) {
+    return 0;
+  }
+
+  return trimmedText.split(/\s+/).length;
+}
+
+// Initialize Supabase Admin Client
+const supabase = createAdminClient();
 
 interface DiagnosticReport {
-  recording?: any;
-  jobs: any[];
-  transcript?: any;
-  document?: any;
+  recording?: RecordingRow;
+  jobs: JobRow[];
+  transcript?: TranscriptRow;
+  document?: DocumentRow;
   chunkCount: number;
-  storageFile?: any;
+  storageFile?: StorageFileEntry;
   issues: string[];
   recommendations: string[];
 }
@@ -82,7 +116,7 @@ async function diagnoseRecording(recordingId: string): Promise<DiagnosticReport>
 
   console.log(`Status: ${recording.status}`);
   console.log(`Title: ${recording.title || '(untitled)'}`);
-  console.log(`Duration: ${recording.duration_seconds || 'N/A'}s`);
+  console.log(`Duration: ${recording.duration_sec ?? 'N/A'}s`);
   console.log(`Storage Path (Raw): ${recording.storage_path_raw || '(none)'}`);
   console.log(`Storage Path (Processed): ${recording.storage_path_processed || '(none)'}`);
   console.log(`Organization ID: ${recording.org_id}`);
@@ -96,7 +130,7 @@ async function diagnoseRecording(recordingId: string): Promise<DiagnosticReport>
     report.recommendations.push('Check if file upload completed successfully');
   }
 
-  if (recording.status === 'failed') {
+  if (recording.status === 'error') {
     report.issues.push(`Recording marked as failed: ${recording.error_message || 'no error message'}`);
   }
 
@@ -121,9 +155,10 @@ async function diagnoseRecording(recordingId: string): Promise<DiagnosticReport>
       report.recommendations.push('Re-upload the recording file');
     } else {
       const file = fileData[0];
+      const fileSizeBytes = typeof file.metadata?.size === 'number' ? file.metadata.size : null;
       report.storageFile = file;
       console.log(`✅ File exists in storage`);
-      console.log(`   Size: ${(file.metadata.size / 1024 / 1024).toFixed(2)} MB`);
+      console.log(`   Size: ${fileSizeBytes === null ? 'Unknown' : `${(fileSizeBytes / 1024 / 1024).toFixed(2)} MB`}`);
       console.log(`   Created: ${file.created_at}`);
       console.log(`   Updated: ${file.updated_at}\n`);
     }
@@ -140,12 +175,16 @@ async function diagnoseRecording(recordingId: string): Promise<DiagnosticReport>
     .order('created_at', { ascending: false })
     .limit(100);
 
-  let jobs: any[] = [];
+  let jobs: JobRow[] = [];
   if (allJobs) {
     // Filter jobs by recording_id in payload
-    jobs = allJobs.filter((job: any) => {
-      const payload = job.payload as any;
-      return payload?.recording_id === recordingId || payload?.recordingId === recordingId;
+    jobs = allJobs.filter((job) => {
+      const payload = getJobPayloadRef(job.payload);
+      return (
+        job.content_id === recordingId ||
+        payload.recording_id === recordingId ||
+        payload.recordingId === recordingId
+      );
     });
   }
 
@@ -217,7 +256,7 @@ async function diagnoseRecording(recordingId: string): Promise<DiagnosticReport>
   const { data: transcript, error: transcriptError } = await supabase
     .from('transcripts')
     .select('*')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .single();
 
   if (transcriptError && transcriptError.code !== 'PGRST116') {
@@ -237,10 +276,10 @@ async function diagnoseRecording(recordingId: string): Promise<DiagnosticReport>
   } else {
     report.transcript = transcript;
     console.log('✅ Transcript exists');
-    console.log(`   Word Count: ${transcript.word_count || 'N/A'}`);
+    console.log(`   Word Count: ${getTranscriptWordCount(transcript)}`);
     console.log(`   Language: ${transcript.language || 'N/A'}`);
     console.log(`   Text Length: ${transcript.text?.length || 0} characters`);
-    console.log(`   Timestamps: ${transcript.timestamps ? 'Yes' : 'No'}`);
+    console.log(`   Timed Words: ${transcript.words_json ? 'Yes' : 'No'}`);
     console.log(`   Created: ${transcript.created_at}\n`);
   }
 
@@ -251,7 +290,7 @@ async function diagnoseRecording(recordingId: string): Promise<DiagnosticReport>
   const { data: document, error: documentError } = await supabase
     .from('documents')
     .select('*')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .single();
 
   if (documentError && documentError.code !== 'PGRST116') {
@@ -271,8 +310,9 @@ async function diagnoseRecording(recordingId: string): Promise<DiagnosticReport>
   } else {
     report.document = document;
     console.log('✅ Document exists');
-    console.log(`   Title: ${document.title || '(untitled)'}`);
-    console.log(`   Content Length: ${document.content?.length || 0} characters`);
+    console.log(`   Version: ${document.version}`);
+    console.log(`   Status: ${document.status}`);
+    console.log(`   Markdown Length: ${document.markdown.length} characters`);
     console.log(`   Created: ${document.created_at}\n`);
   }
 
@@ -283,7 +323,7 @@ async function diagnoseRecording(recordingId: string): Promise<DiagnosticReport>
   const { data: chunks, error: chunksError, count } = await supabase
     .from('transcript_chunks')
     .select('*', { count: 'exact', head: false })
-    .eq('recording_id', recordingId);
+    .eq('content_id', recordingId);
 
   if (chunksError) {
     console.error('❌ Error fetching chunks:', chunksError.message);
@@ -306,8 +346,8 @@ async function diagnoseRecording(recordingId: string): Promise<DiagnosticReport>
       console.log(`✅ ${count} embedding chunks found`);
 
       if (chunks && chunks.length > 0) {
-        const sampleChunk = chunks[0];
-        console.log(`   Sample chunk text length: ${sampleChunk.content?.length || 0} characters`);
+        const sampleChunk: TranscriptChunkRow = chunks[0];
+        console.log(`   Sample chunk text length: ${sampleChunk.chunk_text.length} characters`);
         console.log(`   Has embedding: ${sampleChunk.embedding ? 'Yes' : 'No'}`);
       }
     }
