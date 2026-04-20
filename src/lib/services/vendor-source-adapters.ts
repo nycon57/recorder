@@ -9,6 +9,8 @@ export interface VendorSourceSyncPayload {
   maxPages?: number;
   sourceId: string;
   syncType: VendorSourceSyncMode;
+  /** Optional audit field — system-admin user who triggered this job (TRIB-146). */
+  triggered_by_user_id?: string | null;
 }
 
 export interface VendorSourceAdapterResolution {

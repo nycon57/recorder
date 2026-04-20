@@ -13,6 +13,7 @@ import {
   Alert02Icon,
   Package01Icon,
   Edit02Icon,
+  Database01Icon,
 } from "@hugeicons/core-free-icons"
 
 import { Badge } from "@/app/components/ui/badge"
@@ -84,6 +85,12 @@ const adminItems: AdminItem[] = [
     icon: Edit02Icon,
     description: "Knowledge items awaiting review",
     badgeKey: "reviewQueue",
+  },
+  {
+    title: "Vendor Sources",
+    url: "/admin/vendor-sources",
+    icon: Database01Icon,
+    description: "Canonical vendor corpus health",
   },
 ]
 

@@ -156,9 +156,12 @@ export function createVendorSourceSyncService(
       force?: boolean;
       mode?: VendorSourceSyncMode;
       sourceId?: string;
+      /** Audit provenance — system-admin user who initiated this sync (TRIB-146). */
+      triggeredByUserId?: string | null;
     }): Promise<VendorSourceSyncResult[]> {
       const force = options?.force ?? false;
       const mode = options?.mode ?? 'scheduled';
+      const triggeredByUserId = options?.triggeredByUserId ?? null;
       const now = new Date();
       const attemptedAt = now.toISOString();
 
@@ -209,6 +212,10 @@ export function createVendorSourceSyncService(
         }
 
         const payload = adapter.buildPayload(mode);
+        // Plumb audit provenance from the API caller (back-compat: null for scheduled jobs)
+        if (triggeredByUserId) {
+          payload.triggered_by_user_id = triggeredByUserId;
+        }
         const insert = buildVendorSourceSyncJobInsert(source, payload);
 
         const { data, error } = await (supabase

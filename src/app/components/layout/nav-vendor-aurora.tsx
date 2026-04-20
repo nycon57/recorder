@@ -23,6 +23,9 @@ import {
  *
  * Motion-enhanced vendor admin navigation.
  * Visible to org owners/admins for managing white-label configuration.
+ *
+ * Canonical vendor-source curation is system-admin-only (see /admin/vendor-sources + TRIB-146).
+ * Do not add ingestion affordances here.
  */
 
 interface VendorItem {
