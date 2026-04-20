@@ -17,11 +17,7 @@ import {
   CardTitle,
 } from '@/app/components/ui/card';
 import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/app/components/ui/tooltip';
+import { PreviewDialog } from './preview-dialog';
 
 interface ParentSource {
   app: string;
@@ -39,28 +35,26 @@ interface PageDetailData {
   created_at: string;
   updated_at: string;
   vendor_source_id: string | null;
-  curated_by: string | null; // Not yet populated by worker — display blank (TRIB-149 note)
+  curated_by: string | null;
   ingest_job_id: string | null;
 }
 
 interface PageDetailProps {
   page: PageDetailData;
   parentSource: ParentSource | null;
+  curatedByEmail?: string | null;
 }
 
 /**
  * Single vendor_wiki_pages detail view.
  *
- * Preview button is non-interactive (disabled) — ships with TRIB-149 as a
- * scaffold only. Wired behavior lands in TRIB-152.
+ * Preview is wired via PreviewDialog (TRIB-152).
+ * curated_by is resolved to operator email server-side; displayed as UUID
+ * fragment when the user row is missing.
  *
- * curated_by is displayed blank when null — the worker does not populate
- * this field yet. A follow-up (flagged as TRIB-152 scope or sibling ticket)
- * will backfill the writer.
- *
- * TRIB-149
+ * TRIB-149 | TRIB-152
  */
-export function PageDetail({ page, parentSource }: PageDetailProps) {
+export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailProps) {
   const router = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -138,20 +132,15 @@ export function PageDetail({ page, parentSource }: PageDetailProps) {
         </div>
 
         <div className="flex gap-2">
-          {/* Preview — non-interactive stub (TRIB-152 will wire this) */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button variant="outline" size="sm" disabled className="gap-1.5 cursor-not-allowed opacity-50">
-                  <Eye className="h-4 w-4" />
-                  Preview
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              <p>Preview available in TRIB-152</p>
-            </TooltipContent>
-          </Tooltip>
+          <PreviewDialog
+            pageId={page.id}
+            trigger={
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Eye className="h-4 w-4" />
+                Preview
+              </Button>
+            }
+          />
 
           <Button
             variant="destructive"
@@ -193,8 +182,12 @@ export function PageDetail({ page, parentSource }: PageDetailProps) {
             <MetaRow
               label="Curated by"
               value={
-                page.curated_by ? (
-                  page.curated_by
+                curatedByEmail ? (
+                  curatedByEmail
+                ) : page.curated_by ? (
+                  <code className="font-mono text-xs" title={page.curated_by}>
+                    {page.curated_by.slice(0, 8)}…
+                  </code>
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )
