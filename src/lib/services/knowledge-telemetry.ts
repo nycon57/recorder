@@ -1,5 +1,7 @@
 import type { Json } from '@/lib/types/database';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { CompiledMemoryCitationLayer } from '@/lib/services/compiled-memory-context';
+import type { SharedVendorRetrievalMode } from '@/lib/services/compiled-memory-answer-context';
 
 export type KnowledgeTelemetryEventType =
   | 'extension.context.checked'
@@ -20,9 +22,45 @@ export type KnowledgeReviewOutcome =
   | 'auto_rejected_noop'
   | 'error';
 
+export type KnowledgeTelemetryFailureClass =
+  | 'none'
+  | 'no_sources'
+  | 'route_error'
+  | 'stale_vendor_answer';
+
 export type KnowledgeTelemetrySince = '1h' | '24h' | '7d' | '30d' | 'all';
 
-export interface KnowledgeChatTelemetryPayload {
+interface SharedVendorTelemetryFields {
+  sourceLayers: CompiledMemoryCitationLayer[];
+  orgSourcesCount: number;
+  vendorTrainingSourcesCount: number;
+  vendorSourcesCount: number;
+  citationsCount: number;
+  citationsWithFreshnessCount: number;
+  staleCitationsCount: number;
+  staleVendorCitationsCount: number;
+  vendorSourceIds: string[];
+  vendorRetrievalMode: SharedVendorRetrievalMode;
+  failureClass: KnowledgeTelemetryFailureClass;
+}
+
+interface SharedVendorTelemetryInput {
+  sourceLayers?: CompiledMemoryCitationLayer[];
+  orgSourcesCount?: number;
+  vendorTrainingSourcesCount?: number;
+  vendorSourcesCount?: number;
+  citationsCount?: number;
+  citationsWithFreshnessCount?: number;
+  staleCitationsCount?: number;
+  staleVendorCitationsCount?: number;
+  vendorSourceIds?: string[];
+  vendorRetrievalMode?: SharedVendorRetrievalMode;
+  failureClass?: KnowledgeTelemetryFailureClass;
+  routingFailed?: boolean;
+  routingFailureReason?: string | null;
+}
+
+export interface KnowledgeChatTelemetryPayload extends SharedVendorTelemetryFields {
   orgId: string;
   userId: string;
   queryId: string;
@@ -45,13 +83,25 @@ export interface KnowledgeChatTelemetryPayload {
 export interface KnowledgeChatTelemetryInput
   extends Omit<
     KnowledgeChatTelemetryPayload,
-    'routingFailed' | 'routingFailureReason'
+    keyof SharedVendorTelemetryFields | 'routingFailed' | 'routingFailureReason'
   > {
+  sourceLayers?: CompiledMemoryCitationLayer[];
+  orgSourcesCount?: number;
+  vendorTrainingSourcesCount?: number;
+  vendorSourcesCount?: number;
+  citationsCount?: number;
+  citationsWithFreshnessCount?: number;
+  staleCitationsCount?: number;
+  staleVendorCitationsCount?: number;
+  vendorSourceIds?: string[];
+  vendorRetrievalMode?: SharedVendorRetrievalMode;
+  failureClass?: KnowledgeTelemetryFailureClass;
   routingFailed?: boolean;
   routingFailureReason?: string | null;
 }
 
-export interface KnowledgeExtensionQueryTelemetryPayload {
+export interface KnowledgeExtensionQueryTelemetryPayload
+  extends SharedVendorTelemetryFields {
   orgId: string;
   userId: string;
   app: string;
@@ -65,7 +115,21 @@ export interface KnowledgeExtensionQueryTelemetryPayload {
 }
 
 export interface KnowledgeExtensionQueryTelemetryInput
-  extends Omit<KnowledgeExtensionQueryTelemetryPayload, 'routingFailed'> {
+  extends Omit<
+    KnowledgeExtensionQueryTelemetryPayload,
+    keyof SharedVendorTelemetryFields | 'routingFailed'
+  > {
+  sourceLayers?: CompiledMemoryCitationLayer[];
+  orgSourcesCount?: number;
+  vendorTrainingSourcesCount?: number;
+  vendorSourcesCount?: number;
+  citationsCount?: number;
+  citationsWithFreshnessCount?: number;
+  staleCitationsCount?: number;
+  staleVendorCitationsCount?: number;
+  vendorSourceIds?: string[];
+  vendorRetrievalMode?: SharedVendorRetrievalMode;
+  failureClass?: KnowledgeTelemetryFailureClass;
   routingFailed?: boolean;
 }
 
@@ -115,6 +179,10 @@ export interface KnowledgeTelemetrySummary {
   reviewOutcomes: Record<KnowledgeReviewOutcome, number>;
   byVendorMatchBasis: Record<string, number>;
   byOrgMatchBasis: Record<string, number>;
+  bySourceLayer: Record<CompiledMemoryCitationLayer, number>;
+  byVendorRetrievalMode: Record<SharedVendorRetrievalMode, number>;
+  byFailureClass: Record<KnowledgeTelemetryFailureClass, number>;
+  sharedVendorStaleAnswers: number;
   extensionQueryAvailability: {
     orgKnowledge: number;
     vendorKnowledge: number;
@@ -165,6 +233,18 @@ function readBoolean(
   return typeof value === 'boolean' ? value : null;
 }
 
+function readStringArray(
+  record: Record<string, Json | undefined>,
+  key: string,
+): string[] {
+  const value = record[key];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
 function normalizePayload(payload: Json): Record<string, Json> {
   if (!isRecord(payload)) return {};
   return payload as Record<string, Json>;
@@ -176,6 +256,54 @@ function normalizeText(value: string | null | undefined): string {
 
 function clampLimit(value: number): number {
   return Math.min(Math.max(value, 10), 200);
+}
+
+function normalizeSharedVendorTelemetry(
+  input: SharedVendorTelemetryInput,
+): SharedVendorTelemetryFields {
+  const sourceLayers = (['org', 'vendor_training', 'vendor'] as const).filter((layer) =>
+    (input.sourceLayers ?? []).includes(layer),
+  );
+  const orgSourcesCount = input.orgSourcesCount ?? 0;
+  const vendorTrainingSourcesCount = input.vendorTrainingSourcesCount ?? 0;
+  const vendorSourcesCount = input.vendorSourcesCount ?? 0;
+  const citationsCount = input.citationsCount ?? 0;
+  const citationsWithFreshnessCount = input.citationsWithFreshnessCount ?? 0;
+  const staleCitationsCount = input.staleCitationsCount ?? 0;
+  const staleVendorCitationsCount = input.staleVendorCitationsCount ?? 0;
+  const vendorSourceIds = Array.from(new Set(input.vendorSourceIds ?? []));
+  const vendorRetrievalMode = input.vendorRetrievalMode ?? 'none';
+
+  let failureClass = input.failureClass ?? 'none';
+  if (failureClass === 'none') {
+    if (
+      (input.routingFailed || input.routingFailureReason === 'route_error') &&
+      input.routingFailureReason === 'route_error'
+    ) {
+      failureClass = 'route_error';
+    } else if (
+      orgSourcesCount === 0 &&
+      vendorTrainingSourcesCount === 0 &&
+      vendorSourcesCount > 0 &&
+      staleVendorCitationsCount > 0
+    ) {
+      failureClass = 'stale_vendor_answer';
+    }
+  }
+
+  return {
+    sourceLayers,
+    orgSourcesCount,
+    vendorTrainingSourcesCount,
+    vendorSourcesCount,
+    citationsCount,
+    citationsWithFreshnessCount,
+    staleCitationsCount,
+    staleVendorCitationsCount,
+    vendorSourceIds,
+    vendorRetrievalMode,
+    failureClass,
+  };
 }
 
 function cutoffFromSince(since: KnowledgeTelemetrySince): string | null {
@@ -206,6 +334,14 @@ export function buildKnowledgeChatTelemetry(
     args.recordingsCount > 0;
   const routingFailed =
     args.routingFailed ?? shouldInferRoutingFailure;
+  const sharedVendorTelemetry = normalizeSharedVendorTelemetry({
+    ...args,
+    routingFailed,
+  });
+  const failureClass =
+    sharedVendorTelemetry.failureClass === 'none' && args.sourcesCount === 0
+      ? 'no_sources'
+      : sharedVendorTelemetry.failureClass;
 
   return {
     ...args,
@@ -213,6 +349,8 @@ export function buildKnowledgeChatTelemetry(
     routingFailureReason: routingFailed
       ? args.routingFailureReason ?? 'no_sources'
       : null,
+    ...sharedVendorTelemetry,
+    failureClass,
   };
 }
 
@@ -221,10 +359,22 @@ export function buildKnowledgeExtensionQueryTelemetry(
 ): KnowledgeExtensionQueryTelemetryPayload {
   const routingFailed =
     args.routingFailed ?? (!args.hadOrgKnowledge && !args.hadVendorKnowledge);
+  const sharedVendorTelemetry = normalizeSharedVendorTelemetry({
+    ...args,
+    routingFailed,
+  });
+  const failureClass =
+    sharedVendorTelemetry.failureClass === 'none' &&
+    !args.hadOrgKnowledge &&
+    !args.hadVendorKnowledge
+      ? 'no_sources'
+      : sharedVendorTelemetry.failureClass;
 
   return {
     ...args,
     routingFailed,
+    ...sharedVendorTelemetry,
+    failureClass,
   };
 }
 
@@ -246,10 +396,12 @@ export async function recordKnowledgeTelemetryEvent(input: {
   payload: Json;
 }): Promise<void> {
   try {
+    // Repo-wide Supabase typing currently narrows admin inserts to `never`
+    // during full `tsc --noEmit`, even for valid event rows.
     const { error } = await supabaseAdmin.from('events').insert({
       type: input.type,
       payload: input.payload,
-    });
+    } as never);
 
     if (error) {
       console.warn('[knowledge-telemetry] Failed to record event:', {
@@ -306,11 +458,29 @@ export function summarizeKnowledgeTelemetryEvents(
   };
   const byVendorMatchBasis: Record<string, number> = {};
   const byOrgMatchBasis: Record<string, number> = {};
+  const bySourceLayer: KnowledgeTelemetrySummary['bySourceLayer'] = {
+    org: 0,
+    vendor_training: 0,
+    vendor: 0,
+  };
+  const byVendorRetrievalMode: KnowledgeTelemetrySummary['byVendorRetrievalMode'] = {
+    none: 0,
+    exact: 0,
+    semantic: 0,
+    hybrid: 0,
+  };
+  const byFailureClass: KnowledgeTelemetrySummary['byFailureClass'] = {
+    none: 0,
+    no_sources: 0,
+    route_error: 0,
+    stale_vendor_answer: 0,
+  };
 
   let routingFailures = 0;
   let orgKnowledgeCount = 0;
   let vendorKnowledgeCount = 0;
   let emptyKnowledgeCount = 0;
+  let sharedVendorStaleAnswers = 0;
 
   for (const event of events) {
     byType[event.type] += 1;
@@ -349,6 +519,39 @@ export function summarizeKnowledgeTelemetryEvents(
       }
     }
 
+    if (
+      event.type === 'knowledge.chat.outcome' ||
+      event.type === 'knowledge.extension.query.outcome'
+    ) {
+      for (const layer of readStringArray(event.payload, 'sourceLayers')) {
+        if (layer === 'org' || layer === 'vendor_training' || layer === 'vendor') {
+          bySourceLayer[layer] += 1;
+        }
+      }
+
+      const vendorRetrievalMode = readString(
+        event.payload,
+        'vendorRetrievalMode',
+      ) as SharedVendorRetrievalMode | null;
+      if (vendorRetrievalMode && vendorRetrievalMode in byVendorRetrievalMode) {
+        byVendorRetrievalMode[vendorRetrievalMode] += 1;
+      }
+
+      const failureClass = readString(
+        event.payload,
+        'failureClass',
+      ) as KnowledgeTelemetryFailureClass | null;
+      if (failureClass && failureClass in byFailureClass) {
+        byFailureClass[failureClass] += 1;
+      }
+
+      const staleVendorCitationsCount =
+        readNumber(event.payload, 'staleVendorCitationsCount') ?? 0;
+      if (staleVendorCitationsCount > 0) {
+        sharedVendorStaleAnswers += 1;
+      }
+    }
+
     if (event.type === 'knowledge.review.outcome') {
       const outcome = readString(event.payload, 'outcome') as KnowledgeReviewOutcome | null;
       if (outcome && outcome in reviewOutcomes) {
@@ -365,6 +568,10 @@ export function summarizeKnowledgeTelemetryEvents(
     reviewOutcomes,
     byVendorMatchBasis,
     byOrgMatchBasis,
+    bySourceLayer,
+    byVendorRetrievalMode,
+    byFailureClass,
+    sharedVendorStaleAnswers,
     extensionQueryAvailability: {
       orgKnowledge: orgKnowledgeCount,
       vendorKnowledge: vendorKnowledgeCount,

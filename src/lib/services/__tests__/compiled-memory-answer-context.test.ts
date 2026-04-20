@@ -4,6 +4,7 @@ import {
   buildCompiledMemoryAnswerContext,
   buildExtensionCompiledMemoryPrompt,
   resolveCompiledMemoryAnswerContext,
+  summarizeCompiledMemoryAnswerObservability,
   DEFAULT_CHAT_COMPILED_MEMORY_SCOPE,
 } from '../compiled-memory-answer-context';
 import type { CompiledMemoryContext } from '../compiled-memory-context';
@@ -467,4 +468,136 @@ test('resolveCompiledMemoryAnswerContext falls back to vendor-compatible resolut
   } finally {
     console.error = originalConsoleError;
   }
+});
+
+test('summarizeCompiledMemoryAnswerObservability captures shared vendor freshness and retrieval mode', () => {
+  const compiledMemory: CompiledMemoryContext = {
+    vendorKnowledge: {
+      page: null,
+      pages: [
+        {
+          id: 'vendor-exact',
+          vendorPageId: 'vendor-page-exact',
+          vendorSourceId: 'source-1',
+          app: 'vercel',
+          screen: 'projects',
+          title: 'Project settings',
+          content: 'Exact vendor guidance for project settings.',
+          sourceUrl: 'https://vercel.com/docs/projects',
+          updatedAt: '2026-04-19T12:00:00.000Z',
+          confidence: 0.88,
+          distance: 0.12,
+          matchType: 'exact',
+        },
+        {
+          id: 'vendor-semantic',
+          vendorPageId: 'vendor-page-semantic',
+          vendorSourceId: 'source-2',
+          app: 'vercel',
+          screen: 'domains',
+          title: 'Domain routing',
+          content: 'Broader vendor guidance for domain routing.',
+          sourceUrl: 'https://vercel.com/docs/domains',
+          updatedAt: '2026-04-10T12:00:00.000Z',
+          confidence: 0.76,
+          distance: 0.24,
+          matchType: 'semantic',
+        },
+      ],
+    },
+    vendorTraining: {
+      pages: [
+        {
+          id: 'training-1',
+          app: 'vercel',
+          screen: 'projects',
+          topic: 'Internal vendor rollout',
+          content: 'Start with the staging project before production.',
+          confidence: 0.8,
+          distance: 0.2,
+        },
+      ],
+    },
+    orgKnowledge: {
+      pages: [
+        {
+          id: 'org-1',
+          app: 'vercel',
+          screen: 'projects',
+          topic: 'Project ownership',
+          content: 'Our team owns production project settings centrally.',
+          confidence: 0.91,
+          distance: 0.09,
+        },
+      ],
+      priorTopics: [],
+    },
+    citationsBySourceId: {
+      'org-1': {
+        sourceId: 'org-1',
+        title: 'Project ownership',
+        layer: 'org',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('org-1'),
+      },
+      'training-1': {
+        sourceId: 'training-1',
+        title: 'Internal vendor rollout',
+        layer: 'vendor_training',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('training-1'),
+      },
+      'vendor-exact': {
+        sourceId: 'vendor-exact',
+        title: 'Project settings',
+        layer: 'vendor',
+        linkUrl: 'https://vercel.com/docs/projects',
+        freshness: {
+          updatedAt: '2026-04-19T12:00:00.000Z',
+          lastSuccessfulSyncAt: '2026-04-19T11:00:00.000Z',
+          freshnessTarget: '7 days',
+          isStale: false,
+        },
+        provenance: provenance('vendor-exact', {
+          vendorPageId: 'vendor-page-exact',
+          vendorSourceId: 'source-1',
+          sourceKind: 'documentation',
+          sourceUrl: 'https://vercel.com/docs/projects',
+        }),
+      },
+      'vendor-semantic': {
+        sourceId: 'vendor-semantic',
+        title: 'Domain routing',
+        layer: 'vendor',
+        linkUrl: 'https://vercel.com/docs/domains',
+        freshness: {
+          updatedAt: '2026-04-10T12:00:00.000Z',
+          lastSuccessfulSyncAt: '2026-04-10T11:00:00.000Z',
+          freshnessTarget: '3 days',
+          isStale: true,
+        },
+        provenance: provenance('vendor-semantic', {
+          vendorPageId: 'vendor-page-semantic',
+          vendorSourceId: 'source-2',
+          sourceKind: 'documentation',
+          sourceUrl: 'https://vercel.com/docs/domains',
+        }),
+      },
+    },
+  };
+
+  const answerContext = buildCompiledMemoryAnswerContext(compiledMemory);
+  const summary = summarizeCompiledMemoryAnswerObservability(answerContext);
+
+  assert.deepEqual(summary.sourceLayers, ['org', 'vendor_training', 'vendor']);
+  assert.equal(summary.orgSourcesCount, 1);
+  assert.equal(summary.vendorTrainingSourcesCount, 1);
+  assert.equal(summary.vendorSourcesCount, 2);
+  assert.equal(summary.citationsCount, 4);
+  assert.equal(summary.citationsWithFreshnessCount, 2);
+  assert.equal(summary.staleCitationsCount, 1);
+  assert.equal(summary.staleVendorCitationsCount, 1);
+  assert.deepEqual(summary.vendorSourceIds, ['source-1', 'source-2']);
+  assert.equal(summary.vendorRetrievalMode, 'hybrid');
+  assert.equal(summary.hasStaleVendorContent, true);
 });

@@ -17,6 +17,7 @@ import { requireOrg } from '@/lib/utils/api';
 import { retrieveContext } from '@/lib/services/rag-google';
 import {
   resolveCompiledMemoryAnswerContext,
+  summarizeCompiledMemoryAnswerObservability,
   type CompiledMemoryAnswerContext,
 } from '@/lib/services/compiled-memory-answer-context';
 import { preprocessQuery } from '@/lib/services/query-preprocessor';
@@ -48,6 +49,7 @@ import { searchMonitor } from '@/lib/services/search-monitoring';
 import {
   buildKnowledgeChatTelemetry,
   recordKnowledgeTelemetryEvent,
+  type KnowledgeTelemetryFailureClass,
   type KnowledgeChatTelemetryPayload,
 } from '@/lib/services/knowledge-telemetry';
 
@@ -266,6 +268,8 @@ export async function POST(req: Request) {
     let isMetaDiscoveryQuery = false;
     const isScopedDiscoveryMode = Array.isArray(recordingIds) && recordingIds.length > 0;
     let useToolDiscovery = false;
+    let sharedVendorTelemetry = summarizeCompiledMemoryAnswerObservability(undefined);
+    let telemetryFailureClass: KnowledgeTelemetryFailureClass = 'none';
 
     if (userQuery) {
       console.log('[Chat API] Retrieving answer context for org:', orgId);
@@ -590,6 +594,8 @@ export async function POST(req: Request) {
           userId,
           question: searchableQuery,
         });
+        sharedVendorTelemetry =
+          summarizeCompiledMemoryAnswerObservability(compiledAnswerContext);
 
         console.log('[Chat API] Compiled memory retrieval:', {
           sourcesFound: compiledAnswerContext.sources.length,
@@ -1057,6 +1063,8 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
       totalTimeMs: Date.now() - requestStartTime,
       routingFailed: false,
       routingFailureReason: null,
+      failureClass: telemetryFailureClass,
+      ...sharedVendorTelemetry,
     });
 
     after(async () => {
@@ -1094,6 +1102,7 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
           ...chatTelemetry,
           routingFailed: true,
           routingFailureReason: chatTelemetry.routingFailureReason ?? 'route_error',
+          failureClass: 'route_error',
         }) as any,
       });
     }
