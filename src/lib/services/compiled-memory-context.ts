@@ -8,6 +8,11 @@ import {
   resolveVendorWikiPage,
   type VendorWikiPage,
 } from '@/lib/services/vendor-wiki-resolver';
+import {
+  resolveVendorCorpusPages,
+  formatVendorKnowledgeTitle,
+  type VendorCorpusPageMatch,
+} from '@/lib/services/vendor-doc-corpus';
 import { resolveClusterContext } from '@/lib/services/wiki-clusters';
 
 const DEFAULT_MATCH_LIMIT = 3;
@@ -30,14 +35,25 @@ export interface ResolveCompiledMemoryContextArgs {
   userId?: string;
   app: string;
   screen: string;
+  question?: string;
   questionEmbedding: number[];
   asOf?: string | null;
   limit?: number;
 }
 
+interface ResolveCompiledMemoryContextDeps {
+  createAdminClient?: typeof createAdminClient;
+  getVendorForOrg?: typeof getVendorForOrg;
+  resolveOrgWikiPagesByVector?: typeof resolveOrgWikiPagesByVector;
+  resolveVendorWikiPage?: typeof resolveVendorWikiPage;
+  resolveVendorCorpusPages?: typeof resolveVendorCorpusPages;
+  resolveClusterContext?: typeof resolveClusterContext;
+}
+
 export interface CompiledMemoryContext {
   vendorKnowledge: {
     page: VendorWikiPage | null;
+    pages: VendorCorpusPageMatch[];
   };
   vendorTraining: {
     pages: ResolvedOrgWikiPage[];
@@ -55,15 +71,18 @@ async function resolveVendorTrainingPages(args: {
   questionEmbedding: number[];
   asOf?: string | null;
   limit: number;
-}): Promise<ResolvedOrgWikiPage[]> {
+}, deps: ResolveCompiledMemoryContextDeps = {}): Promise<ResolvedOrgWikiPage[]> {
   const { orgId, app, questionEmbedding, asOf, limit } = args;
+  const getVendorForOrgFn = deps.getVendorForOrg ?? getVendorForOrg;
+  const resolveOrgWikiPagesByVectorFn =
+    deps.resolveOrgWikiPagesByVector ?? resolveOrgWikiPagesByVector;
 
   if (!questionEmbedding || questionEmbedding.length === 0) {
     return [];
   }
 
   try {
-    const vendorInfo = await getVendorForOrg(orgId);
+    const vendorInfo = await getVendorForOrgFn(orgId);
     if (!vendorInfo) return [];
 
     const inScope =
@@ -77,7 +96,7 @@ async function resolveVendorTrainingPages(args: {
       return [];
     }
 
-    return await resolveOrgWikiPagesByVector({
+    return await resolveOrgWikiPagesByVectorFn({
       orgId: vendorInfo.vendorOrgId,
       questionEmbedding,
       limit,
@@ -98,8 +117,13 @@ async function resolveOrgKnowledge(args: {
   questionEmbedding: number[];
   asOf?: string | null;
   limit: number;
-}): Promise<CompiledMemoryContext['orgKnowledge']> {
+}, deps: ResolveCompiledMemoryContextDeps = {}): Promise<CompiledMemoryContext['orgKnowledge']> {
   const { orgId, userId, questionEmbedding, asOf, limit } = args;
+  const resolveOrgWikiPagesByVectorFn =
+    deps.resolveOrgWikiPagesByVector ?? resolveOrgWikiPagesByVector;
+  const resolveClusterContextFn =
+    deps.resolveClusterContext ?? resolveClusterContext;
+  const createAdminClientFn = deps.createAdminClient ?? createAdminClient;
 
   if (!questionEmbedding || questionEmbedding.length === 0) {
     return {
@@ -110,7 +134,7 @@ async function resolveOrgKnowledge(args: {
 
   let pages: ResolvedOrgWikiPage[] = [];
   try {
-    pages = await resolveOrgWikiPagesByVector({
+    pages = await resolveOrgWikiPagesByVectorFn({
       orgId,
       questionEmbedding,
       limit,
@@ -134,7 +158,7 @@ async function resolveOrgKnowledge(args: {
     };
   }
 
-  const supabase = createAdminClient();
+  const supabase = createAdminClientFn();
 
   if (asOf == null) {
     try {
@@ -151,7 +175,7 @@ async function resolveOrgKnowledge(args: {
       const enabled = settings?.wiki_cluster_context_enabled !== false;
       if (enabled) {
         const basePageIds = pages.map((page) => page.id);
-        const clusterPages = await resolveClusterContext({
+        const clusterPages = await resolveClusterContextFn({
           orgId,
           basePageIds,
           perCluster: CLUSTER_CONTEXT_PER_CLUSTER,
@@ -217,13 +241,15 @@ async function resolveOrgKnowledge(args: {
 
 async function resolveOrgCitationLinks(
   pageIds: string[],
+  deps: ResolveCompiledMemoryContextDeps = {},
 ): Promise<Map<string, string>> {
   if (pageIds.length === 0) {
     return new Map();
   }
 
   try {
-    const supabase = createAdminClient();
+    const createAdminClientFn = deps.createAdminClient ?? createAdminClient;
+    const supabase = createAdminClientFn();
     const { data } = await supabase
       .from('wiki_page_sources')
       .select('page_id, source_id, source_type')
@@ -259,18 +285,28 @@ async function resolveOrgCitationLinks(
 
 async function buildCitationsBySourceId(args: {
   vendorPage: VendorWikiPage | null;
+  vendorPages: VendorCorpusPageMatch[];
   vendorTrainingPages: ResolvedOrgWikiPage[];
   orgPages: ResolvedOrgWikiPage[];
-}): Promise<Record<string, CompiledMemoryCitation>> {
-  const { vendorPage, vendorTrainingPages, orgPages } = args;
+}, deps: ResolveCompiledMemoryContextDeps = {}): Promise<Record<string, CompiledMemoryCitation>> {
+  const { vendorPage, vendorPages, vendorTrainingPages, orgPages } = args;
   const citationsBySourceId: Record<string, CompiledMemoryCitation> = {};
 
   if (vendorPage) {
     citationsBySourceId[vendorPage.id] = {
       sourceId: vendorPage.id,
-      title: `${vendorPage.app} — ${vendorPage.screen}`,
+      title: formatVendorKnowledgeTitle(vendorPage.app, vendorPage.screen),
       layer: 'vendor',
       linkUrl: vendorPage.source_url ?? undefined,
+    };
+  }
+
+  for (const vendorKnowledgePage of vendorPages) {
+    citationsBySourceId[vendorKnowledgePage.id] = {
+      sourceId: vendorKnowledgePage.id,
+      title: vendorKnowledgePage.title,
+      layer: 'vendor',
+      linkUrl: vendorKnowledgePage.sourceUrl ?? undefined,
     };
   }
 
@@ -284,6 +320,7 @@ async function buildCitationsBySourceId(args: {
 
   const orgCitationLinks = await resolveOrgCitationLinks(
     orgPages.map((page) => page.id),
+    deps,
   );
 
   for (const page of orgPages) {
@@ -300,44 +337,119 @@ async function buildCitationsBySourceId(args: {
 
 export async function resolveCompiledMemoryContext(
   args: ResolveCompiledMemoryContextArgs,
+  deps: ResolveCompiledMemoryContextDeps = {},
 ): Promise<CompiledMemoryContext> {
   const {
     orgId,
     userId,
     app,
     screen,
+    question = '',
     questionEmbedding,
     asOf,
     limit = DEFAULT_MATCH_LIMIT,
   } = args;
+  const resolveVendorWikiPageFn =
+    deps.resolveVendorWikiPage ?? resolveVendorWikiPage;
+  const resolveVendorCorpusPagesFn =
+    deps.resolveVendorCorpusPages ?? resolveVendorCorpusPages;
 
-  const [vendorPage, vendorTrainingPages, orgKnowledge] = await Promise.all([
-    resolveVendorWikiPage({ app, screen }),
-    resolveVendorTrainingPages({
-      orgId,
-      app,
-      questionEmbedding,
-      asOf,
-      limit,
-    }),
-    resolveOrgKnowledge({
-      orgId,
-      userId,
-      questionEmbedding,
-      asOf,
-      limit,
-    }),
-  ]);
+  const [vendorPage, vendorCorpusPages, vendorTrainingPages, orgKnowledge] =
+    await Promise.all([
+      resolveVendorWikiPageFn({ app, screen }),
+      resolveVendorCorpusPagesFn({
+        app,
+        screen,
+        question,
+        questionEmbedding,
+        limit,
+      }),
+      resolveVendorTrainingPages(
+        {
+          orgId,
+          app,
+          questionEmbedding,
+          asOf,
+          limit,
+        },
+        deps,
+      ),
+      resolveOrgKnowledge(
+        {
+          orgId,
+          userId,
+          questionEmbedding,
+          asOf,
+          limit,
+        },
+        deps,
+      ),
+    ]);
+
+  const vendorPages: VendorCorpusPageMatch[] = [];
+  const seenVendorPageIds = new Set<string>();
+  const seenSourceIds = new Set<string>();
+
+  if (vendorPage) {
+    const exactCorpusPage =
+      vendorCorpusPages.find(
+        (page) =>
+          page.vendorPageId === vendorPage.id || page.id === vendorPage.id,
+      ) ?? null;
+
+    vendorPages.push({
+      id: vendorPage.id,
+      vendorPageId: vendorPage.id,
+      vendorSourceId:
+        exactCorpusPage?.vendorSourceId ?? vendorPage.vendor_source_id,
+      app: vendorPage.app,
+      screen: vendorPage.screen,
+      title:
+        exactCorpusPage?.title ??
+        formatVendorKnowledgeTitle(vendorPage.app, vendorPage.screen),
+      content: vendorPage.content,
+      sourceUrl: exactCorpusPage?.sourceUrl ?? vendorPage.source_url,
+      confidence: exactCorpusPage?.confidence ?? 0.8,
+      distance: exactCorpusPage?.distance ?? 0.2,
+      matchType: 'exact',
+    });
+    seenVendorPageIds.add(vendorPage.id);
+    seenSourceIds.add(vendorPage.id);
+    if (exactCorpusPage) {
+      seenSourceIds.add(exactCorpusPage.id);
+    }
+  }
+
+  for (const vendorCorpusPage of vendorCorpusPages) {
+    if (seenSourceIds.has(vendorCorpusPage.id)) {
+      continue;
+    }
+
+    if (
+      vendorCorpusPage.vendorPageId &&
+      seenVendorPageIds.has(vendorCorpusPage.vendorPageId)
+    ) {
+      continue;
+    }
+
+    vendorPages.push(vendorCorpusPage);
+    seenSourceIds.add(vendorCorpusPage.id);
+    if (vendorCorpusPage.vendorPageId) {
+      seenVendorPageIds.add(vendorCorpusPage.vendorPageId);
+    }
+  }
 
   const citationsBySourceId = await buildCitationsBySourceId({
     vendorPage,
+    vendorPages,
     vendorTrainingPages,
     orgPages: orgKnowledge.pages,
-  });
+  }, deps);
 
   return {
     vendorKnowledge: {
       page: vendorPage,
+      pages: vendorPages,
     },
     vendorTraining: {
       pages: vendorTrainingPages,

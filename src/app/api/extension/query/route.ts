@@ -63,6 +63,7 @@ import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import type { ResolvedOrgWikiPage } from '@/lib/services/org-wiki-embedding';
 import { resolveCompiledMemoryContext } from '@/lib/services/compiled-memory-context';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
+import type { VendorCorpusPageMatch } from '@/lib/services/vendor-doc-corpus';
 import {
   buildKnowledgeExtensionQueryTelemetry,
   recordKnowledgeTelemetryEvent,
@@ -173,7 +174,7 @@ function buildFusionPrompt(args: {
   app: string;
   screen: string;
   question: string;
-  vendorMarkdown: string | null;
+  vendorPages: VendorCorpusPageMatch[];
   vendorTrainingPages: ResolvedOrgWikiPage[];
   orgPages: ResolvedOrgWikiPage[];
   elements: Array<{ selector: string; label: string }>;
@@ -183,16 +184,23 @@ function buildFusionPrompt(args: {
     app,
     screen,
     question,
-    vendorMarkdown,
+    vendorPages,
     vendorTrainingPages,
     orgPages,
     elements,
     userMemoryTopics,
   } = args;
 
-  const vendorSection = vendorMarkdown
-    ? vendorMarkdown.slice(0, MAX_CONTENT_CHARS_PER_PAGE)
-    : '(no vendor documentation available for this screen)';
+  const vendorSection =
+    vendorPages.length > 0
+      ? vendorPages
+          .map((page) => {
+            const header = `### ${page.title} [SOURCE:${page.id}:${page.title}]`;
+            const body = (page.content ?? '').slice(0, MAX_CONTENT_CHARS_PER_PAGE);
+            return `${header}\n${body}`;
+          })
+          .join(ORG_SEPARATOR)
+      : '(no vendor documentation available for this product)';
 
   // TRIB-54: Vendor training layer — wiki pages from the vendor org
   const vendorTrainingSection =
@@ -639,15 +647,16 @@ export async function POST(request: NextRequest) {
           userId,
           app,
           screen,
+          question,
           questionEmbedding,
           asOf,
         });
-        const vendorPage = compiledMemory.vendorKnowledge.page;
+        const vendorPages = compiledMemory.vendorKnowledge.pages;
         const vendorTrainingPages = compiledMemory.vendorTraining.pages;
         const orgPages = compiledMemory.orgKnowledge.pages;
 
         // ---- Step 3: early exit if all layers are empty -----------------
-        if (!vendorPage && vendorTrainingPages.length === 0 && orgPages.length === 0) {
+        if (vendorPages.length === 0 && vendorTrainingPages.length === 0 && orgPages.length === 0) {
           emit({
             type: 'text_chunk',
             text: `I don't have specific documentation for ${app} ${screen} yet. Please check the vendor's help center for guidance.`,
@@ -663,7 +672,7 @@ export async function POST(request: NextRequest) {
           app,
           screen,
           question,
-          vendorMarkdown: vendorPage?.content ?? null,
+          vendorPages,
           vendorTrainingPages,
           orgPages,
           elements: context.elements ?? [],
@@ -677,7 +686,7 @@ export async function POST(request: NextRequest) {
         // TRIB-57: set knowledge flags for usage analytics
         hadOrgKnowledge = orgPages.length > 0;
         hadVendorKnowledge =
-          vendorTrainingPages.length > 0 || vendorPage != null;
+          vendorTrainingPages.length > 0 || vendorPages.length > 0;
 
         // ---- Step 5: stream the LLM response through the tag parser ----
         const citedPageIds = new Set<string>();
@@ -797,7 +806,7 @@ export async function POST(request: NextRequest) {
         }));
 
       if (rows.length > 0) {
-        await supabase.from('user_wiki_interactions').insert(rows);
+        await (supabase.from('user_wiki_interactions') as any).insert(rows);
       }
     } catch (err) {
       // Best-effort — don't let interaction tracking crash anything
@@ -815,7 +824,7 @@ export async function POST(request: NextRequest) {
     after(async () => {
       try {
         const supabase = createAdminClient();
-        await supabase.from('vendor_usage_events').insert({
+        await (supabase.from('vendor_usage_events') as any).insert({
           vendor_org_id: authCtx.orgId,
           customer_org_id: orgId !== authCtx.orgId ? orgId : null,
           api_key_id: authCtx.keyId,
@@ -842,7 +851,7 @@ export async function POST(request: NextRequest) {
 
     await recordKnowledgeTelemetryEvent({
       type: 'knowledge.extension.query.outcome',
-      payload: telemetryPayload,
+      payload: telemetryPayload as any,
     });
   });
 

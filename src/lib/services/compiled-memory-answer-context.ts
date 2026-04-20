@@ -4,6 +4,7 @@ import {
   type CompiledMemoryContext,
 } from '@/lib/services/compiled-memory-context';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
+import { formatVendorKnowledgeTitle } from '@/lib/services/vendor-doc-corpus';
 
 const MAX_CONTENT_CHARS_PER_SOURCE = 1_200;
 const MAX_EXCERPT_CHARS = 220;
@@ -131,24 +132,45 @@ export function buildCompiledMemoryAnswerContext(
     )
     .filter((source): source is CompiledMemoryAnswerSource => source != null);
 
-  const vendorPage = compiledMemory.vendorKnowledge.page;
-  const vendorSources = vendorPage
-    ? [
-        toSource({
-          sourceId: vendorPage.id,
-          title:
-            compiledMemory.citationsBySourceId[vendorPage.id]?.title ??
-            `${vendorPage.app} — ${vendorPage.screen}`,
-          layer: 'vendor',
-          content: vendorPage.content,
-          confidence: 0.6,
-          url:
-            compiledMemory.citationsBySourceId[vendorPage.id]?.linkUrl ??
-            vendorPage.source_url ??
-            undefined,
-        }),
-      ].filter((source): source is CompiledMemoryAnswerSource => source != null)
-    : [];
+  const vendorKnowledgePages =
+    compiledMemory.vendorKnowledge.pages.length > 0
+      ? compiledMemory.vendorKnowledge.pages
+      : compiledMemory.vendorKnowledge.page
+        ? [
+            {
+              id: compiledMemory.vendorKnowledge.page.id,
+              vendorPageId: compiledMemory.vendorKnowledge.page.id,
+              vendorSourceId: compiledMemory.vendorKnowledge.page.vendor_source_id,
+              app: compiledMemory.vendorKnowledge.page.app,
+              screen: compiledMemory.vendorKnowledge.page.screen,
+              title: formatVendorKnowledgeTitle(
+                compiledMemory.vendorKnowledge.page.app,
+                compiledMemory.vendorKnowledge.page.screen,
+              ),
+              content: compiledMemory.vendorKnowledge.page.content,
+              sourceUrl: compiledMemory.vendorKnowledge.page.source_url,
+              confidence: 0.6,
+              distance: 0.4,
+              matchType: 'exact' as const,
+            },
+          ]
+        : [];
+
+  const vendorSources = vendorKnowledgePages
+    .map((page) =>
+      toSource({
+        sourceId: page.id,
+        title: compiledMemory.citationsBySourceId[page.id]?.title ?? page.title,
+        layer: 'vendor',
+        content: page.content,
+        confidence: page.confidence,
+        url:
+          compiledMemory.citationsBySourceId[page.id]?.linkUrl ??
+          page.sourceUrl ??
+          undefined,
+      }),
+    )
+    .filter((source): source is CompiledMemoryAnswerSource => source != null);
 
   const remainingBudget =
     citationLimit == null ? Number.POSITIVE_INFINITY : Math.max(citationLimit, 0);
@@ -285,6 +307,7 @@ export async function resolveCompiledMemoryAnswerContext(
       userId,
       app,
       screen,
+      question: trimmedQuestion,
       questionEmbedding,
       limit,
     });
