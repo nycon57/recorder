@@ -118,9 +118,6 @@ const nextConfig = {
   //   5. External library type definitions (~50 errors)
   // Target: Re-enable checks by end of Q1 2026 after incremental category fixes
   // Use `npm run type:check` to verify progress
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
