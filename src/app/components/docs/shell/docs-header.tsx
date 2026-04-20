@@ -1,4 +1,9 @@
+'use client';
+
+import { useCallback } from 'react';
+
 import type { Audience } from '@/lib/docs';
+import { useDocsSearch } from '@/app/components/docs/search/docs-search-context';
 
 import { DocsBreadcrumb, type BreadcrumbSegment } from './docs-breadcrumb';
 
@@ -14,10 +19,18 @@ interface DocsHeaderProps {
 }
 
 /**
- * Utility bar: breadcrumbs left, audience badge + search hint right.
- * Server component — no interactivity.
+ * Utility bar: breadcrumbs left, audience badge + ⌘K search button right.
+ *
+ * Now a client component so it can call useDocsSearch() to open the dialog.
+ * The search context is provided by DocsSearchProvider in the layout.
  */
 export function DocsHeader({ audience, breadcrumbs = [] }: DocsHeaderProps) {
+  const { open } = useDocsSearch();
+
+  const handleSearchClick = useCallback(() => {
+    open();
+  }, [open]);
+
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-[color:var(--docs-border)] bg-[color:var(--docs-surface)] px-6">
       {/* Breadcrumb */}
@@ -34,10 +47,16 @@ export function DocsHeader({ audience, breadcrumbs = [] }: DocsHeaderProps) {
           </span>
         )}
 
-        {/* Search hint slot — wired in TRIB-155 */}
-        <kbd className="hidden items-center gap-1 rounded border border-[color:var(--docs-border)] bg-[color:var(--docs-surface-hover)] px-1.5 py-0.5 font-mono text-[10px] text-[color:var(--docs-text-muted)] sm:inline-flex">
+        {/* ⌘K search button */}
+        <button
+          type="button"
+          onClick={handleSearchClick}
+          aria-label="Search docs"
+          aria-keyshortcuts="Meta+K Control+K"
+          className="hidden items-center gap-1 rounded border border-[color:var(--docs-border)] bg-[color:var(--docs-surface-hover)] px-1.5 py-0.5 font-mono text-[10px] text-[color:var(--docs-text-muted)] transition-colors hover:border-[color:var(--docs-amber)]/40 hover:text-[color:var(--docs-text-secondary)] sm:inline-flex"
+        >
           <span className="text-[11px]">⌘</span>K
-        </kbd>
+        </button>
       </div>
     </header>
   );

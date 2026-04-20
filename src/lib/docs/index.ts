@@ -32,3 +32,7 @@ export { getDocsRegistry } from './registry';
 // Access control
 export { resolveAccess } from './access';
 export type { AccessDecision } from './access';
+
+// Git adapter — page body lookup for rendering
+export { findGitPageBody, clearGitPageCache } from './adapters/git';
+export type { DocsPageWithBody } from './adapters/git';
