@@ -10,11 +10,16 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { updateLibraryItemSchema } from '@/lib/validations/library';
-import type { ContentType } from '@/lib/types/database';
+import type { ContentType, Database } from '@/lib/types/database';
 
 // Next.js 15 route segment config
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+type ContentUpdateRow = Pick<
+  Database['public']['Tables']['content']['Row'],
+  'id' | 'title' | 'description' | 'metadata' | 'updated_at'
+>;
 
 /**
  * GET /api/library/[id]
@@ -225,14 +230,15 @@ export const PATCH = apiHandler(
       if (error || !item) {
         return errors.notFound('Content item', requestId);
       }
+      const updatedItem = item as ContentUpdateRow;
 
       return successResponse(
         {
-          id: item.id,
-          title: item.title,
-          description: item.description,
-          metadata: item.metadata,
-          updated_at: item.updated_at,
+          id: updatedItem.id,
+          title: updatedItem.title,
+          description: updatedItem.description,
+          metadata: updatedItem.metadata,
+          updated_at: updatedItem.updated_at,
         },
         requestId
       );

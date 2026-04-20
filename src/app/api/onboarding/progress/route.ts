@@ -7,10 +7,19 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import type { LearningPathItem, EngagementData } from '@/lib/types/database';
+import type {
+  LearningPathItem,
+  EngagementData,
+  Database,
+} from '@/lib/types/database';
 import { analyzeOnboardingEngagement } from '@/lib/services/onboarding-engagement';
 
 export const dynamic = 'force-dynamic';
+
+type OnboardingPlanUpdateRow = Pick<
+  Database['public']['Tables']['agent_onboarding_plans']['Row'],
+  'id' | 'plan_status' | 'completed_items' | 'total_items' | 'learning_path'
+>;
 
 /**
  * PATCH /api/onboarding/progress
@@ -80,9 +89,10 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     console.error('[onboarding/progress] Error updating plan:', updateError);
     return errors.internalError();
   }
+  const updatedPlan = (updated ?? null) as OnboardingPlanUpdateRow | null;
 
   // Trigger engagement analysis when the DB confirms status transitioned to completed
-  if (updated?.plan_status === 'completed' && plan.plan_status !== 'completed') {
+  if (updatedPlan?.plan_status === 'completed' && plan.plan_status !== 'completed') {
     const engagement = (plan.engagement_data ?? {}) as Partial<EngagementData>;
     analyzeOnboardingEngagement({
       orgId,
@@ -101,5 +111,5 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     });
   }
 
-  return successResponse(updated);
+  return successResponse(updatedPlan);
 });

@@ -1,6 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import type { LightweightSupabaseClient } from '@/lib/supabase/types';
 import type { Database } from '@/lib/types/database';
 import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 import {
@@ -18,7 +17,7 @@ type CompilationLogEntryLike = {
   resolved_at?: string | null;
 };
 
-type AdminClient = SupabaseClient<Database>;
+type AdminClient = LightweightSupabaseClient;
 
 type OrgWikiPageRow = Pick<
   Database['public']['Tables']['org_wiki_pages']['Row'],

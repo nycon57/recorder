@@ -289,7 +289,7 @@ async function testRecordingStatus(recordingId: string) {
   const { data: transcript } = await supabase
     .from('transcripts')
     .select('id, text')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .maybeSingle();
 
   if (transcript) {
@@ -302,7 +302,7 @@ async function testRecordingStatus(recordingId: string) {
   const { data: document } = await supabase
     .from('documents')
     .select('id, markdown, status')
-    .eq('recording_id', recordingId)
+    .eq('content_id', recordingId)
     .maybeSingle();
 
   if (document) {
@@ -315,7 +315,7 @@ async function testRecordingStatus(recordingId: string) {
   const { data: chunks } = await supabase
     .from('transcript_chunks')
     .select('id')
-    .eq('recording_id', recordingId);
+    .eq('content_id', recordingId);
 
   if (chunks && chunks.length > 0) {
     log(`  ✓ Embeddings found (${chunks.length} chunks)`, 'green');

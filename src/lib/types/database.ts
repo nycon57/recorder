@@ -8,6 +8,61 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+type DatabaseFunction = {
+  Args: Record<string, unknown>;
+  Returns: any;
+};
+
+type DatabaseFunctionName =
+  | 'are_embeddings_stale'
+  | 'check_quota_optimized'
+  | 'estimate_tier_migration_savings'
+  | 'exec_sql'
+  | 'explain_query'
+  | 'find_similar_concepts'
+  | 'get_agent_action_stats'
+  | 'get_agent_usage_by_agent'
+  | 'get_agent_usage_by_day'
+  | 'get_agent_usage_summary'
+  | 'get_audit_log_filters'
+  | 'get_content_concepts'
+  | 'get_department_path'
+  | 'get_document_metrics'
+  | 'get_feature_adoption'
+  | 'get_org_recording_stats'
+  | 'get_org_wiki_page_history'
+  | 'get_queue_status'
+  | 'get_related_concepts'
+  | 'get_top_concepts'
+  | 'get_top_content_by_usage'
+  | 'hierarchical_search'
+  | 'hybrid_search'
+  | 'increment'
+  | 'increment_completed_segments'
+  | 'increment_mcp_request_count'
+  | 'increment_quota_usage'
+  | 'increment_reference_count'
+  | 'increment_segment_completion'
+  | 'increment_share_view_count'
+  | 'is_descendant_of'
+  | 'match_agent_memories'
+  | 'match_chunks'
+  | 'match_org_wiki_pages'
+  | 'match_org_wiki_pages_as_of'
+  | 'multimodal_search'
+  | 'release_quota'
+  | 'search_chunks_text'
+  | 'search_chunks_with_recency'
+  | 'search_similar_chunks'
+  | 'update_embedding_completion'
+  | 'upsert_published_document'
+  | 'vendor_analytics_avg_latency'
+  | 'vendor_analytics_by_day'
+  | 'vendor_analytics_knowledge_gaps'
+  | 'vendor_analytics_top_apps'
+  | 'vendor_analytics_top_questions'
+  | 'vendor_analytics_unique_customers';
+
 export type OrganizationPlan = 'free' | 'pro' | 'enterprise';
 
 export type UserRole = 'owner' | 'admin' | 'contributor' | 'reader';
@@ -517,6 +572,7 @@ export interface Database {
           avatar_url: string | null;
           org_id: string;
           role: UserRole;
+          is_system_admin: boolean;
           email_verified: boolean;
           banned: boolean;
           ban_reason: string | null;
@@ -548,6 +604,7 @@ export interface Database {
           avatar_url?: string | null;
           org_id?: string;
           role?: UserRole;
+          is_system_admin?: boolean;
           email_verified?: boolean;
           banned?: boolean;
           ban_reason?: string | null;
@@ -578,6 +635,7 @@ export interface Database {
           avatar_url?: string | null;
           org_id?: string;
           role?: UserRole;
+          is_system_admin?: boolean;
           email_verified?: boolean;
           banned?: boolean;
           ban_reason?: string | null;
@@ -958,6 +1016,7 @@ export interface Database {
           created_at: string;
           updated_at: string;
           completed_at: string | null;
+          embeddings_updated_at: string | null;
           /** Content type classification (recording, video, audio, document, text) */
           content_type: ContentType | null;
           /** File extension (mp4, webm, mp3, pdf, etc.) */
@@ -970,6 +1029,12 @@ export interface Database {
           file_size: number | null;
           /** Compression statistics (file size reduction, quality metrics, encoding params) */
           compression_stats: CompressionStats | null;
+          file_hash: string | null;
+          is_deduplicated: boolean | null;
+          reference_count: number | null;
+          video_hash: string | null;
+          audio_hash: string | null;
+          similarity_processed_at: string | null;
           /** Storage tier for multi-tier storage strategy (hot, warm, cold) */
           storage_tier: StorageTier | null;
           /** Current storage provider (supabase or r2) */
@@ -1000,12 +1065,19 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
           completed_at?: string | null;
+          embeddings_updated_at?: string | null;
           content_type?: ContentType | null;
           file_type?: FileType | null;
           original_filename?: string | null;
           mime_type?: string | null;
           file_size?: number | null;
           compression_stats?: CompressionStats | null;
+          file_hash?: string | null;
+          is_deduplicated?: boolean | null;
+          reference_count?: number | null;
+          video_hash?: string | null;
+          audio_hash?: string | null;
+          similarity_processed_at?: string | null;
           storage_tier?: StorageTier | null;
           storage_provider?: StorageProvider | null;
           storage_path_r2?: string | null;
@@ -1026,12 +1098,19 @@ export interface Database {
           deleted_at?: string | null;
           updated_at?: string;
           completed_at?: string | null;
+          embeddings_updated_at?: string | null;
           content_type?: ContentType | null;
           file_type?: FileType | null;
           original_filename?: string | null;
           mime_type?: string | null;
           file_size?: number | null;
           compression_stats?: CompressionStats | null;
+          file_hash?: string | null;
+          is_deduplicated?: boolean | null;
+          reference_count?: number | null;
+          video_hash?: string | null;
+          audio_hash?: string | null;
+          similarity_processed_at?: string | null;
           storage_tier?: StorageTier | null;
           storage_provider?: StorageProvider | null;
           storage_path_r2?: string | null;
@@ -1203,6 +1282,9 @@ export interface Database {
           confidence: number | null;
           provider: string | null;
           provider_job_id: string | null;
+          visual_events: Json | null;
+          video_metadata: Json | null;
+          superseded: boolean | null;
           created_at: string;
           updated_at: string;
         };
@@ -1215,6 +1297,9 @@ export interface Database {
           confidence?: number | null;
           provider?: string | null;
           provider_job_id?: string | null;
+          visual_events?: Json | null;
+          video_metadata?: Json | null;
+          superseded?: boolean | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1222,6 +1307,11 @@ export interface Database {
           text?: string;
           words_json?: Json | null;
           confidence?: number | null;
+          provider?: string | null;
+          provider_job_id?: string | null;
+          visual_events?: Json | null;
+          video_metadata?: Json | null;
+          superseded?: boolean | null;
           updated_at?: string;
         };
       };
@@ -1237,6 +1327,10 @@ export interface Database {
           model: string | null;
           is_published: boolean;
           status: DocumentStatus;
+          needs_embeddings_refresh: boolean | null;
+          metadata: Json;
+          has_publications: boolean | null;
+          publication_count: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -1251,6 +1345,10 @@ export interface Database {
           model?: string | null;
           is_published?: boolean;
           status?: DocumentStatus;
+          needs_embeddings_refresh?: boolean | null;
+          metadata?: Json;
+          has_publications?: boolean | null;
+          publication_count?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1259,8 +1357,13 @@ export interface Database {
           html?: string | null;
           summary?: string | null;
           version?: string;
+          model?: string | null;
           is_published?: boolean;
           status?: DocumentStatus;
+          needs_embeddings_refresh?: boolean | null;
+          metadata?: Json;
+          has_publications?: boolean | null;
+          publication_count?: number | null;
           updated_at?: string;
         };
       };
@@ -1821,7 +1924,11 @@ export interface Database {
           results_count: number | null;
           latency_ms: number | null;
           mode: SearchMode | null;
+          cache_hit: boolean | null;
+          cache_layer: string | null;
           filters: Json;
+          clicked_result_ids: string[] | null;
+          session_id: string | null;
           top_result_similarity: number | null;
           user_feedback: number | null;
           created_at: string;
@@ -1835,7 +1942,11 @@ export interface Database {
           results_count?: number | null;
           latency_ms?: number | null;
           mode?: SearchMode | null;
+          cache_hit?: boolean | null;
+          cache_layer?: string | null;
           filters?: Json;
+          clicked_result_ids?: string[] | null;
+          session_id?: string | null;
           top_result_similarity?: number | null;
           user_feedback?: number | null;
           created_at?: string;
@@ -1846,7 +1957,11 @@ export interface Database {
           results_count?: number | null;
           latency_ms?: number | null;
           mode?: SearchMode | null;
+          cache_hit?: boolean | null;
+          cache_layer?: string | null;
           filters?: Json;
+          clicked_result_ids?: string[] | null;
+          session_id?: string | null;
           top_result_similarity?: number | null;
           user_feedback?: number | null;
         };
@@ -2961,6 +3076,7 @@ export interface Database {
         Update: never;
       };
     };
+    Functions: Record<DatabaseFunctionName, DatabaseFunction>;
   };
 }
 
