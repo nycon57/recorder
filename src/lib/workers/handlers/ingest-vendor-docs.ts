@@ -48,6 +48,7 @@ interface IngestVendorDocsPayload {
   app: string;
   maxPages?: number;
   sourceId?: string;
+  syncType?: 'scheduled' | 'manual';
 }
 
 interface CrawledPage {
