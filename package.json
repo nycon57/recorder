@@ -42,6 +42,9 @@
     "mcp:dev": "tsx scripts/mcp-server.ts",
     "demo:seed": "tsx scripts/demo-seed/index.ts",
     "demo:seed:dry": "tsx scripts/demo-seed/index.ts --dry-run",
+    "demo:reset": "tsx scripts/demo-seed/reset.ts",
+    "demo:reset:dry": "tsx scripts/demo-seed/reset.ts --dry-run",
+    "demo:smoke": "tsx scripts/demo-seed/smoke.ts",
     "verify": "npm run type:check && npm run lint && npm run build"
   },
   "dependencies": {

@@ -2,9 +2,21 @@
 
 Idempotent seed for the canonical Tribora demo organization (`Acme Support Demo`) and its five-user roster. Writes directly to Postgres in a single transaction, bypassing the Better Auth admin API to avoid auto-workspace creation.
 
+**Three operator workflows:**
+
+| Command | Purpose |
+|---|---|
+| `npm run demo:seed` | First-time seed (idempotent) |
+| `npm run demo:reset` | Wipe all seed rows + reseed to known-good state |
+| `npm run demo:smoke` | Automated assertions against post-seed DB state |
+
+See [SMOKE_CHECKLIST.md](./SMOKE_CHECKLIST.md) for the manual UI verification checklist.
+
+---
+
 ## Usage
 
-### Local
+### Seed (first-time or idempotent refresh)
 
 ```bash
 # Dry run — see what would be written, zero mutations
@@ -16,6 +28,60 @@ DEMO_SEED_ENABLED=1 npm run demo:seed -- --env=local
 # Force-reseed (also overwrites preserved fields: logins, preferences)
 DEMO_SEED_ENABLED=1 npm run demo:seed -- --env=local --force-reseed
 ```
+
+### Reset (wipe + reseed)
+
+Use `demo:reset` when you want to return the demo tenant to a completely clean
+known-good state — all seed-owned rows deleted, then reseeded from scratch.
+
+```bash
+# Dry run — see what would be deleted and reseeded, zero mutations
+DEMO_SEED_ENABLED=1 npm run demo:reset:dry -- --env=local
+# or equivalently:
+DEMO_SEED_ENABLED=1 npm run demo:reset -- --env=local --dry-run
+
+# Full reset (delete + reseed)
+DEMO_SEED_ENABLED=1 npm run demo:reset -- --env=local
+
+# Staging reset
+DEMO_SEED_ENABLED=1 npm run demo:reset -- \
+  --env=staging \
+  --confirm=$DEMO_SEED_STAGING_CONFIRM
+```
+
+**How it works:**
+
+1. Phase 1 (single transaction): deletes all seed-owned rows in reverse FK dependency
+   order using `DELETE FROM <table> WHERE metadata->>'seed' = 'demo'` or
+   `WHERE id = ANY(<deterministic demo IDs>)`. Never deletes without a WHERE clause.
+2. Phase 2: calls the existing `seed()` orchestrator with `--force-reseed` semantics
+   in its own transaction.
+
+**Tradeoff:** two-transaction design means if Phase 2 fails the DB is empty of demo
+data until the operator retries. Single-transaction would be safer but risks lock
+timeouts on staging. For a dev/staging tool this tradeoff is acceptable.
+
+### Smoke verification
+
+```bash
+# Run all automated assertions (read-only)
+DEMO_SEED_ENABLED=1 npm run demo:smoke -- --env=local
+```
+
+Exits 0 on all-pass, 1 on any-fail. Checks:
+
+1. Demo org exists with expected ID.
+2. All 5 users present with correct roles.
+3. Recording counts by user (18 lead / 10 agent / 2 admin).
+4. Transcript chunk count sane (~180).
+5. Wiki pages: 12 total, 8 published, 4 draft.
+6. Vendor demo org + white_label_config row linked.
+7. Department FK resolution (users → departments → expected names).
+8. Seed metadata present (`metadata.seed = 'demo'`) on all owned rows.
+9. TRIB-145 advisory: `--force-reseed` org_id FK safety check — determines if the
+   advisory bug (placeholder UUID as org_id) is a real constraint violation.
+
+For UI verification see [SMOKE_CHECKLIST.md](./SMOKE_CHECKLIST.md).
 
 ### Staging
 
