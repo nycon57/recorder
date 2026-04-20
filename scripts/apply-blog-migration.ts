@@ -3,7 +3,7 @@
  * Run with: npx tsx scripts/apply-blog-migration.ts
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 
 // Load environment variables
@@ -28,7 +28,7 @@ async function applyMigration() {
   console.log('Checking blog_posts table...\n');
 
   // Check if table exists
-  const { data: tableCheck, error: checkError } = await supabase
+  const { error: checkError } = await supabase
     .from('blog_posts')
     .select('id')
     .limit(1);
@@ -59,7 +59,7 @@ async function applyMigration() {
   console.log('\nDone!');
 }
 
-async function seedPosts(supabase: any) {
+async function seedPosts(supabase: SupabaseClient) {
   const posts = [
     {
       title: 'Introducing Tribora: The Knowledge Intelligence Layer',

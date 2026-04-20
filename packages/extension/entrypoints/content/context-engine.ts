@@ -26,6 +26,7 @@ import type {
   WorkspaceContext,
   WorkspaceContextItem,
 } from '@tribora/shared';
+
 import { getStableSelector } from './selector';
 
 export interface AppRegistryEntry {

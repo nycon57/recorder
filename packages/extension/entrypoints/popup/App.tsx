@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SessionState, RecordingState } from '@tribora/shared';
+
 import { getStoredSession } from '../../utils/api-client.js';
 import {
   initiateSignInAndWait,

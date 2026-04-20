@@ -15,6 +15,7 @@
 
 import { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_WIN } from "@tribora/shared";
 import type { SttState } from "@tribora/shared";
+
 import { createHotkey } from "../../utils/hotkey.js";
 import { createDeepgramSession } from "../../utils/deepgram-client.js";
 

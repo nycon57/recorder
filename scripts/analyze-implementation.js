@@ -4,9 +4,6 @@
  * Analyzes the actual semantic chunking implementation for performance issues
  */
 
-const fs = require('fs');
-const path = require('path');
-
 class ImplementationAnalyzer {
   constructor() {
     this.issues = [];

@@ -14,6 +14,7 @@
  */
 
 import type { PageContext } from '@tribora/shared';
+
 import { buildPageContext } from './context-engine';
 
 export interface DomObserverOptions {

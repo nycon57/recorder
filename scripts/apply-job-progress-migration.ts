@@ -5,15 +5,14 @@
  * This script applies the job progress tracking migration
  */
 
-import { config } from 'dotenv';
-import { resolve } from 'path';
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
+
+import { config } from 'dotenv';
+import { createClient } from '@supabase/supabase-js';
 
 // Load .env.local file
 config({ path: resolve(process.cwd(), '.env.local') });
-
-import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -43,7 +42,7 @@ async function applyMigration() {
   console.log('⚙️  Applying migration...');
 
   const { error } = await supabase.rpc('exec_sql', {
-    query: migrationSql
+    query: migrationSql,
   }).single();
 
   if (error) {

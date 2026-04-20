@@ -12,10 +12,7 @@ import {
   type OverlayTarget,
   type PageContext,
 } from '@tribora/shared';
-import { buildPageContext } from './context-engine';
-import { createDomObserver } from './dom-observer';
-import { createDomOverlay } from './dom-overlay';
-import { createWidget } from './widget';
+
 import {
   clickElement,
   hoverElement,
@@ -26,6 +23,11 @@ import { typeIntoElement } from '../../utils/dom-input.js';
 import { pressKey } from '../../utils/dom-keyboard.js';
 import { deriveWidgetBootstrapState } from '../../utils/session-startup.js';
 import { shouldClearOverlayForSessionEvent } from '../../utils/session-visuals.js';
+
+import { createWidget } from './widget';
+import { createDomOverlay } from './dom-overlay';
+import { createDomObserver } from './dom-observer';
+import { buildPageContext } from './context-engine';
 
 const LOG = '[Tribora content]';
 
