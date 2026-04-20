@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { betterFetch } from "@better-fetch/fetch";
+
 import type { Session } from "@/lib/auth/auth";
+
+const LEGACY_AUTH_PATHS = {
+  "/login": "/sign-in",
+  "/signup": "/sign-up",
+} as const;
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -79,6 +85,17 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  const canonicalAuthPath =
+    pathname in LEGACY_AUTH_PATHS
+      ? LEGACY_AUTH_PATHS[pathname as keyof typeof LEGACY_AUTH_PATHS]
+      : null;
+
+  if (canonicalAuthPath) {
+    return NextResponse.redirect(
+      new URL(session ? "/dashboard" : canonicalAuthPath, request.url)
+    );
+  }
+
   // Protected routes — require authentication
   if (
     pathname.startsWith("/dashboard") ||
@@ -116,7 +133,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/tags")
   ) {
     if (!session) {
-      // API routes get a 401; page routes redirect to login
+      // API routes get a 401; page routes redirect to the canonical sign-in path
       if (pathname.startsWith("/api/")) {
         const isCrossOriginApi =
           pathname.startsWith("/api/extension/") ||
@@ -136,14 +153,13 @@ export async function middleware(request: NextRequest) {
           }
         );
       }
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(new URL("/sign-in", request.url));
     }
   }
 
   // Redirect authenticated users away from auth pages
   if (
-    (pathname === "/login" ||
-      pathname === "/signup" ||
+    ((canonicalAuthPath !== null) ||
       pathname.startsWith("/sign-in") ||
       pathname.startsWith("/sign-up")) &&
     session
