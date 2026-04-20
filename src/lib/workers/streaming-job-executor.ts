@@ -7,76 +7,59 @@
  */
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/types/database';
+import type {
+  CompressAudioJobPayload,
+  CompressVideoJobPayload,
+  Database,
+  MigrateStorageTierJobPayload,
+} from '@/lib/types/database';
 import { streamingManager } from '@/lib/services/streaming-processor';
 import { createLogger } from '@/lib/utils/logger';
 
 import { updateJobProgress, type ProgressCallback } from './job-processor';
-
-// Import job handlers
-import { transcribeRecording } from './handlers/transcribe-gemini-video';
+import { handleArchiveSearchMetrics } from './handlers/archive-search-metrics';
+import { handleAnalyzeKnowledgeGaps } from './handlers/analyze-knowledge-gaps';
+import { handleCollectMetrics } from './handlers/collect-metrics';
+import { handleCompileWiki } from './handlers/compile-wiki';
+import { handleCompressAudio } from './handlers/compress-audio';
+import { handleCompressVideo } from './handlers/compress-video';
+import { handleCurateKnowledge } from './handlers/curate-knowledge';
+import {
+  handleBatchDeduplicate,
+  type BatchDeduplicateJobPayload,
+  type DeduplicateFileJobPayload,
+  handleDeduplicateFile,
+} from './handlers/deduplicate-file';
+import {
+  handleBatchDetectSimilarity,
+  type BatchDetectSimilarityJobPayload,
+  type DetectSimilarityJobPayload,
+  handleDetectSimilarity,
+} from './handlers/detect-similarity';
 import { generateDocument } from './handlers/docify-google';
 import { generateEmbeddings } from './handlers/embeddings-google';
-import { generateSummary } from './handlers/generate-summary';
-import { handleGenerateMetadata } from './handlers/generate-metadata';
-import { handleExtractFrames } from './handlers/extract-frames';
-import { syncConnector } from './handlers/sync-connector';
-import { processImportedDocument } from './handlers/process-imported-doc';
-import { processWebhook } from './handlers/process-webhook';
-
-// Content processing handlers
 import { handleExtractAudio } from './handlers/extract-audio';
-import { handleExtractTextPdf } from './handlers/extract-text-pdf';
+import { handleExtractFrames } from './handlers/extract-frames';
 import { handleExtractTextDocx } from './handlers/extract-text-docx';
-import { handleProcessTextNote } from './handlers/process-text-note';
-
-// Compression handlers
-import { handleCompressVideo } from './handlers/compress-video';
-import { handleCompressAudio } from './handlers/compress-audio';
-
-// Storage tier migration handlers
-import { handleMigrateStorageTier } from './handlers/migrate-storage-tier';
-
-// Deduplication handlers
-import { handleDeduplicateFile, handleBatchDeduplicate } from './handlers/deduplicate-file';
-
-// Similarity detection handlers
-import { handleDetectSimilarity, handleBatchDetectSimilarity } from './handlers/detect-similarity';
-
-// Analytics and monitoring handlers
-import { handleCollectMetrics } from './handlers/collect-metrics';
+import { handleExtractTextPdf } from './handlers/extract-text-pdf';
+import { generateSummary } from './handlers/generate-summary';
 import { handleGenerateAlerts } from './handlers/generate-alerts';
-import { handleGenerateRecommendations } from './handlers/generate-recommendations';
-import { handlePerformHealthCheck } from './handlers/perform-health-check';
-import { handleArchiveSearchMetrics } from './handlers/archive-search-metrics';
-
-// Publishing handlers
-import { handlePublishDocument } from './handlers/publish-document';
-
-// Long video segmentation handlers
-import { transcribeSegment } from './handlers/transcribe-segment';
-import { mergeTranscripts } from './handlers/merge-transcripts';
-
-// Knowledge curation handler
-import { handleCurateKnowledge } from './handlers/curate-knowledge';
-
-// Knowledge gap analysis handler
-import { handleAnalyzeKnowledgeGaps } from './handlers/analyze-knowledge-gaps';
-
-// Onboarding plan generation handler
+import { handleGenerateMetadata } from './handlers/generate-metadata';
 import { handleGenerateOnboardingPlan } from './handlers/generate-onboarding-plan';
-
-// Weekly digest generation handler
+import { handleGenerateRecommendations } from './handlers/generate-recommendations';
 import { handleGenerateWeeklyDigest } from './handlers/generate-weekly-digest';
-
-// Workflow extraction handler
-import { handleWorkflowExtraction } from './handlers/workflow-extraction';
-
-// Wiki compilation handler (Compilation Engine — Wave 3 TRIB-31)
-import { handleCompileWiki } from './handlers/compile-wiki';
-
-// Vendor doc ingestion handler (TRIB-45)
 import { handleIngestVendorDocs } from './handlers/ingest-vendor-docs';
+import { mergeTranscripts } from './handlers/merge-transcripts';
+import { handleMigrateStorageTier } from './handlers/migrate-storage-tier';
+import { handlePerformHealthCheck } from './handlers/perform-health-check';
+import { handleProcessTextNote } from './handlers/process-text-note';
+import { processImportedDocument } from './handlers/process-imported-doc';
+import { handlePublishDocument } from './handlers/publish-document';
+import { processWebhook } from './handlers/process-webhook';
+import { syncConnector } from './handlers/sync-connector';
+import { transcribeRecording } from './handlers/transcribe-gemini-video';
+import { transcribeSegment } from './handlers/transcribe-segment';
+import { handleWorkflowExtraction } from './handlers/workflow-extraction';
 
 const logger = createLogger({ service: 'streaming-job-executor' });
 
@@ -107,13 +90,13 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Compression handlers
   compress_video: async (job: Job) => {
-    const result = await handleCompressVideo(job.payload as any);
+    const result = await handleCompressVideo(job.payload as unknown as CompressVideoJobPayload);
     if (!result.success) {
       throw new Error(result.error || 'Video compression failed');
     }
   },
   compress_audio: async (job: Job) => {
-    const result = await handleCompressAudio(job.payload as any);
+    const result = await handleCompressAudio(job.payload as unknown as CompressAudioJobPayload);
     if (!result.success) {
       throw new Error(result.error || 'Audio compression failed');
     }
@@ -121,7 +104,7 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Storage tier migration
   migrate_storage_tier: async (job: Job) => {
-    const result = await handleMigrateStorageTier(job.payload as any);
+    const result = await handleMigrateStorageTier(job.payload as unknown as MigrateStorageTierJobPayload);
     if (!result.success) {
       throw new Error(result.error || 'Storage tier migration failed');
     }
@@ -129,13 +112,13 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Deduplication handlers
   deduplicate_file: async (job: Job) => {
-    const result = await handleDeduplicateFile(job.payload as any);
+    const result = await handleDeduplicateFile(job.payload as unknown as DeduplicateFileJobPayload);
     if (!result.success) {
       throw new Error(result.error || 'File deduplication failed');
     }
   },
   batch_deduplicate: async (job: Job) => {
-    const result = await handleBatchDeduplicate(job.payload as any);
+    const result = await handleBatchDeduplicate(job.payload as unknown as BatchDeduplicateJobPayload);
     if (!result.success) {
       throw new Error('Batch deduplication failed');
     }
@@ -143,13 +126,13 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Similarity detection handlers
   detect_similarity: async (job: Job) => {
-    const result = await handleDetectSimilarity(job.payload as any);
+    const result = await handleDetectSimilarity(job.payload as unknown as DetectSimilarityJobPayload);
     if (!result.success) {
       throw new Error(result.error || 'Similarity detection failed');
     }
   },
   batch_detect_similarity: async (job: Job) => {
-    const result = await handleBatchDetectSimilarity(job.payload as any);
+    const result = await handleBatchDetectSimilarity(job.payload as unknown as BatchDetectSimilarityJobPayload);
     if (!result.success) {
       throw new Error('Batch similarity detection failed');
     }
