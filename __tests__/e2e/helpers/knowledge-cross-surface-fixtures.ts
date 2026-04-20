@@ -6,9 +6,15 @@ export function createCompiledMemoryContextFixture(): CompiledMemoryContext {
       page: {
         id: 'vendor-hubspot-deals',
         app: 'hubspot',
+        app_version: null,
         screen: 'deals',
         content: 'Vendor baseline says route enterprise deal escalations to RevOps.',
+        element_selectors: null,
         source_url: 'https://docs.vendor.example/hubspot/deals',
+        content_hash: null,
+        vendor_source_id: null,
+        created_at: null,
+        updated_at: null,
       },
     },
     vendorTraining: {

@@ -25,10 +25,15 @@ import type { AnyNode, Element as DomElement, Text as DomText } from 'domhandler
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { withAgentLogging } from '@/lib/services/agent-logger';
+import {
+  createVendorSourceRegistryService,
+  hashVendorSourcePages,
+} from '@/lib/services/vendor-source-registry';
 import { createLogger } from '@/lib/utils/logger';
 import type { Database } from '@/lib/types/database';
 
 import type { ProgressCallback } from '../job-processor';
+import { shouldSkipVendorWikiPageUpdate } from './ingest-vendor-docs-skip';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -42,6 +47,7 @@ interface IngestVendorDocsPayload {
   url: string;
   app: string;
   maxPages?: number;
+  sourceId?: string;
 }
 
 interface CrawledPage {
@@ -611,6 +617,7 @@ function parseFetchedPage(
 async function upsertPages(
   pages: CrawledPage[],
   app: string,
+  options?: { vendorSourceId?: string | null },
   progressCallback?: ProgressCallback
 ): Promise<{ inserted: number; updated: number; skipped: number }> {
   const supabase = createAdminClient();
@@ -636,8 +643,15 @@ async function upsertPages(
       .maybeSingle() as { data: VendorRow | null };
 
     if (existing) {
-      // Compare hashes — skip if unchanged
-      if (existing.content_hash === page.contentHash) {
+      // Skip only when both the page content and the registry mapping already match.
+      if (
+        shouldSkipVendorWikiPageUpdate({
+          existingContentHash: existing.content_hash,
+          nextContentHash: page.contentHash,
+          existingVendorSourceId: existing.vendor_source_id,
+          nextVendorSourceId: options?.vendorSourceId,
+        })
+      ) {
         skipped++;
         logger.debug('Skipping unchanged page', {
           context: { app, screen: page.screen },
@@ -655,6 +669,7 @@ async function upsertPages(
           element_selectors: page.elementSelectors,
           source_url: page.url,
           content_hash: page.contentHash,
+          vendor_source_id: options?.vendorSourceId ?? existing.vendor_source_id,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existing.id);
@@ -678,6 +693,7 @@ async function upsertPages(
           element_selectors: page.elementSelectors,
           source_url: page.url,
           content_hash: page.contentHash,
+          vendor_source_id: options?.vendorSourceId ?? null,
         });
 
       if (error) {
@@ -723,7 +739,7 @@ export async function handleIngestVendorDocs(
   }
 
   logger.info('Starting vendor doc ingestion', {
-    context: { seedUrl, app, maxPages, jobId: job.id },
+    context: { seedUrl, app, maxPages, sourceId: payload.sourceId ?? null, jobId: job.id },
   });
 
   // Use a placeholder orgId for vendor docs (they are not org-scoped)
@@ -738,61 +754,132 @@ export async function handleIngestVendorDocs(
     },
     async () => {
       // Step 1: Fetch robots.txt
-      if (progressCallback) progressCallback(2, 'Fetching robots.txt...');
-      const robotsRules = await fetchRobotsTxt(parsedUrl.origin);
-
-      logger.info('Robots.txt parsed', {
-        context: {
-          disallowedPaths: robotsRules.disallowedPaths.length,
-          crawlDelay: robotsRules.crawlDelay,
-        },
-      });
-
-      // Step 2: BFS crawl
-      if (progressCallback) progressCallback(5, 'Starting crawl...');
-      const pages = await crawlSite(
-        seedUrl,
+      const registry = createVendorSourceRegistryService();
+      const attemptedAt = new Date().toISOString();
+      const registrySource = await registry.findSourceForIngestion({
+        sourceId: payload.sourceId,
         app,
-        maxPages,
-        robotsRules,
-        progressCallback
-      );
-
-      logger.info('Crawl complete', {
-        context: { pagesFound: pages.length, maxPages },
+        sourceUrl: seedUrl,
       });
 
-      if (pages.length === 0) {
-        logger.warn('No pages crawled — check seed URL and robots.txt', {
-          context: { seedUrl },
+      if (payload.sourceId && !registrySource) {
+        throw new Error(`Vendor source ${payload.sourceId} was not found`);
+      }
+
+      if (registrySource) {
+        await registry.recordAttempt(registrySource.id, attemptedAt);
+      }
+
+      // Step 1: Fetch robots.txt
+      if (progressCallback) progressCallback(2, 'Fetching robots.txt...');
+      try {
+        const robotsRules = await fetchRobotsTxt(parsedUrl.origin);
+
+        logger.info('Robots.txt parsed', {
+          context: {
+            disallowedPaths: robotsRules.disallowedPaths.length,
+            crawlDelay: robotsRules.crawlDelay,
+          },
         });
-        if (progressCallback) progressCallback(100, 'No pages found to ingest');
-        return;
-      }
 
-      // Step 3: Upsert into vendor_wiki_pages with hash dedup
-      if (progressCallback) {
-        progressCallback(85, `Saving ${pages.length} pages to database...`);
-      }
-
-      const result = await upsertPages(pages, app, progressCallback);
-
-      logger.info('Vendor doc ingestion complete', {
-        context: {
-          app,
+        // Step 2: BFS crawl
+        if (progressCallback) progressCallback(5, 'Starting crawl...');
+        const pages = await crawlSite(
           seedUrl,
-          totalCrawled: pages.length,
-          inserted: result.inserted,
-          updated: result.updated,
-          skipped: result.skipped,
-        },
-      });
-
-      if (progressCallback) {
-        progressCallback(
-          100,
-          `Done: ${result.inserted} new, ${result.updated} updated, ${result.skipped} unchanged`
+          app,
+          maxPages,
+          robotsRules,
+          progressCallback
         );
+
+        logger.info('Crawl complete', {
+          context: { pagesFound: pages.length, maxPages },
+        });
+
+        if (pages.length === 0) {
+          logger.warn('No pages crawled — check seed URL and robots.txt', {
+            context: { seedUrl },
+          });
+
+          if (registrySource) {
+            await registry.recordFailure(registrySource.id, {
+              attemptedAt,
+              failedAt: new Date().toISOString(),
+              errorMessage: 'No pages found to ingest',
+            });
+          }
+
+          if (progressCallback) progressCallback(100, 'No pages found to ingest');
+          return;
+        }
+
+        // Step 3: Upsert into vendor_wiki_pages with hash dedup
+        if (progressCallback) {
+          progressCallback(85, `Saving ${pages.length} pages to database...`);
+        }
+
+        const result = await upsertPages(
+          pages,
+          app,
+          { vendorSourceId: registrySource?.id ?? null },
+          progressCallback
+        );
+
+        if (registrySource) {
+          const combinedHashInput = hashVendorSourcePages(
+            pages.map((page) => ({
+              screen: page.screen,
+              contentHash: page.contentHash,
+            }))
+          );
+
+          const sourceContentHash = combinedHashInput
+            ? createHash('sha256').update(combinedHashInput).digest('hex')
+            : registrySource.content_hash ?? '';
+
+          await registry.recordSuccess(registrySource.id, {
+            attemptedAt,
+            succeededAt: new Date().toISOString(),
+            contentHash: sourceContentHash,
+          });
+        }
+
+        logger.info('Vendor doc ingestion complete', {
+          context: {
+            app,
+            seedUrl,
+            sourceId: registrySource?.id ?? null,
+            totalCrawled: pages.length,
+            inserted: result.inserted,
+            updated: result.updated,
+            skipped: result.skipped,
+          },
+        });
+
+        if (progressCallback) {
+          progressCallback(
+            100,
+            `Done: ${result.inserted} new, ${result.updated} updated, ${result.skipped} unchanged`
+          );
+        }
+      } catch (error) {
+        if (registrySource) {
+          try {
+            await registry.recordFailure(registrySource.id, {
+              attemptedAt,
+              failedAt: new Date().toISOString(),
+              errorMessage:
+                error instanceof Error ? error.message : 'Unknown vendor ingestion error',
+            });
+          } catch (recordError) {
+            logger.error('Failed to record vendor source ingestion failure', {
+              context: { sourceId: registrySource.id },
+              error: recordError as Error,
+            });
+          }
+        }
+
+        throw error;
       }
     }
   );

@@ -18,6 +18,27 @@ export type Visibility = 'private' | 'department' | 'org' | 'public';
 
 export type WebhookStatus = 'healthy' | 'degraded' | 'failing' | 'disabled';
 
+export type VendorSourceKind =
+  | 'documentation'
+  | 'developer_docs'
+  | 'help_center'
+  | 'api_reference'
+  | 'release_notes'
+  | 'mcp_snapshot';
+
+export type VendorFetchStrategy =
+  | 'markdown_export'
+  | 'llms_txt'
+  | 'static_site'
+  | 'official_mcp_snapshot'
+  | 'sanctioned_crawl';
+
+export type VendorTermsReviewStatus =
+  | 'pending'
+  | 'approved'
+  | 'restricted'
+  | 'rejected';
+
 /**
  * Content type classification for knowledge items in the platform.
  * - 'recording': Screen recordings created in-app
@@ -1830,6 +1851,68 @@ export interface Database {
           user_feedback?: number | null;
         };
       };
+      vendor_doc_sources: {
+        Row: {
+          id: string;
+          app: string;
+          source_kind: VendorSourceKind;
+          source_url: string;
+          publisher_hostname: string;
+          official_source: boolean;
+          fetch_strategy: VendorFetchStrategy;
+          last_success_at: string | null;
+          last_attempt_at: string | null;
+          last_error: string | null;
+          content_hash: string | null;
+          freshness_target: string;
+          version_band: string[];
+          plan_band: string[];
+          applicability: Json;
+          terms_review_status: VendorTermsReviewStatus;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          app: string;
+          source_kind: VendorSourceKind;
+          source_url: string;
+          publisher_hostname: string;
+          official_source?: boolean;
+          fetch_strategy: VendorFetchStrategy;
+          last_success_at?: string | null;
+          last_attempt_at?: string | null;
+          last_error?: string | null;
+          content_hash?: string | null;
+          freshness_target?: string;
+          version_band?: string[];
+          plan_band?: string[];
+          applicability?: Json;
+          terms_review_status?: VendorTermsReviewStatus;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          app?: string;
+          source_kind?: VendorSourceKind;
+          source_url?: string;
+          publisher_hostname?: string;
+          official_source?: boolean;
+          fetch_strategy?: VendorFetchStrategy;
+          last_success_at?: string | null;
+          last_attempt_at?: string | null;
+          last_error?: string | null;
+          content_hash?: string | null;
+          freshness_target?: string;
+          version_band?: string[];
+          plan_band?: string[];
+          applicability?: Json;
+          terms_review_status?: VendorTermsReviewStatus;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       vendor_wiki_pages: {
         Row: {
           id: string;
@@ -1841,6 +1924,7 @@ export interface Database {
           source_url: string | null;
           /** TRIB-45: SHA256 hash of content for deduplication during re-crawl */
           content_hash: string | null;
+          vendor_source_id: string | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -1853,6 +1937,7 @@ export interface Database {
           element_selectors?: Json | null;
           source_url?: string | null;
           content_hash?: string | null;
+          vendor_source_id?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
@@ -1865,6 +1950,7 @@ export interface Database {
           element_selectors?: Json | null;
           source_url?: string | null;
           content_hash?: string | null;
+          vendor_source_id?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
