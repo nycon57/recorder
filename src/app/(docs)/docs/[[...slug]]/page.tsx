@@ -1,10 +1,11 @@
 import { headers } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
 
-import { resolveDocsAudience, getDocsRegistry, resolveAccess } from '@/lib/docs';
+import { resolveDocsAudience, getDocsRegistry, resolveAccess, findGitPageBody } from '@/lib/docs';
 import type { SectionId } from '@/lib/docs';
 import { DocsLanding } from '@/app/components/docs/landing/docs-landing';
 import { DocsPlaceholder } from '@/app/components/docs/placeholder/docs-placeholder';
+import { DocsContent } from '@/app/components/docs/content/docs-content';
 import { DocsSectionIndex } from '@/app/components/docs/section-index/docs-section-index';
 
 // Prevent stale access decisions being served from cache.
@@ -42,7 +43,15 @@ export default async function DocsPage({ params }: DocsPageProps) {
       notFound();
     }
 
-    // kind === 'render'
+    // kind === 'render' — try to find compiled body HTML
+    const bodyHtml = findGitPageBody(page.slug);
+
+    if (bodyHtml) {
+      const related = registry.relatedFor(page.slug, audience);
+      return <DocsContent page={page} bodyHtml={bodyHtml} related={related} />;
+    }
+
+    // Registered page but no compiled body (DB-backed or not yet authored)
     return <DocsPlaceholder page={page} />;
   }
 

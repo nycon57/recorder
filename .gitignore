@@ -1,6 +1,10 @@
 # Kanban config (contains Linear team UUIDs)
 .agents/kanban/
 
+# Docs build output — never commit generated artifacts
+src/lib/docs/generated/
+public/docs/search/
+
 # Chrome extension build output (WXT)
 packages/extension/.output/
 packages/extension/.wxt/
@@ -139,6 +143,9 @@ Desktop.ini
 *.md
 !README.md
 !scripts/demo-seed/content/**/*.md
+# Allow docs content — authored markdown pages and the author guide
+!content/docs/**/*.md
+!content/docs/*.md
 /documentation/
 /documentation
 /.claude/

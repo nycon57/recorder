@@ -5,8 +5,11 @@ interface DocsPlaceholderProps {
 }
 
 /**
- * Placeholder rendered for all docs pages until TRIB-150 ships real content.
- * Displays page metadata and a clear "coming soon" note in tribora styling.
+ * Rendered when a registered docs page has no compiled body.
+ * This occurs for:
+ *  - DB-backed pages (TRIB-154) without body HTML yet
+ *  - Pages added to the registry but not yet authored
+ *  - Mid-deploy states where the manifest is stale
  */
 export function DocsPlaceholder({ page }: DocsPlaceholderProps) {
   return (
@@ -26,15 +29,13 @@ export function DocsPlaceholder({ page }: DocsPlaceholderProps) {
         )}
       </header>
 
-      {/* Pipeline note */}
-      <div className="rounded-md border border-[color:var(--docs-amber)]/30 bg-[color:var(--docs-amber)]/5 px-5 py-4">
-        <p className="font-[family-name:var(--font-space-grotesk)] text-sm font-semibold text-[color:var(--docs-amber)]">
-          Content pipeline — TRIB-150
+      {/* Not yet authored notice */}
+      <div className="rounded-md border border-[color:var(--docs-border)] bg-[color:var(--docs-surface-hover)] px-5 py-4">
+        <p className="font-[family-name:var(--font-space-grotesk)] text-sm font-semibold text-[color:var(--docs-text-secondary)]">
+          Content not yet authored
         </p>
-        <p className="mt-1 text-sm leading-relaxed text-[color:var(--docs-text-secondary)]">
-          This page is registered and access-gated. Full content arrives when
-          the documentation pipeline (TRIB-150) lands. Check back after that
-          milestone ships.
+        <p className="mt-1 text-sm leading-relaxed text-[color:var(--docs-text-muted)]">
+          This page is registered and access-gated, but its content hasn&rsquo;t been written yet.
         </p>
       </div>
 

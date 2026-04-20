@@ -37,3 +37,182 @@
     --docs-amber:            hsl(38 82% 44%);
   }
 }
+
+/* ── .docs-prose ──────────────────────────────────────────────────────────────
+ *
+ * Bespoke prose typography for compiled docs pages.
+ * Scoped to `.docs .docs-prose` — never bleeds outside the docs shell.
+ * Uses only --docs-* tokens. No Tailwind typography plugin.
+ * Shiki code blocks keep their baked-in inline styles; we only set
+ * surface/border/radius/overflow here (no colour overrides).
+ *
+ * See plan §8.
+ * --------------------------------------------------------------------------- */
+
+.docs .docs-prose {
+  color: var(--docs-text-primary);
+  font-family: var(--font-manrope, system-ui, sans-serif);
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+/* Headings */
+.docs .docs-prose h1,
+.docs .docs-prose h2,
+.docs .docs-prose h3,
+.docs .docs-prose h4 {
+  font-family: var(--font-space-grotesk, system-ui, sans-serif);
+  font-weight: 700;
+  color: var(--docs-text-primary);
+  margin-top: 2em;
+  margin-bottom: 0.5em;
+  line-height: 1.25;
+}
+
+.docs .docs-prose h1 { font-size: 2rem; }
+.docs .docs-prose h2 { font-size: 1.5rem; border-bottom: 1px solid var(--docs-border); padding-bottom: 0.35em; }
+.docs .docs-prose h3 { font-size: 1.15rem; }
+.docs .docs-prose h4 { font-size: 1rem; font-weight: 600; }
+
+/* Heading anchor links (injected by rehype-autolink-headings) */
+.docs .docs-prose :is(h2, h3, h4) a {
+  text-decoration: none;
+  color: inherit;
+}
+.docs .docs-prose :is(h2, h3, h4) a:hover {
+  color: var(--docs-amber);
+}
+
+/* Paragraphs */
+.docs .docs-prose p {
+  margin-top: 0;
+  margin-bottom: 1.1em;
+  color: var(--docs-text-secondary);
+}
+
+/* Links */
+.docs .docs-prose a {
+  color: var(--docs-amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.docs .docs-prose a:hover {
+  opacity: 0.8;
+}
+
+/* Lists */
+.docs .docs-prose ul,
+.docs .docs-prose ol {
+  margin-bottom: 1.1em;
+  padding-left: 1.5em;
+  color: var(--docs-text-secondary);
+}
+.docs .docs-prose ul { list-style-type: disc; }
+.docs .docs-prose ol { list-style-type: decimal; }
+.docs .docs-prose li { margin-bottom: 0.35em; }
+.docs .docs-prose li > p { margin-bottom: 0.35em; }
+
+/* Blockquotes */
+.docs .docs-prose blockquote {
+  margin: 1.5em 0;
+  padding: 0.75em 1em;
+  border-left: 3px solid var(--docs-amber);
+  background: color-mix(in srgb, var(--docs-amber) 6%, transparent);
+  border-radius: 0 0.25rem 0.25rem 0;
+  color: var(--docs-text-secondary);
+  font-style: italic;
+}
+.docs .docs-prose blockquote p { margin: 0; }
+
+/* Horizontal rule */
+.docs .docs-prose hr {
+  margin: 2em 0;
+  border: none;
+  border-top: 1px solid var(--docs-border);
+}
+
+/* Tables */
+.docs .docs-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5em;
+  font-size: 0.875rem;
+}
+.docs .docs-prose th {
+  font-family: var(--font-space-grotesk, system-ui, sans-serif);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5em 0.75em;
+  border-bottom: 1px solid var(--docs-border);
+  color: var(--docs-text-primary);
+  background: var(--docs-surface-hover);
+}
+.docs .docs-prose td {
+  padding: 0.5em 0.75em;
+  border-bottom: 1px solid var(--docs-border);
+  color: var(--docs-text-secondary);
+  vertical-align: top;
+}
+.docs .docs-prose tr:last-child td { border-bottom: none; }
+
+/* Inline code */
+.docs .docs-prose :not(pre) > code {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  border-radius: 0.2em;
+  background: var(--docs-surface-hover);
+  border: 1px solid var(--docs-border);
+  color: var(--docs-text-primary);
+}
+
+/* Code blocks — Shiki output */
+.docs .docs-prose pre {
+  margin: 1.5em 0;
+  padding: 1.25em 1.5em;
+  border-radius: 0.375rem;
+  border: 1px solid var(--docs-border);
+  overflow-x: auto;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 0.875em;
+  line-height: 1.7;
+  /* Background comes from Shiki's github-dark-dimmed theme baked into the HTML */
+}
+
+/* Shiki wraps code in a <code> inside the <pre> — remove our inline-code styles */
+.docs .docs-prose pre > code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Shiki .shiki wrapper */
+.docs .docs-prose .shiki {
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+/* Images */
+.docs .docs-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.375rem;
+  border: 1px solid var(--docs-border);
+  margin: 1.5em 0;
+}
+
+/* Strong / em */
+.docs .docs-prose strong { font-weight: 700; color: var(--docs-text-primary); }
+.docs .docs-prose em { font-style: italic; }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .docs .docs-prose a,
+  .docs .docs-prose :is(h2, h3, h4) a {
+    transition: none;
+  }
+}
