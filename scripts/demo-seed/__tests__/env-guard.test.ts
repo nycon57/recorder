@@ -1,4 +1,4 @@
-import { checkGuard, extractHost, extractProjectRef } from '../../../scripts/demo-seed/env-guard';
+import { checkGuard, extractHost, extractProjectRef } from '../env-guard';
 
 // ─── extractHost ──────────────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@ import {
   deriveAccountId,
   deriveDepartmentId,
   DEMO_SEED_NAMESPACE,
-} from '../../../scripts/demo-seed/ids';
+} from '../ids';
 
 describe('DEMO_SEED_NAMESPACE', () => {
   it('is a valid UUID-format string (hex only)', () => {
