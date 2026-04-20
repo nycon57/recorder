@@ -1,11 +1,13 @@
 import {
   resolveCompiledMemoryContext,
+  type CompiledMemoryCitation,
   type CompiledMemoryCitationLayer,
   type CompiledMemoryContext,
 } from '@/lib/services/compiled-memory-context';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
 import { formatVendorKnowledgeTitle } from '@/lib/services/vendor-doc-corpus';
 
+const ORG_SEPARATOR = '\n\n---\n\n';
 const MAX_CONTENT_CHARS_PER_SOURCE = 1_200;
 const MAX_EXCERPT_CHARS = 220;
 
@@ -15,6 +17,7 @@ export const DEFAULT_CHAT_COMPILED_MEMORY_SCOPE = {
 } as const;
 
 export interface CompiledMemoryAnswerSource {
+  citationNumber: number;
   sourceId: string;
   title: string;
   layer: CompiledMemoryCitationLayer;
@@ -22,6 +25,8 @@ export interface CompiledMemoryAnswerSource {
   excerpt: string;
   confidence: number;
   url?: string;
+  freshness: CompiledMemoryCitation['freshness'];
+  provenance: CompiledMemoryCitation['provenance'];
 }
 
 export interface CompiledMemoryAnswerCitation {
@@ -32,11 +37,15 @@ export interface CompiledMemoryAnswerCitation {
   excerpt: string;
   confidence: number;
   url?: string;
+  freshness: CompiledMemoryCitation['freshness'];
+  provenance: CompiledMemoryCitation['provenance'];
 }
 
 export interface CompiledMemoryAnswerContext {
   context: string;
   sources: CompiledMemoryAnswerSource[];
+  citations: CompiledMemoryAnswerCitation[];
+  citationsBySourceId: Record<string, CompiledMemoryAnswerCitation>;
   priorTopics: string[];
 }
 
@@ -46,6 +55,7 @@ interface ResolveCompiledMemoryAnswerContextArgs {
   question: string;
   app?: string;
   screen?: string;
+  asOf?: string | null;
   limit?: number;
 }
 
@@ -69,6 +79,8 @@ function toSource(args: {
   content: string | null | undefined;
   confidence?: number | null;
   url?: string;
+  freshness?: CompiledMemoryCitation['freshness'];
+  provenance?: CompiledMemoryCitation['provenance'];
 }): CompiledMemoryAnswerSource | null {
   const content = clampContent(args.content);
   if (!content) {
@@ -76,6 +88,7 @@ function toSource(args: {
   }
 
   return {
+    citationNumber: 0,
     sourceId: args.sourceId,
     title: args.title,
     layer: args.layer,
@@ -83,23 +96,51 @@ function toSource(args: {
     excerpt: buildExcerpt(content),
     confidence: args.confidence ?? 0.75,
     url: args.url,
+    freshness: args.freshness ?? {
+      updatedAt: null,
+      lastSuccessfulSyncAt: null,
+      freshnessTarget: null,
+      isStale: null,
+    },
+    provenance: args.provenance ?? {
+      pageId: args.sourceId,
+      vendorPageId: null,
+      vendorSourceId: null,
+      sourceKind: null,
+      sourceUrl: null,
+    },
   };
 }
 
 function renderSection(
   label: string,
   sources: CompiledMemoryAnswerSource[],
-  startIndex: number,
 ): string | null {
   if (sources.length === 0) {
     return null;
   }
 
   const body = sources
-    .map((source, index) => `[${startIndex + index}] ${source.title}\n${source.content}`)
+    .map((source) => `[${source.citationNumber}] ${source.title}\n${source.content}`)
     .join('\n\n');
 
   return `${label}:\n${body}`;
+}
+
+function buildTaggedLayerSection(
+  emptyLabel: string,
+  sources: CompiledMemoryAnswerSource[],
+): string {
+  if (sources.length === 0) {
+    return `(no ${emptyLabel} available)`;
+  }
+
+  return sources
+    .map((source) => {
+      const header = `### ${source.title} [SOURCE:${source.sourceId}:${source.title}]`;
+      return `${header}\n${source.content}`;
+    })
+    .join(ORG_SEPARATOR);
 }
 
 export function buildCompiledMemoryAnswerContext(
@@ -115,6 +156,8 @@ export function buildCompiledMemoryAnswerContext(
         content: page.content,
         confidence: page.confidence,
         url: compiledMemory.citationsBySourceId[page.id]?.linkUrl,
+        freshness: compiledMemory.citationsBySourceId[page.id]?.freshness,
+        provenance: compiledMemory.citationsBySourceId[page.id]?.provenance,
       }),
     )
     .filter((source): source is CompiledMemoryAnswerSource => source != null);
@@ -128,6 +171,8 @@ export function buildCompiledMemoryAnswerContext(
         content: page.content,
         confidence: page.confidence,
         url: compiledMemory.citationsBySourceId[page.id]?.linkUrl,
+        freshness: compiledMemory.citationsBySourceId[page.id]?.freshness,
+        provenance: compiledMemory.citationsBySourceId[page.id]?.provenance,
       }),
     )
     .filter((source): source is CompiledMemoryAnswerSource => source != null);
@@ -149,6 +194,7 @@ export function buildCompiledMemoryAnswerContext(
               ),
               content: compiledMemory.vendorKnowledge.page.content,
               sourceUrl: compiledMemory.vendorKnowledge.page.source_url,
+              updatedAt: null,
               confidence: 0.6,
               distance: 0.4,
               matchType: 'exact' as const,
@@ -168,6 +214,8 @@ export function buildCompiledMemoryAnswerContext(
           compiledMemory.citationsBySourceId[page.id]?.linkUrl ??
           page.sourceUrl ??
           undefined,
+        freshness: compiledMemory.citationsBySourceId[page.id]?.freshness,
+        provenance: compiledMemory.citationsBySourceId[page.id]?.provenance,
       }),
     )
     .filter((source): source is CompiledMemoryAnswerSource => source != null);
@@ -188,10 +236,22 @@ export function buildCompiledMemoryAnswerContext(
     ...limitedOrgSources,
     ...limitedVendorTrainingSources,
     ...limitedVendorSources,
-  ];
+  ].map((source, index) => ({
+    ...source,
+    citationNumber: index + 1,
+  }));
+
+  if (sources.length === 0) {
+    return {
+      context: '',
+      sources: [],
+      citations: [],
+      citationsBySourceId: {},
+      priorTopics: compiledMemory.orgKnowledge.priorTopics,
+    };
+  }
 
   const sections: string[] = [];
-  let nextIndex = 1;
 
   sections.push(
     [
@@ -204,36 +264,38 @@ export function buildCompiledMemoryAnswerContext(
 
   const orgSection = renderSection(
     "YOUR TEAM'S KNOWLEDGE",
-    limitedOrgSources,
-    nextIndex,
+    sources.filter((source) => source.layer === 'org'),
   );
   if (orgSection) {
     sections.push(orgSection);
-    nextIndex += limitedOrgSources.length;
   }
 
   const vendorTrainingSection = renderSection(
     'VENDOR TRAINING',
-    limitedVendorTrainingSources,
-    nextIndex,
+    sources.filter((source) => source.layer === 'vendor_training'),
   );
   if (vendorTrainingSection) {
     sections.push(vendorTrainingSection);
-    nextIndex += limitedVendorTrainingSources.length;
   }
 
   const vendorSection = renderSection(
     'VENDOR KNOWLEDGE',
-    limitedVendorSources,
-    nextIndex,
+    sources.filter((source) => source.layer === 'vendor'),
   );
   if (vendorSection) {
     sections.push(vendorSection);
   }
 
+  const citations = buildCompiledMemoryCitations(sources);
+  const citationsBySourceId = Object.fromEntries(
+    citations.map((citation) => [citation.sourceId, citation]),
+  );
+
   return {
     context: sections.join('\n\n'),
     sources,
+    citations,
+    citationsBySourceId,
     priorTopics: compiledMemory.orgKnowledge.priorTopics,
   };
 }
@@ -241,15 +303,66 @@ export function buildCompiledMemoryAnswerContext(
 export function buildCompiledMemoryCitations(
   sources: CompiledMemoryAnswerSource[],
 ): CompiledMemoryAnswerCitation[] {
-  return sources.map((source, index) => ({
-    citationNumber: index + 1,
+  return sources.map((source) => ({
+    citationNumber: source.citationNumber,
     sourceId: source.sourceId,
     title: source.title,
     layer: source.layer,
     excerpt: source.excerpt,
     confidence: source.confidence,
     url: source.url,
+    freshness: source.freshness,
+    provenance: source.provenance,
   }));
+}
+
+export function buildExtensionCompiledMemoryPrompt(args: {
+  app: string;
+  screen: string;
+  question: string;
+  elements: Array<{ selector: string; label: string }>;
+  answerContext: CompiledMemoryAnswerContext;
+}): string {
+  const { app, screen, question, elements, answerContext } = args;
+  const vendorSources = answerContext.sources.filter((source) => source.layer === 'vendor');
+  const vendorTrainingSources = answerContext.sources.filter(
+    (source) => source.layer === 'vendor_training',
+  );
+  const orgSources = answerContext.sources.filter((source) => source.layer === 'org');
+
+  const elementsSection =
+    elements.length > 0
+      ? elements.map((el) => `- ${el.label}: ${el.selector}`).join('\n')
+      : '(no interactive elements provided)';
+
+  const userContextSection =
+    answerContext.priorTopics.length > 0
+      ? `\nUSER CONTEXT:
+The user has previously been shown information about: ${answerContext.priorTopics.join(', ')}. Skip basic explanations they've already seen and focus on their specific question. If they ask about a topic they've seen before, go deeper rather than repeating fundamentals.\n`
+      : '';
+
+  return `You are a context-aware assistant helping someone use ${app}'s ${screen} page.
+
+VENDOR KNOWLEDGE (generic software documentation):
+${buildTaggedLayerSection('vendor knowledge', vendorSources)}
+
+VENDOR TRAINING (how the vendor recommends using it):
+${buildTaggedLayerSection('vendor training knowledge', vendorTrainingSources)}
+
+YOUR TEAM'S KNOWLEDGE (how your team specifically uses it):
+${buildTaggedLayerSection('team knowledge', orgSources)}
+
+INTERACTIVE ELEMENTS VISIBLE ON SCREEN:
+${elementsSection}
+${userContextSection}
+QUESTION: ${question}
+
+Rules:
+- YOUR TEAM'S KNOWLEDGE takes highest precedence, followed by VENDOR TRAINING, then VENDOR KNOWLEDGE. Explicitly mention when you're following the team's specific way versus vendor recommendations.
+- When referring to a clickable element that exists in INTERACTIVE ELEMENTS, tag it like [ELEMENT:selector:label] so the extension can highlight/point at it. Use the selector exactly as provided above.
+- When citing a source, tag it [SOURCE:id:title]. Use the normalized source id from the compiled-memory source itself. Team sources should come first in the citation list, followed by vendor training sources, then vendor knowledge.
+- Keep the answer concise and conversational. Prioritize actionable steps a user can follow right now.
+- If you don't know the answer from any layer, say so clearly instead of guessing.`;
 }
 
 export async function resolveCompiledMemoryAnswerContext(
@@ -262,6 +375,7 @@ export async function resolveCompiledMemoryAnswerContext(
     question,
     app = DEFAULT_CHAT_COMPILED_MEMORY_SCOPE.app,
     screen = DEFAULT_CHAT_COMPILED_MEMORY_SCOPE.screen,
+    asOf,
     limit,
   } = args;
 
@@ -270,6 +384,8 @@ export async function resolveCompiledMemoryAnswerContext(
     return {
       context: '',
       sources: [],
+      citations: [],
+      citationsBySourceId: {},
       priorTopics: [],
     };
   }
@@ -283,22 +399,9 @@ export async function resolveCompiledMemoryAnswerContext(
     questionEmbedding = embeddingResult.embedding;
   } catch (error) {
     console.error(
-      '[compiled-memory-answer-context] embedding failed, returning empty context:',
+      '[compiled-memory-answer-context] embedding failed, continuing with vendor-compatible fallback:',
       error,
     );
-    return {
-      context: '',
-      sources: [],
-      priorTopics: [],
-    };
-  }
-
-  if (questionEmbedding.length === 0) {
-    return {
-      context: '',
-      sources: [],
-      priorTopics: [],
-    };
   }
 
   try {
@@ -307,6 +410,7 @@ export async function resolveCompiledMemoryAnswerContext(
       userId,
       app,
       screen,
+      asOf,
       question: trimmedQuestion,
       questionEmbedding,
       limit,
@@ -321,6 +425,8 @@ export async function resolveCompiledMemoryAnswerContext(
     return {
       context: '',
       sources: [],
+      citations: [],
+      citationsBySourceId: {},
       priorTopics: [],
     };
   }

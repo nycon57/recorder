@@ -17,6 +17,8 @@ import { resolveClusterContext } from '@/lib/services/wiki-clusters';
 
 const DEFAULT_MATCH_LIMIT = 3;
 const CLUSTER_CONTEXT_PER_CLUSTER = 2;
+const FRESHNESS_DURATION_REGEX =
+  /^(\d+)\s*(minute|minutes|min|hour|hours|day|days|week|weeks)$/i;
 
 export type CompiledMemoryCitationLayer =
   | 'vendor'
@@ -28,6 +30,19 @@ export interface CompiledMemoryCitation {
   title: string;
   layer: CompiledMemoryCitationLayer;
   linkUrl?: string;
+  freshness: {
+    updatedAt: string | null;
+    lastSuccessfulSyncAt: string | null;
+    freshnessTarget: string | null;
+    isStale: boolean | null;
+  };
+  provenance: {
+    pageId: string;
+    vendorPageId: string | null;
+    vendorSourceId: string | null;
+    sourceKind: string | null;
+    sourceUrl: string | null;
+  };
 }
 
 export interface ResolveCompiledMemoryContextArgs {
@@ -63,6 +78,75 @@ export interface CompiledMemoryContext {
     priorTopics: string[];
   };
   citationsBySourceId: Record<string, CompiledMemoryCitation>;
+}
+
+function parseFreshnessTargetToMs(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const match = value.trim().match(FRESHNESS_DURATION_REGEX);
+  if (!match) {
+    return null;
+  }
+
+  const amount = Number.parseInt(match[1] ?? '', 10);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+
+  const unit = (match[2] ?? '').toLowerCase();
+  if (unit.startsWith('min')) {
+    return amount * 60 * 1000;
+  }
+  if (unit.startsWith('hour')) {
+    return amount * 60 * 60 * 1000;
+  }
+  if (unit.startsWith('day')) {
+    return amount * 24 * 60 * 60 * 1000;
+  }
+  if (unit.startsWith('week')) {
+    return amount * 7 * 24 * 60 * 60 * 1000;
+  }
+
+  return null;
+}
+
+function computeFreshnessState(args: {
+  updatedAt?: string | null;
+  lastSuccessfulSyncAt?: string | null;
+  freshnessTarget?: string | null;
+}) {
+  const updatedAt = args.updatedAt ?? null;
+  const lastSuccessfulSyncAt = args.lastSuccessfulSyncAt ?? null;
+  const freshnessTarget = args.freshnessTarget ?? null;
+  const freshnessWindowMs = parseFreshnessTargetToMs(freshnessTarget);
+
+  if (!lastSuccessfulSyncAt || freshnessWindowMs == null) {
+    return {
+      updatedAt,
+      lastSuccessfulSyncAt,
+      freshnessTarget,
+      isStale: null,
+    };
+  }
+
+  const lastSuccessMs = Date.parse(lastSuccessfulSyncAt);
+  if (Number.isNaN(lastSuccessMs)) {
+    return {
+      updatedAt,
+      lastSuccessfulSyncAt,
+      freshnessTarget,
+      isStale: null,
+    };
+  }
+
+  return {
+    updatedAt,
+    lastSuccessfulSyncAt,
+    freshnessTarget,
+    isStale: Date.now() - lastSuccessMs > freshnessWindowMs,
+  };
 }
 
 async function resolveVendorTrainingPages(args: {
@@ -283,6 +367,96 @@ async function resolveOrgCitationLinks(
   }
 }
 
+async function resolveOrgPageUpdatedAt(
+  pageIds: string[],
+  deps: ResolveCompiledMemoryContextDeps = {},
+): Promise<Map<string, string>> {
+  if (pageIds.length === 0) {
+    return new Map();
+  }
+
+  try {
+    const createAdminClientFn = deps.createAdminClient ?? createAdminClient;
+    const supabase = createAdminClientFn();
+    const { data } = await supabase
+      .from('org_wiki_pages')
+      .select('id, updated_at')
+      .in('id', pageIds);
+
+    const rows =
+      (data as
+        | Array<{
+            id: string;
+            updated_at: string | null;
+          }>
+        | null) ?? [];
+
+    return new Map(
+      rows
+        .filter((row) => row.updated_at)
+        .map((row) => [row.id, row.updated_at as string]),
+    );
+  } catch (error) {
+    console.error(
+      '[compiled-memory-context] org freshness resolution failed:',
+      error,
+    );
+    return new Map();
+  }
+}
+
+async function resolveVendorSourceMetadata(
+  vendorSourceIds: string[],
+  deps: ResolveCompiledMemoryContextDeps = {},
+): Promise<
+  Map<
+    string,
+    {
+      id: string;
+      source_kind: string | null;
+      source_url: string | null;
+      freshness_target: string | null;
+      last_success_at: string | null;
+      updated_at: string | null;
+    }
+  >
+> {
+  if (vendorSourceIds.length === 0) {
+    return new Map();
+  }
+
+  try {
+    const createAdminClientFn = deps.createAdminClient ?? createAdminClient;
+    const supabase = createAdminClientFn();
+    const { data } = await supabase
+      .from('vendor_doc_sources')
+      .select(
+        'id, source_kind, source_url, freshness_target, last_success_at, updated_at',
+      )
+      .in('id', vendorSourceIds);
+
+    const rows =
+      (data as
+        | Array<{
+            id: string;
+            source_kind: string | null;
+            source_url: string | null;
+            freshness_target: string | null;
+            last_success_at: string | null;
+            updated_at: string | null;
+          }>
+        | null) ?? [];
+
+    return new Map(rows.map((row) => [row.id, row]));
+  } catch (error) {
+    console.error(
+      '[compiled-memory-context] vendor freshness resolution failed:',
+      error,
+    );
+    return new Map();
+  }
+}
+
 async function buildCitationsBySourceId(args: {
   vendorPage: VendorWikiPage | null;
   vendorPages: VendorCorpusPageMatch[];
@@ -291,22 +465,77 @@ async function buildCitationsBySourceId(args: {
 }, deps: ResolveCompiledMemoryContextDeps = {}): Promise<Record<string, CompiledMemoryCitation>> {
   const { vendorPage, vendorPages, vendorTrainingPages, orgPages } = args;
   const citationsBySourceId: Record<string, CompiledMemoryCitation> = {};
+  const orgPageFreshnessById = await resolveOrgPageUpdatedAt(
+    Array.from(
+      new Set([
+        ...vendorTrainingPages.map((page) => page.id),
+        ...orgPages.map((page) => page.id),
+      ]),
+    ),
+    deps,
+  );
+  const vendorSourceMetadataById = await resolveVendorSourceMetadata(
+    Array.from(
+      new Set(
+        [
+          vendorPage?.vendor_source_id ?? null,
+          ...vendorPages.map((page) => page.vendorSourceId),
+        ].filter((value): value is string => Boolean(value)),
+      ),
+    ),
+    deps,
+  );
 
   if (vendorPage) {
+    const vendorSourceId = vendorPage.vendor_source_id ?? null;
+    const vendorSource =
+      (vendorSourceId ? vendorSourceMetadataById.get(vendorSourceId) : null) ?? null;
+
     citationsBySourceId[vendorPage.id] = {
       sourceId: vendorPage.id,
       title: formatVendorKnowledgeTitle(vendorPage.app, vendorPage.screen),
       layer: 'vendor',
-      linkUrl: vendorPage.source_url ?? undefined,
+      linkUrl: vendorPage.source_url ?? vendorSource?.source_url ?? undefined,
+      freshness: computeFreshnessState({
+        lastSuccessfulSyncAt: vendorSource?.last_success_at ?? null,
+        freshnessTarget: vendorSource?.freshness_target ?? null,
+        updatedAt: vendorSource?.updated_at ?? null,
+      }),
+      provenance: {
+        pageId: vendorPage.id,
+        vendorPageId: vendorPage.id,
+        vendorSourceId,
+        sourceKind: vendorSource?.source_kind ?? null,
+        sourceUrl: vendorPage.source_url ?? vendorSource?.source_url ?? null,
+      },
     };
   }
 
   for (const vendorKnowledgePage of vendorPages) {
+    const vendorSource =
+      (vendorKnowledgePage.vendorSourceId
+        ? vendorSourceMetadataById.get(vendorKnowledgePage.vendorSourceId)
+        : null) ?? null;
+
     citationsBySourceId[vendorKnowledgePage.id] = {
       sourceId: vendorKnowledgePage.id,
       title: vendorKnowledgePage.title,
       layer: 'vendor',
-      linkUrl: vendorKnowledgePage.sourceUrl ?? undefined,
+      linkUrl:
+        vendorKnowledgePage.sourceUrl ?? vendorSource?.source_url ?? undefined,
+      freshness: computeFreshnessState({
+        updatedAt: vendorKnowledgePage.updatedAt,
+        lastSuccessfulSyncAt: vendorSource?.last_success_at ?? null,
+        freshnessTarget: vendorSource?.freshness_target ?? null,
+      }),
+      provenance: {
+        pageId: vendorKnowledgePage.id,
+        vendorPageId: vendorKnowledgePage.vendorPageId,
+        vendorSourceId: vendorKnowledgePage.vendorSourceId,
+        sourceKind: vendorSource?.source_kind ?? null,
+        sourceUrl:
+          vendorKnowledgePage.sourceUrl ?? vendorSource?.source_url ?? null,
+      },
     };
   }
 
@@ -315,6 +544,16 @@ async function buildCitationsBySourceId(args: {
       sourceId: page.id,
       title: page.topic,
       layer: 'vendor_training',
+      freshness: computeFreshnessState({
+        updatedAt: orgPageFreshnessById.get(page.id) ?? null,
+      }),
+      provenance: {
+        pageId: page.id,
+        vendorPageId: null,
+        vendorSourceId: null,
+        sourceKind: null,
+        sourceUrl: null,
+      },
     };
   }
 
@@ -329,6 +568,16 @@ async function buildCitationsBySourceId(args: {
       title: page.topic,
       layer: 'org',
       linkUrl: orgCitationLinks.get(page.id),
+      freshness: computeFreshnessState({
+        updatedAt: orgPageFreshnessById.get(page.id) ?? null,
+      }),
+      provenance: {
+        pageId: page.id,
+        vendorPageId: null,
+        vendorSourceId: null,
+        sourceKind: null,
+        sourceUrl: null,
+      },
     };
   }
 
@@ -409,6 +658,7 @@ export async function resolveCompiledMemoryContext(
         formatVendorKnowledgeTitle(vendorPage.app, vendorPage.screen),
       content: vendorPage.content,
       sourceUrl: exactCorpusPage?.sourceUrl ?? vendorPage.source_url,
+      updatedAt: exactCorpusPage?.updatedAt ?? null,
       confidence: exactCorpusPage?.confidence ?? 0.8,
       distance: exactCorpusPage?.distance ?? 0.2,
       matchType: 'exact',

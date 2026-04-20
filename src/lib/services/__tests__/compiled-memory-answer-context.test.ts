@@ -2,10 +2,34 @@ import assert from 'node:assert/strict';
 
 import {
   buildCompiledMemoryAnswerContext,
+  buildExtensionCompiledMemoryPrompt,
   resolveCompiledMemoryAnswerContext,
   DEFAULT_CHAT_COMPILED_MEMORY_SCOPE,
 } from '../compiled-memory-answer-context';
 import type { CompiledMemoryContext } from '../compiled-memory-context';
+
+const EMPTY_FRESHNESS = {
+  updatedAt: null,
+  lastSuccessfulSyncAt: null,
+  freshnessTarget: null,
+  isStale: null,
+} as const;
+
+function provenance(pageId: string, overrides: Partial<{
+  vendorPageId: string | null;
+  vendorSourceId: string | null;
+  sourceKind: string | null;
+  sourceUrl: string | null;
+}> = {}) {
+  return {
+    pageId,
+    vendorPageId: null,
+    vendorSourceId: null,
+    sourceKind: null,
+    sourceUrl: null,
+    ...overrides,
+  };
+}
 
 test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor layers', () => {
   const compiledMemory: CompiledMemoryContext = {
@@ -27,6 +51,7 @@ test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor l
           title: 'HubSpot deals',
           content: 'Vendor documentation for the general deal screen.',
           sourceUrl: 'https://docs.example.com/deals',
+          updatedAt: '2026-04-19T12:00:00.000Z',
           confidence: 0.82,
           distance: 0.18,
           matchType: 'exact',
@@ -40,6 +65,7 @@ test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor l
           title: 'Pipeline defaults',
           content: 'Vendor documentation for broader pipeline configuration.',
           sourceUrl: 'https://docs.example.com/pipelines',
+          updatedAt: '2026-04-18T12:00:00.000Z',
           confidence: 0.74,
           distance: 0.26,
           matchType: 'semantic',
@@ -79,23 +105,51 @@ test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor l
         title: 'Deal routing',
         layer: 'org',
         linkUrl: '/dashboard/recordings/recording-1',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('org-1'),
       },
       'training-1': {
         sourceId: 'training-1',
         title: 'Vendor rollout playbook',
         layer: 'vendor_training',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('training-1'),
       },
       'vendor-1': {
         sourceId: 'vendor-1',
         title: 'HubSpot deals',
         layer: 'vendor',
         linkUrl: 'https://docs.example.com/deals',
+        freshness: {
+          updatedAt: '2026-04-19T12:00:00.000Z',
+          lastSuccessfulSyncAt: '2026-04-19T10:00:00.000Z',
+          freshnessTarget: '7 days',
+          isStale: false,
+        },
+        provenance: provenance('vendor-1', {
+          vendorPageId: 'vendor-1',
+          vendorSourceId: 'source-1',
+          sourceKind: 'documentation',
+          sourceUrl: 'https://docs.example.com/deals',
+        }),
       },
       'vendor-2': {
         sourceId: 'vendor-2',
         title: 'Pipeline defaults',
         layer: 'vendor',
         linkUrl: 'https://docs.example.com/pipelines',
+        freshness: {
+          updatedAt: '2026-04-18T12:00:00.000Z',
+          lastSuccessfulSyncAt: '2026-04-19T10:00:00.000Z',
+          freshnessTarget: '7 days',
+          isStale: false,
+        },
+        provenance: provenance('vendor-2', {
+          vendorPageId: 'vendor-page-2',
+          vendorSourceId: 'source-1',
+          sourceKind: 'documentation',
+          sourceUrl: 'https://docs.example.com/pipelines',
+        }),
       },
     },
   };
@@ -118,9 +172,14 @@ test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor l
   assert.match(result.context, /\[2\] Vendor rollout playbook/);
   assert.match(result.context, /\[3\] HubSpot deals/);
   assert.match(result.context, /\[4\] Pipeline defaults/);
+  assert.deepEqual(
+    result.sources.map((source) => source.citationNumber),
+    [1, 2, 3, 4],
+  );
   assert.equal(result.sources[0]?.url, '/dashboard/recordings/recording-1');
   assert.equal(result.sources[2]?.url, 'https://docs.example.com/deals');
   assert.equal(result.sources[3]?.url, 'https://docs.example.com/pipelines');
+  assert.equal(result.citationsBySourceId['vendor-2']?.freshness.updatedAt, '2026-04-18T12:00:00.000Z');
   assert.deepEqual(result.priorTopics, ['Deal routing']);
 });
 
@@ -144,6 +203,7 @@ test('buildCompiledMemoryAnswerContext applies citation limits globally across l
           title: 'HubSpot deals',
           content: 'Vendor documentation for the general deal screen.',
           sourceUrl: 'https://docs.example.com/deals',
+          updatedAt: '2026-04-19T12:00:00.000Z',
           confidence: 0.82,
           distance: 0.18,
           matchType: 'exact',
@@ -191,21 +251,32 @@ test('buildCompiledMemoryAnswerContext applies citation limits globally across l
         sourceId: 'org-1',
         title: 'Deal routing',
         layer: 'org',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('org-1'),
       },
       'org-2': {
         sourceId: 'org-2',
         title: 'Discount approvals',
         layer: 'org',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('org-2'),
       },
       'training-1': {
         sourceId: 'training-1',
         title: 'Vendor rollout playbook',
         layer: 'vendor_training',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('training-1'),
       },
       'vendor-1': {
         sourceId: 'vendor-1',
         title: 'HubSpot deals',
         layer: 'vendor',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('vendor-1', {
+          vendorPageId: 'vendor-1',
+          vendorSourceId: 'source-1',
+        }),
       },
     },
   };
@@ -218,6 +289,82 @@ test('buildCompiledMemoryAnswerContext applies citation limits globally across l
   );
   assert.doesNotMatch(result.context, /VENDOR TRAINING:/);
   assert.doesNotMatch(result.context, /VENDOR KNOWLEDGE:/);
+});
+
+test('buildExtensionCompiledMemoryPrompt reuses the normalized answer context for extension answers', () => {
+  const compiledMemory: CompiledMemoryContext = {
+    vendorKnowledge: {
+      page: null,
+      pages: [
+        {
+          id: 'vendor-1',
+          vendorPageId: 'vendor-1',
+          vendorSourceId: 'source-1',
+          app: 'vercel',
+          screen: 'projects',
+          title: 'Project settings',
+          content: 'Open Settings to manage project domains.',
+          sourceUrl: 'https://vercel.com/docs/projects/settings',
+          updatedAt: '2026-04-19T12:00:00.000Z',
+          confidence: 0.81,
+          distance: 0.19,
+          matchType: 'semantic',
+        },
+      ],
+    },
+    vendorTraining: { pages: [] },
+    orgKnowledge: {
+      pages: [
+        {
+          id: 'org-1',
+          app: 'vercel',
+          screen: 'projects',
+          topic: 'Project ownership',
+          content: 'Our team updates domains from the project settings page.',
+          confidence: 0.93,
+          distance: 0.07,
+        },
+      ],
+      priorTopics: ['Project ownership'],
+    },
+    citationsBySourceId: {
+      'org-1': {
+        sourceId: 'org-1',
+        title: 'Project ownership',
+        layer: 'org',
+        linkUrl: '/dashboard/recordings/recording-1',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('org-1'),
+      },
+      'vendor-1': {
+        sourceId: 'vendor-1',
+        title: 'Project settings',
+        layer: 'vendor',
+        linkUrl: 'https://vercel.com/docs/projects/settings',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('vendor-1', {
+          vendorPageId: 'vendor-1',
+          vendorSourceId: 'source-1',
+          sourceUrl: 'https://vercel.com/docs/projects/settings',
+        }),
+      },
+    },
+  };
+
+  const answerContext = buildCompiledMemoryAnswerContext(compiledMemory);
+  const prompt = buildExtensionCompiledMemoryPrompt({
+    app: 'vercel',
+    screen: 'projects',
+    question: 'How do I update our domain?',
+    elements: [{ selector: '[data-test=settings]', label: 'Settings' }],
+    answerContext,
+  });
+
+  assert.match(prompt, /YOUR TEAM'S KNOWLEDGE/);
+  assert.match(prompt, /\[SOURCE:org-1:Project ownership\]/);
+  assert.match(prompt, /\[SOURCE:vendor-1:Project settings\]/);
+  assert.match(prompt, /\[ELEMENT:selector:label\]/);
+  assert.match(prompt, /The user has previously been shown information about: Project ownership/);
 });
 
 test('resolveCompiledMemoryAnswerContext passes the default chat scope into the shared compiled-memory resolver', async () => {
@@ -260,6 +407,8 @@ test('resolveCompiledMemoryAnswerContext passes the default chat scope into the 
               title: 'Enterprise routing',
               layer: 'org',
               linkUrl: '/dashboard/recordings/recording-9',
+              freshness: EMPTY_FRESHNESS,
+              provenance: provenance('org-1'),
             },
           },
         };
@@ -272,18 +421,30 @@ test('resolveCompiledMemoryAnswerContext passes the default chat scope into the 
     userId: 'user-123',
     app: DEFAULT_CHAT_COMPILED_MEMORY_SCOPE.app,
     screen: DEFAULT_CHAT_COMPILED_MEMORY_SCOPE.screen,
+    asOf: undefined,
     question: 'How do we route enterprise deals?',
     questionEmbedding: [0.1, 0.2, 0.3],
     limit: 4,
   });
   assert.equal(result.sources[0]?.title, 'Enterprise routing');
   assert.match(result.context, /\[1\] Enterprise routing/);
+  assert.equal(result.citations[0]?.citationNumber, 1);
 });
 
-test('resolveCompiledMemoryAnswerContext returns empty context when embedding generation fails', async () => {
+test('resolveCompiledMemoryAnswerContext falls back to vendor-compatible resolution when embedding generation fails', async () => {
   const originalConsoleError = console.error;
   console.error = () => undefined;
   try {
+    const resolveCompiledMemory = async (args: any) => {
+      assert.deepEqual(args.questionEmbedding, []);
+      return {
+        vendorKnowledge: { page: null, pages: [] },
+        vendorTraining: { pages: [] },
+        orgKnowledge: { pages: [], priorTopics: [] },
+        citationsBySourceId: {},
+      };
+    };
+
     const result = await resolveCompiledMemoryAnswerContext(
       {
         orgId: 'org-123',
@@ -294,14 +455,14 @@ test('resolveCompiledMemoryAnswerContext returns empty context when embedding ge
         generateEmbedding: async () => {
           throw new Error('embedding unavailable');
         },
-        resolveCompiledMemory: async () => {
-          throw new Error('should not be called');
-        },
+        resolveCompiledMemory,
       },
     );
 
     assert.equal(result.context, '');
     assert.deepEqual(result.sources, []);
+    assert.deepEqual(result.citations, []);
+    assert.deepEqual(result.citationsBySourceId, {});
     assert.deepEqual(result.priorTopics, []);
   } finally {
     console.error = originalConsoleError;

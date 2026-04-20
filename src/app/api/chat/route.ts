@@ -946,9 +946,12 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
             timestamp: undefined,
             metadata: {
               sourceId: source.sourceId,
+              citationNumber: source.citationNumber,
               layer: source.layer,
               sourceType: 'compiled_memory',
+              freshness: source.freshness,
               provenance: {
+                ...source.provenance,
                 layer: source.layer,
                 pageId: source.sourceId,
                 title: source.title,
@@ -1061,7 +1064,7 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
 
       await recordKnowledgeTelemetryEvent({
         type: 'knowledge.chat.outcome',
-        payload: chatTelemetry,
+        payload: chatTelemetry as any,
       });
     });
 
@@ -1091,7 +1094,7 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
           ...chatTelemetry,
           routingFailed: true,
           routingFailureReason: chatTelemetry.routingFailureReason ?? 'route_error',
-        }),
+        }) as any,
       });
     }
     return new Response(

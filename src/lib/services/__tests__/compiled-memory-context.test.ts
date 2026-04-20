@@ -64,6 +64,15 @@ function createSupabaseMock(args: {
   clusterEnabled?: boolean | null;
   priorInteractionIds?: string[];
   citationRows?: Array<{ page_id: string; source_id: string; source_type: string }>;
+  orgFreshnessRows?: Array<{ id: string; updated_at: string | null }>;
+  vendorSourceRows?: Array<{
+    id: string;
+    source_kind: string | null;
+    source_url: string | null;
+    freshness_target: string | null;
+    last_success_at: string | null;
+    updated_at: string | null;
+  }>;
 }) {
   return {
     from: jest.fn((table: string) => {
@@ -106,6 +115,28 @@ function createSupabaseMock(args: {
         return query;
       }
 
+      if (table === 'org_wiki_pages') {
+        const query = {
+          select: jest.fn().mockReturnThis(),
+          in: jest.fn(async () => ({
+            data: args.orgFreshnessRows ?? [],
+            error: null,
+          })),
+        };
+        return query;
+      }
+
+      if (table === 'vendor_doc_sources') {
+        const query = {
+          select: jest.fn().mockReturnThis(),
+          in: jest.fn(async () => ({
+            data: args.vendorSourceRows ?? [],
+            error: null,
+          })),
+        };
+        return query;
+      }
+
       throw new Error(`Unexpected table: ${table}`);
     }),
   };
@@ -137,6 +168,7 @@ describe('resolveCompiledMemoryContext', () => {
         title: 'HubSpot deals',
         content: 'Vendor knowledge',
         sourceUrl: 'https://docs.example.com/deals',
+        updatedAt: '2026-04-19T12:00:00.000Z',
         confidence: 0.81,
         distance: 0.19,
         matchType: 'exact',
@@ -150,6 +182,7 @@ describe('resolveCompiledMemoryContext', () => {
         title: 'Pipeline stages',
         content: 'Broader vendor guidance',
         sourceUrl: 'https://docs.example.com/pipelines',
+        updatedAt: '2026-04-18T12:00:00.000Z',
         confidence: 0.73,
         distance: 0.27,
         matchType: 'semantic',
@@ -234,6 +267,22 @@ describe('resolveCompiledMemoryContext', () => {
             source_type: 'recording',
           },
         ],
+        orgFreshnessRows: [
+          { id: 'training-1', updated_at: '2026-04-16T12:00:00.000Z' },
+          { id: 'org-1', updated_at: '2026-04-19T12:00:00.000Z' },
+          { id: 'org-2', updated_at: '2026-04-18T12:00:00.000Z' },
+          { id: 'org-3', updated_at: '2026-04-17T12:00:00.000Z' },
+        ],
+        vendorSourceRows: [
+          {
+            id: 'source-1',
+            source_kind: 'documentation',
+            source_url: 'https://docs.example.com',
+            freshness_target: '36500 days',
+            last_success_at: '2026-04-19T10:00:00.000Z',
+            updated_at: '2026-04-19T10:00:00.000Z',
+          },
+        ],
       }),
     );
 
@@ -293,6 +342,7 @@ describe('resolveCompiledMemoryContext', () => {
             title: 'HubSpot deals',
             content: 'Vendor knowledge',
             sourceUrl: 'https://docs.example.com/deals',
+            updatedAt: '2026-04-19T12:00:00.000Z',
             confidence: 0.81,
             distance: 0.19,
             matchType: 'exact',
@@ -306,6 +356,7 @@ describe('resolveCompiledMemoryContext', () => {
             title: 'Pipeline stages',
             content: 'Broader vendor guidance',
             sourceUrl: 'https://docs.example.com/pipelines',
+            updatedAt: '2026-04-18T12:00:00.000Z',
             confidence: 0.73,
             distance: 0.27,
             matchType: 'semantic',
@@ -363,35 +414,113 @@ describe('resolveCompiledMemoryContext', () => {
           title: 'HubSpot deals',
           layer: 'vendor',
           linkUrl: 'https://docs.example.com/deals',
+          freshness: {
+            updatedAt: '2026-04-19T12:00:00.000Z',
+            lastSuccessfulSyncAt: '2026-04-19T10:00:00.000Z',
+            freshnessTarget: '36500 days',
+            isStale: false,
+          },
+          provenance: {
+            pageId: 'vendor-1',
+            vendorPageId: 'vendor-1',
+            vendorSourceId: 'source-1',
+            sourceKind: 'documentation',
+            sourceUrl: 'https://docs.example.com/deals',
+          },
         },
         'vendor-2': {
           sourceId: 'vendor-2',
           title: 'Pipeline stages',
           layer: 'vendor',
           linkUrl: 'https://docs.example.com/pipelines',
+          freshness: {
+            updatedAt: '2026-04-18T12:00:00.000Z',
+            lastSuccessfulSyncAt: '2026-04-19T10:00:00.000Z',
+            freshnessTarget: '36500 days',
+            isStale: false,
+          },
+          provenance: {
+            pageId: 'vendor-2',
+            vendorPageId: 'vendor-page-2',
+            vendorSourceId: 'source-1',
+            sourceKind: 'documentation',
+            sourceUrl: 'https://docs.example.com/pipelines',
+          },
         },
         'training-1': {
           sourceId: 'training-1',
           title: 'Vendor playbook',
           layer: 'vendor_training',
+          freshness: {
+            updatedAt: '2026-04-16T12:00:00.000Z',
+            lastSuccessfulSyncAt: null,
+            freshnessTarget: null,
+            isStale: null,
+          },
+          provenance: {
+            pageId: 'training-1',
+            vendorPageId: null,
+            vendorSourceId: null,
+            sourceKind: null,
+            sourceUrl: null,
+          },
         },
         'org-1': {
           sourceId: 'org-1',
           title: 'Deal stages',
           layer: 'org',
           linkUrl: '/dashboard/recordings/recording-1',
+          freshness: {
+            updatedAt: '2026-04-19T12:00:00.000Z',
+            lastSuccessfulSyncAt: null,
+            freshnessTarget: null,
+            isStale: null,
+          },
+          provenance: {
+            pageId: 'org-1',
+            vendorPageId: null,
+            vendorSourceId: null,
+            sourceKind: null,
+            sourceUrl: null,
+          },
         },
         'org-2': {
           sourceId: 'org-2',
           title: 'Deal owners',
           layer: 'org',
           linkUrl: undefined,
+          freshness: {
+            updatedAt: '2026-04-18T12:00:00.000Z',
+            lastSuccessfulSyncAt: null,
+            freshnessTarget: null,
+            isStale: null,
+          },
+          provenance: {
+            pageId: 'org-2',
+            vendorPageId: null,
+            vendorSourceId: null,
+            sourceKind: null,
+            sourceUrl: null,
+          },
         },
         'org-3': {
           sourceId: 'org-3',
           title: 'Renewal notes',
           layer: 'org',
           linkUrl: '/dashboard/recordings/recording-3',
+          freshness: {
+            updatedAt: '2026-04-17T12:00:00.000Z',
+            lastSuccessfulSyncAt: null,
+            freshnessTarget: null,
+            isStale: null,
+          },
+          provenance: {
+            pageId: 'org-3',
+            vendorPageId: null,
+            vendorSourceId: null,
+            sourceKind: null,
+            sourceUrl: null,
+          },
         },
       },
     });
@@ -417,6 +546,7 @@ describe('resolveCompiledMemoryContext', () => {
         title: 'Lead detail',
         content: 'Vendor fallback',
         sourceUrl: 'https://docs.example.com/lead-detail',
+        updatedAt: '2026-04-01T11:00:00.000Z',
         confidence: 0.69,
         distance: 0.31,
         matchType: 'exact',
@@ -448,6 +578,19 @@ describe('resolveCompiledMemoryContext', () => {
             page_id: 'org-9',
             source_id: 'recording-9',
             source_type: 'recording',
+          },
+        ],
+        orgFreshnessRows: [
+          { id: 'org-9', updated_at: '2026-04-01T10:00:00.000Z' },
+        ],
+        vendorSourceRows: [
+          {
+            id: 'source-9',
+            source_kind: 'documentation',
+            source_url: 'https://docs.example.com',
+            freshness_target: '36500 days',
+            last_success_at: '2026-04-01T09:00:00.000Z',
+            updated_at: '2026-04-01T09:00:00.000Z',
           },
         ],
       }),
@@ -484,6 +627,19 @@ describe('resolveCompiledMemoryContext', () => {
       title: 'Lead routing',
       layer: 'org',
       linkUrl: '/dashboard/recordings/recording-9',
+      freshness: {
+        updatedAt: '2026-04-01T10:00:00.000Z',
+        lastSuccessfulSyncAt: null,
+        freshnessTarget: null,
+        isStale: null,
+      },
+      provenance: {
+        pageId: 'org-9',
+        vendorPageId: null,
+        vendorSourceId: null,
+        sourceKind: null,
+        sourceUrl: null,
+      },
     });
   });
 });

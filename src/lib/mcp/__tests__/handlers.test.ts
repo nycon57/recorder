@@ -12,7 +12,7 @@ jest.mock('@/lib/services/chat-rag-integration', () => ({
 
 jest.mock('@/lib/services/compiled-memory-answer-context', () => ({
   resolveCompiledMemoryAnswerContext: jest.fn(),
-  buildCompiledMemoryCitations: jest.fn((sources) =>
+  buildCompiledMemoryCitations: jest.fn((sources: any[]) =>
     sources.map((source: any, index: number) => ({
       citationNumber: index + 1,
       sourceId: source.sourceId,
@@ -28,7 +28,7 @@ jest.mock('@/lib/services/compiled-memory-answer-context', () => ({
 const { resolveCompiledMemoryAnswerContext } = require(
   '@/lib/services/compiled-memory-answer-context',
 ) as {
-  resolveCompiledMemoryAnswerContext: jest.Mock;
+  resolveCompiledMemoryAnswerContext: jest.MockedFunction<any>;
 };
 const { handleAnswerQuestion } = require('../handlers') as {
   handleAnswerQuestion: (
@@ -43,7 +43,7 @@ describe('handleAnswerQuestion', () => {
   });
 
   it('returns compiled-memory answer context and citations for MCP callers', async () => {
-    (resolveCompiledMemoryAnswerContext as jest.Mock).mockResolvedValue({
+    resolveCompiledMemoryAnswerContext.mockResolvedValue({
       context:
         "SOURCE PRECEDENCE:\n- Prefer YOUR TEAM'S KNOWLEDGE.\n\nYOUR TEAM'S KNOWLEDGE:\n[1] Approval workflow\nManagers approve discounts above 20%.",
       sources: [
@@ -58,7 +58,7 @@ describe('handleAnswerQuestion', () => {
         },
       ],
       priorTopics: [],
-    });
+    } as any);
 
     const result = await handleAnswerQuestion(
       { question: 'Who approves large discounts?', limit: 2 },
