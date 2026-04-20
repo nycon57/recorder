@@ -1,0 +1,39 @@
+/**
+ * docs.css — local design tokens for the /docs shell.
+ *
+ * Scoped to `.docs` — never bleeds into root globals.css.
+ * Tribora editorial palette: warm off-dark surface, paper-white ink,
+ * one Warm Amber signal accent (≤3× per viewport per design system rules).
+ *
+ * Maps onto globals.css CSS variables where they overlap;
+ * introduces docs-specific slots where they don't.
+ */
+
+.docs {
+  /* Surfaces */
+  --docs-surface:          hsl(220 13% 9%);
+  --docs-surface-hover:    hsl(220 13% 12%);
+
+  /* Text scale */
+  --docs-text-primary:     hsl(40 20% 94%);   /* paper-white */
+  --docs-text-secondary:   hsl(40 10% 68%);
+  --docs-text-muted:       hsl(220 8% 46%);
+
+  /* Borders */
+  --docs-border:           hsl(220 13% 18%);
+
+  /* Warm Amber — the single signal accent */
+  --docs-amber:            hsl(38 92% 60%);
+}
+
+@media (prefers-color-scheme: light) {
+  .docs {
+    --docs-surface:          hsl(40 15% 97%);
+    --docs-surface-hover:    hsl(40 12% 93%);
+    --docs-text-primary:     hsl(220 13% 12%);
+    --docs-text-secondary:   hsl(220 8% 35%);
+    --docs-text-muted:       hsl(220 6% 56%);
+    --docs-border:           hsl(220 10% 84%);
+    --docs-amber:            hsl(38 82% 44%);
+  }
+}
