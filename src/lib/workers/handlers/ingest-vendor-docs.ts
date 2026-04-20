@@ -50,6 +50,8 @@ interface IngestVendorDocsPayload {
   maxPages?: number;
   sourceId?: string;
   syncType?: 'scheduled' | 'manual';
+  /** Optional audit field — system-admin user who triggered this job (TRIB-146). */
+  triggered_by_user_id?: string | null;
 }
 
 interface CrawledPage {
@@ -740,19 +742,29 @@ export async function handleIngestVendorDocs(
     throw new Error(`URL must use http or https protocol: ${seedUrl}`);
   }
 
+  // Audit provenance — back-compat: defaults to null for existing queued jobs
+  const triggeredByUserId = payload.triggered_by_user_id ?? null;
+
   logger.info('Starting vendor doc ingestion', {
-    context: { seedUrl, app, maxPages, sourceId: payload.sourceId ?? null, jobId: job.id },
+    context: {
+      seedUrl,
+      app,
+      maxPages,
+      sourceId: payload.sourceId ?? null,
+      jobId: job.id,
+      triggeredByUserId,
+    },
   });
 
-  // Use a placeholder orgId for vendor docs (they are not org-scoped)
-  const orgId = 'system';
+  // 'platform' sentinel: vendor docs are not org-scoped — they belong to the platform corpus
+  const orgId = 'platform';
 
   await withAgentLogging(
     {
       orgId,
       agentType: 'vendor_doc_ingestion',
       actionType: 'crawl_and_ingest',
-      inputSummary: `Crawl ${seedUrl} for app="${app}", maxPages=${maxPages}`,
+      inputSummary: `Crawl ${seedUrl} for app="${app}", maxPages=${maxPages}${triggeredByUserId ? `, triggered_by=${triggeredByUserId}` : ''}`,
     },
     async () => {
       // Step 1: Fetch robots.txt
