@@ -29,6 +29,7 @@ import {
   createVendorSourceRegistryService,
   hashVendorSourcePages,
 } from '@/lib/services/vendor-source-registry';
+import { syncVendorCorpusFromLegacyPages } from '@/lib/services/vendor-doc-corpus';
 import { createLogger } from '@/lib/utils/logger';
 import type { Database } from '@/lib/types/database';
 
@@ -825,6 +826,23 @@ export async function handleIngestVendorDocs(
           { vendorSourceId: registrySource?.id ?? null },
           progressCallback
         );
+
+        try {
+          const corpusResult = await syncVendorCorpusFromLegacyPages({ app });
+          logger.info('Vendor corpus sync after ingestion complete', {
+            context: {
+              app,
+              inserted: corpusResult.inserted,
+              updated: corpusResult.updated,
+              skipped: corpusResult.skipped,
+            },
+          });
+        } catch (corpusError) {
+          logger.error('Vendor corpus sync after ingestion failed', {
+            context: { app, sourceId: registrySource?.id ?? null },
+            error: corpusError as Error,
+          });
+        }
 
         if (registrySource) {
           const combinedHashInput = hashVendorSourcePages(

@@ -17,6 +17,34 @@ test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor l
         content: 'Vendor documentation for the general deal screen.',
         source_url: 'https://docs.example.com/deals',
       } as CompiledMemoryContext['vendorKnowledge']['page'],
+      pages: [
+        {
+          id: 'vendor-1',
+          vendorPageId: 'vendor-1',
+          vendorSourceId: 'source-1',
+          app: 'hubspot',
+          screen: 'deals',
+          title: 'HubSpot deals',
+          content: 'Vendor documentation for the general deal screen.',
+          sourceUrl: 'https://docs.example.com/deals',
+          confidence: 0.82,
+          distance: 0.18,
+          matchType: 'exact',
+        },
+        {
+          id: 'vendor-2',
+          vendorPageId: 'vendor-page-2',
+          vendorSourceId: 'source-1',
+          app: 'hubspot',
+          screen: 'pipelines',
+          title: 'Pipeline defaults',
+          content: 'Vendor documentation for broader pipeline configuration.',
+          sourceUrl: 'https://docs.example.com/pipelines',
+          confidence: 0.74,
+          distance: 0.26,
+          matchType: 'semantic',
+        },
+      ],
     },
     vendorTraining: {
       pages: [
@@ -59,9 +87,15 @@ test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor l
       },
       'vendor-1': {
         sourceId: 'vendor-1',
-        title: 'hubspot — deals',
+        title: 'HubSpot deals',
         layer: 'vendor',
         linkUrl: 'https://docs.example.com/deals',
+      },
+      'vendor-2': {
+        sourceId: 'vendor-2',
+        title: 'Pipeline defaults',
+        layer: 'vendor',
+        linkUrl: 'https://docs.example.com/pipelines',
       },
     },
   };
@@ -70,7 +104,7 @@ test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor l
 
   assert.deepEqual(
     result.sources.map((source) => source.sourceId),
-    ['org-1', 'training-1', 'vendor-1'],
+    ['org-1', 'training-1', 'vendor-1', 'vendor-2'],
   );
   assert.match(result.context, /YOUR TEAM'S KNOWLEDGE:/);
   assert.match(result.context, /VENDOR TRAINING:/);
@@ -82,9 +116,11 @@ test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor l
   );
   assert.match(result.context, /\[1\] Deal routing/);
   assert.match(result.context, /\[2\] Vendor rollout playbook/);
-  assert.match(result.context, /\[3\] hubspot — deals/);
+  assert.match(result.context, /\[3\] HubSpot deals/);
+  assert.match(result.context, /\[4\] Pipeline defaults/);
   assert.equal(result.sources[0]?.url, '/dashboard/recordings/recording-1');
   assert.equal(result.sources[2]?.url, 'https://docs.example.com/deals');
+  assert.equal(result.sources[3]?.url, 'https://docs.example.com/pipelines');
   assert.deepEqual(result.priorTopics, ['Deal routing']);
 });
 
@@ -98,6 +134,21 @@ test('buildCompiledMemoryAnswerContext applies citation limits globally across l
         content: 'Vendor documentation for the general deal screen.',
         source_url: 'https://docs.example.com/deals',
       } as CompiledMemoryContext['vendorKnowledge']['page'],
+      pages: [
+        {
+          id: 'vendor-1',
+          vendorPageId: 'vendor-1',
+          vendorSourceId: 'source-1',
+          app: 'hubspot',
+          screen: 'deals',
+          title: 'HubSpot deals',
+          content: 'Vendor documentation for the general deal screen.',
+          sourceUrl: 'https://docs.example.com/deals',
+          confidence: 0.82,
+          distance: 0.18,
+          matchType: 'exact',
+        },
+      ],
     },
     vendorTraining: {
       pages: [
@@ -153,7 +204,7 @@ test('buildCompiledMemoryAnswerContext applies citation limits globally across l
       },
       'vendor-1': {
         sourceId: 'vendor-1',
-        title: 'hubspot — deals',
+        title: 'HubSpot deals',
         layer: 'vendor',
       },
     },
@@ -170,16 +221,7 @@ test('buildCompiledMemoryAnswerContext applies citation limits globally across l
 });
 
 test('resolveCompiledMemoryAnswerContext passes the default chat scope into the shared compiled-memory resolver', async () => {
-  let receivedArgs:
-    | {
-        orgId: string;
-        userId?: string;
-        app: string;
-        screen: string;
-        questionEmbedding: number[];
-        limit?: number;
-      }
-    | undefined;
+  let receivedArgs: any;
 
   const result = await resolveCompiledMemoryAnswerContext(
     {
@@ -196,7 +238,7 @@ test('resolveCompiledMemoryAnswerContext passes the default chat scope into the 
       resolveCompiledMemory: async (args) => {
         receivedArgs = args;
         return {
-          vendorKnowledge: { page: null },
+          vendorKnowledge: { page: null, pages: [] },
           vendorTraining: { pages: [] },
           orgKnowledge: {
             pages: [
@@ -230,6 +272,7 @@ test('resolveCompiledMemoryAnswerContext passes the default chat scope into the 
     userId: 'user-123',
     app: DEFAULT_CHAT_COMPILED_MEMORY_SCOPE.app,
     screen: DEFAULT_CHAT_COMPILED_MEMORY_SCOPE.screen,
+    question: 'How do we route enterprise deals?',
     questionEmbedding: [0.1, 0.2, 0.3],
     limit: 4,
   });

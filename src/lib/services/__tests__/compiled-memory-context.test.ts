@@ -1,31 +1,64 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-import { resolveCompiledMemoryContext } from '../compiled-memory-context';
-import { getVendorForOrg } from '../vendor-customers';
-import { resolveOrgWikiPagesByVector } from '../org-wiki-embedding';
-import { resolveVendorWikiPage } from '../vendor-wiki-resolver';
-import { resolveClusterContext } from '../wiki-clusters';
-import { createClient as createAdminClient } from '@/lib/supabase/admin';
-
-jest.mock('../vendor-wiki-resolver', () => ({
+jest.mock('@/lib/services/vendor-wiki-resolver', () => ({
   resolveVendorWikiPage: jest.fn(),
 }));
 
-jest.mock('../vendor-customers', () => ({
+jest.mock('@/lib/services/vendor-customers', () => ({
   getVendorForOrg: jest.fn(),
 }));
 
-jest.mock('../org-wiki-embedding', () => ({
+jest.mock('@/lib/services/org-wiki-embedding', () => ({
   resolveOrgWikiPagesByVector: jest.fn(),
 }));
 
-jest.mock('../wiki-clusters', () => ({
+jest.mock('@/lib/services/vendor-doc-corpus', () => ({
+  resolveVendorCorpusPages: jest.fn(),
+}));
+
+jest.mock('@/lib/services/wiki-clusters', () => ({
   resolveClusterContext: jest.fn(),
 }));
 
 jest.mock('@/lib/supabase/admin', () => ({
   createClient: jest.fn(),
 }));
+
+import { resolveCompiledMemoryContext } from '../compiled-memory-context';
+
+const { getVendorForOrg } = jest.requireMock('@/lib/services/vendor-customers') as {
+  getVendorForOrg: jest.Mock;
+};
+
+const { resolveOrgWikiPagesByVector } = jest.requireMock(
+  '@/lib/services/org-wiki-embedding',
+) as {
+  resolveOrgWikiPagesByVector: jest.Mock;
+};
+
+const { resolveVendorCorpusPages } = jest.requireMock(
+  '@/lib/services/vendor-doc-corpus',
+) as {
+  resolveVendorCorpusPages: jest.Mock;
+};
+
+const { resolveVendorWikiPage } = jest.requireMock(
+  '@/lib/services/vendor-wiki-resolver',
+) as {
+  resolveVendorWikiPage: jest.Mock;
+};
+
+const { resolveClusterContext } = jest.requireMock(
+  '@/lib/services/wiki-clusters',
+) as {
+  resolveClusterContext: jest.Mock;
+};
+
+const { createClient: createAdminClient } = jest.requireMock(
+  '@/lib/supabase/admin',
+) as {
+  createClient: jest.Mock;
+};
 
 function createSupabaseMock(args: {
   clusterEnabled?: boolean | null;
@@ -84,22 +117,55 @@ describe('resolveCompiledMemoryContext', () => {
   });
 
   it('returns vendor, vendor-training, and org layers plus structured citations', async () => {
-    (resolveVendorWikiPage as jest.Mock).mockResolvedValue({
+    const resolveVendorWikiPage: any = jest.fn();
+    resolveVendorWikiPage.mockResolvedValue({
       id: 'vendor-1',
       app: 'hubspot',
       screen: 'deals',
       content: 'Vendor knowledge',
       source_url: 'https://docs.example.com/deals',
+      vendor_source_id: 'source-1',
     });
+    const resolveVendorCorpusPages: any = jest.fn();
+    resolveVendorCorpusPages.mockResolvedValue([
+      {
+        id: 'vendor-1',
+        vendorPageId: 'vendor-1',
+        vendorSourceId: 'source-1',
+        app: 'hubspot',
+        screen: 'deals',
+        title: 'HubSpot deals',
+        content: 'Vendor knowledge',
+        sourceUrl: 'https://docs.example.com/deals',
+        confidence: 0.81,
+        distance: 0.19,
+        matchType: 'exact',
+      },
+      {
+        id: 'vendor-2',
+        vendorPageId: 'vendor-page-2',
+        vendorSourceId: 'source-1',
+        app: 'hubspot',
+        screen: 'pipelines',
+        title: 'Pipeline stages',
+        content: 'Broader vendor guidance',
+        sourceUrl: 'https://docs.example.com/pipelines',
+        confidence: 0.73,
+        distance: 0.27,
+        matchType: 'semantic',
+      },
+    ]);
 
-    (getVendorForOrg as jest.Mock).mockResolvedValue({
+    const getVendorForOrg: any = jest.fn();
+    getVendorForOrg.mockResolvedValue({
       vendorOrgId: 'vendor-org-1',
       whiteLabelConfig: {
         knowledge_scope: ['hubspot'],
       },
     });
 
-    (resolveOrgWikiPagesByVector as jest.Mock).mockImplementation(
+    const resolveOrgWikiPagesByVector: any = jest.fn();
+    resolveOrgWikiPagesByVector.mockImplementation(
       async ({ orgId }: { orgId: string }) => {
         if (orgId === 'vendor-org-1') {
           return [
@@ -138,7 +204,8 @@ describe('resolveCompiledMemoryContext', () => {
       },
     );
 
-    (resolveClusterContext as jest.Mock).mockResolvedValue([
+    const resolveClusterContext: any = jest.fn();
+    resolveClusterContext.mockResolvedValue([
       {
         id: 'org-3',
         app: 'hubspot',
@@ -150,7 +217,8 @@ describe('resolveCompiledMemoryContext', () => {
       },
     ]);
 
-    (createAdminClient as jest.Mock).mockReturnValue(
+    const createAdminClient: any = jest.fn();
+    createAdminClient.mockReturnValue(
       createSupabaseMock({
         clusterEnabled: true,
         priorInteractionIds: ['org-3', 'org-1', 'org-1'],
@@ -169,17 +237,35 @@ describe('resolveCompiledMemoryContext', () => {
       }),
     );
 
-    const result = await resolveCompiledMemoryContext({
-      orgId: 'org-123',
-      userId: 'user-123',
-      app: 'hubspot',
-      screen: 'deals',
-      questionEmbedding: [0.1, 0.2, 0.3],
-    });
+    const result = await resolveCompiledMemoryContext(
+      {
+        orgId: 'org-123',
+        userId: 'user-123',
+        app: 'hubspot',
+        screen: 'deals',
+        question: 'How do I handle deal stages?',
+        questionEmbedding: [0.1, 0.2, 0.3],
+      },
+      {
+        createAdminClient,
+        getVendorForOrg,
+        resolveOrgWikiPagesByVector,
+        resolveVendorCorpusPages,
+        resolveVendorWikiPage,
+        resolveClusterContext,
+      } as any,
+    );
 
     expect(resolveVendorWikiPage).toHaveBeenCalledWith({
       app: 'hubspot',
       screen: 'deals',
+    });
+    expect(resolveVendorCorpusPages).toHaveBeenCalledWith({
+      app: 'hubspot',
+      screen: 'deals',
+      question: 'How do I handle deal stages?',
+      questionEmbedding: [0.1, 0.2, 0.3],
+      limit: 3,
     });
     expect(resolveClusterContext).toHaveBeenCalledWith({
       orgId: 'org-123',
@@ -195,7 +281,36 @@ describe('resolveCompiledMemoryContext', () => {
           screen: 'deals',
           content: 'Vendor knowledge',
           source_url: 'https://docs.example.com/deals',
+          vendor_source_id: 'source-1',
         },
+        pages: [
+          {
+            id: 'vendor-1',
+            vendorPageId: 'vendor-1',
+            vendorSourceId: 'source-1',
+            app: 'hubspot',
+            screen: 'deals',
+            title: 'HubSpot deals',
+            content: 'Vendor knowledge',
+            sourceUrl: 'https://docs.example.com/deals',
+            confidence: 0.81,
+            distance: 0.19,
+            matchType: 'exact',
+          },
+          {
+            id: 'vendor-2',
+            vendorPageId: 'vendor-page-2',
+            vendorSourceId: 'source-1',
+            app: 'hubspot',
+            screen: 'pipelines',
+            title: 'Pipeline stages',
+            content: 'Broader vendor guidance',
+            sourceUrl: 'https://docs.example.com/pipelines',
+            confidence: 0.73,
+            distance: 0.27,
+            matchType: 'semantic',
+          },
+        ],
       },
       vendorTraining: {
         pages: [
@@ -245,9 +360,15 @@ describe('resolveCompiledMemoryContext', () => {
       citationsBySourceId: {
         'vendor-1': {
           sourceId: 'vendor-1',
-          title: 'hubspot — deals',
+          title: 'HubSpot deals',
           layer: 'vendor',
           linkUrl: 'https://docs.example.com/deals',
+        },
+        'vendor-2': {
+          sourceId: 'vendor-2',
+          title: 'Pipeline stages',
+          layer: 'vendor',
+          linkUrl: 'https://docs.example.com/pipelines',
         },
         'training-1': {
           sourceId: 'training-1',
@@ -277,17 +398,36 @@ describe('resolveCompiledMemoryContext', () => {
   });
 
   it('skips cluster expansion for as-of lookups while still returning vendor and org citation metadata', async () => {
-    (resolveVendorWikiPage as jest.Mock).mockResolvedValue({
+    const resolveVendorWikiPage: any = jest.fn();
+    resolveVendorWikiPage.mockResolvedValue({
       id: 'vendor-9',
       app: 'salesforce',
       screen: 'lead-detail',
       content: 'Vendor fallback',
       source_url: 'https://docs.example.com/lead-detail',
     });
+    const resolveVendorCorpusPages: any = jest.fn();
+    resolveVendorCorpusPages.mockResolvedValue([
+      {
+        id: 'vendor-9',
+        vendorPageId: 'vendor-9',
+        vendorSourceId: 'source-9',
+        app: 'salesforce',
+        screen: 'lead-detail',
+        title: 'Lead detail',
+        content: 'Vendor fallback',
+        sourceUrl: 'https://docs.example.com/lead-detail',
+        confidence: 0.69,
+        distance: 0.31,
+        matchType: 'exact',
+      },
+    ]);
 
-    (getVendorForOrg as jest.Mock).mockResolvedValue(null);
+    const getVendorForOrg: any = jest.fn();
+    getVendorForOrg.mockResolvedValue(null);
 
-    (resolveOrgWikiPagesByVector as jest.Mock).mockResolvedValue([
+    const resolveOrgWikiPagesByVector: any = jest.fn();
+    resolveOrgWikiPagesByVector.mockResolvedValue([
       {
         id: 'org-9',
         app: 'salesforce',
@@ -299,7 +439,8 @@ describe('resolveCompiledMemoryContext', () => {
       },
     ]);
 
-    (createAdminClient as jest.Mock).mockReturnValue(
+    const createAdminClient: any = jest.fn();
+    createAdminClient.mockReturnValue(
       createSupabaseMock({
         priorInteractionIds: ['org-9'],
         citationRows: [
@@ -311,18 +452,31 @@ describe('resolveCompiledMemoryContext', () => {
         ],
       }),
     );
+    const resolveClusterContext: any = jest.fn();
 
-    const result = await resolveCompiledMemoryContext({
-      orgId: 'org-999',
-      userId: 'user-999',
-      app: 'salesforce',
-      screen: 'lead-detail',
-      questionEmbedding: [0.4, 0.5, 0.6],
-      asOf: '2026-04-01T12:00:00.000Z',
-    });
+    const result = await resolveCompiledMemoryContext(
+      {
+        orgId: 'org-999',
+        userId: 'user-999',
+        app: 'salesforce',
+        screen: 'lead-detail',
+        question: 'How should I update a lead owner?',
+        questionEmbedding: [0.4, 0.5, 0.6],
+        asOf: '2026-04-01T12:00:00.000Z',
+      },
+      {
+        createAdminClient,
+        getVendorForOrg,
+        resolveOrgWikiPagesByVector,
+        resolveVendorCorpusPages,
+        resolveVendorWikiPage,
+        resolveClusterContext,
+      } as any,
+    );
 
     expect(resolveClusterContext).not.toHaveBeenCalled();
     expect(result.vendorKnowledge.page?.id).toBe('vendor-9');
+    expect(result.vendorKnowledge.pages).toHaveLength(1);
     expect(result.vendorTraining.pages).toEqual([]);
     expect(result.orgKnowledge.priorTopics).toEqual(['Lead routing']);
     expect(result.citationsBySourceId['org-9']).toEqual({

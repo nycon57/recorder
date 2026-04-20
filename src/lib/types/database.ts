@@ -1913,6 +1913,53 @@ export interface Database {
           updated_at?: string;
         };
       };
+      vendor_corpus_pages: {
+        Row: {
+          id: string;
+          app: string;
+          screen: string | null;
+          title: string;
+          normalized_content: string;
+          content_excerpt: string;
+          source_url: string | null;
+          vendor_page_id: string | null;
+          vendor_source_id: string | null;
+          content_hash: string;
+          embedding: number[] | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          app: string;
+          screen?: string | null;
+          title: string;
+          normalized_content: string;
+          content_excerpt: string;
+          source_url?: string | null;
+          vendor_page_id?: string | null;
+          vendor_source_id?: string | null;
+          content_hash: string;
+          embedding?: number[] | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          app?: string;
+          screen?: string | null;
+          title?: string;
+          normalized_content?: string;
+          content_excerpt?: string;
+          source_url?: string | null;
+          vendor_page_id?: string | null;
+          vendor_source_id?: string | null;
+          content_hash?: string;
+          embedding?: number[] | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       vendor_wiki_pages: {
         Row: {
           id: string;

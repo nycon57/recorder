@@ -16,6 +16,21 @@ export function createCompiledMemoryContextFixture(): CompiledMemoryContext {
         created_at: null,
         updated_at: null,
       },
+      pages: [
+        {
+          id: 'vendor-hubspot-deals',
+          vendorPageId: 'vendor-hubspot-deals',
+          vendorSourceId: null,
+          app: 'hubspot',
+          screen: 'deals',
+          title: 'HubSpot Deals',
+          content: 'Vendor baseline says route enterprise deal escalations to RevOps.',
+          sourceUrl: 'https://docs.vendor.example/hubspot/deals',
+          confidence: 0.8,
+          distance: 0.2,
+          matchType: 'exact',
+        },
+      ],
     },
     vendorTraining: {
       pages: [
@@ -59,7 +74,7 @@ export function createCompiledMemoryContextFixture(): CompiledMemoryContext {
       },
       'vendor-hubspot-deals': {
         sourceId: 'vendor-hubspot-deals',
-        title: 'hubspot — deals',
+        title: 'HubSpot Deals',
         layer: 'vendor',
         linkUrl: 'https://docs.vendor.example/hubspot/deals',
       },
