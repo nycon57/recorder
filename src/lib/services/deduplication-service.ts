@@ -9,9 +9,11 @@
  */
 
 import { createHash } from 'crypto';
+
 import { createClient } from '@/lib/supabase/admin';
-import { StorageManager } from './storage-manager';
 import type { StorageProvider, StorageTier } from '@/lib/types/database';
+
+import { StorageManager } from './storage-manager';
 
 /**
  * File hash and metadata
@@ -53,11 +55,21 @@ export interface DeduplicationStats {
   deduplicationRatio: number;
 }
 
+type ContentStorageRecord = {
+  storage_path_raw: string | null;
+  storage_path_processed: string | null;
+  storage_path_r2: string | null;
+};
+
+function getContentStoragePath(recording: ContentStorageRecord): string | null {
+  return recording.storage_path_raw || recording.storage_path_processed || recording.storage_path_r2;
+}
+
 /**
  * Calculate SHA-256 hash of file content
  */
 export async function calculateFileHash(data: Buffer): Promise<string> {
-  return createHash('sha256').update(data).digest('hex');
+  return createHash('sha256').update(new Uint8Array(data)).digest('hex');
 }
 
 /**
@@ -72,7 +84,7 @@ export async function findDuplicateByHash(
 
   let query = supabase
     .from('content')
-    .select('id, file_hash, file_size, storage_path, storage_path_r2, storage_provider, storage_tier, created_at')
+    .select('id, file_hash, file_size, storage_path_raw, storage_path_processed, storage_path_r2, storage_provider, storage_tier, created_at')
     .eq('org_id', orgId)
     .eq('file_hash', hash)
     .is('deleted_at', null)
@@ -89,11 +101,17 @@ export async function findDuplicateByHash(
     return null;
   }
 
+  const storagePath = getContentStoragePath(data);
+
+  if (!storagePath || !data.file_hash || data.file_size === null) {
+    return null;
+  }
+
   return {
     hash: data.file_hash,
     fileSize: data.file_size,
     contentId: data.id,
-    storagePath: data.storage_path_r2 || data.storage_path,
+    storagePath,
     storageProvider: data.storage_provider || 'supabase',
     storageTier: data.storage_tier || 'hot',
     createdAt: new Date(data.created_at),
@@ -254,7 +272,7 @@ export async function batchDeduplicateOrganization(
   // Get recordings without hashes
   const { data: recordings, error } = await supabase
     .from('content')
-    .select('id, storage_path, storage_path_r2, storage_provider, file_size')
+    .select('id, storage_path_raw, storage_path_processed, storage_path_r2, storage_provider, file_size')
     .eq('org_id', orgId)
     .is('file_hash', null)
     .is('deleted_at', null)
@@ -278,11 +296,16 @@ export async function batchDeduplicateOrganization(
   for (const recording of recordings) {
     try {
       // Download file to calculate hash
-      const storagePath = recording.storage_path_r2 || recording.storage_path;
+      const storagePath = getContentStoragePath(recording);
       const provider = recording.storage_provider || 'supabase';
 
+      if (!storagePath) {
+        errors.push(`Missing storage path for ${recording.id}`);
+        continue;
+      }
+
       const downloadResult = await storageManager.download(
-        recording.storage_path,
+        storagePath,
         recording.storage_path_r2,
         provider,
         { asBuffer: true }

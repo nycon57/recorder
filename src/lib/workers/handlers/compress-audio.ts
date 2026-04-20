@@ -9,6 +9,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs/promises';
+
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { VideoCompressor } from '@/lib/services/video-compressor';
 import { createLogger } from '@/lib/utils/logger';
@@ -24,11 +25,12 @@ const logger = createLogger({ service: 'compress-audio' });
  */
 export async function handleCompressAudio(
   jobPayload: CompressAudioJobPayload
-): Promise<{ success: boolean; result?: any; error?: string }> {
-  const { recordingId, orgId, inputPath, outputPath, profile } = jobPayload;
+): Promise<{ success: boolean; result?: unknown; error?: string }> {
+  const { recordingId, contentId, orgId, inputPath, outputPath, profile } = jobPayload;
+  const targetContentId = recordingId ?? contentId;
 
   logger.info('Starting audio compression job', {
-    context: { recordingId, orgId, profile, inputPath, outputPath },
+    context: { recordingId: targetContentId, orgId, profile, inputPath, outputPath },
   });
 
   let tempInputPath: string | null = null;
@@ -47,43 +49,47 @@ export async function handleCompressAudio(
 
     // 2. Save to temporary file
     const inputExt = path.extname(inputPath) || '.mp3';
-    tempInputPath = path.join(
+    const resolvedTempInputPath = path.join(
       os.tmpdir(),
-      `compress-audio-input-${recordingId}-${Date.now()}${inputExt}`
+      `compress-audio-input-${targetContentId}-${Date.now()}${inputExt}`
     );
-    const buffer = Buffer.from(await fileData.arrayBuffer());
-    await fs.writeFile(tempInputPath, buffer);
+    tempInputPath = resolvedTempInputPath;
+    const buffer = new Uint8Array(await fileData.arrayBuffer());
+    await fs.writeFile(resolvedTempInputPath, buffer);
 
     logger.info('Audio downloaded to temp file', {
       context: { tempInputPath, sizeBytes: buffer.length },
     });
 
     // 3. Set up output temporary file
-    tempOutputPath = path.join(
+    const resolvedTempOutputPath = path.join(
       os.tmpdir(),
-      `compress-audio-output-${recordingId}-${Date.now()}.opus`
+      `compress-audio-output-${targetContentId}-${Date.now()}.opus`
     );
+    tempOutputPath = resolvedTempOutputPath;
 
     // 4. Get recording details
     const { data: recording, error: recordingError } = await supabaseAdmin
       .from('content')
       .select('file_size, content_type')
-      .eq('id', recordingId)
+      .eq('id', targetContentId)
       .single();
 
     if (recordingError || !recording) {
       throw new Error(`Failed to fetch recording: ${recordingError?.message}`);
     }
 
+    const originalFileSize = recording.file_size ?? buffer.byteLength;
+
     // 5. Compress audio
     logger.info('Starting audio compression', {
       context: { tempInputPath, tempOutputPath, profile },
     });
     const compressionResult = await VideoCompressor.compressAudio({
-      inputPath: tempInputPath,
-      outputPath: tempOutputPath,
+      inputPath: resolvedTempInputPath,
+      outputPath: resolvedTempOutputPath,
       contentType: 'audio',
-      fileSize: recording.file_size || buffer.length,
+      fileSize: originalFileSize,
       preferences: {
         enabled: true,
         minFileSizeMB: 5, // Lower threshold for audio
@@ -115,8 +121,8 @@ export async function handleCompressAudio(
         .from('content')
         .update({
           compression_stats: {
-            original_size: recording.file_size,
-            compressed_size: recording.file_size,
+            original_size: originalFileSize,
+            compressed_size: originalFileSize,
             compression_ratio: 1.0,
             codec: 'none',
             crf: 0,
@@ -126,7 +132,7 @@ export async function handleCompressAudio(
             compressed_at: new Date().toISOString(),
           },
         })
-        .eq('id', recordingId);
+        .eq('id', targetContentId);
 
       return {
         success: true,
@@ -140,10 +146,11 @@ export async function handleCompressAudio(
     // 7. Upload compressed file
     logger.info('Uploading compressed file', { context: { outputPath } });
     const compressedBuffer = await fs.readFile(tempOutputPath);
+    const uploadData = new Uint8Array(compressedBuffer);
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from('content')
-      .upload(outputPath, compressedBuffer, {
+      .upload(outputPath, uploadData, {
         contentType: 'audio/opus',
         upsert: true,
         cacheControl: '3600',
@@ -154,7 +161,7 @@ export async function handleCompressAudio(
     }
 
     logger.info('Compressed file uploaded', {
-      context: { outputPath, sizeBytes: compressedBuffer.length },
+      context: { outputPath, sizeBytes: uploadData.byteLength },
     });
 
     // 8. Update recording with compression stats
@@ -164,7 +171,7 @@ export async function handleCompressAudio(
         storage_path_processed: outputPath,
         compression_stats: compressionResult.stats,
       })
-      .eq('id', recordingId);
+      .eq('id', targetContentId);
 
     // 9. Calculate savings
     const stats = compressionResult.stats!;
@@ -192,7 +199,7 @@ export async function handleCompressAudio(
     };
   } catch (error) {
     logger.error('Compression job failed', {
-      context: { recordingId, inputPath },
+      context: { recordingId: targetContentId, inputPath },
       error: error as Error,
     });
 
@@ -202,7 +209,7 @@ export async function handleCompressAudio(
       .update({
         error_message: error instanceof Error ? error.message : 'Audio compression failed',
       })
-      .eq('id', recordingId);
+      .eq('id', targetContentId);
 
     return {
       success: false,
@@ -211,7 +218,7 @@ export async function handleCompressAudio(
   } finally {
     // Cleanup temporary files
     if (tempInputPath) {
-      await fs.unlink(tempInputPath).catch((err) => {
+      await fs.unlink(tempInputPath).catch((err: unknown) => {
         logger.warn('Failed to delete temp input file', {
           context: { tempInputPath },
           error: err as Error,
@@ -219,7 +226,7 @@ export async function handleCompressAudio(
       });
     }
     if (tempOutputPath) {
-      await fs.unlink(tempOutputPath).catch((err) => {
+      await fs.unlink(tempOutputPath).catch((err: unknown) => {
         logger.warn('Failed to delete temp output file', {
           context: { tempOutputPath },
           error: err as Error,
