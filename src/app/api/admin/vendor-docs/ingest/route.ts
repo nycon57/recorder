@@ -18,6 +18,8 @@ import {
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/types/database';
+import { createVendorSourceRegistryService } from '@/lib/services/vendor-source-registry';
+import { createVendorSourceSyncService } from '@/lib/services/vendor-source-sync';
 
 /**
  * POST /api/admin/vendor-docs/ingest
@@ -27,14 +29,55 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // Auth: require org admin role
   const { orgId } = await requireAdmin();
 
-  let body: { url?: string; app?: string; maxPages?: number };
+  let body: {
+    url?: string;
+    app?: string;
+    maxPages?: number;
+    sourceId?: string;
+    force?: boolean;
+  };
   try {
     body = await request.json();
   } catch {
     return errors.badRequest('Invalid JSON body');
   }
 
-  const { url, app, maxPages } = body;
+  const { url, app, maxPages, sourceId, force } = body;
+
+  if (sourceId && typeof sourceId !== 'string') {
+    return errors.badRequest('sourceId must be a string when provided');
+  }
+
+  if (sourceId) {
+    const syncService = createVendorSourceSyncService();
+    const [result] = await syncService.scheduleSources({
+      sourceId,
+      mode: 'manual',
+      force: force ?? true,
+    });
+
+    if (!result || result.status === 'missing') {
+      return errors.notFound('Vendor source');
+    }
+
+    if (result.status === 'unsupported') {
+      return errors.badRequest(result.reason ?? 'Vendor source is not syncable');
+    }
+
+    return successResponse(
+      {
+        sourceId,
+        jobId: result.jobId ?? null,
+        status: result.status,
+        message:
+          result.status === 'queued'
+            ? 'Vendor source re-sync job enqueued successfully'
+            : result.reason ?? 'Vendor source sync was skipped',
+      },
+      undefined,
+      result.status === 'queued' ? 201 : 200,
+    );
+  }
 
   // Validate required fields
   if (!url || typeof url !== 'string') {
@@ -62,15 +105,51 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
   }
 
+  const syncService = createVendorSourceSyncService();
+  await syncService.ensureAllowedSources();
+
+  const registry = createVendorSourceRegistryService();
+  const existingSource = await registry.findSourceForIngestion({
+    app,
+    sourceUrl: url,
+  });
+
+  if (existingSource) {
+    const [result] = await syncService.scheduleSources({
+      sourceId: existingSource.id,
+      mode: 'manual',
+      force: force ?? true,
+    });
+
+    if (result?.status === 'unsupported') {
+      return errors.badRequest(result.reason ?? 'Vendor source is not syncable');
+    }
+
+    return successResponse(
+      {
+        sourceId: existingSource.id,
+        jobId: result?.jobId ?? null,
+        status: result?.status ?? 'missing',
+        message:
+          result?.status === 'queued'
+            ? 'Vendor source re-sync job enqueued successfully'
+            : result?.reason ?? 'Vendor source sync was skipped',
+      },
+      undefined,
+      result?.status === 'queued' ? 201 : 200,
+    );
+  }
+
   // Enqueue the job
   const payload: Json = {
     url,
     app,
+    syncType: 'manual',
     ...(maxPages ? { maxPages } : {}),
   };
 
-  const { data: job, error } = await supabaseAdmin
-    .from('jobs')
+  const { data: job, error } = await (supabaseAdmin
+    .from('jobs') as any)
     .insert({
       type: 'ingest_vendor_docs',
       status: 'pending',
@@ -78,7 +157,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
       priority: 2, // NORMAL priority — background operation
     })
     .select('id, type, status, created_at')
-    .single();
+    .single() as {
+      data: { id: string; type: string; status: string } | null;
+      error: { message: string } | null;
+    };
 
   if (error) {
     console.error('[VendorDocsIngest] Failed to enqueue job:', error);
@@ -91,6 +173,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       type: job!.type,
       status: job!.status,
       message: `Vendor doc ingestion job enqueued for ${app} (${url})`,
+      orgId,
     },
     undefined,
     201

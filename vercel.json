@@ -29,6 +29,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/vendor-doc-sync",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/cron/wiki-clusters",
       "schedule": "0 4 * * 0"
     }
