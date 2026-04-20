@@ -10,6 +10,7 @@ import {
   Lightbulb,
   HardDrive,
   FileWarning,
+  BookOpen,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -60,6 +61,12 @@ const navItems: NavItem[] = [
     href: '/admin/wiki-review',
     icon: FileWarning,
     description: 'Resolve flagged contradictions',
+  },
+  {
+    title: 'Vendor Sources',
+    href: '/admin/vendor-sources',
+    icon: BookOpen,
+    description: 'Shared vendor source health',
   },
 ];
 
