@@ -146,6 +146,7 @@ Desktop.ini
 # Allow docs content — authored markdown pages and the author guide
 !content/docs/**/*.md
 !content/docs/*.md
+!scripts/demo-seed/SMOKE_CHECKLIST.md
 /documentation/
 /documentation
 /.claude/
