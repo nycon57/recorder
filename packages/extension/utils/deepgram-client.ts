@@ -5,8 +5,9 @@
  * Node.js only). Audio is streamed via MediaRecorder chunks over the
  * WebSocket connection.
  *
- * Security: short-lived tokens are fetched from the Tribora backend
- * (/api/extension/deepgram-token) — raw API keys are never bundled.
+ * Security: short-lived temporary tokens are fetched from the Tribora
+ * backend (/api/extension/deepgram-token) so long-lived API keys never
+ * ship to the extension bundle.
  *
  * Part of TRIB-25: Deepgram STT + push-to-talk.
  */
@@ -31,8 +32,8 @@ export interface DeepgramClientOptions {
 
 export interface DeepgramToken {
   token: string;
-  /** Unix ms timestamp when the token expires */
-  expiresAt: number;
+  /** ISO timestamp when the temporary token expires */
+  expiresAt: string;
 }
 
 export interface DeepgramStreamingSession {
@@ -58,9 +59,6 @@ export interface DeepgramStreamingSession {
 
 /**
  * Fetch a short-lived Deepgram token from the Tribora backend.
- *
- * TODO(TRIB-28): The backend endpoint POST /api/extension/deepgram-token
- * must be implemented before this function can work in production.
  */
 export async function getDeepgramToken(): Promise<DeepgramToken> {
   try {
@@ -71,8 +69,8 @@ export async function getDeepgramToken(): Promise<DeepgramToken> {
     const message = err instanceof Error ? err.message : String(err);
     if (message.includes("404") || message.includes("API 404")) {
       throw new Error(
-        "Deepgram token endpoint not yet implemented (waiting for TRIB-28). " +
-          "STT will not function until backend routes are deployed. " +
+        "Deepgram token endpoint is unavailable on the current backend. " +
+          "Realtime STT requires POST /api/extension/deepgram-token. " +
           `Original error: ${message}`,
       );
     }

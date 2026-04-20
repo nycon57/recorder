@@ -3,21 +3,13 @@
  *
  * Auth required (Better Auth session via requireOrg).
  *
- * Returns a short-lived Deepgram token for the Chrome extension's
- * real-time STT (TRIB-25).
- *
- * The Deepgram SDK v5 does not expose a grantToken / temporary credential
- * API (the Auth module only provides HeaderAuthProvider helpers). Until
- * Deepgram adds a token issuance endpoint to the SDK, we return the
- * server-side API key directly with a 15-minute logical expiry and a
- * _warning field so callers know this is not a scoped credential.
- *
- * SECURITY NOTE: This endpoint is auth-gated so only authenticated
- * extension users can retrieve the key. Rotate DEEPGRAM_API_KEY
- * server-side if it is ever compromised.
+ * Returns a short-lived Deepgram token for the Chrome extension's real-time
+ * STT flow (TRIB-25) by minting a temporary JWT via Deepgram's
+ * /v1/auth/grant endpoint. Only the temporary token is ever returned to the
+ * browser; the long-lived API key remains server-side.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { requireOrg, errors } from '@/lib/utils/api';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
@@ -30,10 +22,18 @@ export function OPTIONS() {
   return corsPreflightResponse();
 }
 
-/** TTL in seconds for the logical expiry timestamp (15 minutes). */
-const TOKEN_TTL_SECONDS = 15 * 60;
+/**
+ * The token only needs to survive the initial websocket handshake, so keep it
+ * short while leaving a little room for slower client startup.
+ */
+const TOKEN_TTL_SECONDS = 60;
 
-export async function POST(_request: NextRequest) {
+interface DeepgramGrantResponse {
+  access_token?: string;
+  expires_in?: number | null;
+}
+
+export async function POST() {
   try {
     await requireOrg();
 
@@ -44,31 +44,68 @@ export async function POST(_request: NextRequest) {
       return errors.internalError();
     }
 
-    const expiresAt = new Date(
-      Date.now() + TOKEN_TTL_SECONDS * 1000
-    ).toISOString();
+    let deepgramResponse: Response;
+    try {
+      deepgramResponse = await fetch('https://api.deepgram.com/v1/auth/grant', {
+        method: 'POST',
+        headers: {
+          Authorization: `Token ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ttl_seconds: TOKEN_TTL_SECONDS }),
+      });
+    } catch (networkError) {
+      console.error('[extension/deepgram-token] Network error:', networkError);
+      return errors.internalError();
+    }
+
+    if (!deepgramResponse.ok) {
+      const errorText = await deepgramResponse.text().catch(() => '');
+      console.error(
+        `[extension/deepgram-token] Deepgram ${deepgramResponse.status}:`,
+        errorText,
+      );
+      return errors.internalError();
+    }
+
+    let grant: DeepgramGrantResponse;
+    try {
+      grant = (await deepgramResponse.json()) as DeepgramGrantResponse;
+    } catch {
+      console.error('[extension/deepgram-token] Failed to parse Deepgram response');
+      return errors.internalError();
+    }
+
+    if (!grant.access_token) {
+      console.error('[extension/deepgram-token] Missing access_token in response');
+      return errors.internalError();
+    }
+
+    const expiresIn =
+      typeof grant.expires_in === 'number' && grant.expires_in > 0
+        ? grant.expires_in
+        : TOKEN_TTL_SECONDS;
+    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
     return NextResponse.json(
       {
-        token: apiKey,
+        token: grant.access_token,
         expiresAt,
-        _warning:
-          'This is a server-side API key, not a scoped short-lived token. ' +
-          'The Deepgram SDK v5 does not yet expose a token-grant API. ' +
-          'Upgrade to scoped credentials when the SDK adds support.',
       },
       { headers: CORS_HEADERS },
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[extension/deepgram-token] error:', error);
 
-    if (error.message === 'Unauthorized') {
+    const message = error instanceof Error ? error.message : '';
+
+    if (message === 'Unauthorized') {
       return errors.unauthorized();
     }
     if (
-      error.message === 'Organization context required' ||
-      error.message === 'User organization not found' ||
-      error.message?.includes('not found in database')
+      message === 'Organization context required' ||
+      message === 'User organization not found' ||
+      message.includes('not found in database')
     ) {
       return errors.forbidden();
     }
