@@ -6,7 +6,7 @@
  * queries to the owning org, and returns structured JSON.
  *
  * Tools:
- *   answerQuestion        — Compiled-memory Q&A context with citations
+ *   answerQuestion        — Grounded compiled-memory answer with citations
  *   searchRecordings      — Raw evidence discovery across content
  *   searchConcepts        — Knowledge graph concept search
  *   exploreKnowledgeGraph — Depth-based graph traversal
@@ -113,7 +113,7 @@ function registerTools(
 ): void {
   server.tool(
     'answerQuestion',
-    'Answer a question using compiled memory. Returns citation-ordered context with the same precedence used by dashboard chat: team knowledge first, then vendor training, then vendor documentation.',
+    'Answer a question using the shared compiled-memory answer engine. Returns a grounded final answer plus ordered citations, freshness, and provenance metadata with the same precedence used by Tribora surfaces.',
     {
       question: z
         .string()

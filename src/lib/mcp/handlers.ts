@@ -13,7 +13,10 @@ import { injectRAGContext } from '@/lib/services/chat-rag-integration';
 import {
   buildCompiledMemoryCitations,
   resolveCompiledMemoryAnswerContext,
+  summarizeCompiledMemoryAnswerObservability,
+  type CompiledMemoryAnswerObservability,
 } from '@/lib/services/compiled-memory-answer-context';
+import { generateCompiledMemoryGroundedAnswer } from '@/lib/services/compiled-memory-answer';
 
 /** Org context passed to every handler. */
 export interface McpToolContext {
@@ -47,6 +50,21 @@ interface RelatedConceptJoinRow {
   mention_count: number;
   description: string | null;
   org_id: string;
+}
+
+interface DocumentJoinResultRow {
+  id: string;
+  markdown: string | null;
+  html: string | null;
+  created_at: string;
+  content: ContentJoinRow | ContentJoinRow[] | null;
+}
+
+interface TranscriptJoinResultRow {
+  id: string;
+  text: string;
+  language: string | null;
+  content: ContentJoinRow | ContentJoinRow[] | null;
 }
 
 /** Unwrap a Supabase `.single()` result, throwing McpToolError on failure. */
@@ -89,9 +107,11 @@ interface AnswerQuestionInput {
 }
 
 interface AnswerQuestionResult {
+  answer: string;
   answerContext: string;
   citations: ReturnType<typeof buildCompiledMemoryCitations>;
   priorTopics: string[];
+  observability: CompiledMemoryAnswerObservability;
 }
 
 export async function handleAnswerQuestion(
@@ -107,10 +127,17 @@ export async function handleAnswerQuestion(
     limit: input.limit,
   });
 
+  const answer = await generateCompiledMemoryGroundedAnswer({
+    question: input.question,
+    answerContext: compiledMemory,
+  });
+
   return {
+    answer,
     answerContext: compiledMemory.context,
     citations: buildCompiledMemoryCitations(compiledMemory.sources),
     priorTopics: compiledMemory.priorTopics,
+    observability: summarizeCompiledMemoryAnswerObservability(compiledMemory),
   };
 }
 
@@ -438,7 +465,10 @@ export async function handleGetDocument(
     .eq('content_id', contentId)
     .single();
 
-  const doc = unwrapSingleRow(data, error);
+  const doc = unwrapSingleRow<DocumentJoinResultRow>(
+    data as DocumentJoinResultRow | null,
+    error,
+  );
   const joined = verifyOrgAccess(doc.content, ctx.orgId);
 
   const format = doc.markdown ? 'markdown' : 'html';
@@ -491,7 +521,10 @@ export async function handleGetTranscript(
     .eq('content_id', contentId)
     .single();
 
-  const transcript = unwrapSingleRow(data, error);
+  const transcript = unwrapSingleRow<TranscriptJoinResultRow>(
+    data as TranscriptJoinResultRow | null,
+    error,
+  );
   const joined = verifyOrgAccess(transcript.content, ctx.orgId);
 
   return {
