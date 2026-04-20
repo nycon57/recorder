@@ -136,6 +136,7 @@
     "graphology": "^0.26.0",
     "graphology-communities-louvain": "^2.0.2",
     "graphology-types": "^0.24.8",
+    "gray-matter": "^4.0.3",
     "hast-util-from-html": "^2.0.3",
     "isomorphic-dompurify": "^2.33.0",
     "lru-cache": "^11.2.2",
