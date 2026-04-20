@@ -53,3 +53,61 @@ export function deriveAccountId(userId: string): string {
 export function deriveDepartmentId(orgId: string, slug: string): string {
   return uuidv5(`department:${orgId}:${slug}`, NS);
 }
+
+// ─── TRIB-148 content entity derivation ──────────────────────────────────────
+
+export function deriveRecordingId(slug: string): string {
+  return uuidv5(`recording:${slug}`, NS);
+}
+
+export function deriveDocumentId(recordingSlug: string): string {
+  return uuidv5(`document:${recordingSlug}`, NS);
+}
+
+export function deriveSummaryId(recordingSlug: string): string {
+  return uuidv5(`summary:${recordingSlug}`, NS);
+}
+
+export function deriveTranscriptId(recordingSlug: string): string {
+  return uuidv5(`transcript:${recordingSlug}`, NS);
+}
+
+export function deriveChunkId(recordingSlug: string, idx: number): string {
+  return uuidv5(`chunk:${recordingSlug}:${idx}`, NS);
+}
+
+export function deriveWikiPageId(slug: string): string {
+  return uuidv5(`wiki-page:${slug}`, NS);
+}
+
+export function deriveWikiSourceId(pageSlug: string, recSlug: string): string {
+  return uuidv5(`wiki-source:${pageSlug}:${recSlug}`, NS);
+}
+
+export function deriveConnectorId(orgId: string, type: string): string {
+  return uuidv5(`connector:${orgId}:${type}`, NS);
+}
+
+export function deriveImportedDocId(slug: string): string {
+  return uuidv5(`imported-doc:${slug}`, NS);
+}
+
+export function deriveKnowledgeGapId(slug: string): string {
+  return uuidv5(`knowledge-gap:${slug}`, NS);
+}
+
+export function deriveShareId(slug: string): string {
+  return uuidv5(`share:${slug}`, NS);
+}
+
+export function deriveTagId(orgId: string, name: string): string {
+  return uuidv5(`tag:${orgId}:${name.toLowerCase()}`, NS);
+}
+
+export function deriveVendorOrgId(): string {
+  return uuidv5('org:tribora-vendor-demo', NS);
+}
+
+export function deriveWhiteLabelConfigId(vendorOrgId: string): string {
+  return uuidv5(`white-label:${vendorOrgId}`, NS);
+}

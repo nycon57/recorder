@@ -21,6 +21,8 @@ const customJestConfig = {
     '^@google/genai$': '<rootDir>/src/test-support/mocks/google-genai.ts',
     '^cohere-ai$': '<rootDir>/__mocks__/cohere-ai.ts',
     '^@xenova/transformers$': '<rootDir>/__mocks__/@xenova/transformers.ts',
+    // Strip .js extensions from local imports — needed for tsx/ESM compat in Jest CJS mode
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   testMatch: [
     '**/__tests__/**/*.[jt]s?(x)',
