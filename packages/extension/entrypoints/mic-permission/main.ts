@@ -3,6 +3,7 @@ import {
   type MicPermissionStatusTone,
   type MicPermissionViewState,
 } from '../../utils/mic-permission-view.js';
+import { TRIBORA_EXTENSION_THEME } from '../../utils/tribora-theme.js';
 
 const LOG = '[Tribora mic]';
 const MIC_PERMISSION_GRANTED_KEY = 'micPermissionGranted';
@@ -15,40 +16,151 @@ if (!app) {
 const params = new URLSearchParams(window.location.search);
 const resumeTabId = Number(params.get('resumeTabId') ?? '');
 
-document.documentElement.style.background = '#08140f';
+document.documentElement.style.background =
+  TRIBORA_EXTENSION_THEME.color.surface0;
 document.body.style.margin = '0';
 document.body.style.minHeight = '100vh';
 document.body.style.background =
-  'radial-gradient(circle at top, rgba(0, 223, 130, 0.18), transparent 38%), linear-gradient(180deg, #08140f 0%, #040807 100%)';
-document.body.style.color = '#f6fff9';
-document.body.style.fontFamily =
-  'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  'radial-gradient(circle at 14% -12%, rgba(245,190,77,0.2), transparent 42%), linear-gradient(180deg, rgba(41,35,22,0.2) 0%, rgba(20,18,15,0.98) 44%)';
+document.body.style.color = TRIBORA_EXTENSION_THEME.color.ink;
+document.body.style.fontFamily = TRIBORA_EXTENSION_THEME.font.body;
 document.body.style.display = 'flex';
 document.body.style.alignItems = 'center';
 document.body.style.justifyContent = 'center';
 document.body.style.padding = '24px';
 
 app.innerHTML = `
-  <section style="width:min(100%, 520px); border:1px solid rgba(255,255,255,0.1); border-radius:24px; padding:32px; background:rgba(7,18,13,0.88); box-shadow:0 24px 80px rgba(0,0,0,0.45);">
-    <div style="display:inline-flex; align-items:center; justify-content:center; width:52px; height:52px; border-radius:16px; background:linear-gradient(135deg, #03624c 0%, #2cc295 50%, #00df82 100%); color:#ffffff; font-weight:700; font-size:20px; box-shadow:0 0 24px rgba(0,223,130,0.35);">
+  <style>
+    .trb-mic-card {
+      width: min(100%, 560px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 30px;
+      background: linear-gradient(180deg, rgba(26,23,19,0.94) 0%, rgba(19,17,14,0.97) 100%);
+      box-shadow: 0 26px 74px rgba(0,0,0,0.44), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .trb-mic-kicker {
+      margin: 0 0 14px;
+      color: ${TRIBORA_EXTENSION_THEME.color.inkFaint};
+      font-family: ${TRIBORA_EXTENSION_THEME.font.mono};
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .trb-mic-mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 46px;
+      height: 46px;
+      border-radius: 11px;
+      background: linear-gradient(145deg, ${TRIBORA_EXTENSION_THEME.color.signal} 0%, color-mix(in oklab, ${TRIBORA_EXTENSION_THEME.color.signal} 68%, ${TRIBORA_EXTENSION_THEME.color.surface2}) 100%);
+      color: ${TRIBORA_EXTENSION_THEME.color.signalInk};
+      font-family: ${TRIBORA_EXTENSION_THEME.font.display};
+      font-size: 20px;
+      font-weight: 700;
+      box-shadow: 0 0 20px rgba(245,190,77,0.32);
+    }
+    .trb-mic-title {
+      margin: 18px 0 10px;
+      font-size: clamp(1.8rem, 2.4vw, 2.15rem);
+      line-height: 1.02;
+      letter-spacing: -0.02em;
+      font-family: ${TRIBORA_EXTENSION_THEME.font.display};
+      color: ${TRIBORA_EXTENSION_THEME.color.ink};
+    }
+    .trb-mic-title b {
+      color: ${TRIBORA_EXTENSION_THEME.color.signal};
+      font-weight: 600;
+    }
+    .trb-mic-copy {
+      margin: 0 0 10px;
+      color: ${TRIBORA_EXTENSION_THEME.color.inkMuted};
+      line-height: 1.6;
+      font-size: 14px;
+    }
+    .trb-mic-copy-secondary {
+      margin: 0 0 24px;
+      color: ${TRIBORA_EXTENSION_THEME.color.inkDim};
+      line-height: 1.6;
+      font-size: 13px;
+    }
+    .trb-mic-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .trb-btn {
+      appearance: none;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1), background 150ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .trb-btn:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+    .trb-btn:disabled {
+      cursor: wait;
+      opacity: 0.72;
+    }
+    .trb-btn-primary {
+      border: 1px solid ${TRIBORA_EXTENSION_THEME.color.signalEdge};
+      background: ${TRIBORA_EXTENSION_THEME.color.signal};
+      color: ${TRIBORA_EXTENSION_THEME.color.signalInk};
+      display: none;
+    }
+    .trb-btn-primary:hover:not(:disabled) {
+      box-shadow: 0 0 0 5px ${TRIBORA_EXTENSION_THEME.color.signalSoft};
+    }
+    .trb-btn-secondary {
+      border: 1px solid ${TRIBORA_EXTENSION_THEME.color.lineStrong};
+      background: ${TRIBORA_EXTENSION_THEME.color.surface2};
+      color: ${TRIBORA_EXTENSION_THEME.color.ink};
+    }
+    .trb-btn-secondary:hover:not(:disabled) {
+      background: ${TRIBORA_EXTENSION_THEME.color.surface3};
+    }
+    #status {
+      min-height: 24px;
+      margin: 16px 0 0;
+      color: ${TRIBORA_EXTENSION_THEME.color.inkDim};
+      line-height: 1.5;
+      font-family: ${TRIBORA_EXTENSION_THEME.font.mono};
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .trb-btn {
+        transition-duration: 0ms !important;
+      }
+    }
+  </style>
+  <section class="trb-mic-card">
+    <p class="trb-mic-kicker">§PERMISSION · MICROPHONE</p>
+    <div class="trb-mic-mark">
       T
     </div>
-    <h1 style="margin:20px 0 12px; font-size:28px; line-height:1.1;">Allow microphone access</h1>
-    <p style="margin:0 0 12px; color:rgba(246,255,249,0.8); line-height:1.6;">
+    <h1 class="trb-mic-title">Allow microphone access<b>.</b></h1>
+    <p class="trb-mic-copy">
       Tribora needs microphone access to start a live voice session. Chrome is more reliable when this permission is granted from a visible extension page.
     </p>
-    <p style="margin:0 0 24px; color:rgba(246,255,249,0.58); line-height:1.6;">
+    <p class="trb-mic-copy-secondary">
       After access is granted, this page will close and Tribora will resume on your original tab.
     </p>
-    <div style="display:flex; gap:12px; flex-wrap:wrap;">
-      <button id="primary-action" style="appearance:none; border:none; border-radius:999px; padding:14px 18px; background:#00df82; color:#032116; font-size:15px; font-weight:700; cursor:pointer; display:none;">
+    <div class="trb-mic-actions">
+      <button id="primary-action" class="trb-btn trb-btn-primary">
         Try again
       </button>
-      <button id="close-page" style="appearance:none; border:1px solid rgba(255,255,255,0.14); border-radius:999px; padding:14px 18px; background:transparent; color:#f6fff9; font-size:15px; font-weight:600; cursor:pointer;">
+      <button id="close-page" class="trb-btn trb-btn-secondary">
         Close
       </button>
     </div>
-    <p id="status" style="min-height:24px; margin:18px 0 0; color:rgba(246,255,249,0.72); line-height:1.5;"></p>
+    <p id="status"></p>
   </section>
 `;
 
@@ -75,16 +187,16 @@ function setStatus(
   status.textContent = message;
 
   if (tone === 'error') {
-    status.style.color = '#ffb9b9';
+    status.style.color = TRIBORA_EXTENSION_THEME.color.danger;
     return;
   }
 
   if (tone === 'success') {
-    status.style.color = '#7ff0b6';
+    status.style.color = TRIBORA_EXTENSION_THEME.color.live;
     return;
   }
 
-  status.style.color = 'rgba(246,255,249,0.72)';
+  status.style.color = TRIBORA_EXTENSION_THEME.color.inkDim;
 }
 
 function setBusy(isBusy: boolean): void {

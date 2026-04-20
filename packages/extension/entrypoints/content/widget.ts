@@ -5,14 +5,19 @@
  * script based on SESSION_EVENT messages from the offscreen document.
  */
 
-const WIDGET_ID = "tribora-widget";
-const WIDGET_CANVAS_ID = "tribora-widget-canvas";
-const WIDGET_STYLE_ID = "tribora-widget-styles";
+import { TRIBORA_EXTENSION_THEME } from '../../utils/tribora-theme.js';
 
-const COLOR_INDIGO = "#6366f1";
-const COLOR_GREEN = "#00df82";
-const COLOR_INDIGO_GLOW = "rgba(99, 102, 241, 0.5)";
-const COLOR_GREEN_GLOW = "rgba(0, 223, 130, 0.5)";
+const WIDGET_ID = 'tribora-widget';
+const WIDGET_CANVAS_ID = 'tribora-widget-canvas';
+const WIDGET_STYLE_ID = 'tribora-widget-styles';
+
+const COLOR_SIGNAL = '#f5be4d';
+const COLOR_LIVE = '#45e7a0';
+const COLOR_SIGNAL_GLOW = 'rgba(245, 190, 77, 0.42)';
+const COLOR_LIVE_GLOW = 'rgba(69, 231, 160, 0.4)';
+const PILL_SHADOW_BASE =
+  '0 12px 30px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.06)';
+const PILL_BG = 'rgba(24, 22, 18, 0.94)';
 
 const BAR_COUNT = 5;
 const BAR_PROFILE = [0.4, 0.7, 1.0, 0.7, 0.4];
@@ -22,12 +27,12 @@ const BAR_MIN_HEIGHT = 4;
 const BAR_MAX_HEIGHT = 20;
 
 type WidgetState =
-  | "idle"
-  | "connecting"
-  | "listening"
-  | "thinking"
-  | "speaking"
-  | "hidden";
+  | 'idle'
+  | 'connecting'
+  | 'listening'
+  | 'thinking'
+  | 'speaking'
+  | 'hidden';
 
 export interface WidgetCallbacks {
   onStartClick?: () => void;
@@ -48,75 +53,81 @@ export interface AssistantWidget {
 }
 
 export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
+  const prefersReducedMotion = window.matchMedia(
+    '(prefers-reduced-motion: reduce)',
+  ).matches;
+
   injectWidgetStyles();
   document.getElementById(WIDGET_ID)?.remove();
 
-  const container = document.createElement("div");
+  const container = document.createElement('div');
   container.id = WIDGET_ID;
-  container.setAttribute("data-tribora-owner", "true");
+  container.setAttribute('data-tribora-owner', 'true');
   apply(container, {
-    position: "fixed",
-    bottom: "20px",
-    right: "20px",
-    zIndex: "2147483647",
-    pointerEvents: "none",
-    display: "none",
-    transition: "all 300ms cubic-bezier(0.22, 1, 0.36, 1)",
+    position: 'fixed',
+    bottom: '20px',
+    right: '20px',
+    zIndex: '2147483647',
+    pointerEvents: 'none',
+    display: 'none',
+    transition: `all ${TRIBORA_EXTENSION_THEME.motion.medium} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
   });
 
-  const pill = document.createElement("div");
+  const pill = document.createElement('div');
   apply(pill, {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    padding: "10px 14px",
-    borderRadius: "24px",
-    background: "rgba(15, 15, 15, 0.92)",
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)",
-    boxShadow: `0 4px 24px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06)`,
-    transition: "all 300ms cubic-bezier(0.22, 1, 0.36, 1)",
-    pointerEvents: "auto",
-    cursor: "pointer",
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '9px 13px',
+    borderRadius: '24px',
+    background: PILL_BG,
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: `1px solid ${TRIBORA_EXTENSION_THEME.color.line}`,
+    boxShadow: PILL_SHADOW_BASE,
+    transition: `all ${TRIBORA_EXTENSION_THEME.motion.medium} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
+    pointerEvents: 'auto',
+    cursor: 'pointer',
   });
 
-  pill.addEventListener("click", () => {
-    if (currentState === "idle") {
+  pill.addEventListener('click', () => {
+    if (currentState === 'idle') {
       callbacks.onStartClick?.();
     }
   });
 
-  const orb = document.createElement("div");
+  const orb = document.createElement('div');
   apply(orb, {
-    width: "28px",
-    height: "28px",
-    borderRadius: "50%",
-    background: `linear-gradient(135deg, #03624c 0%, #2cc295 50%, ${COLOR_GREEN} 100%)`,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "13px",
-    fontWeight: "700",
-    fontFamily: "system-ui, -apple-system, sans-serif",
-    color: "white",
-    flexShrink: "0",
-    transition: "all 300ms ease",
-    boxShadow: `0 0 12px ${COLOR_GREEN_GLOW}`,
+    width: '28px',
+    height: '28px',
+    borderRadius: '8px',
+    background: `linear-gradient(150deg, ${COLOR_SIGNAL} 0%, #c18b2f 100%)`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '13px',
+    fontWeight: '700',
+    fontFamily: TRIBORA_EXTENSION_THEME.font.display,
+    color: TRIBORA_EXTENSION_THEME.color.signalInk,
+    flexShrink: '0',
+    letterSpacing: '-0.02em',
+    transition: `all ${TRIBORA_EXTENSION_THEME.motion.medium} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
+    boxShadow: `0 0 14px ${COLOR_SIGNAL_GLOW}`,
   });
-  orb.textContent = "T";
+  orb.textContent = 'T';
 
-  const hotkeyHint = document.createElement("span");
+  const hotkeyHint = document.createElement('span');
   apply(hotkeyHint, {
-    fontSize: "12px",
-    fontFamily: "system-ui, -apple-system, sans-serif",
-    fontWeight: "500",
-    color: "rgba(255, 255, 255, 0.75)",
-    whiteSpace: "nowrap",
-    letterSpacing: "0.2px",
+    fontSize: '12px',
+    fontFamily: TRIBORA_EXTENSION_THEME.font.body,
+    fontWeight: '600',
+    color: TRIBORA_EXTENSION_THEME.color.inkMuted,
+    whiteSpace: 'nowrap',
+    letterSpacing: '-0.01em',
   });
-  hotkeyHint.textContent = "Click to talk";
+  hotkeyHint.textContent = 'Talk with Tribora';
 
-  const canvas = document.createElement("canvas");
+  const canvas = document.createElement('canvas');
   canvas.id = WIDGET_CANVAS_ID;
   const totalWidth = BAR_COUNT * BAR_WIDTH + (BAR_COUNT - 1) * BAR_GAP;
   canvas.width = totalWidth * 2;
@@ -124,72 +135,76 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
   apply(canvas, {
     width: `${totalWidth}px`,
     height: `${BAR_MAX_HEIGHT}px`,
-    display: "none",
-    flexShrink: "0",
+    display: 'none',
+    flexShrink: '0',
   });
 
-  const label = document.createElement("span");
+  const label = document.createElement('span');
   apply(label, {
-    fontSize: "12px",
-    fontFamily: "system-ui, -apple-system, sans-serif",
-    fontWeight: "500",
-    color: "rgba(255, 255, 255, 0.7)",
-    whiteSpace: "nowrap",
-    display: "none",
-    transition: "opacity 200ms ease",
+    fontSize: '12px',
+    fontFamily: TRIBORA_EXTENSION_THEME.font.mono,
+    fontWeight: '500',
+    color: TRIBORA_EXTENSION_THEME.color.inkDim,
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    whiteSpace: 'nowrap',
+    display: 'none',
+    transition: `opacity ${TRIBORA_EXTENSION_THEME.motion.fast} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
   });
 
-  const spinner = document.createElement("div");
+  const spinner = document.createElement('div');
   apply(spinner, {
-    width: "16px",
-    height: "16px",
-    border: "2px solid rgba(255,255,255,0.15)",
-    borderTopColor: COLOR_GREEN,
-    borderRadius: "50%",
-    animation: "tribora-widget-spin 0.7s linear infinite",
-    display: "none",
-    flexShrink: "0",
+    width: '16px',
+    height: '16px',
+    border: `2px solid ${TRIBORA_EXTENSION_THEME.color.line}`,
+    borderTopColor: COLOR_SIGNAL,
+    borderRadius: '50%',
+    animation: prefersReducedMotion
+      ? 'none'
+      : 'tribora-widget-spin 0.7s linear infinite',
+    display: 'none',
+    flexShrink: '0',
   });
 
-  const stopBtn = document.createElement("button");
+  const stopBtn = document.createElement('button');
   apply(stopBtn, {
-    width: "20px",
-    height: "20px",
-    borderRadius: "50%",
-    background: "rgba(255, 255, 255, 0.1)",
-    border: "none",
-    cursor: "pointer",
-    display: "none",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "0",
-    marginLeft: "4px",
-    flexShrink: "0",
-    transition: "background 150ms ease",
+    width: '20px',
+    height: '20px',
+    borderRadius: '50%',
+    background: 'rgba(245, 190, 77, 0.12)',
+    border: `1px solid ${TRIBORA_EXTENSION_THEME.color.signalEdge}`,
+    cursor: 'pointer',
+    display: 'none',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0',
+    marginLeft: '4px',
+    flexShrink: '0',
+    transition: `background ${TRIBORA_EXTENSION_THEME.motion.fast} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
   });
-  stopBtn.setAttribute("aria-label", "Stop conversation");
-  stopBtn.setAttribute("title", "Stop conversation");
-  stopBtn.addEventListener("mouseenter", () =>
-    apply(stopBtn, { background: "rgba(255, 255, 255, 0.2)" }),
+  stopBtn.setAttribute('aria-label', 'Stop conversation');
+  stopBtn.setAttribute('title', 'Stop conversation');
+  stopBtn.addEventListener('mouseenter', () =>
+    apply(stopBtn, { background: 'rgba(245, 190, 77, 0.22)' }),
   );
-  stopBtn.addEventListener("mouseleave", () =>
-    apply(stopBtn, { background: "rgba(255, 255, 255, 0.1)" }),
+  stopBtn.addEventListener('mouseleave', () =>
+    apply(stopBtn, { background: 'rgba(245, 190, 77, 0.12)' }),
   );
-  stopBtn.addEventListener("click", (e) => {
+  stopBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     callbacks.onStopClick?.();
   });
 
-  const xSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  xSvg.setAttribute("width", "10");
-  xSvg.setAttribute("height", "10");
-  xSvg.setAttribute("viewBox", "0 0 10 10");
-  xSvg.setAttribute("fill", "none");
-  const xPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  xPath.setAttribute("d", "M1 1 L9 9 M9 1 L1 9");
-  xPath.setAttribute("stroke", "rgba(255, 255, 255, 0.8)");
-  xPath.setAttribute("stroke-width", "1.5");
-  xPath.setAttribute("stroke-linecap", "round");
+  const xSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  xSvg.setAttribute('width', '10');
+  xSvg.setAttribute('height', '10');
+  xSvg.setAttribute('viewBox', '0 0 10 10');
+  xSvg.setAttribute('fill', 'none');
+  const xPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  xPath.setAttribute('d', 'M1 1 L9 9 M9 1 L1 9');
+  xPath.setAttribute('stroke', TRIBORA_EXTENSION_THEME.color.signal);
+  xPath.setAttribute('stroke-width', '1.5');
+  xPath.setAttribute('stroke-linecap', 'round');
   xSvg.appendChild(xPath);
   stopBtn.appendChild(xSvg);
 
@@ -202,14 +217,14 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
   container.appendChild(pill);
   document.documentElement.appendChild(container);
 
-  let currentState: WidgetState = "hidden";
-  let currentColor = COLOR_INDIGO;
-  let currentGlow = COLOR_INDIGO_GLOW;
+  let currentState: WidgetState = 'hidden';
+  let currentColor = COLOR_SIGNAL;
+  let currentGlow = COLOR_SIGNAL_GLOW;
   let animFrameId: number | null = null;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext('2d')!;
 
   function drawWaveform(timestamp: number) {
-    if (currentState !== "listening" && currentState !== "speaking") {
+    if (currentState !== 'listening' && currentState !== 'speaking') {
       animFrameId = null;
       return;
     }
@@ -241,6 +256,7 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
   }
 
   function startAnimation() {
+    if (prefersReducedMotion) return;
     if (animFrameId !== null) return;
     animFrameId = requestAnimationFrame(drawWaveform);
   }
@@ -253,94 +269,94 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
   }
 
   function hideIdleElements() {
-    apply(orb, { display: "none" });
-    apply(hotkeyHint, { display: "none" });
+    apply(orb, { display: 'none' });
+    apply(hotkeyHint, { display: 'none' });
   }
 
   function setIdle() {
-    currentState = "idle";
+    currentState = 'idle';
     stopAnimation();
-    apply(orb, { display: "flex" });
-    apply(hotkeyHint, { display: "inline" });
-    apply(canvas, { display: "none" });
-    apply(spinner, { display: "none" });
-    apply(label, { display: "none" });
-    apply(stopBtn, { display: "none" });
+    apply(orb, { display: 'flex' });
+    apply(hotkeyHint, { display: 'inline' });
+    apply(canvas, { display: 'none' });
+    apply(spinner, { display: 'none' });
+    apply(label, { display: 'none' });
+    apply(stopBtn, { display: 'none' });
     apply(pill, {
-      cursor: "pointer",
-      boxShadow: `0 4px 24px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06)`,
+      cursor: 'pointer',
+      boxShadow: PILL_SHADOW_BASE,
     });
   }
 
   function setConnecting() {
-    currentState = "connecting";
+    currentState = 'connecting';
     stopAnimation();
     hideIdleElements();
-    apply(canvas, { display: "none" });
-    apply(spinner, { display: "block" });
-    apply(label, { display: "block" });
-    label.textContent = "Connecting...";
-    apply(label, { color: "rgba(255,255,255,0.5)" });
-    apply(stopBtn, { display: "flex" });
-    apply(pill, { cursor: "default" });
+    apply(canvas, { display: 'none' });
+    apply(spinner, { display: 'block' });
+    apply(label, { display: 'block' });
+    label.textContent = 'Connecting';
+    apply(label, { color: TRIBORA_EXTENSION_THEME.color.inkFaint });
+    apply(stopBtn, { display: 'flex' });
+    apply(pill, { cursor: 'default' });
   }
 
   function setListening() {
-    currentState = "listening";
-    currentColor = COLOR_INDIGO;
-    currentGlow = COLOR_INDIGO_GLOW;
+    currentState = 'listening';
+    currentColor = COLOR_SIGNAL;
+    currentGlow = COLOR_SIGNAL_GLOW;
     hideIdleElements();
-    apply(canvas, { display: "block" });
-    apply(spinner, { display: "none" });
-    apply(label, { display: "block" });
-    label.textContent = "Listening...";
-    apply(label, { color: "rgba(255,255,255,0.7)" });
-    apply(stopBtn, { display: "flex" });
+    apply(canvas, { display: 'block' });
+    apply(spinner, { display: 'none' });
+    apply(label, { display: 'block' });
+    label.textContent = 'Listening';
+    apply(label, { color: TRIBORA_EXTENSION_THEME.color.inkDim });
+    apply(stopBtn, { display: 'flex' });
     apply(pill, {
-      cursor: "default",
-      boxShadow: `0 4px 24px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06), 0 0 20px ${COLOR_INDIGO_GLOW}`,
+      cursor: 'default',
+      boxShadow: `${PILL_SHADOW_BASE}, 0 0 20px ${COLOR_SIGNAL_GLOW}`,
     });
     startAnimation();
   }
 
   function setThinking() {
-    currentState = "thinking";
+    currentState = 'thinking';
     stopAnimation();
     hideIdleElements();
-    apply(canvas, { display: "none" });
-    apply(spinner, { display: "block" });
-    apply(label, { display: "block" });
-    label.textContent = "Thinking...";
-    apply(label, { color: "rgba(255,255,255,0.7)" });
-    apply(stopBtn, { display: "flex" });
+    apply(canvas, { display: 'none' });
+    apply(spinner, { display: 'block' });
+    apply(label, { display: 'block' });
+    label.textContent = 'Thinking';
+    apply(label, { color: TRIBORA_EXTENSION_THEME.color.inkDim });
+    apply(stopBtn, { display: 'flex' });
   }
 
   function setSpeaking() {
-    currentState = "speaking";
-    currentColor = COLOR_GREEN;
-    currentGlow = COLOR_GREEN_GLOW;
+    currentState = 'speaking';
+    currentColor = COLOR_LIVE;
+    currentGlow = COLOR_LIVE_GLOW;
     hideIdleElements();
-    apply(canvas, { display: "block" });
-    apply(spinner, { display: "none" });
-    apply(label, { display: "block" });
-    label.textContent = "Speaking...";
-    apply(label, { color: COLOR_GREEN });
-    apply(stopBtn, { display: "flex" });
+    apply(canvas, { display: 'block' });
+    apply(spinner, { display: 'none' });
+    apply(label, { display: 'block' });
+    label.textContent = 'Speaking';
+    apply(label, { color: COLOR_LIVE });
+    apply(stopBtn, { display: 'flex' });
     apply(pill, {
-      cursor: "default",
-      boxShadow: `0 4px 24px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06), 0 0 20px ${COLOR_GREEN_GLOW}`,
+      cursor: 'default',
+      boxShadow: `${PILL_SHADOW_BASE}, 0 0 20px ${COLOR_LIVE_GLOW}`,
     });
     startAnimation();
   }
 
   function show() {
-    apply(container, { display: "block" });
-    if (currentState === "hidden") setIdle();
+    apply(container, { display: 'block' });
+    if (currentState === 'hidden') setIdle();
   }
 
   function hide() {
-    apply(container, { display: "none" });
-    currentState = "hidden";
+    apply(container, { display: 'none' });
+    currentState = 'hidden';
     stopAnimation();
   }
 
@@ -358,7 +374,7 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
     setThinking,
     setSpeaking,
     getState: () => currentState,
-    isVisible: () => currentState !== "hidden",
+    isVisible: () => currentState !== 'hidden',
     destroy,
   };
 }
@@ -372,13 +388,13 @@ function apply(
 
 function injectWidgetStyles() {
   if (document.getElementById(WIDGET_STYLE_ID)) return;
-  const style = document.createElement("style");
+  const style = document.createElement('style');
   style.id = WIDGET_STYLE_ID;
   style.textContent = [
-    "@keyframes tribora-widget-spin {",
-    "  from { transform: rotate(0deg); }",
-    "  to { transform: rotate(360deg); }",
-    "}",
-  ].join("\n");
+    '@keyframes tribora-widget-spin {',
+    '  from { transform: rotate(0deg); }',
+    '  to { transform: rotate(360deg); }',
+    '}',
+  ].join('\n');
   (document.head ?? document.documentElement).appendChild(style);
 }
