@@ -28,3 +28,7 @@ export { resolveDocsAudience } from './audience';
 
 // Registry
 export { getDocsRegistry } from './registry';
+
+// Access control
+export { resolveAccess } from './access';
+export type { AccessDecision } from './access';
