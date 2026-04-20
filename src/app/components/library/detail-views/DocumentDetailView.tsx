@@ -3,13 +3,13 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
-import { ArrowLeft, Loader2, FileText as FileTextIcon, AlertCircle, RotateCcw, Trash2, Sparkles } from 'lucide-react';
+import { ArrowLeft, FileText as FileTextIcon, AlertCircle, RotateCcw, Trash2, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import DOMPurify from 'dompurify';
+import domPurify from 'dompurify';
 
 import { Button } from '@/app/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import { Card, CardContent } from '@/app/components/ui/card';
 import { ContentTabs, ContentTabsContent, ContentTabsList, ContentTabsTrigger } from '@/app/components/ui/content-tabs';
 import { Alert, AlertTitle, AlertDescription } from '@/app/components/ui/alert';
 import {
@@ -24,28 +24,34 @@ import {
 } from '@/app/components/ui/alert-dialog';
 import { toast } from '@/app/components/ui/use-toast';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import type { ContentType, FileType, Json, RecordingStatus, Tag } from '@/lib/types/database';
+import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
 // New unified components
 import UnifiedContentViewer from '../viewers/UnifiedContentViewer';
 import ContentSidebar from '../viewers/ContentSidebar';
 import ThumbnailHero from '../viewers/ThumbnailHero';
-
 import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
 import InlineEditableField from '../shared/InlineEditableField';
 import { HighlightToolbar } from '../shared/HighlightToolbar';
-import { HighlightableContent, type Highlight } from '../shared/HighlightableContent';
+import type { Highlight } from '../shared/HighlightableContent';
 
-import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-
-import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
-import type { Tag } from '@/lib/types/database';
-import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
+interface HighlightSource {
+  id: string;
+  recordingId: string;
+  snippet?: string | null;
+  relevanceScore?: number | null;
+  metadata?: {
+    chunkId?: string | null;
+  } | null;
+}
 
 interface Transcript {
   id: string;
   content_id: string;
   text: string;
-  words_json?: any;
+  words_json?: Json;
   language?: string | null;
   confidence?: number | null;
   provider?: string | null;
@@ -73,7 +79,7 @@ interface Recording {
   thumbnail_url: string | null;
   videoUrl: string | null;
   downloadUrl: string | null;
-  metadata: any;
+  metadata: Json | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -94,7 +100,7 @@ interface DocumentDetailViewProps {
   initialHighlightId?: string; // Initial chunk to scroll to
 }
 
-const highlightSourcesFetcher = async (url: string): Promise<any[] | null> => {
+const highlightSourcesFetcher = async (url: string): Promise<HighlightSource[] | null> => {
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -116,7 +122,7 @@ export default function DocumentDetailView({
 }: DocumentDetailViewProps) {
   const router = useRouter();
 
-  const { data: highlightSources, isLoading: isFetchingSources } = useSWR(
+  const { data: highlightSources } = useSWR(
     sourceKey ? `/api/chat?sourcesKey=${sourceKey}` : null,
     highlightSourcesFetcher
   );
@@ -131,7 +137,7 @@ export default function DocumentDetailView({
   const [currentHighlightIndex, setCurrentHighlightIndex] = React.useState(0);
   const [highlightsEnabled, setHighlightsEnabled] = React.useState(true);
   const [showHighlightToolbar, setShowHighlightToolbar] = React.useState(false);
-  const [matchedHighlightsCount, setMatchedHighlightsCount] = React.useState(0);
+  const [matchedHighlightsCount] = React.useState(0);
   const highlightRefsMapRef = React.useRef<Map<string, HTMLElement>>(new Map());
 
   const isTrashed = !!recording.deleted_at;
@@ -172,7 +178,7 @@ export default function DocumentDetailView({
       .map((source) => ({
         id: source.metadata?.chunkId || source.id,
         text: source.snippet || '',
-        similarity: source.relevanceScore,
+        similarity: source.relevanceScore ?? undefined,
       }));
 
     console.log('[DocumentDetailView] Processed highlights:', {
@@ -383,57 +389,6 @@ export default function DocumentDetailView({
     }
   };
 
-  const handleAddTag = async (tagName: string): Promise<Tag> => {
-    try {
-      const createResponse = await fetch('/api/tags', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: tagName }),
-      });
-
-      if (!createResponse.ok) {
-        throw new Error('Failed to create tag');
-      }
-
-      const { tag: newTag } = await createResponse.json();
-
-      const applyResponse = await fetch(`/api/tags/${newTag.id}/apply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recording_ids: [recording.id] }),
-      });
-
-      if (!applyResponse.ok) {
-        throw new Error('Failed to apply tag');
-      }
-
-      toast({ description: 'Tag added successfully' });
-      return newTag;
-    } catch (error) {
-      console.error('Add tag failed:', error);
-      throw error;
-    }
-  };
-
-  const handleRemoveTag = async (tagId: string): Promise<void> => {
-    try {
-      const response = await fetch(`/api/tags/${tagId}/remove`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recording_ids: [recording.id] }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to remove tag');
-      }
-
-      toast({ description: 'Tag removed successfully' });
-    } catch (error) {
-      console.error('Remove tag failed:', error);
-      throw error;
-    }
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -612,7 +567,7 @@ export default function DocumentDetailView({
                       <div className="min-h-[400px] max-h-[800px] overflow-y-auto px-6 py-8 sm:px-8 sm:py-10">
                         <div className="ai-insights-prose max-w-3xl mx-auto">
                           {document.html ? (
-                            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(document.html) }} />
+                            <div dangerouslySetInnerHTML={{ __html: domPurify.sanitize(document.html) }} />
                           ) : document.markdown ? (
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {document.markdown}
