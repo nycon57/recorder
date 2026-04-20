@@ -1,6 +1,7 @@
 'use client';
 
 import * as motion from 'motion/react-client';
+import type { Variants } from 'motion/react';
 import { useState } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
@@ -31,7 +32,7 @@ import { AuroraCTA } from '@/app/components/sections';
 // ANIMATION VARIANTS
 // ============================================================================
 
-const fadeInUp = {
+const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
   visible: {
     opacity: 1,
@@ -40,7 +41,7 @@ const fadeInUp = {
   },
 };
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -48,7 +49,7 @@ const staggerContainer = {
   },
 };
 
-const cardVariants = {
+const cardVariants: Variants = {
   hidden: { opacity: 0, y: 30, scale: 0.95 },
   visible: {
     opacity: 1,
@@ -58,7 +59,7 @@ const cardVariants = {
   },
 };
 
-const scaleIn = {
+const scaleIn: Variants = {
   hidden: { opacity: 0, scale: 0.9 },
   visible: {
     opacity: 1,
@@ -579,7 +580,7 @@ export default function PricingPage() {
               className="text-lg sm:text-xl text-muted-foreground font-light"
               variants={fadeInUp}
             >
-              We don't replace your storage—we make it smarter
+              We don&rsquo;t replace your storage, we make it smarter
             </motion.p>
           </motion.div>
 
@@ -750,7 +751,7 @@ export default function PricingPage() {
             transition={{ duration: 0.6 }}
           >
             <Accordion type="single" collapsible className="space-y-4">
-              {FAQ_ITEMS.map((item, index) => (
+              {FAQ_ITEMS.map((item) => (
                 <AccordionItem
                   key={item.id}
                   value={item.id}
@@ -788,7 +789,7 @@ export default function PricingPage() {
               transition={{ delay: 0.3 }}
             >
               <p className="text-muted-foreground mb-4">
-                Still have questions? We're here to help.
+                Still have questions? We&rsquo;re here to help.
               </p>
               <Link href="/contact">
                 <Button variant="outline" className="rounded-full px-6 border-accent/30 hover:border-accent/50 hover:bg-accent/5 transition-all duration-300">

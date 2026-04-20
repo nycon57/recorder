@@ -3,6 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import * as motion from 'motion/react-client';
+import type { Variants } from 'motion/react';
 import {
   ChevronsUpDown,
   Settings,
@@ -42,7 +43,7 @@ import {
  */
 
 // Motion variants for dropdown items
-const menuItemVariants = {
+const menuItemVariants: Variants = {
   hidden: { opacity: 0, x: -8 },
   visible: (i: number) => ({
     opacity: 1,
@@ -50,13 +51,13 @@ const menuItemVariants = {
     transition: {
       delay: i * 0.05,
       duration: 0.2,
-      ease: [0.25, 0.46, 0.45, 0.94],
+      ease: [0.25, 0.46, 0.45, 0.94] as const,
     },
   }),
 };
 
 // Motion variants for entrance animation
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0, y: 8 },
   visible: {
     opacity: 1,

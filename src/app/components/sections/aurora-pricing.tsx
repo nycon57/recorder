@@ -1,6 +1,7 @@
 'use client';
 
 import * as motion from 'motion/react-client';
+import type { Variants } from 'motion/react';
 import { useState } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Tick02Icon, SparklesIcon, ArrowRight01Icon } from '@hugeicons/core-free-icons';
@@ -12,7 +13,7 @@ import { Button } from '@/app/components/ui/button';
 import { Switch } from '@/app/components/ui/switch';
 
 // Animation variants
-const fadeInUp = {
+const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
   visible: {
     opacity: 1,
@@ -25,7 +26,7 @@ const fadeInUp = {
   },
 };
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -36,7 +37,7 @@ const staggerContainer = {
   },
 };
 
-const cardVariants = {
+const cardVariants: Variants = {
   hidden: { opacity: 0, y: 30, scale: 0.95 },
   visible: {
     opacity: 1,

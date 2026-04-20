@@ -1,6 +1,5 @@
 'use client';
 
-import { useSession } from '@/lib/auth/auth-client';
 import {
   Menu,
   X,
@@ -18,11 +17,11 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import * as motion from 'motion/react-client';
+import type { Variants } from 'motion/react';
 import React, { useEffect, useRef, useState } from 'react';
 
+import { useSession } from '@/lib/auth/auth-client';
 import { cn } from '@/lib/utils';
-
-// Accordion removed - mobile nav now uses flat sections
 import { Button } from '@/app/components/ui/button';
 import {
   NavigationMenu,
@@ -140,7 +139,7 @@ const menuItems: MenuItem[] = [
 const SCROLL_THRESHOLD = 50;
 
 // Motion configuration for dropdown animations
-const dropdownItemVariants = {
+const dropdownItemVariants: Variants = {
   hidden: { opacity: 0, x: -8 },
   visible: (i: number) => ({
     opacity: 1,
@@ -148,12 +147,12 @@ const dropdownItemVariants = {
     transition: {
       delay: i * 0.05,
       duration: 0.2,
-      ease: [0.25, 0.46, 0.45, 0.94],
+      ease: [0.25, 0.46, 0.45, 0.94] as const,
     },
   }),
 };
 
-const dropdownFooterVariants = {
+const dropdownFooterVariants: Variants = {
   hidden: { opacity: 0, y: 4 },
   visible: {
     opacity: 1,
@@ -161,13 +160,13 @@ const dropdownFooterVariants = {
     transition: {
       delay: 0.3,
       duration: 0.2,
-      ease: [0.25, 0.46, 0.45, 0.94],
+      ease: [0.25, 0.46, 0.45, 0.94] as const,
     },
   },
 };
 
 // Mobile navigation motion variants
-const mobileContainerVariants = {
+const mobileContainerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -178,20 +177,20 @@ const mobileContainerVariants = {
   },
 };
 
-const mobileSectionVariants = {
+const mobileSectionVariants: Variants = {
   hidden: { opacity: 0, y: 12 },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
       duration: 0.25,
-      ease: [0.25, 0.46, 0.45, 0.94],
+      ease: [0.25, 0.46, 0.45, 0.94] as const,
       staggerChildren: 0.04,
     },
   },
 };
 
-const mobileItemVariants = {
+const mobileItemVariants: Variants = {
   hidden: { opacity: 0, x: -12 },
   visible: (i: number) => ({
     opacity: 1,
@@ -199,12 +198,12 @@ const mobileItemVariants = {
     transition: {
       delay: i * 0.04,
       duration: 0.2,
-      ease: [0.25, 0.46, 0.45, 0.94],
+      ease: [0.25, 0.46, 0.45, 0.94] as const,
     },
   }),
 };
 
-const mobileFooterVariants = {
+const mobileFooterVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
@@ -289,7 +288,6 @@ export default function AuroraNavbar() {
                   <DesktopMenuItem
                     key={item.title}
                     item={item}
-                    isScrolled={isScrolled}
                   />
                 ))}
               </NavigationMenuList>
@@ -517,10 +515,9 @@ export default function AuroraNavbar() {
 // Desktop Menu Item Component
 interface DesktopMenuItemProps {
   item: MenuItem;
-  isScrolled: boolean;
 }
 
-function DesktopMenuItem({ item, isScrolled }: DesktopMenuItemProps) {
+function DesktopMenuItem({ item }: DesktopMenuItemProps) {
   if (item.items) {
     // Determine if this is the Features menu (has 6 items) for 2-column layout
     const isFeatures = item.title === 'Features';

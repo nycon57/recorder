@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import * as motion from 'motion/react-client';
+import type { Variants } from 'motion/react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -26,7 +27,7 @@ import { Button } from '@/app/components/ui/button';
 import type { BlogPost, BlogPostCard, BlogPostCategory } from '@/lib/types/database';
 
 // Animation variants
-const fadeInUp = {
+const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
   visible: {
     opacity: 1,
@@ -39,7 +40,7 @@ const fadeInUp = {
   },
 };
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -163,7 +164,7 @@ export default function BlogPostPage() {
             {error || 'Post not found'}
           </h1>
           <p className="text-muted-foreground mb-6">
-            The blog post you're looking for doesn't exist or has been removed.
+            The blog post you&rsquo;re looking for doesn&rsquo;t exist or has been removed.
           </p>
           <Link href="/blog">
             <Button variant="outline" className="rounded-full">

@@ -20,10 +20,8 @@ import {
   Globe02Icon,
   ZapIcon,
   Clock01Icon,
-  TrendingUp01Icon,
   Layers01Icon,
 } from '@hugeicons/core-free-icons';
-import Image from 'next/image';
 import Link from 'next/link';
 
 import { cn } from '@/lib/utils';
@@ -112,51 +110,6 @@ const HERO_STATS: Stat[] = [
   { icon: Clock01Icon, value: '<2min', label: 'Average Processing' },
   { icon: Globe02Icon, value: '50+', label: 'Languages Supported' },
   { icon: SecurityCheckIcon, value: '100%', label: 'SOC 2 Compliant' },
-];
-
-interface FeatureHighlight {
-  icon: IconSvgElement;
-  title: string;
-  description: string;
-  size?: 'normal' | 'large';
-  badge?: string;
-}
-
-const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
-  {
-    icon: Mic01Icon,
-    title: 'Browser Recording',
-    description: 'Capture screen, camera, and audio instantly. No downloads or plugins required.',
-    size: 'large',
-    badge: 'Core Feature',
-  },
-  {
-    icon: AiBrain01Icon,
-    title: 'AI Transcription',
-    description: 'Whisper-powered with 95%+ accuracy across 50+ languages.',
-  },
-  {
-    icon: AiSearchIcon,
-    title: 'Semantic Search',
-    description: 'Find anything with context-aware AI that understands meaning.',
-  },
-  {
-    icon: MessageMultiple01Icon,
-    title: 'RAG Assistant',
-    description: 'Get instant answers with exact citations from your knowledge base.',
-    size: 'large',
-    badge: 'AI Powered',
-  },
-  {
-    icon: File01Icon,
-    title: 'Auto Documentation',
-    description: 'Transform recordings into structured docs automatically.',
-  },
-  {
-    icon: AiNetworkIcon,
-    title: 'Knowledge Graph',
-    description: 'Cross-recording concept linking that compounds value over time.',
-  },
 ];
 
 interface DeepDiveFeature {
