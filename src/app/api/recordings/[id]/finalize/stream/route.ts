@@ -22,11 +22,12 @@ import {
   SOURCE_STATUS,
   getQueuedSourceStatusForJob,
 } from '@/lib/utils/status-helpers';
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 
 const logger = createLogger({ endpoint: 'finalize-stream' });
 
 type JobType = Database['public']['Tables']['jobs']['Row']['type'];
+type ContentRow = Database['public']['Tables']['content']['Row'];
 
 interface FinalizeParams {
   params: { id: string };
@@ -181,9 +182,10 @@ export const GET = apiHandler(
       );
       throw new Error('Failed to finalize recording');
     }
+    const finalizedRecording = updatedRecording as ContentRow;
 
     logger.info('Recording updated successfully', {
-      context: { recordingId, status: updatedRecording.status },
+      context: { recordingId, status: finalizedRecording.status },
     });
 
     streamingManager.sendLog(
@@ -227,7 +229,7 @@ export const GET = apiHandler(
 
     // Prepare job payloads with all necessary data
     const jobs = jobTypes.map((type) => {
-      const payload: Record<string, unknown> = { recordingId, orgId };
+      const payload: { [key: string]: Json | undefined } = { recordingId, orgId };
 
       // Add type-specific payload data
       if (type === 'transcribe') {

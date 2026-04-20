@@ -53,7 +53,7 @@ async function createScheduledJob(jobConfig: typeof SCHEDULED_JOBS[number]): Pro
     .from('jobs')
     .select('id, status')
     .eq('dedupe_key', jobConfig.dedupe_key)
-    .in('status', ['pending', 'running'])
+    .in('status', ['pending', 'processing'])
     .single();
 
   if (existingJob) {

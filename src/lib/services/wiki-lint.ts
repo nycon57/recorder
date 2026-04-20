@@ -22,10 +22,10 @@
 
 import { createClient } from '@/lib/supabase/admin';
 import { getWikiCompilationSettings } from '@/lib/services/agent-config';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { LightweightSupabaseClient } from '@/lib/supabase/types';
 import type { Database } from '@/lib/types/database';
 
-type AdminClient = SupabaseClient<Database>;
+type AdminClient = LightweightSupabaseClient;
 
 // ---------------------------------------------------------------------------
 // Types

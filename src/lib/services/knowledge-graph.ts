@@ -1,6 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import type { LightweightSupabaseClient } from '@/lib/supabase/types';
 import type { Database } from '@/lib/types/database';
 import type {
   KnowledgeGraphEdge,
@@ -8,7 +7,7 @@ import type {
   KnowledgeGraphQueryInput,
 } from '@/lib/types/knowledge-graph';
 
-type AdminClient = SupabaseClient<Database>;
+type AdminClient = LightweightSupabaseClient;
 
 type OrgWikiPageRow = Pick<
   Database['public']['Tables']['org_wiki_pages']['Row'],

@@ -10,7 +10,7 @@ import {
 } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/admin';
 import { processFeedback } from '@/lib/services/feedback-processor';
-import type { FeedbackType } from '@/lib/types/database';
+import type { FeedbackType, Json } from '@/lib/types/database';
 
 const feedbackSchema = z.object({
   agent_activity_log_id: z.string().uuid('Invalid activity log ID').optional(),
@@ -18,10 +18,15 @@ const feedbackSchema = z.object({
   score: z.number().int().min(1).max(5).optional(),
   correction_value: z.string().max(2000).optional(),
   comment: z.string().max(2000).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const FEEDBACK_SELECT = 'id, feedback_type, created_at' as const;
+type FeedbackSelectRow = {
+  id: string;
+  feedback_type: FeedbackType;
+  created_at: string;
+};
 
 /** Fire-and-forget: integrate feedback into agent memory (non-blocking). */
 function processInBackground(feedbackId: string): void {
@@ -41,7 +46,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     score: body.score ?? null,
     correction_value: body.correction_value ?? null,
     comment: body.comment ?? null,
-    metadata: body.metadata ?? {},
+    metadata: (body.metadata ?? {}) as Json,
   };
 
   // Feedback tied to an agent activity log entry
@@ -114,10 +119,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
         console.error('[POST /api/agent-feedback] Update error:', updateError);
         return errors.internalError();
       }
+      const updatedFeedback = updated as FeedbackSelectRow;
 
-      processInBackground(updated.id);
+      processInBackground(updatedFeedback.id);
 
-      return successResponse({ feedback: updated });
+      return successResponse({ feedback: updatedFeedback });
     }
   }
 

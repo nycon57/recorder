@@ -1,9 +1,14 @@
 import { createBrowserClient } from '@supabase/ssr';
-import type { Database } from '@/lib/types/database';
+import {
+  asLightweightSupabaseClient,
+  type LightweightSupabaseClient,
+} from '@/lib/supabase/types';
 
-export function createClient() {
-  return createBrowserClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+export function createClient(): LightweightSupabaseClient {
+  return asLightweightSupabaseClient(
+    createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
   );
 }

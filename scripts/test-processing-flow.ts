@@ -24,6 +24,7 @@ import { generateEmbeddings } from '@/lib/workers/handlers/embeddings-google';
 
 type RecordingStatus = Database['public']['Tables']['recordings']['Row']['status'];
 type JobStatus = Database['public']['Tables']['jobs']['Row']['status'];
+type RecordingRow = Database['public']['Tables']['recordings']['Row'];
 
 // Test configuration
 const TEST_TIMEOUT_MS = 60000; // 60 seconds for entire test suite
@@ -237,6 +238,7 @@ async function testNonStreamingFinalize(
     if (updateError || !updated) {
       throw new Error(`Failed to update recording: ${updateError?.message}`);
     }
+    const updatedRecording = updated as RecordingRow;
 
     logSuccess('Recording status updated to "uploaded"');
 
@@ -249,7 +251,7 @@ async function testNonStreamingFinalize(
         payload: {
           recordingId,
           orgId,
-          storagePath: updated.storage_path_raw,
+          storagePath: updatedRecording.storage_path_raw,
         },
         dedupe_key: `transcribe:${recordingId}`,
       })

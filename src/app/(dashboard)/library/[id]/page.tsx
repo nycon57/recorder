@@ -13,13 +13,99 @@ import {
 import { RelatedContent } from '@/app/components/content/RelatedContent';
 import { ContentChatWidget } from '@/app/components/content/ContentChatWidget';
 import { OnboardingViewTracker } from '@/app/components/onboarding/OnboardingViewTracker';
-import type { WorkflowStep } from '@/lib/types/database';
+import { fetchKnowledgeStatusForSource } from '@/lib/services/knowledge-status';
+import type { WorkflowStep, Database, Tag } from '@/lib/types/database';
 import WorkflowViewer from '@/app/components/workflow/WorkflowViewer';
+
+type ContentRow = Database['public']['Tables']['content']['Row'];
+type TranscriptRow = Database['public']['Tables']['transcripts']['Row'];
+type DocumentRow = Database['public']['Tables']['documents']['Row'];
+type TagRow = Database['public']['Tables']['tags']['Row'];
+
+type ContentDetailRow = ContentRow & {
+  transcripts: TranscriptRow[] | TranscriptRow | null;
+  documents: DocumentRow[] | DocumentRow | null;
+};
+
+type ContentTagLinkRow = {
+  content_id: string;
+  tag_id: string;
+  tags: TagRow | null;
+};
+
+type DetailTranscript = {
+  id: string;
+  content_id: string;
+  text: string;
+  words_json?: Array<{
+    word: string;
+    start: number;
+    end: number;
+    confidence?: number;
+  }> | null;
+  language?: string | null;
+  confidence?: number | null;
+  provider?: string | null;
+};
+
+type DetailDocument = {
+  id: string;
+  content_id: string;
+  markdown: string;
+  html?: string | null;
+  summary?: string | null;
+  version: string;
+  status: string;
+  model?: string | null;
+};
+
+function normalizeTranscript(
+  transcript: TranscriptRow[] | TranscriptRow | null
+): DetailTranscript | null {
+  const row = Array.isArray(transcript) ? transcript[0] : transcript;
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    content_id: row.content_id,
+    text: row.text,
+    words_json: Array.isArray(row.words_json)
+      ? (row.words_json as DetailTranscript['words_json'])
+      : null,
+    language: row.language,
+    confidence: row.confidence,
+    provider: row.provider,
+  };
+}
+
+function normalizeDocument(
+  document: DocumentRow[] | DocumentRow | null
+): DetailDocument | null {
+  const row = Array.isArray(document) ? document[0] : document;
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    content_id: row.content_id,
+    markdown: row.markdown,
+    html: row.html,
+    summary: row.summary,
+    version: row.version,
+    status: row.status,
+    model: row.model,
+  };
+}
 
 async function getContentItem(id: string, internalOrgId: string) {
   const { data: item, error } = await supabaseAdmin
     .from('content')
-    .select(
+    .select<ContentDetailRow>(
       `
       *,
       transcripts (*),
@@ -127,18 +213,20 @@ export default async function LibraryItemDetailPage({
     notFound();
   }
 
-  // Supabase may return a single object or an array for joined relations
-  const transcript = Array.isArray(item.transcripts)
-    ? item.transcripts[0]
-    : item.transcripts || null;
-  const document = Array.isArray(item.documents)
-    ? item.documents[0]
-    : item.documents || null;
+  const knowledgeStatus = await fetchKnowledgeStatusForSource({
+    orgId,
+    sourceId: item.id,
+    sourceStatus: item.status,
+  });
+
+  const transcript = normalizeTranscript(item.transcripts);
+  const document = normalizeDocument(item.documents);
 
   const { data: itemTags } = await supabaseAdmin
     .from('content_tags')
-    .select(
+    .select<ContentTagLinkRow>(
       `
+      content_id,
       tag_id,
       tags (
         id,
@@ -153,8 +241,8 @@ export default async function LibraryItemDetailPage({
 
   const tags =
     itemTags
-      ?.map((rt: { tags: Record<string, unknown> | null }) => rt.tags)
-      .filter(Boolean) || [];
+      ?.map((rt) => rt.tags)
+      .filter((tag): tag is Tag => Boolean(tag)) || [];
 
   // Fetch the most recent non-archived workflow for this content
   const { data: rawWorkflow } = await supabaseAdmin
@@ -202,6 +290,7 @@ export default async function LibraryItemDetailPage({
     recording: item,
     transcript,
     document,
+    knowledgeStatus,
     initialTags: tags,
     sourceKey,
     initialHighlightId: highlight,
