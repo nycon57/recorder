@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import * as motion from 'motion/react-client';
+import type { Variants } from 'motion/react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -47,7 +48,7 @@ import {
 import type { BlogPostCard, BlogPostCategory } from '@/lib/types/database';
 
 // Animation variants
-const fadeInUp = {
+const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
   visible: {
     opacity: 1,
@@ -60,7 +61,7 @@ const fadeInUp = {
   },
 };
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -71,7 +72,7 @@ const staggerContainer = {
   },
 };
 
-const cardVariants = {
+const cardVariants: Variants = {
   hidden: { opacity: 0, y: 30, scale: 0.95 },
   visible: {
     opacity: 1,

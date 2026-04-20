@@ -1,6 +1,7 @@
 'use client';
 
 import * as motion from 'motion/react-client';
+import type { Variants } from 'motion/react';
 import { useState } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
@@ -18,7 +19,7 @@ import {
   LinkSquare01Icon,
 } from '@hugeicons/core-free-icons';
 import Link from 'next/link';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 
@@ -35,14 +36,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
-import { contactFormSchema, type ContactFormData } from '@/lib/validations/contact';
+import {
+  contactFormSchema,
+  type ContactFormData,
+  type ContactFormInput,
+} from '@/lib/validations/contact';
 import { AuroraCTA } from '@/app/components/sections';
 
 // ============================================================================
 // ANIMATION VARIANTS (Consistent with Aurora design system)
 // ============================================================================
 
-const fadeInUp = {
+const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
   visible: {
     opacity: 1,
@@ -51,7 +56,7 @@ const fadeInUp = {
   },
 };
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -59,7 +64,7 @@ const staggerContainer = {
   },
 };
 
-const scaleIn = {
+const scaleIn: Variants = {
   hidden: { opacity: 0, scale: 0.9 },
   visible: {
     opacity: 1,
@@ -68,7 +73,7 @@ const scaleIn = {
   },
 };
 
-const cardVariants = {
+const cardVariants: Variants = {
   hidden: { opacity: 0, y: 30, scale: 0.95 },
   visible: {
     opacity: 1,
@@ -137,7 +142,7 @@ export default function ContactPage() {
     handleSubmit,
     reset,
     formState: { errors: formErrors },
-  } = useForm<ContactFormData>({
+  } = useForm<ContactFormInput, unknown, ContactFormData>({
     resolver: zodResolver(contactFormSchema),
     defaultValues: {
       name: '',
@@ -233,7 +238,7 @@ export default function ContactPage() {
               >
                 <HugeiconsIcon icon={SparklesIcon} size={14} className="mr-2 text-accent" />
                 <span className="text-sm font-medium text-accent">
-                  We'd Love to Hear From You
+                  We&rsquo;d Love to Hear From You
                 </span>
               </Badge>
             </motion.div>
@@ -244,7 +249,7 @@ export default function ContactPage() {
                 font-light leading-tight tracking-tight mb-6"
               variants={fadeInUp}
             >
-              Let's start a{' '}
+              Let&rsquo;s start a{' '}
               <span
                 className="bg-gradient-to-r from-accent via-secondary to-primary
                   bg-clip-text text-transparent"
@@ -260,7 +265,7 @@ export default function ContactPage() {
               variants={fadeInUp}
             >
               Whether you have questions, need a demo, or want to discuss enterprise
-              solutions—we're here to help illuminate your path forward.
+              solutions, we&rsquo;re here to help illuminate your path forward.
             </motion.p>
           </motion.div>
         </div>
@@ -671,7 +676,7 @@ interface FormFieldProps {
   label: string;
   type?: string;
   required?: boolean;
-  control: any;
+  control: Control<ContactFormInput>;
   error?: string;
   disabled?: boolean;
   placeholder?: string;

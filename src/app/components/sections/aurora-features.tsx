@@ -1,6 +1,7 @@
 'use client';
 
 import * as motion from 'motion/react-client';
+import type { Variants } from 'motion/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
   Mic01Icon,
@@ -8,7 +9,6 @@ import {
   AiSearchIcon,
   ChatBotIcon,
   Clock01Icon,
-  ZapIcon,
   SparklesIcon,
   AiNetworkIcon,
   ArrowRight01Icon,
@@ -16,14 +16,13 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 
-import { cn } from '@/lib/utils';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent } from '@/app/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
 
 // Animation variants for scroll-triggered bento grid
-const fadeInUp = {
+const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
   visible: {
     opacity: 1,
@@ -36,7 +35,7 @@ const fadeInUp = {
   },
 };
 
-const staggerGrid = {
+const staggerGrid: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -47,7 +46,7 @@ const staggerGrid = {
   },
 };
 
-const gridItem = {
+const gridItem: Variants = {
   hidden: { opacity: 0, y: 20, scale: 0.95 },
   visible: {
     opacity: 1,

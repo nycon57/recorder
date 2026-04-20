@@ -1,6 +1,7 @@
 'use client';
 
 import * as motion from 'motion/react-client';
+import type { Variants } from 'motion/react';
 import AutoScroll from 'embla-carousel-auto-scroll';
 import { useRef } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -19,7 +20,7 @@ import {
 } from '@/app/components/ui/carousel';
 
 // Animation variants for header content
-const fadeInUp = {
+const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
   visible: {
     opacity: 1,
@@ -32,7 +33,7 @@ const fadeInUp = {
   },
 };
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -319,7 +320,7 @@ const AuroraTestimonials = () => {
 
                     {/* Quote */}
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      "{testimonial.content}"
+                      &ldquo;{testimonial.content}&rdquo;
                     </p>
 
                     {/* Bottom glow */}
@@ -379,7 +380,7 @@ const AuroraTestimonials = () => {
 
                     {/* Quote */}
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      "{testimonial.content}"
+                      &ldquo;{testimonial.content}&rdquo;
                     </p>
 
                     {/* Bottom glow */}

@@ -1,6 +1,7 @@
 'use client';
 
 import * as motion from 'motion/react-client';
+import type { Variants } from 'motion/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import type { IconSvgElement } from '@hugeicons/react';
 import {
@@ -19,7 +20,7 @@ import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 
 // Scroll-triggered animation variants
-const fadeInUp = {
+const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
   visible: {
     opacity: 1,
@@ -32,7 +33,7 @@ const fadeInUp = {
   },
 };
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -43,7 +44,7 @@ const staggerContainer = {
   },
 };
 
-const cardVariants = {
+const cardVariants: Variants = {
   hidden: { opacity: 0, y: 20, scale: 0.95 },
   visible: {
     opacity: 1,
@@ -201,11 +202,11 @@ const AuroraValueProp = () => {
             </h2>
 
             <p className="text-lg sm:text-xl text-muted-foreground/70 max-w-2xl mx-auto">
-              Every time someone explains something twice. Every "just ask Sarah" moment.
+              Every time someone explains something twice. Every &ldquo;just ask Sarah&rdquo; moment.
               Every expert who leaves with 3 years of tribal knowledge in their head.
               <br className="hidden sm:block" />
               <span className="text-muted-foreground/90 font-medium">
-                That's not an HR problem. It's a $470K leak.
+                That&rsquo;s not an HR problem. It&rsquo;s a $470K leak.
               </span>
             </p>
           </motion.div>
@@ -327,14 +328,14 @@ const AuroraValueProp = () => {
                 Notion stores <span className="text-muted-foreground">pages</span>.
                 <br />
                 <span className="text-accent">
-                  Neither captures the expertise in your team's heads.
+                  Neither captures the expertise in your team&rsquo;s heads.
                 </span>
               </p>
 
               <p className="mt-6 text-muted-foreground/80">
-                The "how", the "why", the shortcuts, the warnings, the tribal wisdom—
+                The &ldquo;how&rdquo;, the &ldquo;why&rdquo;, the shortcuts, the warnings, the tribal wisdom.
                 <br className="hidden sm:block" />
-                that's what walks out the door. And no document can capture it.
+                That&rsquo;s what walks out the door, and no document can capture it.
               </p>
             </Card>
           </motion.div>
@@ -543,7 +544,7 @@ const AuroraValueProp = () => {
               className="text-lg text-muted-foreground mb-8"
               variants={fadeInUp}
             >
-              Or we'll personally help you set it up until you do.
+              Or we&rsquo;ll personally help you set it up until you do.
             </motion.p>
 
             {/* CTA Button */}

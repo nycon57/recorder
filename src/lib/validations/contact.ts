@@ -32,4 +32,5 @@ export const contactFormSchema = z.object({
     .max(2000, 'Message must be at most 2000 characters'),
 });
 
+export type ContactFormInput = z.input<typeof contactFormSchema>;
 export type ContactFormData = z.infer<typeof contactFormSchema>;

@@ -158,7 +158,7 @@ export function AuroraSidebar({
         {hasSystemAdminAccess && (
           <>
             <SidebarSeparator className="mx-0" />
-            <NavAdminAurora wikiReviewCount={wikiReviewCount} />
+            <NavAdminAurora reviewQueueCount={wikiReviewCount} />
           </>
         )}
       </SidebarContent>
