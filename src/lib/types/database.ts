@@ -2943,6 +2943,24 @@ export interface Database {
         Update: Record<string, never>;
       };
     };
+    Views: {
+      vendor_corpus_page_counts: {
+        Row: {
+          vendor_source_id: string | null;
+          page_count: number;
+        };
+        Insert: never;
+        Update: never;
+      };
+      vendor_wiki_page_counts: {
+        Row: {
+          vendor_source_id: string | null;
+          page_count: number;
+        };
+        Insert: never;
+        Update: never;
+      };
+    };
   };
 }
 
