@@ -12,7 +12,7 @@
 
 import { readFile, stat } from 'fs/promises';
 
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { getGoogleAI, getFileManager, FileState, GOOGLE_CONFIG } from '@/lib/google/client';
 import { createLogger } from '@/lib/utils/logger';
@@ -66,20 +66,15 @@ interface SegmentTranscriptResult {
   }>;
 }
 
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
+}
+
 /**
  * Sleep helper for polling file processing status
  */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * Format seconds to MM:SS timestamp
- */
-function formatTimestamp(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
 /**
@@ -111,7 +106,6 @@ export async function transcribeSegment(job: Job): Promise<void> {
   });
 
   const supabase = createAdminClient();
-  let tempFilePath: string | null = null;
 
   try {
     // Read segment file
@@ -329,12 +323,10 @@ IMPORTANT: Return ONLY the JSON object.`;
         segment_index: segmentIndex,
         segment_start_time: segmentStartTime,
         segment_duration: segmentDuration,
-        audio_transcript: parsedResponse.audioTranscript,
-        visual_events: parsedResponse.visualEvents,
-        combined_narrative: parsedResponse.combinedNarrative,
-        key_moments: keyMoments,
-        key_moments_count: keyMoments.length,
-        status: 'processing', // Will be updated to 'completed' after embeddings
+        audio_transcript: toJson(parsedResponse.audioTranscript),
+        visual_events: toJson(parsedResponse.visualEvents),
+        combined_narrative: parsedResponse.combinedNarrative ?? null,
+        key_moments: toJson(keyMoments),
         processed_at: new Date().toISOString(),
       }, {
         onConflict: 'content_id,segment_index',
@@ -381,7 +373,7 @@ IMPORTANT: Return ONLY the JSON object.`;
 
       let embeddingsGenerated = 0;
 
-      for (const chunk of chunks) {
+      for (const [chunkIndex, chunk] of chunks.entries()) {
         try {
           const embedding = await generateEmbedding(chunk.text);
 
@@ -391,16 +383,17 @@ IMPORTANT: Return ONLY the JSON object.`;
             .insert({
               content_id: contentId,
               org_id: orgId,
-              text: chunk.text,
+              chunk_index: chunkIndex,
+              chunk_text: chunk.text,
               embedding,
-              segment_index: segmentIndex,
-              start_time: chunk.startTime,
-              end_time: chunk.endTime,
-              metadata: {
+              start_time_sec: chunk.startTime,
+              end_time_sec: chunk.endTime,
+              metadata: toJson({
                 source: 'progressive_segment',
                 segmentIndex,
-                absoluteStartTime: chunk.startTime + segmentStartTime,
-              },
+                absoluteStartTime: chunk.startTime,
+                absoluteEndTime: chunk.endTime,
+              }),
             });
 
           if (!chunkError) {
@@ -408,7 +401,7 @@ IMPORTANT: Return ONLY the JSON object.`;
           }
         } catch (embError) {
           logger.warn('Failed to generate embedding for chunk', {
-            context: { contentId, segmentIndex, chunkIndex: chunks.indexOf(chunk) },
+            context: { contentId, segmentIndex, chunkIndex },
             error: embError as Error,
           });
         }
@@ -423,12 +416,11 @@ IMPORTANT: Return ONLY the JSON object.`;
         },
       });
 
-      // Update segment status to completed with embeddings flag
+      // Refresh processed timestamp after the progressive-search pass.
       await supabase
         .from('segment_transcripts')
         .update({
-          status: 'completed',
-          embeddings_generated: embeddingsGenerated > 0,
+          processed_at: new Date().toISOString(),
         })
         .eq('content_id', contentId)
         .eq('segment_index', segmentIndex);
@@ -459,8 +451,7 @@ IMPORTANT: Return ONLY the JSON object.`;
       await supabase
         .from('segment_transcripts')
         .update({
-          status: 'completed',
-          embeddings_generated: false,
+          processed_at: new Date().toISOString(),
         })
         .eq('content_id', contentId)
         .eq('segment_index', segmentIndex);
@@ -530,8 +521,6 @@ IMPORTANT: Return ONLY the JSON object.`;
     });
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Segment transcription failed';
-
     logger.error('Segment transcription failed', {
       context: {
         contentId,
@@ -540,21 +529,6 @@ IMPORTANT: Return ONLY the JSON object.`;
       },
       error: error as Error,
     });
-
-    // Update segment status to failed
-    try {
-      const supabase = createAdminClient();
-      await supabase
-        .from('segment_transcripts')
-        .update({
-          status: 'failed',
-          error_message: errorMessage,
-        })
-        .eq('content_id', contentId)
-        .eq('segment_index', segmentIndex);
-    } catch {
-      // Ignore update failure
-    }
 
     throw error;
   }
@@ -590,7 +564,6 @@ function createChunksFromSegment(
   }
 
   // Strategy 2: Create chunks from audio transcript segments (precise timestamps)
-  const transcriptChunks: string[] = [];
   let currentChunk = '';
   let chunkStartTime = 0;
   let chunkEndTime = 0;
