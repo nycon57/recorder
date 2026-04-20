@@ -12,6 +12,7 @@
  */
 
 import type { OverlayTarget } from '@tribora/shared';
+import { TRIBORA_EXTENSION_THEME } from '../../utils/tribora-theme.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -22,10 +23,10 @@ const LABEL_ID = 'tribora-label';
 const MULTI_LAYER_ID = 'tribora-multi-layer';
 const STYLE_ID = 'tribora-keyframes';
 
-// Indigo-500 accent color (#6366f1) used throughout
-const ACCENT = '#6366f1';
-const ACCENT_RGBA = 'rgba(99, 102, 241, 0.2)';
-const ACCENT_PULSE = 'rgba(99, 102, 241, 0.4)';
+// Warm Amber accent used across the Tribora extension.
+const ACCENT = '#f5be4d';
+const ACCENT_RGBA = 'rgba(245, 190, 77, 0.24)';
+const ACCENT_PULSE = 'rgba(245, 190, 77, 0.42)';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ function buildCursorSvg(): SVGSVGElement {
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('fill', 'none');
   svg.style.cssText =
-    'filter: drop-shadow(0 2px 6px rgba(99,102,241,0.5)); display: block;';
+    'filter: drop-shadow(0 2px 6px rgba(245,190,77,0.5)); display: block;';
 
   // Outer ring
   const outerCircle = document.createElementNS(NS, 'circle');
@@ -103,6 +104,10 @@ function buildCursorSvg(): SVGSVGElement {
  * replace any existing overlay with the same ID.
  */
 export function createDomOverlay(): DomOverlay {
+  const prefersReducedMotion = window.matchMedia(
+    '(prefers-reduced-motion: reduce)',
+  ).matches;
+
   // ── Inject keyframe styles (once per page) ──────────────────────────────────
   injectKeyframesIfNeeded();
 
@@ -136,7 +141,7 @@ export function createDomOverlay(): DomOverlay {
     height: '24px',
     // Start off-screen
     transform: 'translate(-9999px, -9999px) translate(-50%, -50%)',
-    transition: 'transform 350ms cubic-bezier(0.22, 1, 0.36, 1)',
+    transition: `transform ${TRIBORA_EXTENSION_THEME.motion.medium} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
     display: 'none',
     pointerEvents: 'none',
   });
@@ -150,17 +155,20 @@ export function createDomOverlay(): DomOverlay {
   applyStyles(labelEl, {
     position: 'absolute',
     display: 'none',
-    background: ACCENT,
-    color: 'white',
-    fontSize: '12px',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
+    background: 'rgba(24, 22, 18, 0.96)',
+    border: `1px solid ${TRIBORA_EXTENSION_THEME.color.signalEdge}`,
+    color: TRIBORA_EXTENSION_THEME.color.ink,
+    fontSize: '11px',
+    fontFamily: TRIBORA_EXTENSION_THEME.font.mono,
     fontWeight: '500',
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
     lineHeight: '1.4',
-    padding: '3px 8px',
+    padding: '4px 8px',
     borderRadius: '4px',
     whiteSpace: 'nowrap',
     pointerEvents: 'none',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+    boxShadow: '0 8px 22px rgba(0,0,0,0.34)',
   });
 
   // ── Highlight ring ───────────────────────────────────────────────────────────
@@ -171,10 +179,10 @@ export function createDomOverlay(): DomOverlay {
     position: 'absolute',
     display: 'none',
     border: `2px solid ${ACCENT}`,
-    borderRadius: '6px',
+    borderRadius: '4px',
     boxShadow: `0 0 0 4px ${ACCENT_RGBA}`,
     pointerEvents: 'none',
-    transition: 'all 200ms cubic-bezier(0.22, 1, 0.36, 1)',
+    transition: `all ${TRIBORA_EXTENSION_THEME.motion.fast} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
   });
 
   container.appendChild(highlight);
@@ -300,13 +308,13 @@ export function createDomOverlay(): DomOverlay {
         width: `${rect.width + 8}px`,
         height: `${rect.height + 8}px`,
         border: `2px solid ${ACCENT}`,
-        borderRadius: '6px',
+        borderRadius: '4px',
         boxShadow:
           target.action === 'pulse'
             ? `0 0 0 0 ${ACCENT_PULSE}`
             : `0 0 0 4px ${ACCENT_RGBA}`,
         animation:
-          target.action === 'pulse'
+          target.action === 'pulse' && !prefersReducedMotion
             ? 'tribora-pulse 1s cubic-bezier(0, 0, 0.2, 1) infinite'
             : 'none',
       });
@@ -321,17 +329,20 @@ export function createDomOverlay(): DomOverlay {
           position: 'absolute',
           left: `${rect.left + 8}px`,
           top: `${Math.max(0, rect.top - 28)}px`,
-          background: ACCENT,
-          color: 'white',
-          fontSize: '12px',
-          fontFamily: 'system-ui, -apple-system, sans-serif',
+          background: 'rgba(24, 22, 18, 0.96)',
+          border: `1px solid ${TRIBORA_EXTENSION_THEME.color.signalEdge}`,
+          color: TRIBORA_EXTENSION_THEME.color.ink,
+          fontSize: '11px',
+          fontFamily: TRIBORA_EXTENSION_THEME.font.mono,
           fontWeight: '500',
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
           lineHeight: '1.4',
-          padding: '3px 8px',
+          padding: '4px 8px',
           borderRadius: '4px',
           whiteSpace: 'nowrap',
           pointerEvents: 'none',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+          boxShadow: '0 8px 22px rgba(0,0,0,0.34)',
         });
         multiLayer.appendChild(label);
       }
@@ -440,7 +451,9 @@ export function createDomOverlay(): DomOverlay {
     applyStyles(labelEl, { display: 'none' });
 
     applyStyles(highlight, {
-      animation: 'tribora-pulse 1s cubic-bezier(0, 0, 0.2, 1) infinite',
+      animation: prefersReducedMotion
+        ? 'none'
+        : 'tribora-pulse 1s cubic-bezier(0, 0, 0.2, 1) infinite',
       boxShadow: `0 0 0 0 ${ACCENT_PULSE}`,
     });
     positionHighlight(rect);
@@ -528,8 +541,8 @@ function injectKeyframesIfNeeded(): void {
   style.textContent = [
     '@keyframes tribora-pulse {',
     `  0%   { box-shadow: 0 0 0 0 ${ACCENT_PULSE}; }`,
-    '  70%  { box-shadow: 0 0 0 12px rgba(99,102,241,0); }',
-    '  100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }',
+    '  70%  { box-shadow: 0 0 0 12px rgba(245,190,77,0); }',
+    '  100% { box-shadow: 0 0 0 0 rgba(245,190,77,0); }',
     '}',
   ].join('\n');
 

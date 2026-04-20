@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { SessionState, RecordingState } from '@tribora/shared';
 import { getStoredSession } from '../../utils/api-client.js';
 import {
-  initiateSignIn,
+  initiateSignInAndWait,
   refreshSession,
   signOut,
 } from '../../utils/auth-session.js';
@@ -141,24 +141,44 @@ function RecordingSection() {
 export default function App() {
   const [session, setSession] = useState<SessionState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [authHint, setAuthHint] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
       const stored = await getStoredSession();
       setSession(stored);
+      const refreshed = await refreshSession().catch(() => stored);
+      setSession(refreshed);
       setLoading(false);
-
-      // If stored but expired, refresh immediately
-      if (
-        stored?.status === 'authenticated' &&
-        stored.expiresAt &&
-        stored.expiresAt < Date.now()
-      ) {
-        const refreshed = await refreshSession();
-        setSession(refreshed);
-      }
     })();
   }, []);
+
+  const handleSignIn = () => {
+    if (isSigningIn) return;
+
+    setIsSigningIn(true);
+    setAuthHint(
+      'Secure sign-in window opened. Your current tab stays in place.',
+    );
+
+    void initiateSignInAndWait({
+      timeoutMs: 2 * 60 * 1000,
+      pollIntervalMs: 1200,
+    })
+      .then((nextSession) => {
+        setSession(nextSession);
+        if (nextSession.status === 'authenticated') {
+          setAuthHint('Connected. You can start recording.');
+          return;
+        }
+
+        setAuthHint(nextSession.lastError ?? 'Sign-in was not completed.');
+      })
+      .finally(() => {
+        setIsSigningIn(false);
+      });
+  };
 
   const handleSignOut = () => {
     void signOut().then(() => setSession({ status: 'unauthenticated' }));
@@ -168,11 +188,19 @@ export default function App() {
     return (
       <div className="popup-container">
         <header className="popup-header">
-          <h1 className="popup-title">Tribora</h1>
+          <div className="popup-brand">
+            <span className="popup-mark">T</span>
+            <div>
+              <h1 className="popup-title">Tribora</h1>
+              <p className="popup-kicker">Extension Console</p>
+            </div>
+          </div>
           <span className="popup-version">v{VERSION}</span>
         </header>
         <main className="popup-main">
-          <p className="popup-description">Loading…</p>
+          <div className="popup-panel">
+            <p className="popup-description">Loading session state…</p>
+          </div>
         </main>
       </div>
     );
@@ -186,27 +214,41 @@ export default function App() {
     return (
       <div className="popup-container">
         <header className="popup-header">
-          <h1 className="popup-title">Tribora</h1>
+          <div className="popup-brand">
+            <span className="popup-mark">T</span>
+            <div>
+              <h1 className="popup-title">Tribora</h1>
+              <p className="popup-kicker">Extension Console</p>
+            </div>
+          </div>
           <span className="popup-version">v{VERSION}</span>
         </header>
         <main className="popup-main">
-          <div className="status-indicator status-disconnected">
-            <span className="status-dot" />
-            <span className="status-label">Not connected</span>
+          <div className="popup-panel">
+            <div className="status-indicator status-disconnected">
+              <span className="status-dot" />
+              <span className="status-label">Disconnected</span>
+            </div>
+            <h2 className="popup-section-title">Authenticate this browser</h2>
+            <p className="popup-description">
+              Sign-in opens in a dedicated Tribora window so your current tab
+              position stays untouched.
+            </p>
+            {session?.lastError && (
+              <p className="popup-error">{session.lastError}</p>
+            )}
+            {authHint && (
+              <p className="popup-description popup-auth-hint">{authHint}</p>
+            )}
           </div>
-          <p className="popup-description">
-            Sign in to start capturing knowledge.
-          </p>
-          {session?.lastError && (
-            <p className="popup-error">{session.lastError}</p>
-          )}
         </main>
         <footer className="popup-footer">
           <button
             className="popup-btn popup-btn-primary"
-            onClick={initiateSignIn}
+            onClick={handleSignIn}
+            disabled={isSigningIn}
           >
-            Sign in
+            {isSigningIn ? 'Waiting for sign-in…' : 'Sign in'}
           </button>
         </footer>
       </div>
@@ -218,39 +260,56 @@ export default function App() {
   return (
     <div className="popup-container">
       <header className="popup-header">
-        <h1 className="popup-title">Tribora</h1>
+        <div className="popup-brand">
+          <span className="popup-mark">T</span>
+          <div>
+            <h1 className="popup-title">Tribora</h1>
+            <p className="popup-kicker">Extension Console</p>
+          </div>
+        </div>
         <span className="popup-version">v{VERSION}</span>
       </header>
       <main className="popup-main">
-        <div className="status-indicator status-connected">
-          <span className="status-dot" />
-          <span className="status-label">Connected</span>
-        </div>
-        <div className="user-info">
-          {session.user?.image && (
-            <img
-              src={session.user.image}
-              alt=""
-              className="user-avatar"
-              width={32}
-              height={32}
-            />
-          )}
-          <div className="user-details">
-            <div className="user-name">{displayName}</div>
-            {session.activeOrg && (
-              <div className="user-org">{session.activeOrg.name}</div>
+        <div className="popup-panel">
+          <div className="status-indicator status-connected">
+            <span className="status-dot" />
+            <span className="status-label">Connected</span>
+          </div>
+          <div className="user-info">
+            {session.user?.image && (
+              <img
+                src={session.user.image}
+                alt=""
+                className="user-avatar"
+                width={32}
+                height={32}
+              />
             )}
+            <div className="user-details">
+              <div className="user-name">{displayName}</div>
+              {session.activeOrg && (
+                <div className="user-org">{session.activeOrg.name}</div>
+              )}
+            </div>
           </div>
         </div>
-        <RecordingSection />
-        <div className="popup-section popup-debug-section">
+
+        <div className="popup-panel">
           <div className="popup-section-copy">
-            <div className="popup-section-title">Session debugging</div>
+            <div className="popup-section-title">Capture</div>
+            <p className="popup-description">
+              Record in place and upload directly into your workspace library.
+            </p>
+          </div>
+          <RecordingSection />
+        </div>
+
+        <div className="popup-panel popup-debug-section">
+          <div className="popup-section-copy">
+            <div className="popup-section-title">Session Diagnostics</div>
             <p className="popup-description">
               Prelaunch builds now store verbatim transcripts, tool activity,
-              and session events for every new Tribora voice session
-              automatically.
+              and session events for every new Tribora voice session.
             </p>
           </div>
           <div className="status-indicator status-connected">

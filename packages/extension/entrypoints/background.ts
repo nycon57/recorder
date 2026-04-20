@@ -1150,9 +1150,8 @@ export default defineBackground(() => {
         }
       }
       if (!session || session.status !== 'authenticated') {
-        await chrome.tabs.create({
-          url: `${API_BASE_URL}/sign-in?source=extension`,
-        });
+        const { initiateSignIn } = await import('../utils/auth-session.js');
+        await initiateSignIn();
         return;
       }
 
