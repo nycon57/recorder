@@ -6,11 +6,14 @@
 
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
-// Create mock functions at module scope - will be initialized in beforeEach
-let mockFrom: jest.Mock;
-let mockRpc: jest.Mock;
-let mockGenerateEmbedding: jest.Mock;
-let mockExpandShortQuery: jest.Mock;
+// Create mock functions at module scope so the mocked modules and tests share them.
+type SyncMock = (...args: unknown[]) => unknown;
+type AsyncMock = (...args: unknown[]) => Promise<unknown>;
+
+const mockFrom = jest.fn<SyncMock>();
+const mockRpc = jest.fn<AsyncMock>();
+const mockGenerateEmbedding = jest.fn<AsyncMock>();
+const mockExpandShortQuery = jest.fn<AsyncMock>();
 
 // Mock Supabase client at the package level
 jest.mock('@supabase/supabase-js', () => ({
@@ -23,21 +26,21 @@ jest.mock('@supabase/supabase-js', () => ({
 // Mock dependencies - provide actual mock implementations
 jest.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: {
-    from: jest.fn(),
-    rpc: jest.fn(),
+    from: mockFrom,
+    rpc: mockRpc,
   },
   createClient: jest.fn(() => ({
-    from: jest.fn(),
-    rpc: jest.fn(),
+    from: mockFrom,
+    rpc: mockRpc,
   })),
 }));
 
 jest.mock('../embedding-fallback', () => ({
-  generateEmbeddingWithFallback: jest.fn(),
+  generateEmbeddingWithFallback: mockGenerateEmbedding,
 }));
 
 jest.mock('../query-preprocessor', () => ({
-  expandShortQuery: jest.fn(),
+  expandShortQuery: mockExpandShortQuery,
 }));
 
 jest.mock('@/lib/supabase/server', () => ({
@@ -49,28 +52,11 @@ jest.mock('@/lib/supabase/server', () => ({
   })),
 }));
 
-// Import mocked modules for type checking
-import { supabaseAdmin } from '@/lib/supabase/admin';
-import { generateEmbeddingWithFallback } from '../embedding-fallback';
-import { expandShortQuery } from '../query-preprocessor';
 import { vectorSearch, hybridSearch, searchRecording } from '../vector-search-google';
-import type { SearchOptions } from '../vector-search-google';
 
 describe('Vector Search - Adaptive Threshold Logic', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-
-    // Get references to the mocked functions
-    const fromMock = supabaseAdmin.from as jest.Mock;
-    const rpcMock = supabaseAdmin.rpc as jest.Mock;
-    const embeddingMock = generateEmbeddingWithFallback as jest.Mock;
-    const expandQueryMock = expandShortQuery as jest.Mock;
-
-    // Assign to module-level variables
-    mockFrom = fromMock;
-    mockRpc = rpcMock;
-    mockGenerateEmbedding = embeddingMock;
-    mockExpandShortQuery = expandQueryMock;
 
     // Setup default mock chain for from()
     // Create a default query builder chain
@@ -80,28 +66,28 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       is: jest.fn().mockReturnThis(),
       in: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
+      limit: jest.fn<AsyncMock>(),
       gte: jest.fn().mockReturnThis(),
       lte: jest.fn().mockReturnThis(),
       textSearch: jest.fn().mockReturnThis(),
-      single: jest.fn().mockResolvedValue({ data: null, error: null }),
+      single: jest.fn<AsyncMock>().mockResolvedValue({ data: null, error: null }),
     };
 
     // Make limit() return a promise by default
     defaultQueryBuilder.limit.mockResolvedValue({ data: [], error: null });
 
     // Default from() returns the query builder
-    fromMock.mockReturnValue(defaultQueryBuilder);
+    mockFrom.mockReturnValue(defaultQueryBuilder);
 
     // Default rpc() returns empty results
-    rpcMock.mockResolvedValue({ data: [], error: null });
+    mockRpc.mockResolvedValue({ data: [], error: null });
 
     // Restore default mock implementations
-    embeddingMock.mockResolvedValue({
+    mockGenerateEmbedding.mockResolvedValue({
       embedding: Array(1536).fill(0.1),
       provider: 'google',
     });
-    expandQueryMock.mockImplementation(async (query: string) => query);
+    mockExpandShortQuery.mockImplementation(async (query: unknown) => String(query));
 
     // Set environment variables for testing
     process.env.SEARCH_DEFAULT_THRESHOLD = '0.5';
@@ -128,7 +114,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [
             {
               id: 'chunk-1',
@@ -185,7 +171,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [
             {
               id: 'chunk-1',
@@ -226,7 +212,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       await vectorSearch(mediumQuery, { orgId });
 
       // Verify match_chunks was called with elevated threshold (0.55)
-      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
+      expect(mockRpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
         match_threshold: 0.55,
       }));
     });
@@ -242,7 +228,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [
             {
               id: 'chunk-1',
@@ -283,7 +269,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       await vectorSearch(longQuery, { orgId });
 
       // Verify match_chunks was called with high threshold (0.65)
-      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
+      expect(mockRpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
         match_threshold: 0.65,
       }));
     });
@@ -302,7 +288,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [],
           error: null,
         }),
@@ -317,7 +303,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       await vectorSearch(query, { orgId });
 
       // Verify match_chunks was called with custom default threshold (0.6)
-      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
+      expect(mockRpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
         match_threshold: 0.6,
       }));
     });
@@ -334,7 +320,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [],
           error: null,
         }),
@@ -349,7 +335,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       await vectorSearch(query, { orgId, threshold: manualThreshold });
 
       // Verify match_chunks was called with manual threshold
-      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
+      expect(mockRpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
         match_threshold: manualThreshold,
       }));
     });
@@ -369,7 +355,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         order: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
         textSearch: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
+        single: jest.fn<AsyncMock>().mockResolvedValue({
           data: [
             {
               id: 'chunk-1',
@@ -413,9 +399,6 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
     });
 
     it('should apply keyword boosting to matching titles', async () => {
-      const query = 'accelerate';
-      const orgId = 'test-org-id';
-
       // This test verifies the mergeSearchResults function boosts scores
       // when titles match query terms
       const mockVectorResults = [
@@ -460,7 +443,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
-        textSearch: jest.fn().mockResolvedValue({
+        textSearch: jest.fn<AsyncMock>().mockResolvedValue({
           data: [
             {
               id: 'chunk-1', // Duplicate ID
@@ -524,7 +507,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [],
           error: null,
         }),
@@ -539,7 +522,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
 
       // Verify textSearch was NOT called (no keyword search)
       // Should only use vector search via RPC
-      expect(supabaseAdmin.rpc).toHaveBeenCalled();
+      expect(mockRpc).toHaveBeenCalled();
     });
   });
 
@@ -558,7 +541,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [],
           error: null,
         }),
@@ -589,7 +572,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [],
           error: null,
         }),
@@ -621,7 +604,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [],
           error: null,
         }),
@@ -651,7 +634,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [],
           error: null,
         }),
@@ -681,7 +664,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [],
           error: null,
         }),
@@ -715,7 +698,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [],
           error: null,
         }),
@@ -749,7 +732,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [],
           error: null,
         }),
@@ -790,7 +773,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: null,
           error: { message: 'Database connection failed' },
         }),
@@ -822,7 +805,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [
             {
               id: 'chunk-1',
@@ -871,7 +854,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
         is: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({
+        limit: jest.fn<AsyncMock>().mockResolvedValue({
           data: [],
           error: null,
         }),

@@ -8,7 +8,17 @@
  */
 
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+
+import { searchMonitor } from '@/lib/services/search-monitoring';
+
 import { POST } from '../route';
+
+type SyncMock = (...args: unknown[]) => unknown;
+type AsyncMock = (...args: unknown[]) => Promise<unknown>;
+
+const mockRetrieveContext = jest.fn<AsyncMock>();
+const mockHybridSearch = jest.fn<AsyncMock>();
+const mockSupabaseFrom = jest.fn<SyncMock>();
 
 // Mock dependencies
 jest.mock('@/lib/utils/api', () => ({
@@ -19,7 +29,7 @@ jest.mock('@/lib/utils/api', () => ({
 }));
 
 jest.mock('@/lib/services/rag-google', () => ({
-  retrieveContext: jest.fn(),
+  retrieveContext: mockRetrieveContext,
 }));
 
 jest.mock('@/lib/services/query-preprocessor', () => ({
@@ -43,24 +53,26 @@ jest.mock('@/lib/services/query-router', () => ({
       threshold: 0.7,
     },
   })),
-  getRetrievalConfig: jest.fn((route: any) => route.config),
+  getRetrievalConfig: jest.fn((route: { config: unknown }) => route.config),
   explainRoute: jest.fn(() => 'Route explanation'),
 }));
 
 jest.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: {
-    from: jest.fn(() => ({
-      select: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      insert: jest.fn().mockReturnThis(),
-      single: jest.fn().mockResolvedValue({ data: { id: 'test-id' }, error: null }),
-    })),
+    from: mockSupabaseFrom,
   },
 }));
 
 jest.mock('@/lib/services/vector-search-google', () => ({
-  hybridSearch: jest.fn(),
+  hybridSearch: mockHybridSearch,
 }));
+
+mockSupabaseFrom.mockReturnValue({
+  select: jest.fn().mockReturnThis(),
+  eq: jest.fn().mockReturnThis(),
+  insert: jest.fn().mockReturnThis(),
+  single: jest.fn<AsyncMock>().mockResolvedValue({ data: { id: 'test-id' }, error: null }),
+});
 
 jest.mock('ai', () => ({
   streamText: jest.fn(() => ({
@@ -93,12 +105,6 @@ jest.mock('@/lib/services/search-monitoring', () => ({
   },
 }));
 
-// Import mocked modules
-import { retrieveContext } from '@/lib/services/rag-google';
-import { hybridSearch } from '@/lib/services/vector-search-google';
-import { supabaseAdmin } from '@/lib/supabase/admin';
-import { searchMonitor } from '@/lib/services/search-monitoring';
-
 describe('Chat API - Retry Logic', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -111,11 +117,11 @@ describe('Chat API - Retry Logic', () => {
     process.env.ENABLE_SEARCH_AB_TESTING = 'false';
 
     // Mock default database responses
-    (supabaseAdmin.from as jest.Mock).mockReturnValue({
+    mockSupabaseFrom.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
       insert: jest.fn().mockReturnThis(),
-      single: jest.fn().mockResolvedValue({
+      single: jest.fn<AsyncMock>().mockResolvedValue({
         data: { count: 5 },
         error: null,
       }),
@@ -146,7 +152,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock first retrieval returning empty results
-      (retrieveContext as jest.Mock).mockResolvedValueOnce({
+      mockRetrieveContext.mockResolvedValueOnce({
         query: 'What is the accelerate login process?',
         context: '',
         sources: [],
@@ -154,7 +160,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock second retrieval with lower threshold returning results
-      (retrieveContext as jest.Mock).mockResolvedValueOnce({
+      mockRetrieveContext.mockResolvedValueOnce({
         query: 'What is the accelerate login process?',
         context: '[1] Accelerate Login Guide: The login process involves...',
         sources: [
@@ -170,13 +176,13 @@ describe('Chat API - Retry Logic', () => {
         totalChunks: 1,
       });
 
-      const response = await POST(mockRequest);
+      await POST(mockRequest);
 
       // Verify retrieveContext was called twice
-      expect(retrieveContext).toHaveBeenCalledTimes(2);
+      expect(mockRetrieveContext).toHaveBeenCalledTimes(2);
 
       // Verify second call used lower threshold (0.5)
-      expect(retrieveContext).toHaveBeenNthCalledWith(
+      expect(mockRetrieveContext).toHaveBeenNthCalledWith(
         2,
         expect.any(String),
         'test-org-id',
@@ -203,7 +209,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock retrieveContext returning empty (with short query, threshold is already 0.5)
-      (retrieveContext as jest.Mock).mockResolvedValueOnce({
+      mockRetrieveContext.mockResolvedValueOnce({
         query: 'short query',
         context: '',
         sources: [],
@@ -211,7 +217,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock hybrid search as fallback
-      (hybridSearch as jest.Mock).mockResolvedValueOnce([
+      mockHybridSearch.mockResolvedValueOnce([
         {
           id: 'chunk-1',
           recordingId: 'rec-1',
@@ -226,10 +232,10 @@ describe('Chat API - Retry Logic', () => {
       await POST(mockRequest);
 
       // Verify retrieveContext was called only once (no threshold retry)
-      expect(retrieveContext).toHaveBeenCalledTimes(1);
+      expect(mockRetrieveContext).toHaveBeenCalledTimes(1);
 
       // Verify hybrid search was attempted instead
-      expect(hybridSearch).toHaveBeenCalled();
+      expect(mockHybridSearch).toHaveBeenCalled();
     });
   });
 
@@ -248,7 +254,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock both retrieveContext calls returning empty
-      (retrieveContext as jest.Mock).mockResolvedValue({
+      mockRetrieveContext.mockResolvedValue({
         query: 'What is the login URL?',
         context: '',
         sources: [],
@@ -256,7 +262,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock hybrid search returning results
-      (hybridSearch as jest.Mock).mockResolvedValueOnce([
+      mockHybridSearch.mockResolvedValueOnce([
         {
           id: 'chunk-1',
           recordingId: 'rec-1',
@@ -271,7 +277,7 @@ describe('Chat API - Retry Logic', () => {
       await POST(mockRequest);
 
       // Verify hybrid search was called
-      expect(hybridSearch).toHaveBeenCalledWith(
+      expect(mockHybridSearch).toHaveBeenCalledWith(
         'What is the login URL?',
         expect.objectContaining({
           orgId: 'test-org-id',
@@ -298,7 +304,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock empty initial retrieval
-      (retrieveContext as jest.Mock).mockResolvedValue({
+      mockRetrieveContext.mockResolvedValue({
         query: 'test query',
         context: '',
         sources: [],
@@ -306,7 +312,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock hybrid search with visual context
-      (hybridSearch as jest.Mock).mockResolvedValueOnce([
+      mockHybridSearch.mockResolvedValueOnce([
         {
           id: 'chunk-1',
           recordingId: 'rec-1',
@@ -327,7 +333,7 @@ describe('Chat API - Retry Logic', () => {
       const response = await POST(mockRequest);
 
       // Verify response headers include sources
-      const headers = (response as any).headers;
+      const { headers } = response;
       expect(headers.set).toHaveBeenCalledWith('X-Sources-Count', '1');
       expect(headers.set).toHaveBeenCalledWith('X-Retrieval-Attempts', '2');
     });
@@ -348,7 +354,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock all previous attempts returning empty
-      (retrieveContext as jest.Mock).mockResolvedValue({
+      mockRetrieveContext.mockResolvedValue({
         query: 'authentication process',
         context: '',
         sources: [],
@@ -356,10 +362,10 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock first hybrid search (attempt 2) returning empty
-      (hybridSearch as jest.Mock).mockResolvedValueOnce([]);
+      mockHybridSearch.mockResolvedValueOnce([]);
 
       // Mock second hybrid search (attempt 3 - keyword fallback) returning results
-      (hybridSearch as jest.Mock).mockResolvedValueOnce([
+      mockHybridSearch.mockResolvedValueOnce([
         {
           id: 'chunk-1',
           recordingId: 'rec-1',
@@ -374,10 +380,10 @@ describe('Chat API - Retry Logic', () => {
       await POST(mockRequest);
 
       // Verify hybrid search was called twice (once for hybrid, once for keyword)
-      expect(hybridSearch).toHaveBeenCalledTimes(2);
+      expect(mockHybridSearch).toHaveBeenCalledTimes(2);
 
       // Verify third call used very low threshold (0.3)
-      expect(hybridSearch).toHaveBeenNthCalledWith(
+      expect(mockHybridSearch).toHaveBeenNthCalledWith(
         2,
         'authentication process',
         expect.objectContaining({
@@ -403,19 +409,19 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock all attempts returning empty
-      (retrieveContext as jest.Mock).mockResolvedValue({
+      mockRetrieveContext.mockResolvedValue({
         query: 'nonexistent topic',
         context: '',
         sources: [],
         totalChunks: 0,
       });
 
-      (hybridSearch as jest.Mock).mockResolvedValue([]);
+      mockHybridSearch.mockResolvedValue([]);
 
       const response = await POST(mockRequest);
 
       // Verify response headers indicate 0 sources and 3 attempts
-      const headers = (response as any).headers;
+      const { headers } = response;
       expect(headers.set).toHaveBeenCalledWith('X-Sources-Count', '0');
       expect(headers.set).toHaveBeenCalledWith('X-Retrieval-Attempts', '3');
 
@@ -439,7 +445,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock retrieval throwing error
-      (retrieveContext as jest.Mock).mockRejectedValue(
+      mockRetrieveContext.mockRejectedValue(
         new Error('Database connection failed')
       );
 
@@ -470,10 +476,10 @@ describe('Chat API - Retry Logic', () => {
         }),
       });
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
       // Mock retrieval throwing error
-      (retrieveContext as jest.Mock).mockRejectedValue(
+      mockRetrieveContext.mockRejectedValue(
         new Error('Embedding service unavailable')
       );
 
@@ -511,7 +517,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock retrieval error
-      (retrieveContext as jest.Mock).mockRejectedValue(
+      mockRetrieveContext.mockRejectedValue(
         new Error('Temporary failure')
       );
 
@@ -519,7 +525,7 @@ describe('Chat API - Retry Logic', () => {
 
       // Verify streamText was still called (falls back to tools)
       expect(response).toBeDefined();
-      expect((response as any).body).toBe('mock-stream');
+      expect(response.body).toBe('mock-stream');
     });
   });
 
@@ -538,7 +544,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock successful retrieval
-      (retrieveContext as jest.Mock).mockResolvedValueOnce({
+      mockRetrieveContext.mockResolvedValueOnce({
         query: 'test query',
         context: '[1] Test: Content',
         sources: [
@@ -557,7 +563,7 @@ describe('Chat API - Retry Logic', () => {
       const response = await POST(mockRequest);
 
       // Verify strategy header
-      const headers = (response as any).headers;
+      const { headers } = response;
       expect(headers.set).toHaveBeenCalledWith('X-Search-Strategy', 'standard_search');
     });
 
@@ -575,7 +581,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock retrieval with 3 sources
-      (retrieveContext as jest.Mock).mockResolvedValueOnce({
+      mockRetrieveContext.mockResolvedValueOnce({
         query: 'test query',
         context: '[1] Test 1\n[2] Test 2\n[3] Test 3',
         sources: [
@@ -588,7 +594,7 @@ describe('Chat API - Retry Logic', () => {
 
       const response = await POST(mockRequest);
 
-      const headers = (response as any).headers;
+      const { headers } = response;
       expect(headers.set).toHaveBeenCalledWith('X-Sources-Count', '3');
     });
 
@@ -606,7 +612,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock first attempt empty, second succeeds
-      (retrieveContext as jest.Mock)
+      mockRetrieveContext
         .mockResolvedValueOnce({ query: 'test query', context: '', sources: [], totalChunks: 0 })
         .mockResolvedValueOnce({
           query: 'test query',
@@ -617,7 +623,7 @@ describe('Chat API - Retry Logic', () => {
 
       const response = await POST(mockRequest);
 
-      const headers = (response as any).headers;
+      const { headers } = response;
       expect(headers.set).toHaveBeenCalledWith('X-Retrieval-Attempts', '2');
     });
 
@@ -635,7 +641,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock successful retrieval
-      (retrieveContext as jest.Mock).mockResolvedValueOnce({
+      mockRetrieveContext.mockResolvedValueOnce({
         query: 'test query',
         context: '[1] Test: Content',
         sources: [{ recordingId: 'rec-1', recordingTitle: 'Test', chunkId: 'c1', chunkText: 'Content', similarity: 0.8, url: '/library/rec-1' }],
@@ -644,7 +650,7 @@ describe('Chat API - Retry Logic', () => {
 
       const response = await POST(mockRequest);
 
-      const headers = (response as any).headers;
+      const { headers } = response;
       expect(headers.set).toHaveBeenCalledWith('X-Threshold-Used', expect.any(String));
     });
 
@@ -662,7 +668,7 @@ describe('Chat API - Retry Logic', () => {
       });
 
       // Mock retrieval with multiple sources
-      (retrieveContext as jest.Mock).mockResolvedValueOnce({
+      mockRetrieveContext.mockResolvedValueOnce({
         query: 'test query',
         context: '[1] Test 1\n[2] Test 2',
         sources: [
@@ -674,7 +680,7 @@ describe('Chat API - Retry Logic', () => {
 
       const response = await POST(mockRequest);
 
-      const headers = (response as any).headers;
+      const { headers } = response;
       // Average: (0.9 + 0.7) / 2 = 0.8
       expect(headers.set).toHaveBeenCalledWith('X-Similarity-Avg', '0.800');
     });
@@ -694,24 +700,24 @@ describe('Chat API - Retry Logic', () => {
         }),
       });
 
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
       // Mock recordings count > 0
-      (supabaseAdmin.from as jest.Mock).mockReturnValue({
+      mockSupabaseFrom.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({ data: { count: 10 }, error: null }),
+        single: jest.fn<AsyncMock>().mockResolvedValue({ data: { count: 10 }, error: null }),
       });
 
       // Mock all retrievals empty
-      (retrieveContext as jest.Mock).mockResolvedValue({
+      mockRetrieveContext.mockResolvedValue({
         query: 'test query',
         context: '',
         sources: [],
         totalChunks: 0,
       });
 
-      (hybridSearch as jest.Mock).mockResolvedValue([]);
+      mockHybridSearch.mockResolvedValue([]);
 
       await POST(mockRequest);
 
@@ -743,17 +749,17 @@ describe('Chat API - Retry Logic', () => {
         }),
       });
 
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
       // Mock recordings count = 0
-      (supabaseAdmin.from as jest.Mock).mockReturnValue({
+      mockSupabaseFrom.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({ data: { count: 0 }, error: null }),
+        single: jest.fn<AsyncMock>().mockResolvedValue({ data: { count: 0 }, error: null }),
       });
 
       // Mock empty retrieval
-      (retrieveContext as jest.Mock).mockResolvedValue({
+      mockRetrieveContext.mockResolvedValue({
         query: 'test query',
         context: '',
         sources: [],
