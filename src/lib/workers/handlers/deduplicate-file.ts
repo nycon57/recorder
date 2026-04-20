@@ -59,7 +59,7 @@ export async function handleDeduplicateFile(
 
     const { data: recording } = await supabase
       .from('content')
-      .select('storage_path, storage_path_r2')
+      .select('storage_path_raw, storage_path_processed, storage_path_r2')
       .eq('id', recordingId)
       .single();
 
@@ -67,8 +67,15 @@ export async function handleDeduplicateFile(
       throw new Error('Recording not found');
     }
 
+    const storagePathToUse =
+      recording.storage_path_raw || recording.storage_path_processed || recording.storage_path_r2;
+
+    if (!storagePathToUse) {
+      throw new Error('Recording storage path is missing');
+    }
+
     const downloadResult = await storageManager.download(
-      recording.storage_path,
+      storagePathToUse,
       recording.storage_path_r2,
       storageProvider,
       { asBuffer: true }

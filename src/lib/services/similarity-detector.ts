@@ -8,15 +8,17 @@
  * - Threshold-based matching
  */
 
-import { createHash } from 'crypto';
 import { execFile, spawn } from 'child_process';
-import { promisify } from 'util';
 import { promises as fs } from 'fs';
-import { join, isAbsolute, resolve } from 'path';
+import { isAbsolute, resolve } from 'path';
+import { promisify } from 'util';
+
 import * as tmp from 'tmp-promise';
+
 import { createClient } from '@/lib/supabase/admin';
-import { StorageManager } from './storage-manager';
 import type { StorageProvider } from '@/lib/types/database';
+
+import { StorageManager } from './storage-manager';
 
 const execFileAsync = promisify(execFile);
 
@@ -65,6 +67,16 @@ const DEFAULT_CONFIG: SimilarityConfig = {
   overallThreshold: 88,
   maxHammingDistance: 10,
 };
+
+type ContentStorageRecord = {
+  storage_path_raw: string | null;
+  storage_path_processed: string | null;
+  storage_path_r2: string | null;
+};
+
+function getContentStoragePath(recording: ContentStorageRecord): string | null {
+  return recording.storage_path_raw || recording.storage_path_processed || recording.storage_path_r2;
+}
 
 /**
  * Validate and normalize file path
@@ -137,8 +149,8 @@ export async function calculateVideoHash(
         '-',
       ]);
 
-      const chunks: Buffer[] = [];
-      const stderrChunks: Buffer[] = [];
+      const chunks: Uint8Array[] = [];
+      const stderrChunks: Uint8Array[] = [];
 
       ffmpegProcess.stdout.on('data', (chunk) => chunks.push(chunk));
       ffmpegProcess.stderr.on('data', (chunk) => stderrChunks.push(chunk));
@@ -239,8 +251,8 @@ export async function calculateAudioHash(filePath: string): Promise<string> {
         '-',
       ]);
 
-      const chunks: Buffer[] = [];
-      const stderrChunks: Buffer[] = [];
+      const chunks: Uint8Array[] = [];
+      const stderrChunks: Uint8Array[] = [];
 
       ffmpegProcess.stdout.on('data', (chunk) => chunks.push(chunk));
       ffmpegProcess.stderr.on('data', (chunk) => stderrChunks.push(chunk));
@@ -322,7 +334,7 @@ export async function calculatePerceptualHash(
     if (!storagePath) {
       const { data: recording } = await supabase
         .from('content')
-        .select('storage_path, storage_path_r2, duration')
+        .select('storage_path_raw, storage_path_processed, storage_path_r2, duration_sec')
         .eq('id', contentId)
         .single();
 
@@ -330,17 +342,21 @@ export async function calculatePerceptualHash(
         throw new Error('Recording not found');
       }
 
-      pathToUse = recording.storage_path_r2 || recording.storage_path;
-      duration = recording.duration || 0;
+      pathToUse = getContentStoragePath(recording) || '';
+      duration = recording.duration_sec ?? 0;
     } else {
       // If storagePath is provided, still get duration from DB
       const { data: recording } = await supabase
         .from('content')
-        .select('duration')
+        .select('duration_sec')
         .eq('id', contentId)
         .single();
 
-      duration = recording?.duration || 0;
+      duration = recording?.duration_sec ?? 0;
+    }
+
+    if (!pathToUse) {
+      throw new Error('Recording storage path is missing');
     }
 
     const downloadResult = await storageManager.download(
@@ -429,7 +445,7 @@ export async function findSimilarRecordings(
   // Get all recordings with perceptual hashes in the organization
   let query = supabase
     .from('content')
-    .select('id, title, duration, file_size, video_hash, audio_hash')
+    .select('id, title, duration_sec, file_size, video_hash, audio_hash')
     .eq('org_id', orgId)
     .not('video_hash', 'is', null)
     .not('audio_hash', 'is', null)
@@ -449,6 +465,10 @@ export async function findSimilarRecordings(
 
   for (const recording of recordings) {
     try {
+      if (!recording.video_hash || !recording.audio_hash) {
+        continue;
+      }
+
       // Calculate video similarity
       const videoDistance = hammingDistance(videoHash, recording.video_hash);
       const videoSimilarity = hammingToSimilarity(videoDistance);
@@ -477,9 +497,9 @@ export async function findSimilarRecordings(
           audioSimilarity: Math.round(audioSimilarity * 100) / 100,
           overallSimilarity: Math.round(overallSimilarity * 100) / 100,
           hammingDistance: Math.round(avgDistance),
-          title: recording.title,
-          duration: recording.duration,
-          fileSize: recording.file_size,
+          title: recording.title ?? 'Untitled content',
+          duration: recording.duration_sec ?? 0,
+          fileSize: recording.file_size ?? 0,
         });
       }
     } catch (error) {
@@ -538,7 +558,7 @@ export async function batchProcessSimilarity(
   // Get recordings without perceptual hashes
   const { data: recordings, error } = await supabase
     .from('content')
-    .select('id, storage_path, storage_path_r2, storage_provider')
+    .select('id, storage_path_raw, storage_path_processed, storage_path_r2, storage_provider')
     .eq('org_id', orgId)
     .is('video_hash', null)
     .is('deleted_at', null)
@@ -558,9 +578,16 @@ export async function batchProcessSimilarity(
 
   for (const recording of recordings) {
     try {
+      const storagePath = getContentStoragePath(recording);
+
+      if (!storagePath) {
+        errors.push(`Missing storage path for ${recording.id}`);
+        continue;
+      }
+
       const hash = await calculatePerceptualHash(
         recording.id,
-        recording.storage_path_r2 || recording.storage_path,
+        storagePath,
         recording.storage_provider || 'supabase'
       );
 
