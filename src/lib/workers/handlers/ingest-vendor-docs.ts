@@ -33,6 +33,7 @@ import { createLogger } from '@/lib/utils/logger';
 import type { Database } from '@/lib/types/database';
 
 import type { ProgressCallback } from '../job-processor';
+import { shouldSkipVendorWikiPageUpdate } from './ingest-vendor-docs-skip';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -642,8 +643,15 @@ async function upsertPages(
       .maybeSingle() as { data: VendorRow | null };
 
     if (existing) {
-      // Compare hashes — skip if unchanged
-      if (existing.content_hash === page.contentHash) {
+      // Skip only when both the page content and the registry mapping already match.
+      if (
+        shouldSkipVendorWikiPageUpdate({
+          existingContentHash: existing.content_hash,
+          nextContentHash: page.contentHash,
+          existingVendorSourceId: existing.vendor_source_id,
+          nextVendorSourceId: options?.vendorSourceId,
+        })
+      ) {
         skipped++;
         logger.debug('Skipping unchanged page', {
           context: { app, screen: page.screen },
