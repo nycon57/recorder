@@ -60,10 +60,12 @@ import { GoogleGenAI } from '@google/genai';
 
 import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
-import type { ResolvedOrgWikiPage } from '@/lib/services/org-wiki-embedding';
-import { resolveCompiledMemoryContext } from '@/lib/services/compiled-memory-context';
-import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
-import type { VendorCorpusPageMatch } from '@/lib/services/vendor-doc-corpus';
+import type { CompiledMemoryCitationLayer } from '@/lib/services/compiled-memory-context';
+import {
+  buildExtensionCompiledMemoryPrompt,
+  resolveCompiledMemoryAnswerContext,
+  type CompiledMemoryAnswerCitation,
+} from '@/lib/services/compiled-memory-answer-context';
 import {
   buildKnowledgeExtensionQueryTelemetry,
   recordKnowledgeTelemetryEvent,
@@ -98,6 +100,8 @@ interface CitationEvent {
   sourceId: string;
   title: string;
   recordingUrl?: string;
+  layer?: CompiledMemoryCitationLayer;
+  freshness?: CompiledMemoryAnswerCitation['freshness'];
 }
 
 interface DoneEvent {
@@ -154,112 +158,6 @@ function getGenAIClient(): GoogleGenAI {
     _genaiClient = new GoogleGenAI({ apiKey });
   }
   return _genaiClient;
-}
-
-// -------------------- Fusion prompt --------------------
-
-const ORG_SEPARATOR = '\n\n---\n\n';
-const MAX_CONTENT_CHARS_PER_PAGE = 3000;
-
-/**
- * Build the PRD Part 3 Component 3 fusion prompt. Sections are kept in the
- * order specified by product-architecture-v2.md line 435+:
- *   VENDOR KNOWLEDGE → ORG KNOWLEDGE → INTERACTIVE ELEMENTS → QUESTION.
- *
- * Rules block is inlined verbatim (paraphrased slightly for clarity) and
- * enforces: org precedence, `[ELEMENT:selector:label]` tagging,
- * `[SOURCE:id:title]` citations, org sources first.
- */
-function buildFusionPrompt(args: {
-  app: string;
-  screen: string;
-  question: string;
-  vendorPages: VendorCorpusPageMatch[];
-  vendorTrainingPages: ResolvedOrgWikiPage[];
-  orgPages: ResolvedOrgWikiPage[];
-  elements: Array<{ selector: string; label: string }>;
-  userMemoryTopics?: string[];
-}): string {
-  const {
-    app,
-    screen,
-    question,
-    vendorPages,
-    vendorTrainingPages,
-    orgPages,
-    elements,
-    userMemoryTopics,
-  } = args;
-
-  const vendorSection =
-    vendorPages.length > 0
-      ? vendorPages
-          .map((page) => {
-            const header = `### ${page.title} [SOURCE:${page.id}:${page.title}]`;
-            const body = (page.content ?? '').slice(0, MAX_CONTENT_CHARS_PER_PAGE);
-            return `${header}\n${body}`;
-          })
-          .join(ORG_SEPARATOR)
-      : '(no vendor documentation available for this product)';
-
-  // TRIB-54: Vendor training layer — wiki pages from the vendor org
-  const vendorTrainingSection =
-    vendorTrainingPages.length > 0
-      ? vendorTrainingPages
-          .map((page) => {
-            const header = `### ${page.topic} [SOURCE:${page.id}:${page.topic}]`;
-            const body = (page.content ?? '').slice(0, MAX_CONTENT_CHARS_PER_PAGE);
-            return `${header}\n${body}`;
-          })
-          .join(ORG_SEPARATOR)
-      : '(no vendor training knowledge available)';
-
-  const orgSection =
-    orgPages.length > 0
-      ? orgPages
-          .map((page) => {
-            const header = `### ${page.topic} [SOURCE:${page.id}:${page.topic}]`;
-            const body = (page.content ?? '').slice(0, MAX_CONTENT_CHARS_PER_PAGE);
-            return `${header}\n${body}`;
-          })
-          .join(ORG_SEPARATOR)
-      : '(no team-specific knowledge available)';
-
-  const elementsSection =
-    elements.length > 0
-      ? elements.map((el) => `- ${el.label}: ${el.selector}`).join('\n')
-      : '(no interactive elements provided)';
-
-  // TRIB-50: If user has prior interactions with some of these pages,
-  // inject a USER CONTEXT section so the LLM can skip basic explanations.
-  const userContextSection =
-    userMemoryTopics && userMemoryTopics.length > 0
-      ? `\nUSER CONTEXT:
-The user has previously been shown information about: ${userMemoryTopics.join(', ')}. Skip basic explanations they've already seen and focus on their specific question. If they ask about a topic they've seen before, go deeper rather than repeating fundamentals.\n`
-      : '';
-
-  return `You are a context-aware assistant helping someone use ${app}'s ${screen} page.
-
-VENDOR KNOWLEDGE (generic software documentation):
-${vendorSection}
-
-VENDOR TRAINING (how the vendor recommends using it):
-${vendorTrainingSection}
-
-YOUR TEAM'S KNOWLEDGE (how your team specifically uses it):
-${orgSection}
-
-INTERACTIVE ELEMENTS VISIBLE ON SCREEN:
-${elementsSection}
-${userContextSection}
-QUESTION: ${question}
-
-Rules:
-- YOUR TEAM'S KNOWLEDGE takes highest precedence, followed by VENDOR TRAINING, then VENDOR KNOWLEDGE. Explicitly mention when you're following the team's specific way versus vendor recommendations.
-- When referring to a clickable element that exists in INTERACTIVE ELEMENTS, tag it like [ELEMENT:selector:label] so the extension can highlight/point at it. Use the selector exactly as provided above.
-- When citing a source, tag it [SOURCE:id:title]. Use the page id for team/vendor-training citations and the vendor page id for vendor citations. Team sources should come first in the citation list, followed by vendor training sources.
-- Keep the answer concise and conversational. Prioritize actionable steps a user can follow right now.
-- If you don't know the answer from any layer, say so clearly instead of guessing.`;
 }
 
 // -------------------- Tag-parsing state machine --------------------
@@ -618,45 +516,20 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        // ---- Step 1: embed the question (RETRIEVAL_QUERY task) ---------
-        // Reuse the project's fallback-aware embedding helper so we get
-        // identical dimensions and retry behavior as TRIB-36 writes.
-        let questionEmbedding: number[] = [];
-        try {
-          const result = await generateEmbeddingWithFallback(
-            question,
-            'RETRIEVAL_QUERY'
-          );
-          questionEmbedding = result.embedding;
-        } catch (embedError) {
-          // If embedding fails, continue with an empty vector — the org
-          // resolver will short-circuit to an empty result and we'll
-          // fall through to vendor-only fusion.
-          console.error(
-            '[extension/query] embedding failed, continuing without org layer:',
-            embedError
-          );
-        }
-
-        // ---- Step 2: resolve compiled-memory context -------------------
-        // Shared service owns three-layer knowledge resolution and
-        // structured citation metadata. The route keeps prompt assembly
-        // and SSE/tag handling local.
-        const compiledMemory = await resolveCompiledMemoryContext({
+        // ---- Step 1: resolve compiled-memory answer context ------------
+        // Shared service owns three-layer retrieval plus normalized
+        // source/citation metadata so routes stop rebuilding it inline.
+        const answerContext = await resolveCompiledMemoryAnswerContext({
           orgId,
           userId,
+          question,
           app,
           screen,
-          question,
-          questionEmbedding,
           asOf,
         });
-        const vendorPages = compiledMemory.vendorKnowledge.pages;
-        const vendorTrainingPages = compiledMemory.vendorTraining.pages;
-        const orgPages = compiledMemory.orgKnowledge.pages;
 
         // ---- Step 3: early exit if all layers are empty -----------------
-        if (vendorPages.length === 0 && vendorTrainingPages.length === 0 && orgPages.length === 0) {
+        if (answerContext.sources.length === 0) {
           emit({
             type: 'text_chunk',
             text: `I don't have specific documentation for ${app} ${screen} yet. Please check the vendor's help center for guidance.`,
@@ -665,28 +538,29 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        const userMemoryTopics = compiledMemory.orgKnowledge.priorTopics;
-
         // ---- Step 4: build the three-layer fusion prompt ----------------
-        const fusionPrompt = buildFusionPrompt({
+        const fusionPrompt = buildExtensionCompiledMemoryPrompt({
           app,
           screen,
           question,
-          vendorPages,
-          vendorTrainingPages,
-          orgPages,
           elements: context.elements ?? [],
-          userMemoryTopics:
-            userMemoryTopics.length > 0 ? userMemoryTopics : undefined,
+          answerContext,
         });
 
         // TRIB-50: capture page IDs for after() interaction recording
-        resolvedOrgPageIds.push(...orgPages.map((p) => p.id));
+        resolvedOrgPageIds.push(
+          ...answerContext.sources
+            .filter((source) => source.layer === 'org')
+            .map((source) => source.provenance.pageId),
+        );
 
         // TRIB-57: set knowledge flags for usage analytics
-        hadOrgKnowledge = orgPages.length > 0;
-        hadVendorKnowledge =
-          vendorTrainingPages.length > 0 || vendorPages.length > 0;
+        hadOrgKnowledge = answerContext.sources.some(
+          (source) => source.layer === 'org',
+        );
+        hadVendorKnowledge = answerContext.sources.some(
+          (source) => source.layer !== 'org',
+        );
 
         // ---- Step 5: stream the LLM response through the tag parser ----
         const citedPageIds = new Set<string>();
@@ -711,12 +585,14 @@ export async function POST(request: NextRequest) {
             if (citedPageIds.has(sourceId)) return;
             citedPageIds.add(sourceId);
 
-            const citation = compiledMemory.citationsBySourceId[sourceId];
+            const citation = answerContext.citationsBySourceId[sourceId];
             emit({
               type: 'citation',
               sourceId,
               title: title || citation?.title || 'Source',
-              recordingUrl: citation?.linkUrl,
+              recordingUrl: citation?.url,
+              layer: citation?.layer,
+              freshness: citation?.freshness,
             });
           }
         );

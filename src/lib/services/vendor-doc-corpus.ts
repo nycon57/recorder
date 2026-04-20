@@ -62,6 +62,7 @@ export interface VendorCorpusPageMatch {
   title: string;
   content: string;
   sourceUrl: string | null;
+  updatedAt: string | null;
   confidence: number;
   distance: number;
   matchType: 'semantic' | 'exact';
@@ -420,6 +421,7 @@ export async function resolveVendorCorpusPages(args: {
     title: result.row.title,
     content: result.row.normalized_content,
     sourceUrl: result.row.source_url,
+    updatedAt: result.row.updated_at,
     confidence: Number(result.combinedScore.toFixed(4)),
     distance: Number(Math.max(0, 1 - result.semanticSimilarity).toFixed(4)),
     matchType: 'semantic',

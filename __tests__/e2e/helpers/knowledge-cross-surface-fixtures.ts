@@ -1,5 +1,22 @@
 import type { CompiledMemoryContext } from '../../../src/lib/services/compiled-memory-context';
 
+const EMPTY_FRESHNESS = {
+  updatedAt: null,
+  lastSuccessfulSyncAt: null,
+  freshnessTarget: null,
+  isStale: null,
+} as const;
+
+function provenance(pageId: string, sourceUrl: string | null = null) {
+  return {
+    pageId,
+    vendorPageId: null,
+    vendorSourceId: null,
+    sourceKind: null,
+    sourceUrl,
+  };
+}
+
 export function createCompiledMemoryContextFixture(): CompiledMemoryContext {
   return {
     vendorKnowledge: {
@@ -26,6 +43,7 @@ export function createCompiledMemoryContextFixture(): CompiledMemoryContext {
           title: 'HubSpot Deals',
           content: 'Vendor baseline says route enterprise deal escalations to RevOps.',
           sourceUrl: 'https://docs.vendor.example/hubspot/deals',
+          updatedAt: '2026-04-19T15:00:00.000Z',
           confidence: 0.8,
           distance: 0.2,
           matchType: 'exact',
@@ -66,17 +84,26 @@ export function createCompiledMemoryContextFixture(): CompiledMemoryContext {
         title: 'Deal escalation playbook',
         layer: 'org',
         linkUrl: '/knowledge/pages/org-deal-escalation-playbook',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('org-deal-escalation-playbook'),
       },
       'training-hubspot-revops': {
         sourceId: 'training-hubspot-revops',
         title: 'Vendor training: deal escalation',
         layer: 'vendor_training',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance('training-hubspot-revops'),
       },
       'vendor-hubspot-deals': {
         sourceId: 'vendor-hubspot-deals',
         title: 'HubSpot Deals',
         layer: 'vendor',
         linkUrl: 'https://docs.vendor.example/hubspot/deals',
+        freshness: EMPTY_FRESHNESS,
+        provenance: provenance(
+          'vendor-hubspot-deals',
+          'https://docs.vendor.example/hubspot/deals',
+        ),
       },
     },
   };
