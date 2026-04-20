@@ -8,7 +8,7 @@
  * The triggered_by_user_id field in the job payload provides audit provenance
  * for all system-admin-initiated ingestions.
  *
- * TRIB-45 | Security: TRIB-156 | Canonical home: TRIB-146
+ * TRIB-45 | Security: TRIB-156 | Canonical home: TRIB-146 | Schema unified: TRIB-149
  */
 
 import { NextRequest } from 'next/server';
@@ -23,6 +23,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/types/database';
 import { createVendorSourceRegistryService } from '@/lib/services/vendor-source-registry';
 import { createVendorSourceSyncService } from '@/lib/services/vendor-source-sync';
+import { vendorIngestInputSchema, vendorResyncInputSchema } from '@/lib/schemas/vendor-source';
 
 /**
  * POST /api/admin/vendor-sources/ingest
@@ -32,29 +33,26 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // Auth: system-admin only — canonical vendor corpus is platform-scoped
   const session = await requireSystemAdmin();
 
-  let body: {
-    url?: string;
-    app?: string;
-    maxPages?: number;
-    sourceId?: string;
-    force?: boolean;
-  };
+  let rawBody: unknown;
   try {
-    body = await request.json();
+    rawBody = await request.json();
   } catch {
     return errors.badRequest('Invalid JSON body');
-  }
-
-  const { url, app, maxPages, sourceId, force } = body;
-
-  if (sourceId && typeof sourceId !== 'string') {
-    return errors.badRequest('sourceId must be a string when provided');
   }
 
   // Shared audit field — plumbed into every job payload for provenance
   const triggeredByUserId: string = session.userId;
 
-  if (sourceId) {
+  // Detect re-sync path (sourceId present) vs raw-URL path
+  const bodyObj = rawBody as Record<string, unknown>;
+  if (bodyObj && typeof bodyObj === 'object' && 'sourceId' in bodyObj) {
+    const parsed = vendorResyncInputSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const msg = parsed.error.issues.map((i) => i.message).join('; ');
+      return errors.badRequest(msg);
+    }
+
+    const { sourceId, force } = parsed.data;
     const syncService = createVendorSourceSyncService();
     const [result] = await syncService.scheduleSources({
       sourceId,
@@ -86,29 +84,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
     );
   }
 
-  // Validate required fields for raw URL ingestion
-  if (!url || typeof url !== 'string') {
-    return errors.badRequest('Missing or invalid "url" field');
+  // Raw URL ingestion — validate with shared schema
+  const parsed = vendorIngestInputSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    const msg = parsed.error.issues.map((i) => i.message).join('; ');
+    return errors.badRequest(msg);
   }
 
-  if (!app || typeof app !== 'string') {
-    return errors.badRequest('Missing or invalid "app" field');
-  }
-
-  try {
-    const parsed = new URL(url);
-    if (!parsed.protocol.startsWith('http')) {
-      return errors.badRequest('URL must use http or https protocol');
-    }
-  } catch {
-    return errors.badRequest('Invalid URL format');
-  }
-
-  if (maxPages !== undefined) {
-    if (typeof maxPages !== 'number' || maxPages < 1 || maxPages > 500) {
-      return errors.badRequest('maxPages must be a number between 1 and 500');
-    }
-  }
+  const { url, app, maxPages, force } = parsed.data;
 
   const syncService = createVendorSourceSyncService();
   await syncService.ensureAllowedSources();
@@ -155,8 +138,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
     ...(maxPages ? { maxPages } : {}),
   };
 
-  const { data: job, error } = await (supabaseAdmin
-    .from('jobs') as any)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: job, error } = await (supabaseAdmin.from('jobs') as any)
     .insert({
       type: 'ingest_vendor_docs',
       status: 'pending',

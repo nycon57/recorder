@@ -6,12 +6,12 @@ import {
   AlertTriangle,
   BookOpen,
   CheckCircle2,
-  Clock3,
   ExternalLink,
   Loader2,
   RefreshCw,
   ShieldAlert,
 } from 'lucide-react';
+
 
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
@@ -22,6 +22,9 @@ import type {
   VendorSourceOpsSnapshot,
   VendorSourceOpsStatus,
 } from '@/lib/services/vendor-source-ops';
+import { AddSourceButton } from '@/app/components/admin/vendor-sources/add-source-button';
+import { SourceCardActions } from '@/app/components/admin/vendor-sources/source-card-actions';
+import { RecentIngestJobs } from '@/app/components/admin/vendor-sources/recent-ingest-jobs';
 
 function formatTimestamp(value: string | null): string {
   if (!value) return 'Never';
@@ -61,7 +64,7 @@ function renderBand(values: string[], fallback: string) {
   return values.join(', ');
 }
 
-function SourceCard({ source }: { source: VendorSourceOpsItem }) {
+function SourceCard({ source, onResync }: { source: VendorSourceOpsItem; onResync?: () => void }) {
   const hasApplicabilityMetadata =
     source.applicability &&
     typeof source.applicability === 'object' &&
@@ -172,6 +175,13 @@ function SourceCard({ source }: { source: VendorSourceOpsItem }) {
             </pre>
           </div>
         ) : null}
+
+        <SourceCardActions
+          sourceId={source.id}
+          app={source.app}
+          activeJobStatus={source.activeJobStatus}
+          onResyncSuccess={onResync}
+        />
       </CardContent>
     </Card>
   );
@@ -257,6 +267,7 @@ export default function AdminVendorSourcesPage() {
             <RefreshCw className="h-4 w-4" />
             Refresh
           </button>
+          <AddSourceButton />
         </div>
       </div>
 
@@ -348,9 +359,11 @@ export default function AdminVendorSourcesPage() {
 
       <div className="space-y-4">
         {snapshot.sources.map((source) => (
-          <SourceCard key={source.id} source={source} />
+          <SourceCard key={source.id} source={source} onResync={refetch} />
         ))}
       </div>
+
+      <RecentIngestJobs />
     </div>
   );
 }
