@@ -341,7 +341,7 @@ export async function batchMigrateTier(
       .update({ tier_migration_scheduled: true })
       .in('id', recordingIds);
 
-    migratedCount = filesToMigrate.length;
+    migratedCount = jobs.length;
 
     logger.info('Created migration jobs', {
       context: { orgId },

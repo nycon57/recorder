@@ -43,7 +43,7 @@ function getFrameNumber(metadata: Json): number | null {
     return null;
   }
 
-  const frameNumber = metadata.frameNumber;
+  const frameNumber = metadata.frameNumber ?? metadata.frame_number;
   return typeof frameNumber === 'number' && Number.isFinite(frameNumber)
     ? frameNumber
     : null;
@@ -133,6 +133,7 @@ export async function handleExtractFrames(
       frame_url: frame.storagePath,
       metadata: toJson({
         frameNumber: frame.frameNumber,
+        frame_number: frame.frameNumber,
         width: frame.width,
         height: frame.height,
         sizeBytes: frame.sizeBytes,
@@ -208,11 +209,6 @@ async function performOCR(
 ): Promise<void> {
   const supabase = createClient();
 
-  logger.info('Starting OCR processing', {
-    context: { recordingId, orgId },
-    data: { totalFrames: frames.length },
-  });
-
   // Get frames from database
   const { data: dbFrames, error: fetchError } = await supabase
     .from('video_frames')
@@ -228,6 +224,11 @@ async function performOCR(
     });
     return;
   }
+
+  logger.info('Starting OCR processing', {
+    context: { recordingId, orgId },
+    data: { totalFrames: dbFrames.length },
+  });
 
   // Process frames in batches
   const batchSize = 5;
