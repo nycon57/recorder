@@ -7,6 +7,7 @@ import {
   DollarSign,
   Bell,
   Activity,
+  BarChart3,
   Lightbulb,
   HardDrive,
   FileWarning,
@@ -67,6 +68,12 @@ const navItems: NavItem[] = [
     href: '/admin/vendor-sources',
     icon: BookOpen,
     description: 'Shared vendor source health',
+  },
+  {
+    title: 'Knowledge Telemetry',
+    href: '/admin/knowledge-telemetry',
+    icon: BarChart3,
+    description: 'Shared answer freshness and rollout quality',
   },
 ];
 

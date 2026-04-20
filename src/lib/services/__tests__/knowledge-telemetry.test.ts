@@ -5,6 +5,7 @@ import {
   buildKnowledgeChatTelemetry,
   buildKnowledgeExtensionQueryTelemetry,
   buildKnowledgeReviewTelemetry,
+  summarizeKnowledgeTelemetryEvents,
 } from '../knowledge-telemetry';
 
 test('buildKnowledgeChatTelemetry marks discovery requests with no sources as routing failures', () => {
@@ -108,6 +109,17 @@ test('buildKnowledgeExtensionQueryTelemetry captures org and vendor knowledge av
     routingFailed: false,
     responseLatencyMs: 245,
     asOf: '2026-04-18T12:00:00.000Z',
+    sourceLayers: [],
+    orgSourcesCount: 0,
+    vendorTrainingSourcesCount: 0,
+    vendorSourcesCount: 0,
+    citationsCount: 0,
+    citationsWithFreshnessCount: 0,
+    staleCitationsCount: 0,
+    staleVendorCitationsCount: 0,
+    vendorSourceIds: [],
+    vendorRetrievalMode: 'none',
+    failureClass: 'none',
   });
 });
 
@@ -145,4 +157,93 @@ test('buildKnowledgeReviewTelemetry trims error messages', () => {
   });
 
   assert.equal(telemetry.errorMessage, 'failed to parse contradiction');
+});
+
+test('buildKnowledgeChatTelemetry captures shared vendor answer freshness and failure class', () => {
+  const telemetry = buildKnowledgeChatTelemetry({
+    orgId: 'org-123',
+    userId: 'user-123',
+    queryId: 'query-123',
+    answerMode: 'compiled-memory',
+    routeStrategy: null,
+    selectedStrategy: 'compiled_memory',
+    recordingsCount: 12,
+    sourcesCount: 2,
+    retrievalAttempts: 1,
+    finalThreshold: null,
+    averageSimilarity: 0,
+    query: 'How do we handle domain changes?',
+    queryLength: 31,
+    queryWordCount: 6,
+    totalTimeMs: 540,
+    sourceLayers: ['vendor'],
+    orgSourcesCount: 0,
+    vendorTrainingSourcesCount: 0,
+    vendorSourcesCount: 2,
+    citationsCount: 2,
+    citationsWithFreshnessCount: 2,
+    staleCitationsCount: 1,
+    staleVendorCitationsCount: 1,
+    vendorSourceIds: ['source-1', 'source-2'],
+    vendorRetrievalMode: 'hybrid',
+  });
+
+  assert.deepEqual(telemetry.sourceLayers, ['vendor']);
+  assert.equal(telemetry.vendorRetrievalMode, 'hybrid');
+  assert.equal(telemetry.staleVendorCitationsCount, 1);
+  assert.equal(telemetry.failureClass, 'stale_vendor_answer');
+});
+
+test('summarizeKnowledgeTelemetryEvents aggregates retrieval modes and failure classes', () => {
+  const summary = summarizeKnowledgeTelemetryEvents([
+    {
+      id: 'evt-1',
+      type: 'knowledge.chat.outcome',
+      createdAt: '2026-04-20T00:00:00.000Z',
+      payload: {
+        orgId: 'org-123',
+        answerMode: 'compiled-memory',
+        routingFailed: false,
+        sourceLayers: ['vendor'],
+        orgSourcesCount: 0,
+        vendorTrainingSourcesCount: 0,
+        vendorSourcesCount: 2,
+        citationsCount: 2,
+        citationsWithFreshnessCount: 2,
+        staleCitationsCount: 1,
+        staleVendorCitationsCount: 1,
+        vendorSourceIds: ['source-1'],
+        vendorRetrievalMode: 'hybrid',
+        failureClass: 'stale_vendor_answer',
+      },
+    },
+    {
+      id: 'evt-2',
+      type: 'knowledge.extension.query.outcome',
+      createdAt: '2026-04-20T00:01:00.000Z',
+      payload: {
+        orgId: 'org-123',
+        hadOrgKnowledge: false,
+        hadVendorKnowledge: false,
+        routingFailed: true,
+        sourceLayers: [],
+        orgSourcesCount: 0,
+        vendorTrainingSourcesCount: 0,
+        vendorSourcesCount: 0,
+        citationsCount: 0,
+        citationsWithFreshnessCount: 0,
+        staleCitationsCount: 0,
+        staleVendorCitationsCount: 0,
+        vendorSourceIds: [],
+        vendorRetrievalMode: 'none',
+        failureClass: 'no_sources',
+      },
+    },
+  ]);
+
+  assert.equal(summary.byVendorRetrievalMode.hybrid, 1);
+  assert.equal(summary.byVendorRetrievalMode.none, 1);
+  assert.equal(summary.byFailureClass.stale_vendor_answer, 1);
+  assert.equal(summary.byFailureClass.no_sources, 1);
+  assert.equal(summary.sharedVendorStaleAnswers, 1);
 });

@@ -64,11 +64,13 @@ import type { CompiledMemoryCitationLayer } from '@/lib/services/compiled-memory
 import {
   buildExtensionCompiledMemoryPrompt,
   resolveCompiledMemoryAnswerContext,
+  summarizeCompiledMemoryAnswerObservability,
   type CompiledMemoryAnswerCitation,
 } from '@/lib/services/compiled-memory-answer-context';
 import {
   buildKnowledgeExtensionQueryTelemetry,
   recordKnowledgeTelemetryEvent,
+  type KnowledgeTelemetryFailureClass,
   type KnowledgeExtensionQueryTelemetryPayload,
 } from '@/lib/services/knowledge-telemetry';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
@@ -457,6 +459,8 @@ export async function POST(request: NextRequest) {
   // TRIB-57: Track request start time for latency measurement
   const requestStartTime = Date.now();
   let telemetryPayload: KnowledgeExtensionQueryTelemetryPayload | null = null;
+  let sharedVendorTelemetry = summarizeCompiledMemoryAnswerObservability(undefined);
+  let telemetryFailureClass: KnowledgeTelemetryFailureClass = 'none';
 
   // TRIB-57: Mutable flags for knowledge layer presence (set inside the stream)
   let hadOrgKnowledge = false;
@@ -491,6 +495,8 @@ export async function POST(request: NextRequest) {
               : 'dom_only',
           responseLatencyMs: Date.now() - requestStartTime,
           asOf,
+          failureClass: telemetryFailureClass,
+          ...sharedVendorTelemetry,
         });
       };
 
@@ -527,6 +533,8 @@ export async function POST(request: NextRequest) {
           screen,
           asOf,
         });
+        sharedVendorTelemetry =
+          summarizeCompiledMemoryAnswerObservability(answerContext);
 
         // ---- Step 3: early exit if all layers are empty -----------------
         if (answerContext.sources.length === 0) {
@@ -619,6 +627,7 @@ export async function POST(request: NextRequest) {
           parser.flush();
         } catch (llmError) {
           console.error('[extension/query] LLM stream error:', llmError);
+          telemetryFailureClass = 'route_error';
           // Make sure any buffered text still makes it to the client.
           parser.flush();
           emit({
@@ -630,6 +639,7 @@ export async function POST(request: NextRequest) {
         finish();
       } catch (error) {
         console.error('[extension/query] stream error:', error);
+        telemetryFailureClass = 'route_error';
         try {
           emit({
             type: 'text_chunk',

@@ -27,6 +27,7 @@ export interface CompiledMemoryAnswerSource {
   url?: string;
   freshness: CompiledMemoryCitation['freshness'];
   provenance: CompiledMemoryCitation['provenance'];
+  matchType?: 'exact' | 'semantic' | null;
 }
 
 export interface CompiledMemoryAnswerCitation {
@@ -39,6 +40,7 @@ export interface CompiledMemoryAnswerCitation {
   url?: string;
   freshness: CompiledMemoryCitation['freshness'];
   provenance: CompiledMemoryCitation['provenance'];
+  matchType?: 'exact' | 'semantic' | null;
 }
 
 export interface CompiledMemoryAnswerContext {
@@ -47,6 +49,22 @@ export interface CompiledMemoryAnswerContext {
   citations: CompiledMemoryAnswerCitation[];
   citationsBySourceId: Record<string, CompiledMemoryAnswerCitation>;
   priorTopics: string[];
+}
+
+export type SharedVendorRetrievalMode = 'none' | 'exact' | 'semantic' | 'hybrid';
+
+export interface CompiledMemoryAnswerObservability {
+  sourceLayers: CompiledMemoryCitationLayer[];
+  orgSourcesCount: number;
+  vendorTrainingSourcesCount: number;
+  vendorSourcesCount: number;
+  citationsCount: number;
+  citationsWithFreshnessCount: number;
+  staleCitationsCount: number;
+  staleVendorCitationsCount: number;
+  vendorSourceIds: string[];
+  vendorRetrievalMode: SharedVendorRetrievalMode;
+  hasStaleVendorContent: boolean;
 }
 
 interface ResolveCompiledMemoryAnswerContextArgs {
@@ -81,6 +99,7 @@ function toSource(args: {
   url?: string;
   freshness?: CompiledMemoryCitation['freshness'];
   provenance?: CompiledMemoryCitation['provenance'];
+  matchType?: 'exact' | 'semantic' | null;
 }): CompiledMemoryAnswerSource | null {
   const content = clampContent(args.content);
   if (!content) {
@@ -109,7 +128,47 @@ function toSource(args: {
       sourceKind: null,
       sourceUrl: null,
     },
+    matchType: args.matchType ?? null,
   };
+}
+
+function hasFreshnessMetadata(
+  freshness: CompiledMemoryCitation['freshness'] | null | undefined,
+): boolean {
+  if (!freshness) {
+    return false;
+  }
+
+  return (
+    freshness.updatedAt != null ||
+    freshness.lastSuccessfulSyncAt != null ||
+    freshness.freshnessTarget != null ||
+    freshness.isStale != null
+  );
+}
+
+function resolveVendorRetrievalMode(
+  sources: CompiledMemoryAnswerSource[],
+): SharedVendorRetrievalMode {
+  const vendorMatchTypes = new Set(
+    sources
+      .filter((source) => source.layer === 'vendor' && source.matchType)
+      .map((source) => source.matchType),
+  );
+
+  if (vendorMatchTypes.size === 0) {
+    return 'none';
+  }
+
+  if (vendorMatchTypes.has('exact') && vendorMatchTypes.has('semantic')) {
+    return 'hybrid';
+  }
+
+  if (vendorMatchTypes.has('exact')) {
+    return 'exact';
+  }
+
+  return 'semantic';
 }
 
 function renderSection(
@@ -216,6 +275,7 @@ export function buildCompiledMemoryAnswerContext(
           undefined,
         freshness: compiledMemory.citationsBySourceId[page.id]?.freshness,
         provenance: compiledMemory.citationsBySourceId[page.id]?.provenance,
+        matchType: page.matchType,
       }),
     )
     .filter((source): source is CompiledMemoryAnswerSource => source != null);
@@ -313,7 +373,52 @@ export function buildCompiledMemoryCitations(
     url: source.url,
     freshness: source.freshness,
     provenance: source.provenance,
+    matchType: source.matchType ?? null,
   }));
+}
+
+export function summarizeCompiledMemoryAnswerObservability(
+  answerContext: Pick<CompiledMemoryAnswerContext, 'sources'> | null | undefined,
+): CompiledMemoryAnswerObservability {
+  const sources = answerContext?.sources ?? [];
+  const orgSourcesCount = sources.filter((source) => source.layer === 'org').length;
+  const vendorTrainingSourcesCount = sources.filter(
+    (source) => source.layer === 'vendor_training',
+  ).length;
+  const vendorSourcesCount = sources.filter((source) => source.layer === 'vendor').length;
+  const citationsWithFreshnessCount = sources.filter((source) =>
+    hasFreshnessMetadata(source.freshness),
+  ).length;
+  const staleCitationsCount = sources.filter(
+    (source) => source.freshness.isStale === true,
+  ).length;
+  const staleVendorCitationsCount = sources.filter(
+    (source) => source.layer === 'vendor' && source.freshness.isStale === true,
+  ).length;
+
+  const vendorSourceIds = Array.from(
+    new Set(
+      sources
+        .map((source) => source.provenance.vendorSourceId)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  return {
+    sourceLayers: (['org', 'vendor_training', 'vendor'] as const).filter(
+      (layer) => sources.some((source) => source.layer === layer),
+    ),
+    orgSourcesCount,
+    vendorTrainingSourcesCount,
+    vendorSourcesCount,
+    citationsCount: sources.length,
+    citationsWithFreshnessCount,
+    staleCitationsCount,
+    staleVendorCitationsCount,
+    vendorSourceIds,
+    vendorRetrievalMode: resolveVendorRetrievalMode(sources),
+    hasStaleVendorContent: staleVendorCitationsCount > 0,
+  };
 }
 
 export function buildExtensionCompiledMemoryPrompt(args: {
