@@ -12,6 +12,7 @@
  */
 
 import type { OverlayTarget } from '@tribora/shared';
+
 import { TRIBORA_EXTENSION_THEME } from '../../utils/tribora-theme.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────

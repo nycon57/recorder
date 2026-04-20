@@ -1,3 +1,6 @@
+/* eslint-env node */
+/* eslint-disable @typescript-eslint/no-require-imports */
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Required headers for SharedArrayBuffer (FFMPEG.wasm support) + Security

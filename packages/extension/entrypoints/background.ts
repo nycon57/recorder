@@ -11,6 +11,9 @@
  *   - Token refresh + auth state
  */
 
+import type { LiveContextPack, PageContext } from '@tribora/shared';
+import { sanitizePageContextLocation } from '@tribora/shared';
+
 import { scheduleTokenRefresh } from '../utils/token-refresh.js';
 import { createTabRecorder } from '../utils/tab-recorder.js';
 import { uploadRecording } from '../utils/recording-uploader.js';
@@ -33,8 +36,6 @@ import {
 import type { ActiveDebugSessionState } from '../utils/debug-session.js';
 import { shouldOpenMicPermissionBootstrap } from '../utils/session-startup.js';
 import { createTurnGuards } from '../utils/turn-guards.js';
-import type { LiveContextPack, PageContext } from '@tribora/shared';
-import { sanitizePageContextLocation } from '@tribora/shared';
 import { buildContextSemanticFingerprint } from '../utils/context-telemetry.js';
 
 const BG = '[Tribora bg]';

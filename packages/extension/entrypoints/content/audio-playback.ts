@@ -16,8 +16,9 @@
  * Part of TRIB-26: ElevenLabs streaming TTS.
  */
 
-import { streamTts } from "../../utils/elevenlabs-client.js";
 import type { TtsState } from "@tribora/shared";
+
+import { streamTts } from "../../utils/elevenlabs-client.js";
 
 // ─── Public types ────────────────────────────────────────────────────────────
 

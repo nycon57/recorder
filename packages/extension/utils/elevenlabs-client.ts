@@ -14,9 +14,10 @@
  * Part of TRIB-26: ElevenLabs streaming TTS.
  */
 
-import { getStoredSession } from "./api-client.js";
 import type { ElevenLabsVoiceConfig } from "@tribora/shared";
 import { DEFAULT_VOICE_CONFIG } from "@tribora/shared";
+
+import { getStoredSession } from "./api-client.js";
 
 const API_BASE_URL =
   (import.meta.env as Record<string, string>).VITE_TRIBORA_API_URL ||

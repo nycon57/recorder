@@ -1,6 +1,8 @@
+/* eslint-env node */
+/* eslint-disable @typescript-eslint/no-require-imports */
+
 // Sentry error monitoring
 const { withSentryConfig } = require('@sentry/nextjs');
-
 // Vercel Bot ID protection
 const { withBotId } = require('botid/next/config');
 

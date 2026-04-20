@@ -1,8 +1,11 @@
+/* eslint-env jest */
+
 // Learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
 
 // Add OpenAI shims when the package is available in the current install.
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('openai/shims/node');
 } catch {
   // Some lightweight worktrees omit optional OpenAI shims; tests that do not

@@ -14,6 +14,10 @@
 
 import { createClient } from '@/lib/supabase/admin';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 interface SearchMetrics {
   // Success rates
   overallSuccessRate: number; // % queries returning > 0 results
@@ -163,12 +167,18 @@ async function analyzeSearchQuality(
     // Analyze message metadata for search quality
     const queryMetrics = messages
       .map((msg) => {
-        const metadata = msg.metadata as any;
-        const content = msg.content as any;
+        const metadata = isRecord(msg.metadata) ? msg.metadata : {};
+        const content = msg.content;
         const text =
           typeof content === 'string'
             ? content
-            : content?.text || content?.content || '';
+            : isRecord(content)
+              ? typeof content.text === 'string'
+                ? content.text
+                : typeof content.content === 'string'
+                  ? content.content
+                  : ''
+              : '';
 
         return {
           query: text,
@@ -247,7 +257,7 @@ async function analyzeSearchQuality(
     // Strategy breakdown
     queryMetrics.forEach((m) => {
       const strategy = m.strategy as keyof typeof metrics.strategyBreakdown;
-      if (metrics.strategyBreakdown.hasOwnProperty(strategy)) {
+      if (Object.prototype.hasOwnProperty.call(metrics.strategyBreakdown, strategy)) {
         metrics.strategyBreakdown[strategy]++;
       }
     });
