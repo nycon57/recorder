@@ -621,7 +621,11 @@ function parseFetchedPage(
 async function upsertPages(
   pages: CrawledPage[],
   app: string,
-  options?: { vendorSourceId?: string | null },
+  options?: {
+    vendorSourceId?: string | null;
+    triggeredByUserId?: string | null;
+    jobId?: string | null;
+  },
   progressCallback?: ProgressCallback
 ): Promise<{ inserted: number; updated: number; skipped: number }> {
   const supabase = createAdminClient();
@@ -675,6 +679,8 @@ async function upsertPages(
           content_hash: page.contentHash,
           vendor_source_id: options?.vendorSourceId ?? existing.vendor_source_id,
           updated_at: new Date().toISOString(),
+          curated_by: options?.triggeredByUserId ?? null,
+          ingest_job_id: options?.jobId ?? null,
         })
         .eq('id', existing.id);
 
@@ -698,6 +704,8 @@ async function upsertPages(
           source_url: page.url,
           content_hash: page.contentHash,
           vendor_source_id: options?.vendorSourceId ?? null,
+          curated_by: options?.triggeredByUserId ?? null,
+          ingest_job_id: options?.jobId ?? null,
         });
 
       if (error) {
@@ -835,7 +843,11 @@ export async function handleIngestVendorDocs(
         const result = await upsertPages(
           pages,
           app,
-          { vendorSourceId: registrySource?.id ?? null },
+          {
+            vendorSourceId: registrySource?.id ?? null,
+            triggeredByUserId: triggeredByUserId,
+            jobId: job.id,
+          },
           progressCallback
         );
 

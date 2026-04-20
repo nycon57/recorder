@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import {
+  Activity,
   AlertTriangle,
   BookOpen,
   CheckCircle2,
@@ -267,6 +268,13 @@ export default function AdminVendorSourcesPage() {
             <RefreshCw className="h-4 w-4" />
             Refresh
           </button>
+          <Link
+            href="/admin/vendor-sources/health"
+            className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted"
+          >
+            <Activity className="h-4 w-4" />
+            Health
+          </Link>
           <AddSourceButton />
         </div>
       </div>

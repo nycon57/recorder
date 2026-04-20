@@ -30,6 +30,8 @@ export function createCompiledMemoryContextFixture(): CompiledMemoryContext {
         source_url: 'https://docs.vendor.example/hubspot/deals',
         content_hash: null,
         vendor_source_id: null,
+        curated_by: null,
+        ingest_job_id: null,
         created_at: null,
         updated_at: null,
       },

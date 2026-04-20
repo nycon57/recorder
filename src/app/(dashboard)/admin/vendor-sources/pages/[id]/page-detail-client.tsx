@@ -37,6 +37,7 @@ export function PageDetailClient({ pageId }: Props) {
         publisher_hostname: string;
         status: string;
       } | null;
+      curatedByEmail: string | null;
     };
   }>(`/api/admin/vendor-sources/pages/${pageId}`);
 
@@ -68,5 +69,11 @@ export function PageDetailClient({ pageId }: Props) {
     );
   }
 
-  return <PageDetail page={data.data.page} parentSource={data.data.parentSource} />;
+  return (
+    <PageDetail
+      page={data.data.page}
+      parentSource={data.data.parentSource}
+      curatedByEmail={data.data.curatedByEmail ?? null}
+    />
+  );
 }

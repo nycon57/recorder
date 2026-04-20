@@ -1,6 +1,7 @@
 /**
  * GET /api/admin/vendor-sources/pages/[id]
  * Single vendor_wiki_pages row with parent vendor_doc_sources context.
+ * Includes `content` (markdown) and resolved `curatedByEmail` for preview + detail view.
  * Returns 404 if row is missing.
  *
  * DELETE /api/admin/vendor-sources/pages/[id]
@@ -8,7 +9,7 @@
  * Hard-deletes the row (no soft-delete column on the table).
  * Logs a structured `vendor_source.page.deleted` event for audit provenance.
  *
- * TRIB-146 (DELETE) | TRIB-149 (GET)
+ * TRIB-146 (DELETE) | TRIB-149 (GET) | TRIB-152 (content + curatedByEmail)
  */
 
 import { NextRequest } from 'next/server';
@@ -37,7 +38,7 @@ export const GET = apiHandler(
     const { data: page, error: pageError } = await (supabaseAdmin as any)
       .from('vendor_wiki_pages')
       .select(
-        'id, app, screen, source_url, content_hash, created_at, updated_at, vendor_source_id, curated_by, ingest_job_id',
+        'id, app, screen, source_url, content, content_hash, created_at, updated_at, vendor_source_id, curated_by, ingest_job_id',
       )
       .eq('id', id)
       .single() as {
@@ -46,6 +47,7 @@ export const GET = apiHandler(
           app: string;
           screen: string;
           source_url: string | null;
+          content: string | null;
           content_hash: string | null;
           created_at: string;
           updated_at: string;
@@ -85,7 +87,22 @@ export const GET = apiHandler(
       parentSource = source;
     }
 
-    return successResponse({ page, parentSource });
+    // Resolve curated_by UUID → operator email (best-effort; null on missing row)
+    let curatedByEmail: string | null = null;
+    if (page.curated_by) {
+      try {
+        const { data: userRow } = await (supabaseAdmin as any)
+          .from('user')
+          .select('email')
+          .eq('id', page.curated_by)
+          .maybeSingle() as { data: { email: string } | null };
+        curatedByEmail = userRow?.email ?? null;
+      } catch {
+        // Non-fatal — fall through to null
+      }
+    }
+
+    return successResponse({ page, parentSource, curatedByEmail });
   },
 );
 
