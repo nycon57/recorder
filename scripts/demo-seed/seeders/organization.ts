@@ -9,6 +9,7 @@
  */
 
 import type { PoolClient } from 'pg';
+
 import { DEMO_ORG } from '../fixtures.js';
 
 export async function seedOrganization(

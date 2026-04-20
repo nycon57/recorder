@@ -10,6 +10,7 @@
  */
 
 import type { PoolClient } from 'pg';
+
 import { DEMO_ORG_ID, DEMO_USERS, SEED_CREATED_AT } from '../fixtures.js';
 
 export async function seedMembers(

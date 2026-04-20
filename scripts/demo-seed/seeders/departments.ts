@@ -10,6 +10,7 @@
  */
 
 import type { PoolClient } from 'pg';
+
 import { DEMO_DEPARTMENTS } from '../fixtures.js';
 
 export type DepartmentMap = Record<string, string>;

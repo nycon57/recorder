@@ -19,12 +19,30 @@
 
 import 'dotenv/config';
 import pg from 'pg';
+
 import { checkGuard, type SeedEnv } from './env-guard.js';
 import { seedOrganization } from './seeders/organization.js';
 import { seedDepartments } from './seeders/departments.js';
 import { seedUsers } from './seeders/users.js';
 import { seedMembers } from './seeders/members.js';
-import { DEMO_ORG, DEMO_USERS, DEMO_DEPARTMENTS } from './fixtures.js';
+import { seedTags } from './seeders/tags.js';
+import { seedConnector } from './seeders/connector.js';
+import { seedRecordings } from './seeders/recordings.js';
+import { seedWiki } from './seeders/wiki.js';
+import { seedImportedDocs } from './seeders/imported-docs.js';
+import { seedKnowledgeGaps } from './seeders/knowledge-gaps.js';
+import { seedShares } from './seeders/shares.js';
+import { seedVendorOrg } from './seeders/vendor-org.js';
+import { seedOrgSettings } from './seeders/org-settings.js';
+import {
+  DEMO_ORG,
+  DEMO_USERS,
+  DEMO_DEPARTMENTS,
+  DEMO_RECORDING_SLUGS,
+  DEMO_WIKI_PAGE_SLUGS,
+  DEMO_IMPORTED_DOC_SLUGS,
+  DEMO_TAG_NAMES,
+} from './fixtures.js';
 
 const { Pool } = pg;
 
@@ -84,11 +102,15 @@ async function main(): Promise<void> {
   const dbUrl = process.env['DIRECT_DATABASE_URL']!;
 
   console.log(`\n[demo-seed] Starting${dryRun ? ' (DRY RUN)' : ''}...`);
-  console.log(`  env:         ${env}`);
+  console.log(`  env:          ${env}`);
   console.log(`  force-reseed: ${forceReseed}`);
-  console.log(`  org:         ${DEMO_ORG.name} (${DEMO_ORG.id})`);
-  console.log(`  users:       ${DEMO_USERS.length}`);
-  console.log(`  departments: ${DEMO_DEPARTMENTS.length}\n`);
+  console.log(`  org:          ${DEMO_ORG.name} (${DEMO_ORG.id})`);
+  console.log(`  users:        ${DEMO_USERS.length}`);
+  console.log(`  departments:  ${DEMO_DEPARTMENTS.length}`);
+  console.log(`  recordings:   ${DEMO_RECORDING_SLUGS.length}`);
+  console.log(`  wiki pages:   ${DEMO_WIKI_PAGE_SLUGS.length}`);
+  console.log(`  imported docs:${DEMO_IMPORTED_DOC_SLUGS.length}`);
+  console.log(`  tags:         ${DEMO_TAG_NAMES.length}\n`);
 
   // ── Connection ───────────────────────────────────────────────────────────
 
@@ -106,12 +128,17 @@ async function main(): Promise<void> {
       // Run guard + dry-run path for each seeder (read-only queries allowed).
       await seedOrganization(client, { dryRun: true, forceReseed });
       await seedDepartments(client, { dryRun: true });
-      await seedUsers(client, {
-        dryRun: true,
-        forceReseed,
-        departmentMap: {},
-      });
+      await seedUsers(client, { dryRun: true, forceReseed, departmentMap: {} });
       await seedMembers(client, { dryRun: true });
+      await seedTags(client, { dryRun: true });
+      await seedConnector(client, { dryRun: true });
+      await seedRecordings(client, { dryRun: true, forceReseed });
+      await seedWiki(client, { dryRun: true });
+      await seedImportedDocs(client, { dryRun: true });
+      await seedKnowledgeGaps(client, { dryRun: true, forceReseed });
+      await seedShares(client, { dryRun: true, forceReseed });
+      await seedVendorOrg(client, { dryRun: true });
+      await seedOrgSettings(client, { dryRun: true });
 
       console.log('\n[demo-seed] Dry run complete. No data was written.\n');
       return;
@@ -122,10 +149,22 @@ async function main(): Promise<void> {
     await client.query('BEGIN');
 
     try {
+      // §11 ordering: org → departments → users → members → tags → recordings
+      // → wiki (refs recordings) → connector → imported-docs → knowledge-gaps
+      // → shares → vendor-org → org-settings
       await seedOrganization(client, { dryRun: false, forceReseed });
       const departmentMap = await seedDepartments(client, { dryRun: false });
       await seedUsers(client, { dryRun: false, forceReseed, departmentMap });
       await seedMembers(client, { dryRun: false });
+      await seedTags(client, { dryRun: false });
+      await seedRecordings(client, { dryRun: false, forceReseed });
+      await seedWiki(client, { dryRun: false });
+      await seedConnector(client, { dryRun: false });
+      await seedImportedDocs(client, { dryRun: false });
+      await seedKnowledgeGaps(client, { dryRun: false, forceReseed });
+      await seedShares(client, { dryRun: false, forceReseed });
+      await seedVendorOrg(client, { dryRun: false });
+      await seedOrgSettings(client, { dryRun: false });
 
       await client.query('COMMIT');
     } catch (err) {
@@ -137,14 +176,21 @@ async function main(): Promise<void> {
     // ── Summary ───────────────────────────────────────────────────────────
 
     console.log('\n[demo-seed] Seed complete.');
-    console.log(`  Organization:  ${DEMO_ORG.name}`);
-    console.log(`  Departments:   ${DEMO_DEPARTMENTS.length}`);
-    console.log(`  Users:         ${DEMO_USERS.length}`);
+    console.log(`  Organization:   ${DEMO_ORG.name}`);
+    console.log(`  Departments:    ${DEMO_DEPARTMENTS.length}`);
+    console.log(`  Users:          ${DEMO_USERS.length}`);
+    console.log(`  Tags:           ${DEMO_TAG_NAMES.length}`);
+    console.log(`  Recordings:     ${DEMO_RECORDING_SLUGS.length}`);
+    console.log(`  Wiki pages:     ${DEMO_WIKI_PAGE_SLUGS.length}`);
+    console.log(`  Imported docs:  ${DEMO_IMPORTED_DOC_SLUGS.length}`);
     console.log(`\n  Roster:`);
     for (const u of DEMO_USERS) {
       console.log(`    ${u.role.padEnd(12)} ${u.name} <${u.email}>`);
     }
     console.log('');
+    console.log('  Note: Embeddings are zero-vector placeholders.');
+    console.log('        Run `npm run demo:reembed` (follow-up TRIB-151) for real vectors.');
+    console.log('        R2 paths are DB-only — playback 404s are expected.');
   } finally {
     client.release();
     await pool.end();

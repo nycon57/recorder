@@ -24,7 +24,9 @@
  */
 
 import type { PoolClient } from 'pg';
+
 import { DEMO_DEPARTMENT_IDS, DEMO_USERS, SEED_CREATED_AT } from '../fixtures.js';
+
 import type { DepartmentMap } from './departments.js';
 
 // Department slug → DEMO_DEPARTMENT_IDS key mapping.

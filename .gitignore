@@ -138,6 +138,7 @@ Desktop.ini
 # SENSITIVE: Project documentation and configuration
 *.md
 !README.md
+!scripts/demo-seed/content/**/*.md
 /documentation/
 /documentation
 /.claude/
