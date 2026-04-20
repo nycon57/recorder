@@ -12,6 +12,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+import type { GenerativeModel } from '@google/generative-ai';
 
 import { getGoogleAI , GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient } from '@/lib/supabase/admin';
@@ -37,13 +38,33 @@ const OPTIMIZED_PROMPT = `Analyze this screenshot. Return JSON only:
 }
 Focus on: text, UI components, code, user actions, technical details.`;
 
+function getFrameNumber(metadata: unknown, fallback: number): number {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return fallback;
+  }
+
+  const frameNumber =
+    (metadata as { frameNumber?: unknown; frame_number?: unknown }).frameNumber ??
+    (metadata as { frameNumber?: unknown; frame_number?: unknown }).frame_number;
+
+  return typeof frameNumber === 'number' && Number.isFinite(frameNumber)
+    ? frameNumber
+    : fallback;
+}
+
+function getMetadataObject(metadata: unknown): Record<string, unknown> {
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? metadata as Record<string, unknown>
+    : {};
+}
+
 /**
  * Generate visual description for a frame buffer (optimized)
  */
 export async function describeFrameOptimized(
   imageBuffer: Buffer,
   frameContext?: string,
-  model?: any
+  model?: GenerativeModel
 ): Promise<VisualDescription> {
   // Check cache first
   const cached = await frameCache.getCachedDescription(imageBuffer);
@@ -53,10 +74,7 @@ export async function describeFrameOptimized(
   }
 
   // Use provided model or create new one
-  if (!model) {
-    const genAI = getGoogleAI();
-    model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-  }
+  const activeModel = model ?? getGoogleAI().getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const imageBase64 = imageBuffer.toString('base64');
 
@@ -65,7 +83,7 @@ export async function describeFrameOptimized(
     : OPTIMIZED_PROMPT;
 
   try {
-    const result = await model.generateContent([
+    const result = await activeModel.generateContent([
       {
         inlineData: {
           mimeType: 'image/jpeg',
@@ -86,8 +104,9 @@ export async function describeFrameOptimized(
     await frameCache.setCachedDescription(imageBuffer, parsed);
 
     return parsed;
-  } catch (error: any) {
-    console.error('[Visual Indexing] Gemini error:', error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[Visual Indexing] Gemini error:', message);
 
     // Return fallback description on error
     return {
@@ -179,10 +198,11 @@ export async function indexRecordingFramesOptimized(
   // Get unprocessed frames
   const { data: frames, error } = await supabase
     .from('video_frames')
-    .select('id, frame_url, frame_time_sec, frame_number')
+    .select('id, frame_url, frame_time_sec, metadata')
     .eq('content_id', recordingId)
+    .eq('org_id', orgId)
     .is('visual_description', null)
-    .order('frame_number');
+    .order('frame_time_sec');
 
   if (error || !frames || frames.length === 0) {
     console.log('[Visual Indexing] No frames to process');
@@ -196,8 +216,13 @@ export async function indexRecordingFramesOptimized(
   const downloadStart = Date.now();
 
   const frameBuffers = await Promise.all(
-    frames.map(async (frame) => {
+    frames.map(async (frame, index) => {
       try {
+        if (!frame.frame_url) {
+          console.warn(`[Visual Indexing] Frame missing storage path: ${frame.id}`);
+          return null;
+        }
+
         const { data } = await supabase.storage
           .from(process.env.FRAMES_STORAGE_BUCKET || 'video-frames')
           .download(frame.frame_url);
@@ -209,8 +234,9 @@ export async function indexRecordingFramesOptimized(
 
         return {
           frameId: frame.id,
-          frameNumber: frame.frame_number,
+          frameNumber: getFrameNumber(frame.metadata, index + 1),
           frameTimeSec: frame.frame_time_sec,
+          metadata: frame.metadata,
           buffer: Buffer.from(await data.arrayBuffer()),
         };
       } catch (error) {
@@ -230,6 +256,7 @@ export async function indexRecordingFramesOptimized(
 
   const allResults: Array<{
     frameId: string;
+    metadata: unknown;
     description: VisualDescription;
   }> = [];
 
@@ -246,7 +273,7 @@ export async function indexRecordingFramesOptimized(
       batch.map(async (frameData) => {
         if (!frameData) return null;
 
-        const { frameId, frameNumber, buffer } = frameData;
+        const { frameId, frameNumber, metadata, buffer } = frameData;
         try {
           // Add frame context for better descriptions
           const frameContext = `Frame ${frameNumber} from recording`;
@@ -259,11 +286,14 @@ export async function indexRecordingFramesOptimized(
 
           return {
             frameId,
+            metadata,
             description: { ...description, frameId },
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+
           // OPTIMIZATION 3: Rate limit handling with exponential backoff
-          if (error.message?.includes('429') || error.message?.includes('RATE_LIMIT')) {
+          if (message.includes('429') || message.includes('RATE_LIMIT')) {
             const backoffMs = Math.pow(2, batchNum) * 1000;
             console.log(`[Visual Indexing] Rate limited, waiting ${backoffMs}ms`);
             await new Promise(r => setTimeout(r, backoffMs));
@@ -273,6 +303,7 @@ export async function indexRecordingFramesOptimized(
               const description = await describeFrameOptimized(buffer, '', model);
               return {
                 frameId,
+                metadata,
                 description: { ...description, frameId },
               };
             } catch (retryError) {
@@ -281,13 +312,15 @@ export async function indexRecordingFramesOptimized(
             }
           }
 
-          console.error(`[Visual Indexing] Error for frame ${frameId}:`, error.message);
+          console.error(`[Visual Indexing] Error for frame ${frameId}:`, message);
           return null;
         }
       })
     );
 
-    const validResults = results.filter((r): r is { frameId: string; description: VisualDescription } => r !== null);
+    const validResults = results.filter(
+      (r): r is NonNullable<(typeof results)[number]> => r !== null
+    );
     allResults.push(...validResults);
 
     console.log(`[Visual Indexing] Batch ${batchNum} complete in ${Date.now() - batchStart}ms (${validResults.length}/${batch.length} successful)`);
@@ -311,15 +344,16 @@ export async function indexRecordingFramesOptimized(
       const chunk = allResults.slice(i, i + UPDATE_CHUNK_SIZE);
 
       // Use a transaction for each chunk
-      const updates = chunk.map(({ frameId, description }) => ({
+      const updates = chunk.map(({ frameId, metadata, description }) => ({
         id: frameId,
         visual_description: description.description,
-        visual_embedding: JSON.stringify(description.embedding || []),
-        scene_type: description.sceneType,
-        detected_elements: description.detectedElements,
+        visual_embedding: description.embedding || [],
         metadata: {
+          ...getMetadataObject(metadata),
           confidence: description.confidence,
           indexed_at: new Date().toISOString(),
+          sceneType: description.sceneType,
+          detectedElements: description.detectedElements,
         },
       }));
 
@@ -330,8 +364,6 @@ export async function indexRecordingFramesOptimized(
           .update({
             visual_description: update.visual_description,
             visual_embedding: update.visual_embedding,
-            scene_type: update.scene_type,
-            detected_elements: update.detected_elements,
             metadata: update.metadata,
           })
           .eq('id', update.id)

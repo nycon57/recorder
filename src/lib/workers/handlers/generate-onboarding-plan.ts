@@ -49,13 +49,10 @@ function getGenAIClient(): GoogleGenAI {
   return genaiClient;
 }
 
-interface ContentRow {
-  id: string;
-  title: string | null;
-  content_type: string;
-  duration_sec: number | null;
-  created_at: string;
-}
+type ContentRow = Pick<
+  Database['public']['Tables']['content']['Row'],
+  'id' | 'title' | 'content_type' | 'duration_sec' | 'created_at'
+>;
 
 interface ContentCandidate {
   id: string;
@@ -74,7 +71,7 @@ function toContentCandidate(
   return {
     id: row.id,
     title: row.title ?? 'Untitled',
-    contentType: row.content_type as ContentType,
+    contentType: row.content_type ?? 'document',
     durationSec: row.duration_sec,
     createdAt: row.created_at,
     conceptNames,
@@ -540,7 +537,7 @@ async function insertOnboardingPlan(
       user_name: params.userName,
       user_role: params.userRole,
       plan_status: 'active',
-      learning_path: params.learningPath as unknown as Json[],
+      learning_path: params.learningPath,
       total_items: params.learningPath.length,
       completed_items: 0,
       engagement_data: {} as Json,

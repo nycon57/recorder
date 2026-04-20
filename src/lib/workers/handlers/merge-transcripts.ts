@@ -6,7 +6,7 @@
  * Creates the final transcript record and triggers downstream jobs.
  */
 
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { createLogger } from '@/lib/utils/logger';
 import { GOOGLE_CONFIG } from '@/lib/google/client';
@@ -49,6 +49,11 @@ interface VisualEvent {
   confidence?: number;
 }
 
+interface KeyMoment {
+  timestamp: string;
+  description: string;
+}
+
 interface SegmentResult {
   segmentIndex: number;
   segmentStartTime: number;
@@ -56,7 +61,148 @@ interface SegmentResult {
   audioTranscript: AudioSegment[];
   visualEvents: VisualEvent[];
   combinedNarrative: string;
-  keyMoments: Array<{ timestamp: string; description: string }>;
+  keyMoments: KeyMoment[];
+}
+
+type JsonObject = { [key: string]: Json | undefined };
+
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function readNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function parseVisualEventType(value: unknown): VisualEvent['type'] {
+  switch (value) {
+    case 'click':
+    case 'type':
+    case 'navigate':
+    case 'scroll':
+    case 'other':
+      return value;
+    default:
+      return 'other';
+  }
+}
+
+function parseAudioSegments(value: Json | null): AudioSegment[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isJsonObject(entry)) {
+      return [];
+    }
+
+    const timestamp = readString(entry.timestamp);
+    const startTime = readNumber(entry.startTime);
+    const endTime = readNumber(entry.endTime);
+    const text = readString(entry.text);
+
+    if (!timestamp || startTime === null || endTime === null || !text) {
+      return [];
+    }
+
+    return [
+      {
+        timestamp,
+        startTime,
+        endTime,
+        text,
+        speaker: readString(entry.speaker) ?? undefined,
+      },
+    ];
+  });
+}
+
+function parseVisualEvents(value: Json | null): VisualEvent[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isJsonObject(entry)) {
+      return [];
+    }
+
+    const timestamp = readString(entry.timestamp);
+    const description = readString(entry.description);
+
+    if (!timestamp || !description) {
+      return [];
+    }
+
+    return [
+      {
+        timestamp,
+        description,
+        type: parseVisualEventType(entry.type),
+        target: readString(entry.target) ?? undefined,
+        location: readString(entry.location) ?? undefined,
+        confidence: readNumber(entry.confidence) ?? undefined,
+      },
+    ];
+  });
+}
+
+function parseKeyMoments(value: Json | null): KeyMoment[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isJsonObject(entry)) {
+      return [];
+    }
+
+    const timestamp = readString(entry.timestamp);
+    const description = readString(entry.description);
+
+    if (!timestamp || !description) {
+      return [];
+    }
+
+    return [{ timestamp, description }];
+  });
+}
+
+function parseSegmentResult(value: Json | null): SegmentResult | null {
+  if (!isJsonObject(value)) {
+    return null;
+  }
+
+  const segmentIndex = readNumber(value.segmentIndex);
+  const segmentStartTime = readNumber(value.segmentStartTime);
+  const segmentDuration = readNumber(value.segmentDuration);
+
+  if (
+    segmentIndex === null ||
+    segmentStartTime === null ||
+    segmentDuration === null
+  ) {
+    return null;
+  }
+
+  return {
+    segmentIndex,
+    segmentStartTime,
+    segmentDuration,
+    audioTranscript: parseAudioSegments(value.audioTranscript ?? null),
+    visualEvents: parseVisualEvents(value.visualEvents ?? null),
+    combinedNarrative: readString(value.combinedNarrative) ?? '',
+    keyMoments: parseKeyMoments(value.keyMoments ?? null),
+  };
 }
 
 /**
@@ -191,14 +337,15 @@ export async function mergeTranscripts(job: Job): Promise<void> {
 
     if (!jobStatusError && jobStatus) {
       const { segments_completed, total_segments } = jobStatus;
+      const completedSegments = segments_completed ?? 0;
 
-      if (total_segments && segments_completed < total_segments) {
+      if (total_segments && completedSegments < total_segments) {
         // Not all segments have completed yet - this shouldn't happen
         // if dependency-based triggering is working correctly
         logger.warn('Merge job triggered before all segments complete', {
           context: {
             contentId,
-            segmentsCompleted: segments_completed,
+            segmentsCompleted: completedSegments,
             totalSegments: total_segments,
             jobId: job.id,
           },
@@ -210,14 +357,14 @@ export async function mergeTranscripts(job: Job): Promise<void> {
           .from('jobs')
           .update({
             status: 'waiting',
-            error: `Waiting for ${total_segments - segments_completed} more segments to complete`,
+            error: `Waiting for ${total_segments - completedSegments} more segments to complete`,
           })
           .eq('id', job.id);
 
         logger.info('Merge job re-queued to wait for remaining segments', {
           context: {
             contentId,
-            remaining: total_segments - segments_completed,
+            remaining: total_segments - completedSegments,
           },
         });
 
@@ -227,7 +374,7 @@ export async function mergeTranscripts(job: Job): Promise<void> {
       logger.info('All segments confirmed complete', {
         context: {
           contentId,
-          segmentsCompleted: segments_completed,
+          segmentsCompleted: completedSegments,
           totalSegments: total_segments,
         },
       });
@@ -249,13 +396,10 @@ export async function mergeTranscripts(job: Job): Promise<void> {
         segmentIndex: s.segment_index,
         segmentStartTime: s.segment_start_time,
         segmentDuration: s.segment_duration,
-        audioTranscript: s.audio_transcript as AudioSegment[],
-        visualEvents: s.visual_events as VisualEvent[],
-        combinedNarrative: s.combined_narrative,
-        keyMoments: s.key_moments as Array<{
-          timestamp: string;
-          description: string;
-        }>,
+        audioTranscript: parseAudioSegments(s.audio_transcript),
+        visualEvents: parseVisualEvents(s.visual_events),
+        combinedNarrative: s.combined_narrative ?? '',
+        keyMoments: parseKeyMoments(s.key_moments),
       }));
     } else {
       // Fallback: fetch from completed segment jobs
@@ -274,8 +418,8 @@ export async function mergeTranscripts(job: Job): Promise<void> {
       }
 
       segmentResults = segmentJobs
-        .map((j) => j.result as SegmentResult)
-        .filter((r) => r !== null)
+        .map((j) => parseSegmentResult(j.result))
+        .filter((result): result is SegmentResult => result !== null)
         .sort((a, b) => a.segmentIndex - b.segmentIndex);
     }
 
@@ -298,8 +442,7 @@ export async function mergeTranscripts(job: Job): Promise<void> {
     // Merge all segments with adjusted timestamps
     const mergedAudioTranscript: AudioSegment[] = [];
     const mergedVisualEvents: VisualEvent[] = [];
-    const mergedKeyMoments: Array<{ timestamp: string; description: string }> =
-      [];
+    const mergedKeyMoments: KeyMoment[] = [];
     const narrativeParts: string[] = [];
 
     for (const segment of segmentResults) {
@@ -331,9 +474,6 @@ export async function mergeTranscripts(job: Job): Promise<void> {
       narrativeParts.push(`${segmentLabel}\n${segment.combinedNarrative}`);
     }
 
-    // Build combined narrative
-    const combinedNarrative = narrativeParts.join('\n\n');
-
     // Build full transcript text
     const fullTranscript = mergedAudioTranscript
       .map((seg) => seg.text)
@@ -341,7 +481,7 @@ export async function mergeTranscripts(job: Job): Promise<void> {
       .trim();
 
     // Build words_json compatible structure
-    const words_json = {
+    const wordsJson = {
       segments: mergedAudioTranscript.map((seg) => ({
         start: seg.startTime,
         end: seg.endTime,
@@ -352,7 +492,7 @@ export async function mergeTranscripts(job: Job): Promise<void> {
     };
 
     // Video metadata
-    const video_metadata = {
+    const videoMetadata = {
       model: GOOGLE_CONFIG.DOCIFY_MODEL,
       provider: 'gemini-video-segmented',
       duration: totalDuration,
@@ -381,9 +521,9 @@ export async function mergeTranscripts(job: Job): Promise<void> {
         content_id: contentId,
         text: fullTranscript,
         language: GOOGLE_CONFIG.SPEECH_LANGUAGE,
-        words_json,
-        visual_events: mergedVisualEvents,
-        video_metadata,
+        words_json: toJson(wordsJson),
+        visual_events: toJson(mergedVisualEvents),
+        video_metadata: toJson(videoMetadata),
         confidence: 0.93, // Slightly lower than single-pass due to boundary effects
         provider: 'gemini-video-segmented',
       })
@@ -519,11 +659,11 @@ export async function mergeTranscripts(job: Job): Promise<void> {
       .from('content')
       .update({
         status: SOURCE_STATUS.ERROR,
-        metadata: {
+        metadata: toJson({
           error: errorMessage,
           errorType: 'merge_transcripts',
           timestamp: new Date().toISOString(),
-        },
+        }),
       })
       .eq('id', contentId);
 

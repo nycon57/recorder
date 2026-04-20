@@ -11,12 +11,14 @@ import { extractFrames } from '@/lib/services/frame-extraction';
 import { indexRecordingFrames } from '@/lib/services/visual-indexing';
 import { extractFrameText } from '@/lib/services/ocr-service';
 import { createClient } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger({ service: 'extract-frames' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
+
+type JsonObject = { [key: string]: Json | undefined };
 
 export interface ExtractFramesPayload {
   recordingId: string;
@@ -27,6 +29,25 @@ export interface ExtractFramesPayload {
 
 // Generic job type with typed payload
 type TypedJob<T> = Omit<Job, 'payload'> & { payload: T };
+
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
+}
+
+function isJsonObject(value: Json): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getFrameNumber(metadata: Json): number | null {
+  if (!isJsonObject(metadata)) {
+    return null;
+  }
+
+  const frameNumber = metadata.frameNumber ?? metadata.frame_number;
+  return typeof frameNumber === 'number' && Number.isFinite(frameNumber)
+    ? frameNumber
+    : null;
+}
 
 export async function handleExtractFrames(
   job: TypedJob<ExtractFramesPayload>
@@ -63,12 +84,6 @@ export async function handleExtractFrames(
   const supabase = createClient();
 
   try {
-    // Update status
-    await supabase
-      .from('content')
-      .update({ visual_indexing_status: 'processing' })
-      .eq('id', recordingId);
-
     // Determine video source
     let localVideoPath: string;
     let shouldCleanup = false;
@@ -90,8 +105,8 @@ export async function handleExtractFrames(
 
       // Save to temp file
       localVideoPath = path.join('/tmp', `video_${recordingId}.webm`);
-      const buffer = Buffer.from(await videoData.arrayBuffer());
-      await fs.writeFile(localVideoPath, buffer);
+      const videoBytes = new Uint8Array(await videoData.arrayBuffer());
+      await fs.writeFile(localVideoPath, videoBytes);
       shouldCleanup = true;
     } else {
       throw new Error('No video path or URL provided');
@@ -114,14 +129,16 @@ export async function handleExtractFrames(
     const frameRecords = extraction.frames.map((frame) => ({
       content_id: recordingId,
       org_id: orgId,
-      frame_number: frame.frameNumber,
       frame_time_sec: frame.timeSec,
       frame_url: frame.storagePath,
-      metadata: {
+      metadata: toJson({
+        frameNumber: frame.frameNumber,
+        frame_number: frame.frameNumber,
         width: frame.width,
         height: frame.height,
         sizeBytes: frame.sizeBytes,
-      },
+        mimeType: frame.mimeType,
+      }),
     }));
 
     const { error: insertError } = await supabase
@@ -145,18 +162,8 @@ export async function handleExtractFrames(
       logger.info('Extracting OCR text', {
         context: { recordingId },
       });
-      await performOCR(recordingId, orgId, extraction.frames);
+      await performOCR(recordingId, orgId);
     }
-
-    // Update recording
-    await supabase
-      .from('content')
-      .update({
-        frames_extracted: true,
-        frame_count: extraction.totalFrames,
-        visual_indexing_status: 'completed',
-      })
-      .eq('id', recordingId);
 
     logger.info('Frame extraction complete', {
       context: { recordingId },
@@ -189,11 +196,6 @@ export async function handleExtractFrames(
       error: error as Error,
     });
 
-    await supabase
-      .from('content')
-      .update({ visual_indexing_status: 'failed' })
-      .eq('id', recordingId);
-
     throw error;
   }
 }
@@ -203,23 +205,17 @@ export async function handleExtractFrames(
  */
 async function performOCR(
   recordingId: string,
-  orgId: string,
-  frames: Array<{ frameNumber: number; localPath: string }>
+  orgId: string
 ): Promise<void> {
   const supabase = createClient();
-
-  logger.info('Starting OCR processing', {
-    context: { recordingId, orgId },
-    data: { totalFrames: frames.length },
-  });
 
   // Get frames from database
   const { data: dbFrames, error: fetchError } = await supabase
     .from('video_frames')
-    .select('id, frame_number, frame_url')
+    .select('id, frame_time_sec, frame_url, metadata')
     .eq('content_id', recordingId)
     .eq('org_id', orgId)
-    .order('frame_number');
+    .order('frame_time_sec');
 
   if (fetchError || !dbFrames) {
     logger.error('Failed to fetch frames for OCR', {
@@ -229,6 +225,11 @@ async function performOCR(
     return;
   }
 
+  logger.info('Starting OCR processing', {
+    context: { recordingId, orgId },
+    data: { totalFrames: dbFrames.length },
+  });
+
   // Process frames in batches
   const batchSize = 5;
   for (let i = 0; i < dbFrames.length; i += batchSize) {
@@ -237,6 +238,13 @@ async function performOCR(
     await Promise.all(
       batch.map(async (dbFrame) => {
         try {
+          if (!dbFrame.frame_url) {
+            logger.warn('Frame is missing storage path for OCR', {
+              context: { frameId: dbFrame.id, recordingId },
+            });
+            return;
+          }
+
           // Download frame from storage
           const { data: imageData } = await supabase.storage
             .from(process.env.FRAMES_STORAGE_BUCKET || 'video-frames')
@@ -251,8 +259,8 @@ async function performOCR(
 
           // Create temp file for OCR
           const tempPath = `/tmp/ocr_${dbFrame.id}.jpg`;
-          const buffer = Buffer.from(await imageData.arrayBuffer());
-          await fs.writeFile(tempPath, buffer);
+          const imageBytes = new Uint8Array(await imageData.arrayBuffer());
+          await fs.writeFile(tempPath, imageBytes);
 
           // Perform OCR
           const ocrResult = await extractFrameText(tempPath);
@@ -263,13 +271,20 @@ async function performOCR(
               .from('video_frames')
               .update({
                 ocr_text: ocrResult.text,
-                ocr_confidence: ocrResult.confidence,
-                ocr_blocks: ocrResult.blocks,
+                metadata: toJson({
+                  ...(isJsonObject(dbFrame.metadata) ? dbFrame.metadata : {}),
+                  ocrConfidence: ocrResult.confidence,
+                  ocrBlocks: ocrResult.blocks,
+                }),
               })
               .eq('id', dbFrame.id);
 
             logger.info('OCR text extracted from frame', {
-              context: { frameId: dbFrame.id, frameNumber: dbFrame.frame_number, recordingId },
+              context: {
+                frameId: dbFrame.id,
+                frameNumber: getFrameNumber(dbFrame.metadata) ?? 'unknown',
+                recordingId,
+              },
               data: { textLength: ocrResult.text.length, confidence: ocrResult.confidence },
             });
           }

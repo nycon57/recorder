@@ -20,6 +20,12 @@ export interface VisualDescription {
   confidence: number;
 }
 
+function getMetadataObject(metadata: unknown): Record<string, unknown> {
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? metadata as Record<string, unknown>
+    : {};
+}
+
 /**
  * Generate visual description for a frame
  */
@@ -147,10 +153,11 @@ export async function indexRecordingFrames(
   // Get unprocessed frames
   const { data: frames, error } = await supabase
     .from('video_frames')
-    .select('id, frame_url, frame_time_sec')
+    .select('id, frame_url, frame_time_sec, metadata')
     .eq('content_id', recordingId)
+    .eq('org_id', orgId)
     .is('visual_description', null)
-    .order('frame_number');
+    .order('frame_time_sec');
 
   if (error || !frames || frames.length === 0) {
     console.log('[Visual Indexing] No frames to process');
@@ -168,6 +175,11 @@ export async function indexRecordingFrames(
     await Promise.all(
       batch.map(async (frame) => {
         try {
+          if (!frame.frame_url) {
+            console.warn('[Visual Indexing] Frame missing storage path:', frame.id);
+            return;
+          }
+
           // Download frame from storage
           const { data: imageData } = await supabase.storage
             .from(process.env.FRAMES_STORAGE_BUCKET || 'video-frames')
@@ -180,8 +192,8 @@ export async function indexRecordingFrames(
 
           // Create temp file
           const tempPath = `/tmp/frame_${frame.id}.jpg`;
-          const buffer = Buffer.from(await imageData.arrayBuffer());
-          await fs.writeFile(tempPath, buffer);
+          const imageBytes = new Uint8Array(await imageData.arrayBuffer());
+          await fs.writeFile(tempPath, imageBytes);
 
           // Generate description
           const description = await describeFrame(tempPath);
@@ -194,11 +206,13 @@ export async function indexRecordingFrames(
             .from('video_frames')
             .update({
               visual_description: description.description,
-              visual_embedding: JSON.stringify(embedding), // Supabase expects string for vector
-              scene_type: description.sceneType,
-              detected_elements: description.detectedElements,
+              visual_embedding: embedding,
               metadata: {
+                ...getMetadataObject(frame.metadata),
                 confidence: description.confidence,
+                indexed_at: new Date().toISOString(),
+                sceneType: description.sceneType,
+                detectedElements: description.detectedElements,
               },
             })
             .eq('id', frame.id);

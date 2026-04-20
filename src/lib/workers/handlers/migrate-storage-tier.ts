@@ -8,13 +8,42 @@
 import { getStorageManager } from '@/lib/services/storage-manager';
 import { createClient } from '@/lib/supabase/admin';
 import type {
+  Database,
+  Json,
   MigrateStorageTierJobPayload,
-  StorageTier,
-  StorageProvider,
 } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger({ service: 'migrate-storage-tier' });
+
+type ContentStorageTier = NonNullable<
+  Database['public']['Tables']['content']['Row']['storage_tier']
+>;
+type ContentStorageProvider = NonNullable<
+  Database['public']['Tables']['content']['Row']['storage_provider']
+>;
+
+interface MigrationCandidateRow {
+  content_id?: string | null;
+  recording_id?: string | null;
+  org_id: string;
+  current_tier: MigrateStorageTierJobPayload['fromTier'];
+  target_tier: MigrateStorageTierJobPayload['toTier'];
+  storage_path: string;
+  file_size: number;
+}
+
+interface MigrationJobResult {
+  contentId: string;
+  recordingId: string;
+  fromTier: ContentStorageTier;
+  toTier: ContentStorageTier;
+  fromProvider: ContentStorageProvider;
+  toProvider: ContentStorageProvider;
+  toPath: string;
+  fileSize: number;
+  durationMs: number;
+}
 
 /**
  * Handle storage tier migration job
@@ -24,11 +53,28 @@ const logger = createLogger({ service: 'migrate-storage-tier' });
  */
 export async function handleMigrateStorageTier(
   payload: MigrateStorageTierJobPayload
-): Promise<{ success: boolean; result?: any; error?: string }> {
-  const { recordingId, orgId, fromProvider, fromTier, toTier, sourcePath, fileSize } = payload;
+): Promise<{ success: boolean; result?: MigrationJobResult; error?: string }> {
+  const {
+    contentId: payloadContentId,
+    recordingId,
+    orgId,
+    fromProvider,
+    fromTier,
+    toTier,
+    sourcePath,
+    fileSize,
+  } = payload;
+  const contentId = payloadContentId || recordingId;
+
+  if (!contentId) {
+    return {
+      success: false,
+      error: 'Storage tier migration payload is missing contentId',
+    };
+  }
 
   logger.info('Starting storage tier migration', {
-    context: { recordingId, orgId, fromTier, toTier, fromProvider, sourcePath },
+    context: { contentId, orgId, fromTier, toTier, fromProvider, sourcePath },
   });
 
   const startTime = Date.now();
@@ -40,7 +86,7 @@ export async function handleMigrateStorageTier(
     const { data: recording, error: recordingError } = await supabase
       .from('content')
       .select('*')
-      .eq('id', recordingId)
+      .eq('id', contentId)
       .single();
 
     if (recordingError || !recording) {
@@ -51,7 +97,7 @@ export async function handleMigrateStorageTier(
     const { data: migration, error: migrationInsertError } = await supabase
       .from('storage_migrations')
       .insert({
-        content_id: recordingId,
+        content_id: contentId,
         org_id: orgId,
         from_tier: fromTier,
         to_tier: toTier,
@@ -75,14 +121,14 @@ export async function handleMigrateStorageTier(
     try {
       // 3. Perform migration using StorageManager
       logger.info('Migrating file', {
-        context: { recordingId, migrationId },
+        context: { contentId, migrationId },
       });
 
       const migrationResult = await storageManager.migrateToTier(
         fromProvider,
         sourcePath,
         toTier as 'hot' | 'warm' | 'cold',
-        recordingId || ''
+        contentId
       );
 
       if (!migrationResult.success) {
@@ -91,14 +137,14 @@ export async function handleMigrateStorageTier(
 
       logger.info('Migration successful', {
         context: {
-          recordingId,
+          contentId,
           toProvider: migrationResult.toProvider,
           toPath: migrationResult.toPath,
         },
       });
 
       // 4. Update recording with new tier and provider
-      const updateData: any = {
+      const updateData: Database['public']['Tables']['content']['Update'] = {
         storage_tier: toTier,
         storage_provider: migrationResult.toProvider,
         tier_migrated_at: new Date().toISOString(),
@@ -116,7 +162,7 @@ export async function handleMigrateStorageTier(
       const { error: updateError } = await supabase
         .from('content')
         .update(updateData)
-        .eq('id', recordingId);
+        .eq('id', contentId);
 
       if (updateError) {
         throw new Error(`Failed to update recording: ${updateError.message}`);
@@ -136,14 +182,15 @@ export async function handleMigrateStorageTier(
       const fileSizeMB = fileSize / 1024 / 1024;
 
       logger.info('Migration completed', {
-        context: { recordingId, migrationId },
+        context: { contentId, migrationId },
         data: { durationMs, fileSizeMB: parseFloat(fileSizeMB.toFixed(2)) },
       });
 
       return {
         success: true,
         result: {
-          recordingId,
+          contentId,
+          recordingId: contentId,
           fromTier,
           toTier,
           fromProvider,
@@ -168,7 +215,7 @@ export async function handleMigrateStorageTier(
     }
   } catch (error) {
     logger.error('Migration failed', {
-      context: { recordingId, fromTier, toTier },
+      context: { contentId, fromTier, toTier },
       error: error as Error,
     });
 
@@ -176,7 +223,7 @@ export async function handleMigrateStorageTier(
     await supabase
       .from('content')
       .update({ tier_migration_scheduled: false })
-      .eq('id', recordingId);
+      .eq('id', contentId);
 
     return {
       success: false,
@@ -240,36 +287,61 @@ export async function batchMigrateTier(
     });
 
     // 2. Create migration jobs for each file
-    const jobs = filesToMigrate.map((file: any) => ({
-      type: 'migrate_storage_tier' as const,
-      status: 'pending' as const,
-      payload: {
-        recordingId: file.recording_id,
-        orgId: file.org_id,
-        fromProvider: 'supabase' as const,
-        fromTier: file.current_tier,
-        toTier: file.target_tier,
-        sourcePath: file.storage_path,
-        fileSize: file.file_size,
-      },
-      dedupe_key: `migrate_tier:${file.recording_id}:${file.target_tier}`,
-    }));
+    const jobs = (filesToMigrate as MigrationCandidateRow[]).flatMap((file) => {
+      const fileContentId = file.content_id ?? file.recording_id;
+
+      if (!fileContentId) {
+        failedCount++;
+        errors.push('Skipped migration job with missing content ID');
+        return [];
+      }
+
+      return [
+        {
+          type: 'migrate_storage_tier' as const,
+          status: 'pending' as const,
+          payload: {
+            contentId: fileContentId,
+            recordingId: fileContentId,
+            orgId: file.org_id,
+            fromProvider: 'supabase' as const,
+            fromTier: file.current_tier,
+            toTier: file.target_tier,
+            sourcePath: file.storage_path,
+            fileSize: file.file_size,
+          },
+          dedupe_key: `migrate_tier:${fileContentId}:${file.target_tier}`,
+        },
+      ];
+    });
+
+    if (jobs.length === 0) {
+      logger.warn('No valid migration jobs could be created', {
+        context: { orgId },
+      });
+      return {
+        success: false,
+        migrated: 0,
+        failed: failedCount,
+        errors,
+      };
+    }
 
     // 3. Insert jobs in batches
-    const { data: insertedJobs, error: insertError } = await supabase.from('jobs').insert(jobs);
+    const { error: insertError } = await supabase.from('jobs').insert(jobs);
 
     if (insertError) {
       throw new Error(`Failed to create migration jobs: ${insertError.message}`);
     }
 
     // 4. Mark recordings as having scheduled migration
-    const recordingIds = filesToMigrate.map((f: any) => f.recording_id);
+    const recordingIds = jobs.map((job) => job.payload.contentId);
     await supabase
       .from('content')
       .update({ tier_migration_scheduled: true })
       .in('id', recordingIds);
 
-    migratedCount = filesToMigrate.length;
+    migratedCount = jobs.length;
 
     logger.info('Created migration jobs', {
       context: { orgId },
@@ -308,7 +380,7 @@ export async function getMigrationStats(orgId: string): Promise<{
   byProvider: Record<string, number>;
   pendingMigrations: number;
   recentMigrations: number;
-  estimatedSavings: any;
+  estimatedSavings: Json | null;
 }> {
   const supabase = createClient();
 

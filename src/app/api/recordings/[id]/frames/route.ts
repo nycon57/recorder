@@ -16,6 +16,36 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+function getFrameNumber(metadata: unknown, fallback: number): number {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return fallback;
+  }
+
+  const frameNumber =
+    (metadata as { frameNumber?: unknown; frame_number?: unknown }).frameNumber ??
+    (metadata as { frameNumber?: unknown; frame_number?: unknown }).frame_number;
+
+  return typeof frameNumber === 'number' && Number.isFinite(frameNumber)
+    ? frameNumber
+    : fallback;
+}
+
+function getMetadataObject(metadata: unknown): Record<string, unknown> {
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? metadata as Record<string, unknown>
+    : {};
+}
+
+function getMetadataString(metadata: unknown, key: string): string | undefined {
+  const value = getMetadataObject(metadata)[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getMetadataStringArray(metadata: unknown, key: string): string[] {
+  const value = getMetadataObject(metadata)[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
 /**
  * GET /api/recordings/[id]/frames
  * Retrieve frames for a recording with pagination and optional filters
@@ -55,12 +85,12 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
   // Build query for frames
   let query = supabase
     .from('video_frames')
-    .select('id, content_id, frame_number, frame_time_sec, frame_url, visual_description, ocr_text, scene_type, detected_elements, metadata, created_at', {
+    .select('id, content_id, frame_time_sec, frame_url, visual_description, ocr_text, metadata, created_at', {
       count: 'exact',
     })
     .eq('content_id', recordingId)
     .eq('org_id', orgId)
-    .order('frame_number', { ascending: true });
+    .order('frame_time_sec', { ascending: true });
 
   // Apply time range filters
   if (startTime !== undefined) {
@@ -84,7 +114,7 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
 
   // Generate presigned URLs for frame images
   const framesWithUrls = await Promise.all(
-    (frames || []).map(async (frame) => {
+    (frames || []).map(async (frame, index) => {
       let signedUrl = null;
 
       if (frame.frame_url) {
@@ -102,13 +132,13 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
       return {
         id: frame.id,
         recordingId: frame.content_id,
-        frameNumber: frame.frame_number,
+        frameNumber: getFrameNumber(frame.metadata, offset + index + 1),
         frameTimeSec: frame.frame_time_sec,
         frameUrl: signedUrl,
         visualDescription: includeDescriptions ? frame.visual_description : undefined,
         ocrText: includeOcr ? frame.ocr_text : undefined,
-        sceneType: frame.scene_type,
-        detectedElements: frame.detected_elements || [],
+        sceneType: getMetadataString(frame.metadata, 'sceneType'),
+        detectedElements: getMetadataStringArray(frame.metadata, 'detectedElements'),
         metadata: frame.metadata || {},
         createdAt: frame.created_at,
       };
@@ -150,13 +180,18 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
   // Check if recording exists and belongs to org
   const { data: recording, error: recordingError } = await supabase
     .from('content')
-    .select('id, video_url')
+    .select('id, storage_path_raw, storage_path_processed')
     .eq('id', recordingId)
     .eq('org_id', orgId)
     .single();
 
   if (recordingError || !recording) {
     throw new Error('Recording not found');
+  }
+
+  const videoStoragePath = recording.storage_path_processed ?? recording.storage_path_raw;
+  if (!videoStoragePath) {
+    throw new Error('Recording has no stored video path');
   }
 
   // Check if frames already exist
@@ -181,7 +216,7 @@ export const POST = apiHandler(async (request: NextRequest, context: RouteContex
       payload: {
         recordingId,
         orgId,
-        videoUrl: recording.video_url,
+        videoUrl: videoStoragePath,
       },
       dedupe_key: `extract_frames:${recordingId}`,
     })
