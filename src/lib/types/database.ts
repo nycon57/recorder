@@ -8444,3 +8444,8 @@ export const Constants = {
     },
   },
 } as const
+
+// ─── Application-layer type re-exports ────────────────────────────────────
+// Custom domain types that consumers import via `@/lib/types/database`.
+// Defined in app-types.ts so this generated file can be safely re-regenerated.
+export * from './app-types';
