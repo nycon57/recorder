@@ -20,6 +20,7 @@ import {
   WebhooksTab,
   ExternalSourcesTab,
 } from '@/app/components/settings';
+import { DocLink } from '@/app/components/docs/doc-link';
 
 export default function IntegrationsPage() {
   const [activeTab, setActiveTab] = useState('external-sources');
@@ -27,7 +28,12 @@ export default function IntegrationsPage() {
   return (
     <div className="trbd-page">
       <div className="mb-8">
-        <h1 className="trbd-page-title mb-2">Integrations</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="trbd-page-title mb-2">Integrations</h1>
+          <DocLink href="/docs/integrations/browser-extension">
+            Integration guides
+          </DocLink>
+        </div>
         <p className="text-muted-foreground">
           Connect external services, manage API keys, and configure webhooks
         </p>
@@ -47,10 +53,17 @@ export default function IntegrationsPage() {
         <TabsContent value="external-sources" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>External Data Sources</CardTitle>
-              <CardDescription>
-                Connect and sync content from external platforms
-              </CardDescription>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <CardTitle>External Data Sources</CardTitle>
+                  <CardDescription className="mt-1.5">
+                    Connect and sync content from external platforms
+                  </CardDescription>
+                </div>
+                <DocLink href="/docs/integrations/browser-extension">
+                  Browser extension guide
+                </DocLink>
+              </div>
             </CardHeader>
             <CardContent>
               <ExternalSourcesTab />
@@ -61,10 +74,17 @@ export default function IntegrationsPage() {
         <TabsContent value="api-keys" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>API Keys</CardTitle>
-              <CardDescription>
-                Create and manage API keys for programmatic access to your data
-              </CardDescription>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <CardTitle>API Keys</CardTitle>
+                  <CardDescription className="mt-1.5">
+                    Create and manage API keys for programmatic access to your data
+                  </CardDescription>
+                </div>
+                <DocLink href="/docs/integrations/sdk-widget">
+                  SDK widget docs
+                </DocLink>
+              </div>
             </CardHeader>
             <CardContent>
               <ApiKeysTab />

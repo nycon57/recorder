@@ -26,6 +26,7 @@ import type {
 import { AddSourceButton } from '@/app/components/admin/vendor-sources/add-source-button';
 import { SourceCardActions } from '@/app/components/admin/vendor-sources/source-card-actions';
 import { RecentIngestJobs } from '@/app/components/admin/vendor-sources/recent-ingest-jobs';
+import { DocLink } from '@/app/components/docs/doc-link';
 
 function formatTimestamp(value: string | null): string {
   if (!value) return 'Never';
@@ -255,6 +256,14 @@ export default function AdminVendorSourcesPage() {
             Internal visibility into shared vendor source freshness, failures,
             provenance, and applicability.
           </p>
+          <div className="flex items-center gap-4 mt-1">
+            <DocLink href="/docs/vendor-sources/sync-lifecycle">
+              Sync lifecycle
+            </DocLink>
+            <DocLink href="/docs/vendor-sources/governance">
+              Governance
+            </DocLink>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline">

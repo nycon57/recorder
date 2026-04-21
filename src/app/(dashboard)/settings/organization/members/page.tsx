@@ -24,6 +24,7 @@ import {
   BulkActionsBar,
   MemberFilters,
 } from '@/app/components/settings';
+import { DocLink } from '@/app/components/docs/doc-link';
 import { MemberDataTable } from '@/app/components/settings/organization/members/MemberDataTable';
 
 import type { OrganizationMember, MemberFiltersState } from './types';
@@ -162,6 +163,9 @@ export default function MembersPage() {
           <p className="text-muted-foreground mt-2">
             Manage your organization&apos;s team members, roles, and access
           </p>
+          <DocLink href="/docs/org-admin/members-and-roles" className="mt-1">
+            Members &amp; roles guide
+          </DocLink>
         </div>
         <Button onClick={() => setShowInviteModal(true)} className="gap-2">
           <UserPlus className="h-4 w-4" />

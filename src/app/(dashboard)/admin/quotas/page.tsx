@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, HardDrive, Package, Users } from 'lucide-react';
 
+import { DocLink } from '@/app/components/docs/doc-link';
 import {
   Card,
   CardHeader,
@@ -119,12 +120,15 @@ export default function AdminQuotasPage() {
   return (
     <div className="trbd-page">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-start gap-3">
         <div>
           <h1 className="trbd-page-title">Quota Management</h1>
           <p className="text-muted-foreground">
             Monitor organization usage and limits
           </p>
+          <DocLink href="/docs/system-admin/global-quotas" className="mt-1">
+            Global quotas reference
+          </DocLink>
         </div>
 
         <Badge variant="outline" className="text-sm">

@@ -67,18 +67,18 @@ const DEFAULT_NAV: NavSection[] = [
     title: 'Resources',
     links: [
       { name: 'Documentation', href: '/docs' },
-      { name: 'Help Center', href: '/help' },
-      { name: 'API Reference', href: '/api' },
+      { name: 'Getting Started', href: '/docs/getting-started/welcome' },
+      { name: 'API Reference', href: '/docs/reference/data-model' },
       { name: 'Status', href: '/status' },
     ],
   },
   {
     title: 'Legal',
     links: [
-      { name: 'Privacy Policy', href: '/privacy' },
+      { name: 'Privacy Policy', href: '/docs/policies/privacy' },
       { name: 'Terms of Service', href: '/terms' },
-      { name: 'Cookie Policy', href: '/cookies' },
-      { name: 'Security', href: '/security' },
+      { name: 'Security', href: '/docs/policies/security' },
+      { name: 'Contact', href: '/contact' },
     ],
   },
 ];

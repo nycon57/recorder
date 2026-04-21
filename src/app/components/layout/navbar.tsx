@@ -2,7 +2,7 @@
 
 import * as NavigationMenuPrimitive from '@radix-ui/react-navigation-menu';
 import { useSession } from '@/lib/auth/auth-client';
-import { Menu, Sparkles, MessageSquare } from 'lucide-react';
+import { Menu, Sparkles, MessageSquare, BookOpen } from 'lucide-react';
 import React from 'react';
 
 import { cn } from '@/lib/utils';
@@ -41,6 +41,7 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   { title: 'Features', url: '/features' },
   { title: 'Pricing', url: '/pricing' },
+  { title: 'Docs', url: '/docs' },
   {
     title: 'Resources',
     url: '#',
@@ -50,6 +51,12 @@ const menuItems: MenuItem[] = [
         description: 'Learn about our mission and team',
         icon: <Sparkles className="size-5 shrink-0" />,
         url: '/about',
+      },
+      {
+        title: 'Documentation',
+        description: 'Guides, integrations, and reference',
+        icon: <BookOpen className="size-5 shrink-0" />,
+        url: '/docs',
       },
       {
         title: 'Contact',

@@ -7,6 +7,7 @@ import {
   CostProjections,
   CostAllocationReport,
 } from '@/app/components/admin';
+import { DocLink } from '@/app/components/docs/doc-link';
 
 export const metadata: Metadata = {
   title: 'Cost Management | Admin',
@@ -18,7 +19,12 @@ export default function CostManagementPage() {
     <div className="trbd-page">
       {/* Page Header */}
       <div className="space-y-2">
-        <h1 className="trbd-page-title tracking-tight">Cost Management</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="trbd-page-title tracking-tight">Cost Management</h1>
+          <DocLink href="/docs/platform-runbooks/cost-and-quota-investigation">
+            Cost runbook
+          </DocLink>
+        </div>
         <p className="text-muted-foreground">
           Track storage costs, manage budgets, and forecast future spending
         </p>

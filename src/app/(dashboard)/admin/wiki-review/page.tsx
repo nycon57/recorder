@@ -14,6 +14,7 @@
 import { redirect } from 'next/navigation';
 import { AlertTriangle, Inbox } from 'lucide-react';
 
+import { DocLink } from '@/app/components/docs/doc-link';
 import { Alert, AlertDescription, AlertTitle } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
 import {
@@ -58,6 +59,9 @@ export default async function WikiReviewPage() {
             Resolve flagged contradictions and confirm routing gaps before wiki
             updates settle into their final destination.
           </p>
+          <DocLink href="/docs/knowledge-ops/wiki-review-queue" className="mt-1">
+            Wiki review queue guide
+          </DocLink>
         </div>
         <Badge variant="outline" className="text-sm">
           {totalEntries} pending
