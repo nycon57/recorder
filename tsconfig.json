@@ -52,6 +52,7 @@
   "exclude": [
     "node_modules",
     "packages/extension",
-    "packages/sdk"
+    "packages/sdk",
+    "reference-repos/**"
   ]
 }
