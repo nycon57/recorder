@@ -65,6 +65,7 @@ import {
 import { CollectionFolder } from '@/app/components/collections/CollectionFolderCard';
 import { MoveToCollectionModal } from '@/app/components/collections/MoveToCollectionModal';
 import { SelectableContentCard, LibraryTable } from '@/app/components/library';
+import { DocLink } from '@/app/components/docs/doc-link';
 import { ContentItem } from '@/app/components/content';
 import {
   Pagination,
@@ -1039,6 +1040,9 @@ function LibraryPageContent() {
             <p className="text-sm text-muted-foreground">
               Your recordings, documents, and content organized in folders
             </p>
+            <DocLink href="/docs/product/recordings">
+              About recordings
+            </DocLink>
           </div>
 
           <div className="flex flex-wrap gap-3">

@@ -39,6 +39,7 @@ import {
   ConceptPanel,
   ConceptFilter,
 } from '@/app/components/knowledge';
+import { DocLink } from '@/app/components/docs/doc-link';
 import { KeyboardShortcutsProvider } from '@/app/components/keyboard-shortcuts/KeyboardShortcutsProvider';
 import { useKeyboardShortcuts } from '@/app/hooks/useKeyboardShortcuts';
 import {
@@ -282,6 +283,9 @@ function KnowledgePageContent() {
             <p className="text-sm sm:text-base text-muted-foreground">
               Explore concepts and relationships across your content
             </p>
+            <DocLink href="/docs/product/wiki">
+              Wiki product guide
+            </DocLink>
           </div>
 
           {/* Right: Health link + View mode toggle */}

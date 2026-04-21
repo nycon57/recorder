@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { CreditCard, Download, AlertCircle } from 'lucide-react';
 
+import { DocLink } from '@/app/components/docs/doc-link';
+
 export default function BillingSettingsPage() {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -58,7 +60,12 @@ export default function BillingSettingsPage() {
   return (
     <div className="max-w-4xl">
       <div className="mb-8">
-        <h1 className="trbd-page-title mb-2">Billing & Subscription</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="trbd-page-title mb-2">Billing &amp; Subscription</h1>
+          <DocLink href="/docs/org-admin/billing">
+            Billing guide
+          </DocLink>
+        </div>
         <p className="text-muted-foreground">
           Manage your subscription, billing information, and usage
         </p>
