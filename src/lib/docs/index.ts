@@ -36,3 +36,7 @@ export type { AccessDecision } from './access';
 // Git adapter — page body lookup for rendering
 export { findGitPageBody, clearGitPageCache } from './adapters/git';
 export type { DocsPageWithBody } from './adapters/git';
+
+// DB adapter — page body lookup for DB-backed pages
+export { findDbPageBody } from './adapters/db';
+export type { DbPageBody } from './adapters/db';

@@ -1,8 +1,10 @@
+import { unstable_cache } from 'next/cache';
 import { headers } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
 
 import { resolveDocsAudience, getDocsRegistry, resolveAccess, findGitPageBody } from '@/lib/docs';
 import type { SectionId } from '@/lib/docs';
+import { findDbPageBody } from '@/lib/docs/adapters/db';
 import { DocsLanding } from '@/app/components/docs/landing/docs-landing';
 import { DocsPlaceholder } from '@/app/components/docs/placeholder/docs-placeholder';
 import { DocsContent } from '@/app/components/docs/content/docs-content';
@@ -43,15 +45,28 @@ export default async function DocsPage({ params }: DocsPageProps) {
       notFound();
     }
 
-    // kind === 'render' — try to find compiled body HTML
-    const bodyHtml = findGitPageBody(page.slug);
+    // kind === 'render' — resolve body HTML from git or DB adapter
+    let bodyHtml: string | undefined;
+
+    if (page.source === 'db') {
+      // DB-backed page: per-slug cached body fetch
+      const getCachedDbBody = unstable_cache(
+        () => findDbPageBody(page.slug),
+        [`docs-db-body-${page.slug}`],
+        { revalidate: 3600, tags: [`docs:db:body:${page.slug}`, 'docs:db'] },
+      );
+      const dbBody = await getCachedDbBody();
+      bodyHtml = dbBody?.bodyHtml;
+    } else {
+      bodyHtml = findGitPageBody(page.slug);
+    }
 
     if (bodyHtml) {
       const related = registry.relatedFor(page.slug, audience);
       return <DocsContent page={page} bodyHtml={bodyHtml} related={related} />;
     }
 
-    // Registered page but no compiled body (DB-backed or not yet authored)
+    // Registered page but no compiled body (not yet authored or compile pending)
     return <DocsPlaceholder page={page} />;
   }
 
