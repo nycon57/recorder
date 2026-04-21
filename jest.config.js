@@ -21,6 +21,13 @@ const customJestConfig = {
     '^@google/genai$': '<rootDir>/src/test-support/mocks/google-genai.ts',
     '^cohere-ai$': '<rootDir>/__mocks__/cohere-ai.ts',
     '^@xenova/transformers$': '<rootDir>/__mocks__/@xenova/transformers.ts',
+    // better-auth is ESM-only; redirect each entry-point to the root-level mocks so
+    // Jest never tries to load the real .mjs files.
+    '^better-auth/plugins/access$': '<rootDir>/../../__mocks__/better-auth-plugins-access.ts',
+    '^better-auth/plugins/admin/access$': '<rootDir>/../../__mocks__/better-auth-plugins-admin-access.ts',
+    '^better-auth/plugins$': '<rootDir>/../../__mocks__/better-auth-plugins.ts',
+    '^better-auth/next-js$': '<rootDir>/../../__mocks__/better-auth-next-js.ts',
+    '^better-auth(.*)$': '<rootDir>/../../__mocks__/better-auth.ts',
     // Strip .js extensions from local imports — needed for tsx/ESM compat in Jest CJS mode
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },

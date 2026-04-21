@@ -2465,6 +2465,87 @@ export type Database = {
           },
         ]
       }
+      docs_pages: {
+        Row: {
+          audience: string
+          body_html_cached: string | null
+          body_markdown: string
+          content_hash: string
+          created_at: string
+          created_by: string | null
+          description: string
+          group: string | null
+          id: string
+          order: number | null
+          published: boolean
+          related: Json | null
+          section: string
+          slug: string
+          tags: Json | null
+          title: string
+          unlisted: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          audience: string
+          body_html_cached?: string | null
+          body_markdown: string
+          content_hash: string
+          created_at?: string
+          created_by?: string | null
+          description: string
+          group?: string | null
+          id?: string
+          order?: number | null
+          published?: boolean
+          related?: Json | null
+          section: string
+          slug: string
+          tags?: Json | null
+          title: string
+          unlisted?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          audience?: string
+          body_html_cached?: string | null
+          body_markdown?: string
+          content_hash?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          group?: string | null
+          id?: string
+          order?: number | null
+          published?: boolean
+          related?: Json | null
+          section?: string
+          slug?: string
+          tags?: Json | null
+          title?: string
+          unlisted?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "docs_pages_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "docs_pages_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
           content_id: string
