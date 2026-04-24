@@ -124,7 +124,10 @@ describe('POST /api/recordings/[id]/finalize', () => {
 
     expect(response.status).toBe(200);
     expect(mockStorageFrom).toHaveBeenCalledWith('recordings');
-    expect(storageList).toHaveBeenCalledWith('org_org_1/recordings/rec_1');
+    expect(storageList).toHaveBeenCalledWith('org_org_1/recordings/rec_1', {
+      limit: 10,
+      search: 'raw.webm',
+    });
     expect(contentUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         storage_path_raw: 'org_org_1/recordings/rec_1/raw.webm',
@@ -157,7 +160,10 @@ describe('POST /api/recordings/[id]/finalize', () => {
 
     expect(response.status).toBe(200);
     expect(mockStorageFrom).toHaveBeenCalledWith('content');
-    expect(storageList).toHaveBeenCalledWith('org_1/recordings/rec_1');
+    expect(storageList).toHaveBeenCalledWith('org_1/recordings/rec_1', {
+      limit: 10,
+      search: 'raw.webm',
+    });
     expect(contentUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         storage_path_raw: 'org_1/recordings/rec_1/raw.webm',

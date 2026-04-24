@@ -49,6 +49,7 @@ type StorageObject = {
 type StorageBucketClient = {
   list: (
     path: string,
+    options?: { limit?: number; search?: string },
   ) => Promise<{ data: StorageObject[] | null; error: unknown | null }>;
 };
 
@@ -469,7 +470,10 @@ export async function findExactStorageObject(
   error: unknown | null;
 }> {
   const { parentPath, objectName } = splitStorageObjectPath(storagePath);
-  const { data, error } = await supabase.storage.from(bucket).list(parentPath);
+  const { data, error } = await supabase.storage.from(bucket).list(parentPath, {
+    limit: 10,
+    search: objectName,
+  });
 
   if (error) {
     return {
