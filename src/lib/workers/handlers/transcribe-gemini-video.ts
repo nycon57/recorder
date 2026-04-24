@@ -16,7 +16,7 @@ import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
 import OpenAI from 'openai';
 
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import {
   getGoogleAI,
@@ -41,17 +41,37 @@ import {
   SPLIT_THRESHOLD_SECONDS,
 } from '@/lib/services/video-splitter';
 import {
+  FILE_TYPE_TO_MIME_TYPE,
   getProcessingStrategy,
   calculateSegmentCount,
   estimateProcessingTime,
+  type ContentType,
+  type FileType,
 } from '@/lib/types/content';
 import {
   SOURCE_STATUS,
   getQueuedSourceStatusForJob,
 } from '@/lib/utils/status-helpers';
+import {
+  inferRecordingStorageBucket,
+  validateDerivedAudioStoragePath,
+  validateRecordingStoragePath,
+  type RecordingStorageBucket,
+} from '@/lib/recordings/storage-contract';
 
 // Size threshold for using Gemini File API vs inline base64
 const FILE_API_THRESHOLD_BYTES = 20 * 1024 * 1024; // 20MB
+
+const GEMINI_MEDIA_FILE_TYPES: readonly FileType[] = [
+  'mp4',
+  'mov',
+  'webm',
+  'avi',
+  'mp3',
+  'wav',
+  'm4a',
+  'ogg',
+];
 
 // Maximum video duration for single-pass transcription (30 minutes)
 // Videos longer than this will be split into segments
@@ -96,9 +116,157 @@ function isRecoverableGeminiError(error: any): boolean {
 type Job = Database['public']['Tables']['jobs']['Row'];
 
 interface TranscribePayload {
+  recordingId?: unknown;
+  orgId?: unknown;
+  storagePath?: unknown;
+  storageBucket?: unknown;
+  contentType?: unknown;
+  fileType?: unknown;
+}
+
+type TranscribeRecordingRow = {
+  content_type?: ContentType | null;
+  file_type?: FileType | null;
+};
+
+export type ResolvedTranscribeStoragePayload = {
   recordingId: string;
   orgId: string;
   storagePath: string;
+  storageBucket: RecordingStorageBucket;
+  contentType: ContentType | null;
+  fileType: FileType | null;
+};
+
+type TranscribeMediaMetadata = {
+  fileExtension: FileType;
+  mimeType: string;
+  mediaKind: 'audio' | 'video';
+};
+
+function requirePayloadString(payload: TranscribePayload, key: string): string {
+  const value = payload[key as keyof TranscribePayload];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`Invalid transcribe payload: ${key} is required`);
+  }
+  return value;
+}
+
+export function resolveTranscribeMediaMetadata(
+  fileType: FileType | null,
+): TranscribeMediaMetadata {
+  const safeFileType =
+    fileType && GEMINI_MEDIA_FILE_TYPES.includes(fileType)
+      ? fileType
+      : 'webm';
+  const mimeType = FILE_TYPE_TO_MIME_TYPE[safeFileType] || 'video/webm';
+
+  return {
+    fileExtension: safeFileType,
+    mimeType,
+    mediaKind: mimeType.startsWith('audio/') ? 'audio' : 'video',
+  };
+}
+
+export function buildTranscribeVideoSource({
+  geminiFileUri,
+  geminiMimeType,
+  videoBase64,
+  fallbackMimeType,
+}: {
+  geminiFileUri: string | null;
+  geminiMimeType: string | null;
+  videoBase64: string | null;
+  fallbackMimeType: string;
+}): VideoSource {
+  return geminiFileUri
+    ? {
+        type: 'fileApi',
+        fileUri: geminiFileUri,
+        mimeType: geminiMimeType || fallbackMimeType,
+      }
+    : {
+        type: 'inline',
+        base64: videoBase64 || '',
+        mimeType: fallbackMimeType,
+      };
+}
+
+export function resolveTranscribeStoragePayload(
+  rawPayload: unknown,
+  recording: TranscribeRecordingRow | null,
+): ResolvedTranscribeStoragePayload {
+  const payload = (rawPayload || {}) as TranscribePayload;
+  const recordingId = requirePayloadString(payload, 'recordingId');
+  const orgId = requirePayloadString(payload, 'orgId');
+  const storagePath = requirePayloadString(payload, 'storagePath');
+
+  const storageBucket = inferRecordingStorageBucket({
+    storagePath,
+    storageBucket: payload.storageBucket,
+    orgId,
+    recordingId,
+  });
+
+  if (!storageBucket) {
+    throw new Error('Invalid transcribe payload: unsupported storage bucket');
+  }
+
+  const recordingContentType = recording?.content_type ?? null;
+  const recordingFileType = recording?.file_type ?? null;
+  const payloadContentType =
+    typeof payload.contentType === 'string'
+      ? (payload.contentType as ContentType)
+      : null;
+  const payloadFileType =
+    typeof payload.fileType === 'string'
+      ? (payload.fileType as FileType)
+      : null;
+  const contentType = recordingContentType ?? payloadContentType;
+  const fileType = recordingFileType ?? payloadFileType;
+
+  const validation = validateRecordingStoragePath({
+    storagePath,
+    bucket: storageBucket,
+    orgId,
+    recordingId,
+    contentType,
+    fileType,
+    allowLegacyRecordingsBucket: true,
+  });
+
+  if (!validation.valid) {
+    const derivedAudioValidation = validateDerivedAudioStoragePath({
+      storagePath,
+      bucket: storageBucket,
+      orgId,
+      recordingId,
+      sourceContentType: recordingContentType ?? contentType,
+      sourceFileType: recordingFileType ?? fileType,
+    });
+
+    if (derivedAudioValidation.valid) {
+      return {
+        recordingId,
+        orgId,
+        storagePath: derivedAudioValidation.storagePath,
+        storageBucket: derivedAudioValidation.bucket,
+        contentType: 'audio',
+        fileType: 'mp3',
+      };
+    }
+
+    throw new Error(`Invalid transcribe payload: ${validation.message}`);
+  }
+
+  return {
+    recordingId,
+    orgId,
+    storagePath: validation.storagePath,
+    storageBucket: validation.bucket,
+    contentType,
+    fileType,
+  };
 }
 
 interface VisualEvent {
@@ -199,10 +367,45 @@ function formatTimestamp(seconds: number): string {
  * Transcribe a video recording using Gemini video understanding
  */
 export async function transcribeRecording(job: Job): Promise<void> {
-  const payload = job.payload as unknown as TranscribePayload;
-  const { recordingId, orgId, storagePath } = payload;
-
   const logger = createLogger({ service: 'transcribe-gemini' });
+  const supabase = createAdminClient();
+
+  const rawPayload = (job.payload || {}) as TranscribePayload;
+  let resolvedPayload: ResolvedTranscribeStoragePayload;
+
+  try {
+    const recordingIdForLookup = requirePayloadString(
+      rawPayload,
+      'recordingId',
+    );
+    const orgIdForLookup = requirePayloadString(rawPayload, 'orgId');
+
+    const { data: recording, error: recordingError } = await supabase
+      .from('content')
+      .select('id, org_id, content_type, file_type, storage_path_raw')
+      .eq('id', recordingIdForLookup)
+      .eq('org_id', orgIdForLookup)
+      .single();
+
+    if (recordingError || !recording) {
+      throw new Error('Invalid transcribe payload: recording not found');
+    }
+
+    resolvedPayload = resolveTranscribeStoragePayload(
+      rawPayload,
+      recording as TranscribeRecordingRow,
+    );
+  } catch (error) {
+    logger.error('Invalid transcription payload', {
+      context: { jobId: job.id },
+      error: error as Error,
+    });
+    throw error;
+  }
+
+  const { recordingId, orgId, storagePath, storageBucket, fileType } =
+    resolvedPayload;
+  const mediaMetadata = resolveTranscribeMediaMetadata(fileType);
 
   // Check if streaming is available for this recording
   const isStreaming = isStreamingAvailable(recordingId);
@@ -212,12 +415,13 @@ export async function transcribeRecording(job: Job): Promise<void> {
       recordingId,
       orgId,
       storagePath,
+      storageBucket,
+      mediaMimeType: mediaMetadata.mimeType,
+      mediaKind: mediaMetadata.mediaKind,
       jobId: job.id,
       streamingEnabled: isStreaming,
     },
   });
-
-  const supabase = createAdminClient();
 
   // Check if transcript already exists (idempotency check)
   const { data: existingTranscript } = await supabase
@@ -307,7 +511,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
   try {
     // Download video from Supabase Storage using streaming to reduce memory usage
     logger.info('Downloading video from storage', {
-      context: { storagePath },
+      context: { storagePath, storageBucket },
     });
 
     if (isStreaming) {
@@ -320,7 +524,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
     }
 
     const { data: videoBlob, error: downloadError } = await supabase.storage
-      .from('content')
+      .from(storageBucket)
       .download(storagePath);
 
     if (downloadError || !videoBlob) {
@@ -348,7 +552,10 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     // Stream video to temp file to reduce memory pressure
     // This avoids holding the entire file in memory as arrayBuffer
-    tempFilePath = join(tmpdir(), `${randomUUID()}.webm`);
+    tempFilePath = join(
+      tmpdir(),
+      `${randomUUID()}.${mediaMetadata.fileExtension}`,
+    );
 
     // Use streaming to write blob to file
     const blobStream = videoBlob.stream();
@@ -565,7 +772,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
             segmentCount: splitResult.segments.length,
             totalDuration: splitResult.totalDuration,
             segments: splitResult.segments,
-          },
+          } as unknown as Json,
           // No run_at delay - job will be triggered by segment completion
           run_at: new Date().toISOString(),
           dedupe_key: `merge_transcripts:${recordingId}`,
@@ -785,7 +992,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     if (useFileAPI) {
       // Use Gemini File API for large files (>20MB)
-      logger.info('Uploading video to Gemini File API', {
+      logger.info(`Uploading ${mediaMetadata.mediaKind} to Gemini File API`, {
         context: { fileSizeMB, recordingId },
       });
 
@@ -802,8 +1009,8 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
       // Upload file to Gemini
       const uploadResult = await fileManager.uploadFile(tempFilePath, {
-        mimeType: 'video/webm',
-        displayName: `video-${recordingId}`,
+        mimeType: mediaMetadata.mimeType,
+        displayName: `${mediaMetadata.mediaKind}-${recordingId}`,
       });
 
       logger.info('File uploaded to Gemini, waiting for processing', {
@@ -856,7 +1063,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
       }
 
       geminiFileUri = file.uri;
-      geminiMimeType = file.mimeType;
+      geminiMimeType = file.mimeType || mediaMetadata.mimeType;
 
       logger.info('Gemini file processing complete', {
         context: {
@@ -965,13 +1172,12 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
     const startTime = Date.now();
 
     // Build video source based on upload method
-    const videoSource: VideoSource = geminiFileUri
-      ? {
-          type: 'fileApi',
-          fileUri: geminiFileUri,
-          mimeType: geminiMimeType || 'video/webm',
-        }
-      : { type: 'inline', base64: videoBase64 || '' };
+    const videoSource: VideoSource = buildTranscribeVideoSource({
+      geminiFileUri,
+      geminiMimeType,
+      videoBase64,
+      fallbackMimeType: mediaMetadata.mimeType,
+    });
 
     logger.info('Sending video to Gemini for analysis', {
       context: {
@@ -1167,7 +1373,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
         text: fullTranscript,
         language: GOOGLE_CONFIG.SPEECH_LANGUAGE,
         words_json,
-        visual_events: parsedResponse.visualEvents,
+        visual_events: parsedResponse.visualEvents as unknown as Json,
         video_metadata,
         confidence: transcriptionProvider === 'gemini' ? 0.95 : 0.92, // Gemini 95%, Whisper 92%
         provider:
@@ -1376,6 +1582,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
         recordingId,
         orgId,
         storagePath,
+        storageBucket,
         jobId: job.id,
       },
       error: error as Error,
