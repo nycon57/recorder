@@ -34,6 +34,13 @@ const SAFE_FILE_TYPES: readonly FileType[] = [
   'md',
 ];
 
+const VIDEO_SOURCE_FILE_TYPES: readonly FileType[] = [
+  'mp4',
+  'mov',
+  'webm',
+  'avi',
+];
+
 type StorageObject = {
   name: string;
   metadata?: Record<string, unknown> | null;
@@ -147,6 +154,14 @@ function isSafeContentType(
   );
 }
 
+function isVideoSourceFileType(
+  fileType: FileType | null | undefined,
+): fileType is FileType {
+  return Boolean(
+    fileType && VIDEO_SOURCE_FILE_TYPES.includes(fileType as FileType),
+  );
+}
+
 export function inferRecordingStorageBucket({
   storagePath,
   storageBucket,
@@ -166,6 +181,32 @@ export function inferRecordingStorageBucket({
   return storagePath.startsWith(legacyPrefix)
     ? LEGACY_RECORDING_STORAGE_BUCKET
     : CURRENT_RECORDING_STORAGE_BUCKET;
+}
+
+export function buildDerivedAudioStoragePath({
+  orgId,
+  recordingId,
+  sourceContentType,
+  sourceFileType,
+}: {
+  orgId: string;
+  recordingId: string;
+  sourceContentType: ContentType;
+  sourceFileType: FileType;
+}): string | null {
+  if (
+    sourceContentType !== 'video' ||
+    !isVideoSourceFileType(sourceFileType)
+  ) {
+    return null;
+  }
+
+  return buildContentRecordingStoragePath(
+    orgId,
+    sourceContentType,
+    recordingId,
+    sourceFileType,
+  ).replace(/\.[^.]+$/, '.mp3');
 }
 
 export function validateRecordingStoragePath({
@@ -258,6 +299,87 @@ export function validateRecordingStoragePath({
     return {
       valid: false,
       message: 'Storage path does not match this recording',
+      details: { expectedPath },
+    };
+  }
+
+  return {
+    valid: true,
+    bucket,
+    storagePath,
+    expectedPath,
+  };
+}
+
+export function validateDerivedAudioStoragePath({
+  storagePath,
+  bucket,
+  orgId,
+  recordingId,
+  sourceContentType,
+  sourceFileType,
+}: {
+  storagePath: unknown;
+  bucket: unknown;
+  orgId: string;
+  recordingId: string;
+  sourceContentType?: ContentType | null;
+  sourceFileType?: FileType | null;
+}): StoragePathValidation {
+  if (!isRecordingStorageBucket(bucket)) {
+    return {
+      valid: false,
+      message: 'Unsupported storage bucket',
+      details: { bucket: String(bucket) },
+    };
+  }
+
+  if (bucket !== CURRENT_RECORDING_STORAGE_BUCKET) {
+    return {
+      valid: false,
+      message: 'Derived audio storage must use the content bucket',
+    };
+  }
+
+  if (typeof storagePath !== 'string' || storagePath.length === 0) {
+    return {
+      valid: false,
+      message: 'Storage path is required',
+    };
+  }
+
+  if (isUnsafeObjectPath(storagePath)) {
+    return {
+      valid: false,
+      message: 'Invalid storage path',
+    };
+  }
+
+  if (!sourceContentType || !sourceFileType) {
+    return {
+      valid: false,
+      message: 'Recording is missing source metadata for derived audio storage',
+    };
+  }
+
+  const expectedPath = buildDerivedAudioStoragePath({
+    orgId,
+    recordingId,
+    sourceContentType,
+    sourceFileType,
+  });
+
+  if (!expectedPath) {
+    return {
+      valid: false,
+      message: 'Derived audio storage only supports video sources',
+    };
+  }
+
+  if (storagePath !== expectedPath) {
+    return {
+      valid: false,
+      message: 'Storage path does not match this derived audio recording',
       details: { expectedPath },
     };
   }

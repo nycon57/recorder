@@ -34,6 +34,48 @@ describe('resolveTranscribeStoragePayload', () => {
     });
   });
 
+  it('resolves extracted MP3 payloads for video uploads as derived audio', () => {
+    expect(
+      resolveTranscribeStoragePayload(
+        {
+          recordingId: 'video_1',
+          orgId: 'org_1',
+          storagePath: 'org_1/videos/video_1.mp3',
+          storageBucket: 'content',
+          contentType: 'audio',
+          fileType: 'mp3',
+        },
+        {
+          content_type: 'video',
+          file_type: 'mp4',
+        },
+      ),
+    ).toMatchObject({
+      recordingId: 'video_1',
+      orgId: 'org_1',
+      storagePath: 'org_1/videos/video_1.mp3',
+      storageBucket: 'content',
+      contentType: 'audio',
+      fileType: 'mp3',
+    });
+  });
+
+  it('rejects derived audio paths for non-video source rows', () => {
+    expect(() =>
+      resolveTranscribeStoragePayload(
+        {
+          recordingId: 'rec_1',
+          orgId: 'org_1',
+          storagePath: 'org_1/recordings/rec_1.mp3',
+          storageBucket: 'content',
+          contentType: 'audio',
+          fileType: 'mp3',
+        },
+        recording,
+      ),
+    ).toThrow('Storage path does not match this recording');
+  });
+
   it('infers legacy recordings bucket paths when storageBucket is absent', () => {
     expect(
       resolveTranscribeStoragePayload(
@@ -87,6 +129,17 @@ describe('resolveTranscribeStoragePayload', () => {
         recording,
       ),
     ).toThrow('Storage path does not match this recording');
+
+    expect(() =>
+      resolveTranscribeStoragePayload(
+        {
+          recordingId: 'rec_1',
+          orgId: 'org_1',
+          storagePath: 'org_1/recordings/rec_1/raw.webm%00.mp3',
+        },
+        recording,
+      ),
+    ).toThrow('Invalid storage path');
   });
 
   it('rejects unsupported explicit buckets', () => {

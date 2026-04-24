@@ -53,6 +53,7 @@ import {
 } from '@/lib/utils/status-helpers';
 import {
   inferRecordingStorageBucket,
+  validateDerivedAudioStoragePath,
   validateRecordingStoragePath,
   type RecordingStorageBucket,
 } from '@/lib/recordings/storage-contract';
@@ -153,16 +154,18 @@ export function resolveTranscribeStoragePayload(
     throw new Error('Invalid transcribe payload: unsupported storage bucket');
   }
 
-  const contentType =
-    recording?.content_type ??
-    (typeof payload.contentType === 'string'
+  const recordingContentType = recording?.content_type ?? null;
+  const recordingFileType = recording?.file_type ?? null;
+  const payloadContentType =
+    typeof payload.contentType === 'string'
       ? (payload.contentType as ContentType)
-      : null);
-  const fileType =
-    recording?.file_type ??
-    (typeof payload.fileType === 'string'
+      : null;
+  const payloadFileType =
+    typeof payload.fileType === 'string'
       ? (payload.fileType as FileType)
-      : null);
+      : null;
+  const contentType = recordingContentType ?? payloadContentType;
+  const fileType = recordingFileType ?? payloadFileType;
 
   const validation = validateRecordingStoragePath({
     storagePath,
@@ -175,6 +178,26 @@ export function resolveTranscribeStoragePayload(
   });
 
   if (!validation.valid) {
+    const derivedAudioValidation = validateDerivedAudioStoragePath({
+      storagePath,
+      bucket: storageBucket,
+      orgId,
+      recordingId,
+      sourceContentType: recordingContentType ?? contentType,
+      sourceFileType: recordingFileType ?? fileType,
+    });
+
+    if (derivedAudioValidation.valid) {
+      return {
+        recordingId,
+        orgId,
+        storagePath: derivedAudioValidation.storagePath,
+        storageBucket: derivedAudioValidation.bucket,
+        contentType: 'audio',
+        fileType: 'mp3',
+      };
+    }
+
     throw new Error(`Invalid transcribe payload: ${validation.message}`);
   }
 

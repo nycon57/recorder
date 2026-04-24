@@ -108,7 +108,7 @@ export async function handleExtractAudio(
     // Save video to temp file
     tempVideoPath = join(tmpdir(), `${randomUUID()}.${videoExtension}`);
     const buffer = await videoBlob.arrayBuffer();
-    await writeFile(tempVideoPath, Buffer.from(buffer));
+    await writeFile(tempVideoPath, new Uint8Array(buffer));
 
     logger.info('Video saved to temp file', {
       context: { tempVideoPath, sizeBytes: buffer.byteLength },
@@ -234,6 +234,9 @@ export async function handleExtractAudio(
         recordingId,
         orgId,
         storagePath: audioStoragePath,
+        storageBucket: 'content',
+        contentType: 'audio',
+        fileType: 'mp3',
       },
       dedupe_key: `transcribe:${recordingId}`,
     });
