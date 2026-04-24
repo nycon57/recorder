@@ -41,6 +41,7 @@ export type RetryCallback = (info: RetryInfo) => void;
 interface UploadInitResponse {
   recordingId: string;
   uploadUrl: string;
+  uploadBucket?: 'content';
   uploadPath: string;
   thumbnailUploadUrl: string | null;
   thumbnailPath: string | null;

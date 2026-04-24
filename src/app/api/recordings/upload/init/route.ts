@@ -21,6 +21,11 @@ import { QuotaManager } from '@/lib/services/quotas/quota-manager';
 import { createLogger } from '@/lib/utils/logger';
 import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
 import {
+  buildContentRecordingStoragePath,
+  buildDefaultThumbnailStoragePath,
+  CURRENT_RECORDING_STORAGE_BUCKET,
+} from '@/lib/recordings/storage-contract';
+import {
   getContentTypeFromMimeType,
   getFileTypeFromMimeType,
   isValidFileSize,
@@ -241,10 +246,17 @@ export const POST = withRateLimit(
       });
 
       // Generate storage paths
-      const fileExtension = `.${fileType}`;
-      const filePath = `${orgId}/uploads/${recording.id}/file${fileExtension}`;
+      const filePath = buildContentRecordingStoragePath(
+        orgId,
+        contentType,
+        recording.id,
+        fileType,
+      );
       // Thumbnails go in the 'thumbnails' bucket with different path pattern
-      const thumbnailPath = `org_${orgId}/recordings/${recording.id}/thumbnail.jpg`;
+      const thumbnailPath = buildDefaultThumbnailStoragePath(
+        orgId,
+        recording.id,
+      );
 
       // Generate presigned upload URL for main file
       const { data: fileUploadData, error: fileUploadError } =
@@ -299,6 +311,7 @@ export const POST = withRateLimit(
         {
           recordingId: recording.id,
           uploadUrl: fileUploadData.signedUrl,
+          uploadBucket: CURRENT_RECORDING_STORAGE_BUCKET,
           uploadPath: filePath,
           thumbnailUploadUrl: thumbnailUploadData?.signedUrl || null,
           thumbnailPath: thumbnailUploadData ? thumbnailPath : null,

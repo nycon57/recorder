@@ -22,6 +22,13 @@ import {
   SOURCE_STATUS,
   getQueuedSourceStatusForJob,
 } from '@/lib/utils/status-helpers';
+import {
+  CURRENT_RECORDING_STORAGE_BUCKET,
+  findExactStorageObject,
+  validateRecordingStoragePath,
+  validateThumbnailStoragePath,
+} from '@/lib/recordings/storage-contract';
+import type { ContentType, FileType } from '@/lib/types/content';
 
 const logger = createLogger({ service: 'upload-metadata' });
 
@@ -32,10 +39,11 @@ const metadataSchema = z.object({
   title: z.string().min(1).max(255),
   description: z.string().max(5000).optional(),
   tags: z.array(z.string()).max(20).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
   thumbnailUploaded: z.boolean().optional(),
   thumbnailPath: z.string().optional(), // Path to uploaded thumbnail (if custom extension)
   storagePath: z.string().min(1), // Path where file was uploaded
+  storageBucket: z.literal('content').optional(),
 });
 
 type MetadataRequest = z.infer<typeof metadataSchema>;
@@ -80,6 +88,7 @@ export const POST = apiHandler(
         thumbnailUploaded,
         thumbnailPath: providedThumbnailPath,
         storagePath,
+        storageBucket = CURRENT_RECORDING_STORAGE_BUCKET,
       } = validationResult.data;
 
       logger.info('Saving metadata and starting processing', {
@@ -120,6 +129,55 @@ export const POST = apiHandler(
         );
       }
 
+      const storageValidation = validateRecordingStoragePath({
+        storagePath,
+        bucket: storageBucket,
+        orgId,
+        recordingId,
+        contentType: recording.content_type as ContentType | null,
+        fileType: recording.file_type as FileType | null,
+        allowLegacyRecordingsBucket: false,
+      });
+
+      if (!storageValidation.valid) {
+        logger.warn('Invalid metadata storage path', {
+          context: { requestId, recordingId, orgId },
+          data: storageValidation.details,
+        });
+        return errors.badRequest(
+          storageValidation.message,
+          storageValidation.details,
+          requestId,
+        );
+      }
+
+      const storageObject = await findExactStorageObject(
+        supabase,
+        CURRENT_RECORDING_STORAGE_BUCKET,
+        storageValidation.storagePath,
+      );
+
+      if (!storageObject.exists) {
+        const storageError =
+          storageObject.error instanceof Error
+            ? storageObject.error.message
+            : undefined;
+
+        logger.warn('Uploaded file not found in content storage', {
+          context: { requestId, recordingId, orgId },
+          data: {
+            storagePath: storageValidation.storagePath,
+            storageBucket: CURRENT_RECORDING_STORAGE_BUCKET,
+            storageError,
+          },
+        });
+        return errors.badRequest(
+          'Uploaded file not found in storage',
+          undefined,
+          requestId,
+        );
+      }
+
       // Generate thumbnail URL if thumbnail was uploaded
       let thumbnailUrl: string | null = null;
 
@@ -129,6 +187,24 @@ export const POST = apiHandler(
         const thumbnailPath =
           providedThumbnailPath ||
           `org_${orgId}/recordings/${recordingId}/thumbnail.jpg`;
+
+        const thumbnailValidation = validateThumbnailStoragePath({
+          thumbnailPath,
+          orgId,
+          recordingId,
+        });
+
+        if (!thumbnailValidation.valid) {
+          logger.warn('Invalid thumbnail path', {
+            context: { requestId, recordingId, orgId },
+            data: thumbnailValidation.details,
+          });
+          return errors.badRequest(
+            thumbnailValidation.message,
+            thumbnailValidation.details,
+            requestId,
+          );
+        }
 
         const { data: publicUrlData } = supabase.storage
           .from('thumbnails')
@@ -151,7 +227,7 @@ export const POST = apiHandler(
         title,
         description: description || null,
         status: SOURCE_STATUS.UPLOADED, // Move to uploaded status
-        storage_path_raw: storagePath,
+        storage_path_raw: storageValidation.storagePath,
         thumbnail_url: thumbnailUrl, // Set thumbnail URL if uploaded
         metadata: {
           ...(recording.metadata as any),
@@ -293,15 +369,16 @@ export const POST = apiHandler(
 
         // Add storage path with correct field name for each job type
         if (firstJobType === 'extract_audio') {
-          jobPayload.videoPath = storagePath;
+          jobPayload.videoPath = storageValidation.storagePath;
         } else if (firstJobType === 'transcribe') {
-          jobPayload.audioPath = storagePath;
+          jobPayload.storagePath = storageValidation.storagePath;
+          jobPayload.storageBucket = CURRENT_RECORDING_STORAGE_BUCKET;
         } else if (firstJobType === 'extract_text_pdf') {
-          jobPayload.pdfPath = storagePath;
+          jobPayload.pdfPath = storageValidation.storagePath;
         } else if (firstJobType === 'extract_text_docx') {
-          jobPayload.docxPath = storagePath;
+          jobPayload.docxPath = storageValidation.storagePath;
         } else if (firstJobType === 'process_text_note') {
-          jobPayload.textPath = storagePath;
+          jobPayload.textPath = storageValidation.storagePath;
         }
 
         const { error: jobError } = await supabase.from('jobs').insert({
