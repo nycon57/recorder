@@ -41,6 +41,7 @@ import {
   SPLIT_THRESHOLD_SECONDS,
 } from '@/lib/services/video-splitter';
 import {
+  FILE_TYPE_TO_MIME_TYPE,
   getProcessingStrategy,
   calculateSegmentCount,
   estimateProcessingTime,
@@ -60,6 +61,17 @@ import {
 
 // Size threshold for using Gemini File API vs inline base64
 const FILE_API_THRESHOLD_BYTES = 20 * 1024 * 1024; // 20MB
+
+const GEMINI_MEDIA_FILE_TYPES: readonly FileType[] = [
+  'mp4',
+  'mov',
+  'webm',
+  'avi',
+  'mp3',
+  'wav',
+  'm4a',
+  'ogg',
+];
 
 // Maximum video duration for single-pass transcription (30 minutes)
 // Videos longer than this will be split into segments
@@ -126,12 +138,58 @@ export type ResolvedTranscribeStoragePayload = {
   fileType: FileType | null;
 };
 
+type TranscribeMediaMetadata = {
+  fileExtension: FileType;
+  mimeType: string;
+  mediaKind: 'audio' | 'video';
+};
+
 function requirePayloadString(payload: TranscribePayload, key: string): string {
   const value = payload[key as keyof TranscribePayload];
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`Invalid transcribe payload: ${key} is required`);
   }
   return value;
+}
+
+export function resolveTranscribeMediaMetadata(
+  fileType: FileType | null,
+): TranscribeMediaMetadata {
+  const safeFileType =
+    fileType && GEMINI_MEDIA_FILE_TYPES.includes(fileType)
+      ? fileType
+      : 'webm';
+  const mimeType = FILE_TYPE_TO_MIME_TYPE[safeFileType] || 'video/webm';
+
+  return {
+    fileExtension: safeFileType,
+    mimeType,
+    mediaKind: mimeType.startsWith('audio/') ? 'audio' : 'video',
+  };
+}
+
+export function buildTranscribeVideoSource({
+  geminiFileUri,
+  geminiMimeType,
+  videoBase64,
+  fallbackMimeType,
+}: {
+  geminiFileUri: string | null;
+  geminiMimeType: string | null;
+  videoBase64: string | null;
+  fallbackMimeType: string;
+}): VideoSource {
+  return geminiFileUri
+    ? {
+        type: 'fileApi',
+        fileUri: geminiFileUri,
+        mimeType: geminiMimeType || fallbackMimeType,
+      }
+    : {
+        type: 'inline',
+        base64: videoBase64 || '',
+        mimeType: fallbackMimeType,
+      };
 }
 
 export function resolveTranscribeStoragePayload(
@@ -345,7 +403,9 @@ export async function transcribeRecording(job: Job): Promise<void> {
     throw error;
   }
 
-  const { recordingId, orgId, storagePath, storageBucket } = resolvedPayload;
+  const { recordingId, orgId, storagePath, storageBucket, fileType } =
+    resolvedPayload;
+  const mediaMetadata = resolveTranscribeMediaMetadata(fileType);
 
   // Check if streaming is available for this recording
   const isStreaming = isStreamingAvailable(recordingId);
@@ -356,6 +416,8 @@ export async function transcribeRecording(job: Job): Promise<void> {
       orgId,
       storagePath,
       storageBucket,
+      mediaMimeType: mediaMetadata.mimeType,
+      mediaKind: mediaMetadata.mediaKind,
       jobId: job.id,
       streamingEnabled: isStreaming,
     },
@@ -490,7 +552,10 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     // Stream video to temp file to reduce memory pressure
     // This avoids holding the entire file in memory as arrayBuffer
-    tempFilePath = join(tmpdir(), `${randomUUID()}.webm`);
+    tempFilePath = join(
+      tmpdir(),
+      `${randomUUID()}.${mediaMetadata.fileExtension}`,
+    );
 
     // Use streaming to write blob to file
     const blobStream = videoBlob.stream();
@@ -927,7 +992,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
     if (useFileAPI) {
       // Use Gemini File API for large files (>20MB)
-      logger.info('Uploading video to Gemini File API', {
+      logger.info(`Uploading ${mediaMetadata.mediaKind} to Gemini File API`, {
         context: { fileSizeMB, recordingId },
       });
 
@@ -944,8 +1009,8 @@ export async function transcribeRecording(job: Job): Promise<void> {
 
       // Upload file to Gemini
       const uploadResult = await fileManager.uploadFile(tempFilePath, {
-        mimeType: 'video/webm',
-        displayName: `video-${recordingId}`,
+        mimeType: mediaMetadata.mimeType,
+        displayName: `${mediaMetadata.mediaKind}-${recordingId}`,
       });
 
       logger.info('File uploaded to Gemini, waiting for processing', {
@@ -998,7 +1063,7 @@ export async function transcribeRecording(job: Job): Promise<void> {
       }
 
       geminiFileUri = file.uri;
-      geminiMimeType = file.mimeType;
+      geminiMimeType = file.mimeType || mediaMetadata.mimeType;
 
       logger.info('Gemini file processing complete', {
         context: {
@@ -1107,13 +1172,12 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
     const startTime = Date.now();
 
     // Build video source based on upload method
-    const videoSource: VideoSource = geminiFileUri
-      ? {
-          type: 'fileApi',
-          fileUri: geminiFileUri,
-          mimeType: geminiMimeType || 'video/webm',
-        }
-      : { type: 'inline', base64: videoBase64 || '' };
+    const videoSource: VideoSource = buildTranscribeVideoSource({
+      geminiFileUri,
+      geminiMimeType,
+      videoBase64,
+      fallbackMimeType: mediaMetadata.mimeType,
+    });
 
     logger.info('Sending video to Gemini for analysis', {
       context: {

@@ -4,7 +4,11 @@ import { afterAll, describe, expect, it } from '@jest/globals';
 
 import { streamingManager } from '@/lib/services/streaming-processor';
 
-import { resolveTranscribeStoragePayload } from '../transcribe-gemini-video';
+import {
+  buildTranscribeVideoSource,
+  resolveTranscribeMediaMetadata,
+  resolveTranscribeStoragePayload,
+} from '../transcribe-gemini-video';
 
 describe('resolveTranscribeStoragePayload', () => {
   afterAll(() => {
@@ -35,28 +39,61 @@ describe('resolveTranscribeStoragePayload', () => {
   });
 
   it('resolves extracted MP3 payloads for video uploads as derived audio', () => {
-    expect(
-      resolveTranscribeStoragePayload(
-        {
-          recordingId: 'video_1',
-          orgId: 'org_1',
-          storagePath: 'org_1/videos/video_1.mp3',
-          storageBucket: 'content',
-          contentType: 'audio',
-          fileType: 'mp3',
-        },
-        {
-          content_type: 'video',
-          file_type: 'mp4',
-        },
-      ),
-    ).toMatchObject({
+    const resolved = resolveTranscribeStoragePayload(
+      {
+        recordingId: 'video_1',
+        orgId: 'org_1',
+        storagePath: 'org_1/videos/video_1.mp3',
+        storageBucket: 'content',
+        contentType: 'audio',
+        fileType: 'mp3',
+      },
+      {
+        content_type: 'video',
+        file_type: 'mp4',
+      },
+    );
+
+    expect(resolved).toMatchObject({
       recordingId: 'video_1',
       orgId: 'org_1',
       storagePath: 'org_1/videos/video_1.mp3',
       storageBucket: 'content',
       contentType: 'audio',
       fileType: 'mp3',
+    });
+
+    const mediaMetadata = resolveTranscribeMediaMetadata(resolved.fileType);
+    expect(mediaMetadata).toEqual({
+      fileExtension: 'mp3',
+      mediaKind: 'audio',
+      mimeType: 'audio/mpeg',
+    });
+
+    expect(
+      buildTranscribeVideoSource({
+        geminiFileUri: null,
+        geminiMimeType: null,
+        videoBase64: 'base64-audio',
+        fallbackMimeType: mediaMetadata.mimeType,
+      }),
+    ).toEqual({
+      type: 'inline',
+      base64: 'base64-audio',
+      mimeType: 'audio/mpeg',
+    });
+
+    expect(
+      buildTranscribeVideoSource({
+        geminiFileUri: 'gemini://derived-audio',
+        geminiMimeType: null,
+        videoBase64: null,
+        fallbackMimeType: mediaMetadata.mimeType,
+      }),
+    ).toEqual({
+      type: 'fileApi',
+      fileUri: 'gemini://derived-audio',
+      mimeType: 'audio/mpeg',
     });
   });
 
