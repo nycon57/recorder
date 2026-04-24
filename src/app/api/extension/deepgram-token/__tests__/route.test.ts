@@ -102,10 +102,15 @@ describe('POST /api/extension/deepgram-token', () => {
       }),
     );
 
-    await expect(response.json()).resolves.toEqual({
+    const payload = await response.json();
+    const serializedPayload = JSON.stringify(payload);
+
+    expect(payload).toEqual({
       token: 'dg_temp_token',
       expiresAt: '2026-04-20T03:01:00.000Z',
     });
+    expect(payload.token).not.toBe(process.env.DEEPGRAM_API_KEY);
+    expect(serializedPayload).not.toContain('dg_server_key');
   });
 
   it('returns unauthorized when the caller is not signed in', async () => {
@@ -135,5 +140,26 @@ describe('POST /api/extension/deepgram-token', () => {
     );
 
     expect(response.status).toBe(500);
+  });
+
+  it('refuses to serialize the raw account API key if Deepgram echoes it', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        access_token: 'dg_server_key',
+        expires_in: 60,
+      }),
+    });
+
+    const response = await POST(
+      new Request('http://localhost:3000/api/extension/deepgram-token', {
+        method: 'POST',
+      }) as unknown as NextRequest,
+    );
+
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(payload)).not.toContain('dg_server_key');
   });
 });

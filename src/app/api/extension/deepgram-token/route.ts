@@ -81,6 +81,11 @@ export async function POST() {
       return errors.internalError();
     }
 
+    if (grant.access_token === apiKey) {
+      console.error('[extension/deepgram-token] Refusing to return account API key');
+      return errors.internalError();
+    }
+
     const expiresIn =
       typeof grant.expires_in === 'number' && grant.expires_in > 0
         ? grant.expires_in
