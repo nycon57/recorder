@@ -10,6 +10,7 @@ function jsonRpcErrorResponse(
   status: number,
   code: number,
   message: string,
+  headers?: Record<string, string>,
 ): NextResponse {
   return NextResponse.json(
     {
@@ -20,18 +21,25 @@ function jsonRpcErrorResponse(
       },
       id: null,
     },
-    { status },
+    { status, headers },
   );
 }
 
 function extractBearerToken(request: NextRequest): string | null {
   const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
+  const [scheme, ...tokenParts] = authHeader?.trim().split(/\s+/) ?? [];
+  if (scheme?.toLowerCase() !== 'bearer' || tokenParts.length !== 1) {
     return null;
   }
 
-  const token = authHeader.slice('Bearer '.length).trim();
+  const token = tokenParts[0]?.trim() ?? '';
   return token.length > 0 ? token : null;
+}
+
+function unsupportedMethodResponse(): NextResponse {
+  return jsonRpcErrorResponse(405, -32000, 'Method not allowed.', {
+    Allow: 'GET, POST, DELETE',
+  });
 }
 
 async function handleMcpRequest(request: NextRequest): Promise<Response> {
@@ -73,4 +81,12 @@ export async function POST(request: NextRequest): Promise<Response> {
 
 export async function DELETE(request: NextRequest): Promise<Response> {
   return handleMcpRequest(request);
+}
+
+export async function PUT(): Promise<Response> {
+  return unsupportedMethodResponse();
+}
+
+export async function PATCH(): Promise<Response> {
+  return unsupportedMethodResponse();
 }
