@@ -6,7 +6,9 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { PageContext } from '@tribora/shared';
 
 const resolveExtensionContextMatches = jest.fn<() => Promise<unknown>>();
-const buildExtensionContextTelemetry = jest.fn<() => unknown>();
+const buildExtensionContextTelemetry = jest.fn<
+  (input: { context: PageContext; [key: string]: unknown }) => unknown
+>();
 const recordKnowledgeTelemetryEvent = jest.fn<() => Promise<void>>();
 
 jest.mock('next/server', () => ({

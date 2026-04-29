@@ -6,7 +6,9 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { buildKnowledgeResolvedFor, type PageContext } from '@tribora/shared';
 
 const resolveExtensionContextMatches = jest.fn<() => Promise<unknown>>();
-const buildLiveContextPack = jest.fn<() => unknown>();
+const buildLiveContextPack = jest.fn<
+  (input: { context: PageContext; [key: string]: unknown }) => unknown
+>();
 
 jest.mock('@/lib/utils/api-key-auth', () => ({
   requireApiKeyOrSession: async () => ({

@@ -38,6 +38,7 @@ import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 import { resolveExtensionContextMatches } from '@/lib/services/extension-context';
 import { buildExtensionContextTelemetry } from '@/lib/services/extension-context-telemetry';
 import { recordKnowledgeTelemetryEvent } from '@/lib/services/knowledge-telemetry';
+import type { Json } from '@/lib/types/database';
 import { logger } from '@/lib/monitoring/logger';
 
 export const runtime = 'nodejs';
@@ -193,7 +194,7 @@ export async function POST(request: NextRequest) {
 
         await recordKnowledgeTelemetryEvent({
           type: 'extension.context.checked',
-          payload: telemetry,
+          payload: telemetry as unknown as Json,
         });
       } catch (error) {
         logger.warn('Failed to record extension context telemetry', {
