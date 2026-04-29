@@ -59,6 +59,16 @@ function sanitizeDebugIdentifier(
   return sanitizePageContextText(value, 120) ?? fallback;
 }
 
+function sanitizeOptionalInteger(value: unknown): number | null {
+  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : null;
+}
+
+function sanitizeOptionalDuration(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
+}
+
 function isValidEventInput(
   value: unknown,
 ): value is ExtensionDebugSessionEventInput {
@@ -110,10 +120,10 @@ function sanitizeDebugEvent(
     fingerprint: sanitizeDebugIdentifier(event.fingerprint),
     pageInstanceId: sanitizeDebugIdentifier(event.pageInstanceId),
     contentInstanceId: sanitizeDebugIdentifier(event.contentInstanceId),
-    tabId: event.tabId ?? null,
-    windowId: event.windowId ?? null,
-    bindingEpoch: event.bindingEpoch ?? null,
-    durationMs: event.durationMs ?? null,
+    tabId: sanitizeOptionalInteger(event.tabId),
+    windowId: sanitizeOptionalInteger(event.windowId),
+    bindingEpoch: sanitizeOptionalInteger(event.bindingEpoch),
+    durationMs: sanitizeOptionalDuration(event.durationMs),
   };
 }
 
