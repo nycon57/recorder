@@ -93,6 +93,8 @@ describe('POST /api/extension/debug-events', () => {
             urlPath: '/contact?token=secret#notes',
             app: 'hubspot',
             screen: 'contact-record',
+            conversationId: 'conversation_jane@example.com',
+            pageInstanceId: 'page_token_secret_123456789012345678901234567890',
             messageText: 'My email is jane@example.com',
             inputTextPreview: 'api_key=super-secret-token',
             resultText: 'Card 4242 4242 4242 4242',
@@ -106,7 +108,7 @@ describe('POST /api/extension/debug-events', () => {
           {
             sessionId: 'session_1',
             seq: 2,
-            eventType: 'target_rebound',
+            eventType: 'page_context_checked',
             occurredAt: '2026-04-29T12:00:01.000Z',
             urlHost: 'example.com',
             urlPath: 'settings/users?token=secret',
@@ -126,8 +128,10 @@ describe('POST /api/extension/debug-events', () => {
       authMethod: 'session',
       urlHost: 'example.com',
       urlPath: '/contact',
+      conversationId: '[REDACTED]',
+      pageInstanceId: '[REDACTED][REDACTED]',
       messageText: 'My email is [REDACTED]',
-      inputTextPreview: 'api_key=[REDACTED]',
+      inputTextPreview: '[input present]',
       resultText: 'Card [REDACTED]',
       pageSummary: 'Call [REDACTED]',
       selectedEntityTitle: 'Jane [REDACTED]',
@@ -145,5 +149,25 @@ describe('POST /api/extension/debug-events', () => {
       urlHost: 'example.com',
       urlPath: '/settings/users',
     });
+  });
+
+  it('rejects unknown event types and invalid timestamps', async () => {
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        events: [
+          {
+            sessionId: 'session_1',
+            seq: 1,
+            eventType: 'raw_secret_event',
+            occurredAt: 'not-a-date',
+          },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(insert).not.toHaveBeenCalled();
   });
 });

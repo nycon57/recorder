@@ -4,6 +4,7 @@ import {
   sanitizePageContextLocation,
   sanitizePageContextSelector,
   sanitizePageContextText,
+  type ExtensionDebugSessionEventType,
   type ExtensionDebugSessionEventInput,
 } from '@tribora/shared';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
@@ -19,6 +20,44 @@ export function OPTIONS() {
   return corsPreflightResponse();
 }
 
+const ALLOWED_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'session_start_requested',
+  'session_started',
+  'session_ended',
+  'session_error',
+  'mic_permission_opened',
+  'mic_permission_granted',
+  'mic_permission_denied',
+  'mic_permission_resumed',
+  'page_context_checked',
+  'contextual_update_sent',
+  'user_message',
+  'assistant_message',
+  'assistant_reply_watchdog_fired',
+  'duplicate_assistant_reply',
+  'tool_call_started',
+  'tool_call_completed',
+]);
+
+function isAllowedEventType(
+  value: unknown,
+): value is ExtensionDebugSessionEventType {
+  return typeof value === 'string' && ALLOWED_EVENT_TYPES.has(value);
+}
+
+function normalizeOccurredAt(value: string): string | null {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+  return new Date(timestamp).toISOString();
+}
+
+function sanitizeDebugIdentifier(
+  value: string | null | undefined,
+  fallback: string | null = null,
+): string | null {
+  return sanitizePageContextText(value, 120) ?? fallback;
+}
+
 function isValidEventInput(
   value: unknown,
 ): value is ExtensionDebugSessionEventInput {
@@ -27,9 +66,11 @@ function isValidEventInput(
 
   return (
     typeof record.sessionId === 'string' &&
-    typeof record.seq === 'number' &&
-    typeof record.eventType === 'string' &&
-    typeof record.occurredAt === 'string'
+    Number.isInteger(record.seq) &&
+    Number(record.seq) >= 0 &&
+    isAllowedEventType(record.eventType) &&
+    typeof record.occurredAt === 'string' &&
+    normalizeOccurredAt(record.occurredAt) !== null
   );
 }
 
@@ -44,38 +85,30 @@ function sanitizeDebugEvent(
   );
 
   return {
-    sessionId: event.sessionId,
+    sessionId: sanitizeDebugIdentifier(event.sessionId, 'unknown') ?? 'unknown',
     seq: event.seq,
-    turnId: sanitizePageContextText(event.turnId, 120) ?? null,
+    turnId: sanitizeDebugIdentifier(event.turnId),
     eventType: event.eventType,
-    occurredAt: event.occurredAt,
+    occurredAt: normalizeOccurredAt(event.occurredAt) ?? event.occurredAt,
     urlHost: event.urlHost ? location.host : event.urlHost,
     urlPath: event.urlPath ? location.path : event.urlPath,
-    app: sanitizePageContextText(event.app, 80) ?? event.app,
-    screen: sanitizePageContextText(event.screen, 80) ?? event.screen,
+    app: sanitizePageContextText(event.app, 80) ?? null,
+    screen: sanitizePageContextText(event.screen, 80) ?? null,
     messageText: sanitizePageContextText(event.messageText, 500) ?? null,
-    toolName: sanitizePageContextText(event.toolName, 80) ?? event.toolName,
+    toolName: sanitizePageContextText(event.toolName, 80) ?? null,
     selector: sanitizePageContextSelector(event.selector) ?? null,
-    label: sanitizePageContextText(event.label, 140) ?? event.label,
-    action: sanitizePageContextText(event.action, 80) ?? event.action,
-    inputTextPreview:
-      sanitizePageContextText(event.inputTextPreview, 160) ?? null,
+    label: sanitizePageContextText(event.label, 140) ?? null,
+    action: sanitizePageContextText(event.action, 80) ?? null,
+    inputTextPreview: event.inputTextPreview ? '[input present]' : null,
     resultText: sanitizePageContextText(event.resultText, 500) ?? null,
-    error: sanitizePageContextText(event.error, 260) ?? event.error,
+    error: sanitizePageContextText(event.error, 260) ?? null,
     pageSummary: sanitizePageContextText(event.pageSummary, 500) ?? null,
     selectedEntityTitle:
       sanitizePageContextText(event.selectedEntityTitle, 200) ?? null,
-    conversationId:
-      sanitizePageContextText(event.conversationId, 120) ??
-      event.conversationId,
-    fingerprint:
-      sanitizePageContextText(event.fingerprint, 120) ?? event.fingerprint,
-    pageInstanceId:
-      sanitizePageContextText(event.pageInstanceId, 120) ??
-      event.pageInstanceId,
-    contentInstanceId:
-      sanitizePageContextText(event.contentInstanceId, 120) ??
-      event.contentInstanceId,
+    conversationId: sanitizeDebugIdentifier(event.conversationId),
+    fingerprint: sanitizeDebugIdentifier(event.fingerprint),
+    pageInstanceId: sanitizeDebugIdentifier(event.pageInstanceId),
+    contentInstanceId: sanitizeDebugIdentifier(event.contentInstanceId),
     tabId: event.tabId ?? null,
     windowId: event.windowId ?? null,
     bindingEpoch: event.bindingEpoch ?? null,
