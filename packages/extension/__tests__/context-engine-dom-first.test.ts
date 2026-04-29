@@ -2,6 +2,8 @@
  * @jest-environment jsdom
  */
 
+/* global HTMLIFrameElement */
+
 import {
   afterEach,
   beforeEach,
@@ -17,6 +19,7 @@ import {
   inspectPageRegionFromDom,
   searchPageElementsFromDom,
 } from '../entrypoints/content/context-engine';
+import { FRAME_SELECTOR_DELIMITER } from '../entrypoints/content/frame-targeting';
 
 function setPage(html: string, path = '/dashboard/customers') {
   document.body.innerHTML = html;
@@ -228,5 +231,93 @@ describe('DOM-first page context engine', () => {
         }),
       ]),
     );
+  });
+
+  it('marks same-origin iframe-owned controls as explicitly unsupported context entries', () => {
+    setPage(`
+      <main>
+        <h1>Frame heavy admin</h1>
+        <button id="save">Save top document</button>
+        <iframe id="embedded-crm"></iframe>
+      </main>
+    `);
+
+    const frame = document.querySelector<HTMLIFrameElement>('#embedded-crm');
+    expect(frame?.contentDocument).toBeTruthy();
+    frame?.contentDocument?.open();
+    frame?.contentDocument?.write(`
+      <!doctype html>
+      <html>
+        <head><title>Embedded CRM</title></head>
+        <body>
+          <button id="save">Save embedded record</button>
+          <label>Frame note <input id="frame-note" /></label>
+        </body>
+      </html>
+    `);
+    frame?.contentDocument?.close();
+    jest
+      .spyOn(
+        frame!.contentWindow!.HTMLElement.prototype,
+        'getBoundingClientRect',
+      )
+      .mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 32,
+        top: 0,
+        right: 120,
+        bottom: 32,
+        left: 0,
+        toJSON: () => ({}),
+      } as unknown as ReturnType<HTMLElement['getBoundingClientRect']>);
+
+    const context = buildPageContext(document, window);
+    const topSave = context.interactiveElements.find(
+      (element) => element.selector === '#save',
+    );
+    const frameSave = context.interactiveElements.find(
+      (element) => element.frameOwner?.innerSelector === '#save',
+    );
+
+    expect(topSave).toMatchObject({
+      selector: '#save',
+      label: 'Save top document',
+    });
+    expect(topSave?.frameOwner).toBeUndefined();
+    expect(frameSave).toMatchObject({
+      selector: `#embedded-crm${FRAME_SELECTOR_DELIMITER}#save`,
+      label: 'Save embedded record',
+      frameOwner: {
+        frameSelector: '#embedded-crm',
+        innerSelector: '#save',
+        status: 'same_origin_unsupported',
+        frameTitle: 'Embedded CRM',
+      },
+    });
+
+    const matches = searchPageElementsFromDom(
+      'embedded record',
+      context,
+      document,
+    );
+    expect(matches[0]).toMatchObject({
+      selector: `#embedded-crm${FRAME_SELECTOR_DELIMITER}#save`,
+      unsupportedReason: expect.stringContaining('inside Embedded CRM'),
+    });
+
+    const inspection = inspectElementFromDom(
+      frameSave?.selector ?? '',
+      context,
+      document,
+    );
+    expect(inspection).toMatchObject({
+      tagName: 'iframe-child',
+      frameOwner: expect.objectContaining({
+        innerSelector: '#save',
+      }),
+      unsupportedReason: expect.stringContaining('cannot be safely acted on'),
+    });
   });
 });

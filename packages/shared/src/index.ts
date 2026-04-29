@@ -1,5 +1,6 @@
 export type {
   InteractiveElement,
+  FrameOwner,
   ContextRect,
   ViewportSnapshot,
   PageRegion,
