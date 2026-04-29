@@ -1,4 +1,4 @@
-/* global afterEach, describe, expect, it, jest */
+/* global afterEach, describe, expect, it, jest, KeyboardEvent */
 
 import { requestActionConfirmation } from '../entrypoints/content/action-confirmation';
 
@@ -12,6 +12,8 @@ describe('action confirmation prompt', () => {
   });
 
   it('returns false when the user declines confirmation', async () => {
+    const pageClickSpy = jest.fn();
+    document.documentElement.addEventListener('click', pageClickSpy);
     const resultPromise = requestActionConfirmation({
       safety: {
         decision: 'confirm',
@@ -33,7 +35,38 @@ describe('action confirmation prompt', () => {
     cancel!.click();
 
     await expect(resultPromise).resolves.toBe(false);
+    expect(pageClickSpy).not.toHaveBeenCalled();
     expect(document.querySelector('#tribora-action-confirmation')).toBeNull();
+    document.documentElement.removeEventListener('click', pageClickSpy);
+  });
+
+  it('keeps handled keyboard events inside the confirmation prompt', async () => {
+    const pageKeySpy = jest.fn();
+    document.documentElement.addEventListener('keydown', pageKeySpy);
+    const resultPromise = requestActionConfirmation({
+      safety: {
+        decision: 'confirm',
+        risk: 'input',
+        reason: 'Requires approval.',
+        confirmationLabel: 'Press Enter on Submit',
+      },
+    });
+
+    const dialog = document.querySelector<HTMLElement>(
+      '#tribora-action-confirmation',
+    );
+    expect(dialog).toBeTruthy();
+    dialog!.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    await expect(resultPromise).resolves.toBe(false);
+    expect(pageKeySpy).not.toHaveBeenCalled();
+    document.documentElement.removeEventListener('keydown', pageKeySpy);
   });
 
   it('times out safely and does not render raw typed text', async () => {

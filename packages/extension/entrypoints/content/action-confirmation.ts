@@ -102,17 +102,27 @@ export function requestActionConfirmation(
     function onKeyDown(event: KeyboardEvent): void {
       if (event.key === 'Escape') {
         event.preventDefault();
+        event.stopImmediatePropagation();
         settle(false);
         return;
       }
       if ((event.key === 'Enter' || event.key === ' ') && event.target === approve) {
         event.preventDefault();
+        event.stopImmediatePropagation();
         settle(true);
       }
     }
 
-    cancel.addEventListener('click', () => settle(false));
-    approve.addEventListener('click', () => settle(true));
+    cancel.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      settle(false);
+    });
+    approve.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      settle(true);
+    });
     container.addEventListener('keydown', onKeyDown);
     container.tabIndex = -1;
     container.focus();
