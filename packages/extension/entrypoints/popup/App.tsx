@@ -330,6 +330,7 @@ export default function App() {
       await refreshAssistantState();
     } catch (err) {
       setAssistantError((err as Error).message);
+      await refreshAssistantState().catch(() => undefined);
     } finally {
       setAssistantBusy(false);
     }
