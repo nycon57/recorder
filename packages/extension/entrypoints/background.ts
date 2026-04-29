@@ -534,6 +534,43 @@ async function hideWidgetsEverywhere(): Promise<void> {
   );
 }
 
+async function setExtensionEnabledForTab(
+  enabled: boolean,
+  tabId?: number | null,
+): Promise<void> {
+  await setExtensionEnabled(enabled);
+  console.log(`${BG} Extension toggled: ${enabled ? 'ON' : 'OFF'}`);
+
+  if (enabled) {
+    if (tabId) {
+      await sendWidgetVisibility(tabId, true);
+    }
+    return;
+  }
+
+  const { permissionTabId } = clearPendingMicPermissionFlow();
+  if (permissionTabId !== null) {
+    try {
+      await chrome.tabs.remove(permissionTabId);
+    } catch {
+      // Ignore if the permission page is already gone.
+    }
+  }
+  await endAgentSession();
+  await closeOffscreen();
+  await stopPageContextCollectionEverywhere();
+  latestContexts.clear();
+  contextUpdateSeq.clear();
+  contextFingerprints.clear();
+  liveContextHashes.clear();
+  contentInstanceIds.clear();
+  pageInstanceIds.clear();
+  await hideWidgetsEverywhere();
+  if (tabId) {
+    await sendWidgetVisibility(tabId, false);
+  }
+}
+
 function emitSessionErrorToTab(tabId: number, error: string): void {
   chrome.tabs.sendMessage(
     tabId,
@@ -2140,7 +2177,9 @@ async function replyToolResult(
 // Content script → background: session control + tool results.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'START_AGENT_SESSION') {
-    const tabId = sender.tab?.id;
+    const requestedTabId =
+      typeof message.tabId === 'number' ? message.tabId : null;
+    const tabId = sender.tab?.id ?? requestedTabId;
     if (!tabId) {
       sendResponse({ ok: false, error: 'No sender tab' });
       return false;
@@ -2169,8 +2208,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === 'SET_EXTENSION_ENABLED') {
+    const requestedTabId =
+      typeof message.tabId === 'number' ? message.tabId : null;
+    const tabId = sender.tab?.id ?? requestedTabId;
+    void setExtensionEnabledForTab(message.enabled === true, tabId)
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) =>
+        sendResponse({ ok: false, error: (err as Error).message }),
+      );
+    return true;
+  }
+
   if (message?.type === 'WHICH_SESSION_ACTIVE') {
-    const tabId = sender.tab?.id;
+    const requestedTabId =
+      typeof message.tabId === 'number' ? message.tabId : null;
+    const tabId = sender.tab?.id ?? requestedTabId;
     void hasActiveVoiceSession()
       .then((active) =>
         sendResponse({
@@ -2186,7 +2239,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === 'GET_EXTENSION_STATE') {
-    const tabId = sender.tab?.id;
+    const requestedTabId =
+      typeof message.tabId === 'number' ? message.tabId : null;
+    const tabId = sender.tab?.id ?? requestedTabId;
     void (async () => {
       const [enabled, active] = await Promise.all([
         getExtensionEnabled(),
@@ -2245,60 +2300,7 @@ export default defineBackground(() => {
   scheduleTokenRefresh();
   void restoreVoiceSessionState();
 
-  void chrome.action.setPopup({ popup: '' });
-
-  chrome.action.onClicked.addListener((tab) => {
-    void (async () => {
-      let session = await getStoredSession();
-      if (!session || session.status !== 'authenticated') {
-        try {
-          const { refreshSession } = await import('../utils/auth-session.js');
-          session = await refreshSession();
-        } catch (err) {
-          console.error(`${BG} Cookie refresh failed:`, (err as Error).message);
-        }
-      }
-      if (!session || session.status !== 'authenticated') {
-        const { initiateSignIn } = await import('../utils/auth-session.js');
-        await initiateSignIn();
-        return;
-      }
-
-      const currentlyEnabled = await getExtensionEnabled();
-      const nextEnabled = !currentlyEnabled;
-      await setExtensionEnabled(nextEnabled);
-      console.log(`${BG} Extension toggled: ${nextEnabled ? 'ON' : 'OFF'}`);
-
-      if (nextEnabled) {
-        if (tab.id) {
-          await sendWidgetVisibility(tab.id, true);
-        }
-        return;
-      }
-
-      const { permissionTabId } = clearPendingMicPermissionFlow();
-      if (permissionTabId !== null) {
-        try {
-          await chrome.tabs.remove(permissionTabId);
-        } catch {
-          // Ignore if the permission page is already gone.
-        }
-      }
-      await endAgentSession();
-      await closeOffscreen();
-      await stopPageContextCollectionEverywhere();
-      latestContexts.clear();
-      contextUpdateSeq.clear();
-      contextFingerprints.clear();
-      liveContextHashes.clear();
-      contentInstanceIds.clear();
-      pageInstanceIds.clear();
-      await hideWidgetsEverywhere();
-      if (tab.id) {
-        await sendWidgetVisibility(tab.id, false);
-      }
-    })();
-  });
+  void chrome.action.setPopup({ popup: 'popup.html' });
 
   // ── Recording (tab capture) ─────────────────────────────────────────────────
   let activeRecorder: TabRecorder | null = null;

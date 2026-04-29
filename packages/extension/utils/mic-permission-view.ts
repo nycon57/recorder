@@ -29,9 +29,16 @@ export function deriveMicPermissionViewModel(
 ): MicPermissionViewModel {
   switch (input.state) {
     case 'initial':
+      return {
+        autoRequestOnOpen: false,
+        primaryActionLabel: 'Allow microphone',
+        primaryActionVisible: true,
+        statusMessage: 'Ready to request microphone access.',
+        statusTone: 'normal',
+      };
     case 'requesting':
       return {
-        autoRequestOnOpen: input.state === 'initial',
+        autoRequestOnOpen: false,
         primaryActionLabel: null,
         primaryActionVisible: false,
         statusMessage: 'Requesting microphone access...',

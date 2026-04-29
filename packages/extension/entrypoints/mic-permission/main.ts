@@ -5,6 +5,8 @@ import {
 } from '../../utils/mic-permission-view.js';
 import { TRIBORA_EXTENSION_THEME } from '../../utils/tribora-theme.js';
 
+/* global chrome, HTMLParagraphElement */
+
 const LOG = '[Tribora mic]';
 const MIC_PERMISSION_GRANTED_KEY = 'micPermissionGranted';
 
@@ -45,7 +47,7 @@ app.innerHTML = `
       font-family: ${TRIBORA_EXTENSION_THEME.font.mono};
       font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.06em;
     }
     .trb-mic-mark {
       display: inline-flex;
@@ -65,7 +67,7 @@ app.innerHTML = `
       margin: 18px 0 10px;
       font-size: clamp(1.8rem, 2.4vw, 2.15rem);
       line-height: 1.02;
-      letter-spacing: -0.02em;
+      letter-spacing: 0;
       font-family: ${TRIBORA_EXTENSION_THEME.font.display};
       color: ${TRIBORA_EXTENSION_THEME.color.ink};
     }
@@ -96,7 +98,7 @@ app.innerHTML = `
       padding: 12px 16px;
       font-size: 14px;
       font-weight: 600;
-      letter-spacing: -0.01em;
+      letter-spacing: 0;
       cursor: pointer;
       transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1), background 150ms cubic-bezier(0.16, 1, 0.3, 1);
     }
@@ -106,6 +108,10 @@ app.innerHTML = `
     .trb-btn:disabled {
       cursor: wait;
       opacity: 0.72;
+    }
+    .trb-btn:focus-visible {
+      outline: 2px solid ${TRIBORA_EXTENSION_THEME.color.signal};
+      outline-offset: 3px;
     }
     .trb-btn-primary {
       border: 1px solid ${TRIBORA_EXTENSION_THEME.color.signalEdge};
@@ -131,7 +137,7 @@ app.innerHTML = `
       line-height: 1.5;
       font-family: ${TRIBORA_EXTENSION_THEME.font.mono};
       font-size: 11px;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
     }
     @media (prefers-reduced-motion: reduce) {
@@ -140,27 +146,27 @@ app.innerHTML = `
       }
     }
   </style>
-  <section class="trb-mic-card">
-    <p class="trb-mic-kicker">§PERMISSION · MICROPHONE</p>
+  <section class="trb-mic-card" aria-labelledby="mic-permission-title" aria-describedby="mic-permission-copy">
+    <p class="trb-mic-kicker">Permission · Microphone</p>
     <div class="trb-mic-mark">
       T
     </div>
-    <h1 class="trb-mic-title">Allow microphone access<b>.</b></h1>
-    <p class="trb-mic-copy">
+    <h1 id="mic-permission-title" class="trb-mic-title">Allow microphone access<b>.</b></h1>
+    <p id="mic-permission-copy" class="trb-mic-copy">
       Tribora needs microphone access to start a live voice session. Chrome is more reliable when this permission is granted from a visible extension page.
     </p>
     <p class="trb-mic-copy-secondary">
       After access is granted, this page will close and Tribora will resume on your original tab.
     </p>
     <div class="trb-mic-actions">
-      <button id="primary-action" class="trb-btn trb-btn-primary">
-        Try again
+      <button id="primary-action" class="trb-btn trb-btn-primary" type="button" aria-describedby="status">
+        Allow microphone
       </button>
-      <button id="close-page" class="trb-btn trb-btn-secondary">
+      <button id="close-page" class="trb-btn trb-btn-secondary" type="button">
         Close
       </button>
     </div>
-    <p id="status"></p>
+    <p id="status" role="status" aria-live="polite"></p>
   </section>
 `;
 

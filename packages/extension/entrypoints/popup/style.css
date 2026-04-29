@@ -93,7 +93,7 @@ body {
   font-family: var(--trb-font-display);
   font-size: 14px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   flex-shrink: 0;
   box-shadow:
     0 0 0 1px oklch(0.78 0.155 72 / 0.35),
@@ -105,7 +105,7 @@ body {
   font-size: 17px;
   font-weight: 600;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   color: var(--trb-ink);
 }
 
@@ -114,7 +114,7 @@ body {
   font-family: var(--trb-font-mono);
   font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--trb-ink-faint);
 }
@@ -122,7 +122,7 @@ body {
 .popup-version {
   font-family: var(--trb-font-mono);
   font-size: 10px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--trb-ink-dim);
   flex-shrink: 0;
@@ -159,7 +159,7 @@ body {
   font-family: var(--trb-font-display);
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--trb-ink);
 }
 
@@ -184,7 +184,7 @@ body {
 .status-label {
   font-family: var(--trb-font-mono);
   font-size: 10px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--trb-ink-muted);
 }
@@ -224,7 +224,7 @@ body {
   font-family: var(--trb-font-display);
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   cursor: pointer;
   transition:
     transform var(--trb-dur-fast) var(--trb-ease),
@@ -245,6 +245,12 @@ body {
 .popup-btn:disabled {
   cursor: wait;
   opacity: 0.72;
+}
+
+.assistant-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .popup-btn-primary {
@@ -313,7 +319,7 @@ body {
   font-family: var(--trb-font-display);
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--trb-ink);
   white-space: nowrap;
   overflow: hidden;
@@ -323,7 +329,7 @@ body {
 .user-org {
   font-family: var(--trb-font-mono);
   font-size: 10px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--trb-ink-dim);
   white-space: nowrap;
@@ -351,7 +357,7 @@ body {
   color: var(--trb-live);
   font-family: var(--trb-font-mono);
   font-size: 10px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -386,7 +392,7 @@ body {
   color: var(--trb-ink-dim);
   font-family: var(--trb-font-mono);
   font-size: 10px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
