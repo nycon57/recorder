@@ -100,6 +100,12 @@ async function startSession(signedUrl: string, tabId: number): Promise<void> {
       ),
       clientTools: {
         get_page_context: () => callTool('get_page_context', {}),
+        search_page_elements: (args: { query: string; limit?: number }) =>
+          callTool('search_page_elements', args),
+        inspect_element: (args: { selector: string }) =>
+          callTool('inspect_element', args),
+        inspect_page_region: (args: { selector?: string; regionId?: string }) =>
+          callTool('inspect_page_region', args),
         capture_screenshot: () => callTool('capture_screenshot', {}),
         highlight_element: (args: {
           selector: string;

@@ -56,6 +56,8 @@ export interface ExtensionContextTelemetryPayload {
     forms: number;
     tables: number;
     dialogs: number;
+    regions: number;
+    snippets: number;
     interactiveElements: number;
   };
   pageSummary: string;
@@ -193,6 +195,8 @@ export function buildExtensionContextTelemetry(args: {
       forms: context.forms?.length ?? 0,
       tables: context.tables?.length ?? 0,
       dialogs: context.dialogs?.length ?? 0,
+      regions: context.regions?.length ?? 0,
+      snippets: context.snippets?.length ?? 0,
       interactiveElements: context.interactiveElements?.length ?? 0,
     },
     pageSummary: truncate(normalizeText(context.pageSummary), 280),

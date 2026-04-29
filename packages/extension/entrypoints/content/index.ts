@@ -12,7 +12,9 @@
 import {
   buildContextSemanticFingerprint,
   type OverlayTarget,
+  type PageElementSearchResult,
   type PageContext,
+  type PageRegionInspectionResult,
 } from '@tribora/shared';
 
 import {
@@ -33,7 +35,12 @@ import {
 import { createWidget } from './widget';
 import { createDomOverlay } from './dom-overlay';
 import { createDomObserver } from './dom-observer';
-import { buildPageContext } from './context-engine';
+import {
+  buildPageContext,
+  inspectElementFromDom,
+  inspectPageRegionFromDom,
+  searchPageElementsFromDom,
+} from './context-engine';
 
 const LOG = '[Tribora content]';
 
@@ -235,6 +242,59 @@ export default defineContentScript({
           context.appSignature ?? `${context.app}:${context.screen}`,
         interactiveElements: context.interactiveElements,
       });
+    }
+
+    async function execSearchPageElements(args: {
+      query?: string;
+      limit?: number;
+    }): Promise<string> {
+      const context = await getFreshLatestContext();
+      const query = typeof args.query === 'string' ? args.query : '';
+      const limit =
+        typeof args.limit === 'number' && Number.isFinite(args.limit)
+          ? Math.min(Math.max(Math.round(args.limit), 1), 20)
+          : 12;
+      const matches = searchPageElementsFromDom(
+        query,
+        context,
+        document,
+        limit,
+      );
+      const result: PageElementSearchResult = {
+        query,
+        matches,
+        matchCount: matches.length,
+        truncated: matches.length >= limit,
+      };
+      return JSON.stringify(result);
+    }
+
+    async function execInspectElement(args: {
+      selector?: string;
+    }): Promise<string> {
+      const context = await getFreshLatestContext();
+      const selector = typeof args.selector === 'string' ? args.selector : '';
+      const inspection = selector
+        ? inspectElementFromDom(selector, context, document)
+        : null;
+      return JSON.stringify({ element: inspection });
+    }
+
+    async function execInspectPageRegion(args: {
+      selector?: string;
+      regionId?: string;
+    }): Promise<string> {
+      const context = await getFreshLatestContext();
+      const selector =
+        typeof args.regionId === 'string'
+          ? args.regionId
+          : typeof args.selector === 'string'
+            ? args.selector
+            : '';
+      const result: PageRegionInspectionResult = selector
+        ? inspectPageRegionFromDom(selector, context, document)
+        : { region: null, snippets: [], elements: [] };
+      return JSON.stringify(result);
     }
 
     function execHighlightElement(args: {
@@ -568,6 +628,21 @@ export default defineContentScript({
             switch (name) {
               case 'get_page_context':
                 result = await execGetPageContext();
+                break;
+              case 'search_page_elements':
+                result = await execSearchPageElements(
+                  args as { query?: string; limit?: number },
+                );
+                break;
+              case 'inspect_element':
+                result = await execInspectElement(
+                  args as { selector?: string },
+                );
+                break;
+              case 'inspect_page_region':
+                result = await execInspectPageRegion(
+                  args as { selector?: string; regionId?: string },
+                );
                 break;
               case 'highlight_element':
                 result = execHighlightElement(

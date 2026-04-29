@@ -5,11 +5,15 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 type StreamChunk = { text: string };
 type PromptArgs = {
-  elements: Array<{ selector: string; label: string; type?: string }>;
+  elements: Array<{ selector: string; label: string }>;
+  pageContext?: unknown;
 };
 
-const generateContentStream = jest.fn<() => Promise<AsyncGenerator<StreamChunk>>>();
-const buildExtensionCompiledMemoryPrompt = jest.fn<(args: PromptArgs) => string>();
+const generateContentStream =
+  jest.fn<() => Promise<AsyncGenerator<StreamChunk>>>();
+const buildExtensionCompiledMemoryPrompt =
+  jest.fn<(args: PromptArgs) => string>();
+const resolveCompiledMemoryAnswerContext = jest.fn();
 
 jest.mock('@google/genai', () => ({
   GoogleGenAI: jest.fn().mockImplementation(() => ({
@@ -38,14 +42,20 @@ jest.mock('@/lib/utils/api', () => ({
     badRequest: (message: string) =>
       Response.json({ code: 'BAD_REQUEST', message }, { status: 400 }),
     forbidden: () =>
-      Response.json({ code: 'FORBIDDEN', message: 'Forbidden' }, { status: 403 }),
+      Response.json(
+        { code: 'FORBIDDEN', message: 'Forbidden' },
+        { status: 403 },
+      ),
     rateLimitExceeded: () =>
       Response.json(
         { code: 'RATE_LIMIT_EXCEEDED', message: 'Rate limit exceeded' },
         { status: 429 },
       ),
     unauthorized: () =>
-      Response.json({ code: 'UNAUTHORIZED', message: 'Unauthorized' }, { status: 401 }),
+      Response.json(
+        { code: 'UNAUTHORIZED', message: 'Unauthorized' },
+        { status: 401 },
+      ),
   },
 }));
 
@@ -65,18 +75,7 @@ jest.mock('@/lib/utils/cors', () => ({
 
 jest.mock('@/lib/services/compiled-memory-answer-context', () => ({
   buildExtensionCompiledMemoryPrompt,
-  resolveCompiledMemoryAnswerContext: async () => ({
-    context: 'compiled memory context',
-    sources: [
-      {
-        layer: 'org',
-        provenance: { pageId: 'page-1' },
-      },
-    ],
-    citations: [],
-    citationsBySourceId: {},
-    priorTopics: [],
-  }),
+  resolveCompiledMemoryAnswerContext,
   summarizeCompiledMemoryAnswerObservability: jest.fn().mockReturnValue({
     sourceLayers: ['org'],
     orgSourcesCount: 1,
@@ -107,8 +106,22 @@ function buildRequest(body: unknown): NextRequest {
 describe('POST /api/extension/query', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resolveCompiledMemoryAnswerContext.mockResolvedValue({
+      context: 'compiled memory context',
+      sources: [
+        {
+          layer: 'org',
+          provenance: { pageId: 'page-1' },
+        },
+      ],
+      citations: [],
+      citationsBySourceId: {},
+      priorTopics: [],
+    });
     buildExtensionCompiledMemoryPrompt.mockReturnValue('fusion prompt');
-    generateContentStream.mockResolvedValue(streamText('Use [ELEMENT:#save:Save deal] now.'));
+    generateContentStream.mockResolvedValue(
+      streamText('Use [ELEMENT:#save:Save deal] now.'),
+    );
   });
 
   it('passes SDK interactiveElements selector and label refs into the prompt and stream path', async () => {
@@ -136,11 +149,79 @@ describe('POST /api/extension/query', () => {
 
     expect(buildExtensionCompiledMemoryPrompt).toHaveBeenCalledWith(
       expect.objectContaining({
-        elements: [{ selector: '#save', label: 'Save deal', type: 'button' }],
+        elements: [{ selector: '#save', label: 'Save deal' }],
+        pageContext: expect.objectContaining({
+          interactiveElements: [
+            {
+              selector: '#save',
+              label: 'Save deal',
+              type: 'button',
+            },
+          ],
+        }),
       }),
     );
     expect(streamBody).toContain('"type":"element_ref"');
     expect(streamBody).toContain('"selector":"#save"');
     expect(streamBody).toContain('"label":"Save deal"');
+  });
+
+  it('uses DOM-grounded generation when compiled memory has no sources but page context exists', async () => {
+    resolveCompiledMemoryAnswerContext.mockResolvedValue({
+      context: '',
+      sources: [],
+      citations: [],
+      citationsBySourceId: {},
+      priorTopics: [],
+    });
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        question: 'Where can I change billing?',
+        context: {
+          url: 'https://example.com/settings',
+          appSignature: 'unknown:settings',
+          interactiveElements: [
+            {
+              selector: '#billing',
+              label: 'Billing',
+              type: 'link',
+            },
+          ],
+          regions: [
+            {
+              id: 'region-1',
+              selector: 'main',
+              kind: 'main',
+              label: 'Settings',
+              interactiveCount: 1,
+              snippetCount: 1,
+            },
+          ],
+          snippets: [
+            {
+              id: 'snippet-1',
+              selector: 'h1',
+              regionId: 'region-1',
+              kind: 'heading',
+              text: 'Settings',
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(buildExtensionCompiledMemoryPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pageContext: expect.objectContaining({
+          regions: expect.arrayContaining([
+            expect.objectContaining({ label: 'Settings' }),
+          ]),
+        }),
+      }),
+    );
+    expect(await response.text()).not.toContain('help center');
   });
 });

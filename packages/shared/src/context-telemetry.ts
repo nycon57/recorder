@@ -88,6 +88,20 @@ export function buildContextSemanticFingerprint(context: PageContext): string {
     4,
   );
 
+  const regions = takeUnique(
+    (context.regions ?? []).map((region) =>
+      [region.kind, region.label, region.interactiveCount].join(':'),
+    ),
+    6,
+  );
+
+  const snippets = takeUnique(
+    (context.snippets ?? []).map((snippet) =>
+      [snippet.kind, snippet.text].join(':'),
+    ),
+    6,
+  );
+
   const breadcrumbs = takeUnique(context.breadcrumbs ?? [], 4);
   const headings = takeUnique(
     (context.headings ?? []).map((heading) => heading.text),
@@ -108,6 +122,8 @@ export function buildContextSemanticFingerprint(context: PageContext): string {
     primaryActions.join('|'),
     forms.join('|'),
     tables.join('|'),
+    regions.join('|'),
+    snippets.join('|'),
     headings.join('|'),
   ].join('||');
 }

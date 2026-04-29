@@ -40,6 +40,9 @@ describe('OpenAI Realtime extension helpers', () => {
     expect(tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         'get_page_context',
+        'search_page_elements',
+        'inspect_element',
+        'inspect_page_region',
         'capture_screenshot',
         'click_element',
         'type_in_element',

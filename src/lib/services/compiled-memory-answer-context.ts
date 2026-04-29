@@ -6,6 +6,7 @@ import {
 } from '@/lib/services/compiled-memory-context';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
 import { formatVendorKnowledgeTitle } from '@/lib/services/vendor-doc-corpus';
+import type { PageContext } from '@tribora/shared';
 
 const ORG_SEPARATOR = '\n\n---\n\n';
 const MAX_CONTENT_CHARS_PER_SOURCE = 1_200;
@@ -51,7 +52,11 @@ export interface CompiledMemoryAnswerContext {
   priorTopics: string[];
 }
 
-export type SharedVendorRetrievalMode = 'none' | 'exact' | 'semantic' | 'hybrid';
+export type SharedVendorRetrievalMode =
+  | 'none'
+  | 'exact'
+  | 'semantic'
+  | 'hybrid';
 
 export interface CompiledMemoryAnswerObservability {
   sourceLayers: CompiledMemoryCitationLayer[];
@@ -180,7 +185,10 @@ function renderSection(
   }
 
   const body = sources
-    .map((source) => `[${source.citationNumber}] ${source.title}\n${source.content}`)
+    .map(
+      (source) =>
+        `[${source.citationNumber}] ${source.title}\n${source.content}`,
+    )
     .join('\n\n');
 
   return `${label}:\n${body}`;
@@ -244,7 +252,8 @@ export function buildCompiledMemoryAnswerContext(
             {
               id: compiledMemory.vendorKnowledge.page.id,
               vendorPageId: compiledMemory.vendorKnowledge.page.id,
-              vendorSourceId: compiledMemory.vendorKnowledge.page.vendor_source_id,
+              vendorSourceId:
+                compiledMemory.vendorKnowledge.page.vendor_source_id,
               app: compiledMemory.vendorKnowledge.page.app,
               screen: compiledMemory.vendorKnowledge.page.screen,
               title: formatVendorKnowledgeTitle(
@@ -281,7 +290,9 @@ export function buildCompiledMemoryAnswerContext(
     .filter((source): source is CompiledMemoryAnswerSource => source != null);
 
   const remainingBudget =
-    citationLimit == null ? Number.POSITIVE_INFINITY : Math.max(citationLimit, 0);
+    citationLimit == null
+      ? Number.POSITIVE_INFINITY
+      : Math.max(citationLimit, 0);
   const limitedOrgSources = orgSources.slice(0, remainingBudget);
   const remainingAfterOrg = remainingBudget - limitedOrgSources.length;
   const limitedVendorTrainingSources = vendorTrainingSources.slice(
@@ -290,7 +301,10 @@ export function buildCompiledMemoryAnswerContext(
   );
   const remainingAfterTraining =
     remainingAfterOrg - limitedVendorTrainingSources.length;
-  const limitedVendorSources = vendorSources.slice(0, Math.max(remainingAfterTraining, 0));
+  const limitedVendorSources = vendorSources.slice(
+    0,
+    Math.max(remainingAfterTraining, 0),
+  );
 
   const sources = [
     ...limitedOrgSources,
@@ -316,7 +330,7 @@ export function buildCompiledMemoryAnswerContext(
   sections.push(
     [
       'SOURCE PRECEDENCE:',
-      '- If guidance conflicts, YOUR TEAM\'S KNOWLEDGE overrides VENDOR TRAINING and VENDOR KNOWLEDGE.',
+      "- If guidance conflicts, YOUR TEAM'S KNOWLEDGE overrides VENDOR TRAINING and VENDOR KNOWLEDGE.",
       '- VENDOR TRAINING overrides VENDOR KNOWLEDGE when those two conflict.',
       '- Prefer the highest-precedence source with explicit citations.',
     ].join('\n'),
@@ -378,14 +392,21 @@ export function buildCompiledMemoryCitations(
 }
 
 export function summarizeCompiledMemoryAnswerObservability(
-  answerContext: Pick<CompiledMemoryAnswerContext, 'sources'> | null | undefined,
+  answerContext:
+    | Pick<CompiledMemoryAnswerContext, 'sources'>
+    | null
+    | undefined,
 ): CompiledMemoryAnswerObservability {
   const sources = answerContext?.sources ?? [];
-  const orgSourcesCount = sources.filter((source) => source.layer === 'org').length;
+  const orgSourcesCount = sources.filter(
+    (source) => source.layer === 'org',
+  ).length;
   const vendorTrainingSourcesCount = sources.filter(
     (source) => source.layer === 'vendor_training',
   ).length;
-  const vendorSourcesCount = sources.filter((source) => source.layer === 'vendor').length;
+  const vendorSourcesCount = sources.filter(
+    (source) => source.layer === 'vendor',
+  ).length;
   const citationsWithFreshnessCount = sources.filter((source) =>
     hasFreshnessMetadata(source.freshness),
   ).length;
@@ -427,18 +448,93 @@ export function buildExtensionCompiledMemoryPrompt(args: {
   question: string;
   elements: Array<{ selector: string; label: string }>;
   answerContext: CompiledMemoryAnswerContext;
+  pageContext?: PageContext;
 }): string {
-  const { app, screen, question, elements, answerContext } = args;
-  const vendorSources = answerContext.sources.filter((source) => source.layer === 'vendor');
+  const { app, screen, question, elements, answerContext, pageContext } = args;
+  const vendorSources = answerContext.sources.filter(
+    (source) => source.layer === 'vendor',
+  );
   const vendorTrainingSources = answerContext.sources.filter(
     (source) => source.layer === 'vendor_training',
   );
-  const orgSources = answerContext.sources.filter((source) => source.layer === 'org');
+  const orgSources = answerContext.sources.filter(
+    (source) => source.layer === 'org',
+  );
 
   const elementsSection =
     elements.length > 0
       ? elements.map((el) => `- ${el.label}: ${el.selector}`).join('\n')
       : '(no interactive elements provided)';
+
+  const domSection = pageContext
+    ? [
+        pageContext.pageSummary
+          ? `PAGE SUMMARY: ${pageContext.pageSummary}`
+          : null,
+        pageContext.viewport
+          ? `VIEWPORT: ${pageContext.viewport.width}x${pageContext.viewport.height}, scroll ${pageContext.viewport.scrollX},${pageContext.viewport.scrollY}`
+          : null,
+        (pageContext.regions ?? []).length > 0
+          ? `REGIONS:\n${(pageContext.regions ?? [])
+              .slice(0, 10)
+              .map(
+                (region) =>
+                  `- ${region.id} ${region.kind}${region.label ? ` "${region.label}"` : ''}: ${region.selector}`,
+              )
+              .join('\n')}`
+          : null,
+        (pageContext.snippets ?? []).length > 0
+          ? `SAFE DOM SNIPPETS:\n${(pageContext.snippets ?? [])
+              .slice(0, 12)
+              .map(
+                (snippet) =>
+                  `- ${snippet.kind}${snippet.regionId ? ` in ${snippet.regionId}` : ''}: ${snippet.text}`,
+              )
+              .join('\n')}`
+          : null,
+        (pageContext.forms ?? []).length > 0
+          ? `FORMS:\n${(pageContext.forms ?? [])
+              .slice(0, 5)
+              .map(
+                (form) =>
+                  `- ${form.label ?? form.selector ?? 'form'}: ${form.fields
+                    .slice(0, 8)
+                    .map((field) =>
+                      [
+                        field.label,
+                        field.type,
+                        field.required ? 'required' : null,
+                        field.valuePresent ? 'value present' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' '),
+                    )
+                    .join(', ')}`,
+              )
+              .join('\n')}`
+          : null,
+        (pageContext.tables ?? []).length > 0
+          ? `TABLES:\n${(pageContext.tables ?? [])
+              .slice(0, 5)
+              .map(
+                (table) =>
+                  `- ${table.label ?? table.selector ?? 'table'}: ${table.rowCount} rows, columns ${table.columns.slice(0, 8).join(', ')}`,
+              )
+              .join('\n')}`
+          : null,
+        (pageContext.dialogs ?? []).length > 0
+          ? `DIALOGS:\n${(pageContext.dialogs ?? [])
+              .slice(0, 4)
+              .map(
+                (dialog) =>
+                  `- ${dialog.title ?? dialog.selector}: actions ${dialog.actionLabels.slice(0, 6).join(', ')}`,
+              )
+              .join('\n')}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join('\n\n')
+    : '';
 
   const userContextSection =
     answerContext.priorTopics.length > 0
@@ -459,6 +555,9 @@ ${buildTaggedLayerSection('team knowledge', orgSources)}
 
 INTERACTIVE ELEMENTS VISIBLE ON SCREEN:
 ${elementsSection}
+
+DOM-FIRST PAGE UNDERSTANDING:
+${domSection || '(no DOM context provided)'}
 ${userContextSection}
 QUESTION: ${question}
 
@@ -466,6 +565,7 @@ Rules:
 - YOUR TEAM'S KNOWLEDGE takes highest precedence, followed by VENDOR TRAINING, then VENDOR KNOWLEDGE. Explicitly mention when you're following the team's specific way versus vendor recommendations.
 - When referring to a clickable element that exists in INTERACTIVE ELEMENTS, tag it like [ELEMENT:selector:label] so the extension can highlight/point at it. Use the selector exactly as provided above.
 - When citing a source, tag it [SOURCE:id:title]. Use the normalized source id from the compiled-memory source itself. Team sources should come first in the citation list, followed by vendor training sources, then vendor knowledge.
+- If vendor/team docs are absent but DOM-FIRST PAGE UNDERSTANDING has enough structure, answer from the visible page only and say what you can infer from the page. Do not invent product-specific workflows.
 - Keep the answer concise and conversational. Prioritize actionable steps a user can follow right now.
 - If you don't know the answer from any layer, say so clearly instead of guessing.`;
 }
@@ -495,12 +595,17 @@ export async function resolveCompiledMemoryAnswerContext(
     };
   }
 
-  const generateEmbedding = deps.generateEmbedding ?? generateEmbeddingWithFallback;
-  const resolveCompiledMemory = deps.resolveCompiledMemory ?? resolveCompiledMemoryContext;
+  const generateEmbedding =
+    deps.generateEmbedding ?? generateEmbeddingWithFallback;
+  const resolveCompiledMemory =
+    deps.resolveCompiledMemory ?? resolveCompiledMemoryContext;
 
   let questionEmbedding: number[] = [];
   try {
-    const embeddingResult = await generateEmbedding(trimmedQuestion, 'RETRIEVAL_QUERY');
+    const embeddingResult = await generateEmbedding(
+      trimmedQuestion,
+      'RETRIEVAL_QUERY',
+    );
     questionEmbedding = embeddingResult.embedding;
   } catch (error) {
     console.error(
