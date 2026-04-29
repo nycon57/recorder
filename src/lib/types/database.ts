@@ -7345,6 +7345,32 @@ export type Database = {
         Args: { p_amount?: number; p_org_id: string; p_quota_type: string }
         Returns: boolean
       }
+      claim_pending_jobs: {
+        Args: { p_batch_size: number; p_claimed_at?: string }
+        Returns: {
+          attempts: number | null
+          completed_at: string | null
+          content: Json | null
+          content_id: string | null
+          created_at: string
+          dedupe_key: string | null
+          error: string | null
+          id: string
+          max_attempts: number | null
+          parent_job_id: string | null
+          payload: Json
+          priority: number | null
+          progress_message: string | null
+          progress_percent: number | null
+          result: Json | null
+          run_at: string
+          segments_completed: number | null
+          started_at: string | null
+          status: string
+          total_segments: number | null
+          type: string
+        }[]
+      }
       cleanup_expired_cache: {
         Args: never
         Returns: {

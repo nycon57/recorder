@@ -18,6 +18,7 @@ import type {
 } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 
+import { claimJobById, claimPendingJobs, type Job } from './job-claiming';
 import { handleArchiveSearchMetrics } from './handlers/archive-search-metrics';
 import { handleAnalyzeKnowledgeGaps } from './handlers/analyze-knowledge-gaps';
 import { handleCollectMetrics } from './handlers/collect-metrics';
@@ -83,24 +84,6 @@ const processorLogger = createLogger({ service: 'job-processor' });
 type JobRow = Database['public']['Tables']['jobs']['Row'];
 type JobType = JobRow['type'];
 type JobStatus = JobRow['status'];
-
-// PERF-DB-002: Extended job type with prefetched content data
-// This eliminates N+1 queries by joining jobs with content in the initial fetch
-interface PrefetchedContent {
-  id: string;
-  org_id: string;
-  title: string | null;
-  status: string;
-  content_type: string;
-  file_type: string | null;
-  storage_path_raw: string | null;
-  storage_path_processed: string | null;
-  file_size: number | null;
-}
-
-type Job = JobRow & {
-  content?: PrefetchedContent | null;
-};
 
 interface JobHandler {
   (job: Job, progressCallback?: ProgressCallback): Promise<void>;
@@ -428,33 +411,12 @@ export async function processJobs(options?: {
   // Main processing loop
   while (true) {
     try {
-      // PERF-DB-002: Fetch pending jobs with content data (eliminates N+1 queries)
-      // PERF-WK-001: Order by priority (0=critical first), then run_at, then created_at
-      const { data: jobs, error } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          content:content!jobs_content_id_fkey (
-            id,
-            org_id,
-            title,
-            status,
-            content_type,
-            file_type,
-            storage_path_raw,
-            storage_path_processed,
-            file_size
-          )
-        `)
-        .eq('status', 'pending')
-        .lte('run_at', new Date().toISOString()) // Only jobs ready to run
-        .order('priority', { ascending: true })   // High priority first (0 before 3)
-        .order('run_at', { ascending: true })     // Then by scheduled time
-        .order('created_at', { ascending: true }) // Then by creation time
-        .limit(batchSize);
+      // PERF-DB-002: Claim pending jobs with content data (eliminates N+1 queries)
+      // PERF-WK-001: RPC preserves priority/run_at/created_at ordering while claiming atomically.
+      const { jobs, error } = await claimPendingJobs(supabase, batchSize);
 
       if (error) {
-        console.error('[Job Processor] Error fetching jobs:', error);
+        console.error('[Job Processor] Error claiming jobs:', error);
         await sleep(currentPollInterval);
         continue;
       }
@@ -487,11 +449,11 @@ export async function processJobs(options?: {
         currentPollInterval = pollInterval;
       }
 
-      console.log(`[Job Processor] Found ${jobs.length} pending jobs`);
+      console.log(`[Job Processor] Claimed ${jobs.length} pending jobs`);
 
       // Process jobs in parallel
       await Promise.allSettled(
-        jobs.map(job => processJob(job, maxRetries))
+        jobs.map(job => processClaimedJob(job, maxRetries))
       );
 
       // After processing, poll immediately for more jobs
@@ -507,7 +469,7 @@ export async function processJobs(options?: {
 /**
  * Process a single job
  */
-async function processJob(job: Job, maxRetries: number): Promise<void> {
+async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
   const supabase = createAdminClient();
   // Support both old (recordingId) and new (contentId) payload formats for backward compatibility
   const payloadWithIds = job.payload as JobPayloadWithIds | null;
@@ -521,17 +483,6 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
     processorLogger.info('Processing job', {
       context: { jobId: job.id, contentId, jobType: job.type },
     });
-
-    // Mark job as processing
-    await supabase
-      .from('jobs')
-      .update({
-        status: 'processing' as JobStatus,
-        started_at: new Date().toISOString(),
-        progress_percent: 0,
-        progress_message: 'Starting job...',
-      })
-      .eq('id', job.id);
 
     // Stream initial progress
     if (contentId) {
@@ -603,7 +554,7 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
       error: error as Error,
     });
 
-    const attemptCount = job.attempts + 1;
+    const attemptCount = (job.attempts ?? 0) + 1;
     const shouldRetry = attemptCount < maxRetries;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
@@ -677,17 +628,17 @@ async function processJob(job: Job, maxRetries: number): Promise<void> {
 export async function processJobById(jobId: string): Promise<void> {
   const supabase = createAdminClient();
 
-  const { data: job, error } = await supabase
-    .from('jobs')
-    .select('*')
-    .eq('id', jobId)
-    .single();
+  const { job, error } = await claimJobById(supabase, jobId);
 
-  if (error || !job) {
-    throw new Error(`Job not found: ${jobId}`);
+  if (error) {
+    throw new Error(`Failed to claim job ${jobId}: ${error.message}`);
   }
 
-  await processJob(job, 3);
+  if (!job) {
+    throw new Error(`Job not claimable: ${jobId}`);
+  }
+
+  await processClaimedJob(job, 3);
 }
 
 /**
