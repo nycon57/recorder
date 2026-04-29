@@ -267,6 +267,20 @@ function sanitizeInteractiveElement(
     invalid: element.invalid,
     valuePresent: element.valuePresent,
     placeholder: sanitizePageContextText(element.placeholder),
+    frameOwner: element.frameOwner
+      ? {
+          frameSelector:
+            sanitizePageContextSelector(element.frameOwner.frameSelector) ?? '',
+          innerSelector:
+            sanitizePageContextSelector(element.frameOwner.innerSelector) ?? '',
+          status: element.frameOwner.status,
+          frameTitle: sanitizePageContextText(
+            element.frameOwner.frameTitle,
+            80,
+          ),
+          frameUrl: sanitizePageContextUrl(element.frameOwner.frameUrl),
+        }
+      : undefined,
   };
 }
 

@@ -44,6 +44,11 @@ import { requestActionConfirmation } from './action-confirmation';
 import { createDomOverlay } from './dom-overlay';
 import { createDomObserver, type DomObserver } from './dom-observer';
 import {
+  findFrameOwnedContextElement,
+  getUnsupportedFrameTargetMessage,
+  resolveTopDocumentActionTarget,
+} from './frame-targeting';
+import {
   buildPageContext,
   inspectElementFromDom,
   inspectPageRegionFromDom,
@@ -402,8 +407,13 @@ export default defineContentScript({
       action?: string;
     }): string {
       cancelOverlayClear();
-      const el = document.querySelector(args.selector);
-      if (!el) return 'target unavailable: element not found';
+      const { element: el, error } =
+        resolveTopDocumentActionTarget<HTMLElement>({
+          selector: args.selector,
+          context: latestContext,
+          doc: document,
+        });
+      if (error || !el) return error ?? 'target unavailable: element not found';
       if (args.action === 'highlight') overlay.highlight(args.selector);
       else if (args.action === 'pulse') overlay.pulse(args.selector);
       else overlay.pointAt(args.selector, args.label ?? '');
@@ -413,15 +423,32 @@ export default defineContentScript({
 
     function execHighlightElements(args: { targets: OverlayTarget[] }): string {
       cancelOverlayClear();
+      let unsupportedFrameTarget: string | null = null;
       const targets = (args.targets ?? []).filter((target) => {
         if (typeof target?.selector !== 'string') return false;
         try {
-          return !!document.querySelector(target.selector);
+          const { element, error } =
+            resolveTopDocumentActionTarget<HTMLElement>({
+              selector: target.selector,
+              context: latestContext,
+              doc: document,
+            });
+          if (error) {
+            if (error.startsWith('target unsupported:')) {
+              unsupportedFrameTarget = error;
+            }
+            return false;
+          }
+          return !!element;
         } catch {
           return false;
         }
       });
-      if (targets.length === 0) return 'target unavailable: element not found';
+      if (targets.length === 0) {
+        return (
+          unsupportedFrameTarget ?? 'target unavailable: element not found'
+        );
+      }
       overlay.showTargets(targets);
       scheduleOverlayClear(8000);
       return 'highlighted';
@@ -431,8 +458,13 @@ export default defineContentScript({
       selector: string;
     }): Promise<string> {
       cancelOverlayClear();
-      const el = document.querySelector<HTMLElement>(args.selector);
-      if (!el) return 'target unavailable: element not found';
+      const { element: el, error } =
+        resolveTopDocumentActionTarget<HTMLElement>({
+          selector: args.selector,
+          context: latestContext,
+          doc: document,
+        });
+      if (error || !el) return error ?? 'target unavailable: element not found';
       const safetyBlock = await enforceActionSafety({
         toolName: 'click_element',
         selector: args.selector,
@@ -462,8 +494,13 @@ export default defineContentScript({
       selector: string;
     }): Promise<string> {
       cancelOverlayClear();
-      const el = document.querySelector<HTMLElement>(args.selector);
-      if (!el) return 'target unavailable: element not found';
+      const { element: el, error } =
+        resolveTopDocumentActionTarget<HTMLElement>({
+          selector: args.selector,
+          context: latestContext,
+          doc: document,
+        });
+      if (error || !el) return error ?? 'target unavailable: element not found';
       const context = latestContext;
       if (!context) return 'target unavailable: page context unavailable';
       const previousFingerprint = buildContextSemanticFingerprint(context);
@@ -493,8 +530,13 @@ export default defineContentScript({
       clear?: boolean;
     }): Promise<string> {
       cancelOverlayClear();
-      const el = document.querySelector<HTMLElement>(args.selector);
-      if (!el) return 'target unavailable: element not found';
+      const { element: el, error } =
+        resolveTopDocumentActionTarget<HTMLElement>({
+          selector: args.selector,
+          context: latestContext,
+          doc: document,
+        });
+      if (error || !el) return error ?? 'target unavailable: element not found';
       const safetyBlock = await enforceActionSafety({
         toolName: 'type_in_element',
         selector: args.selector,
@@ -531,8 +573,13 @@ export default defineContentScript({
       selector: string;
     }): Promise<string> {
       cancelOverlayClear();
-      const el = document.querySelector<HTMLElement>(args.selector);
-      if (!el) return 'target unavailable: element not found';
+      const { element: el, error } =
+        resolveTopDocumentActionTarget<HTMLElement>({
+          selector: args.selector,
+          context: latestContext,
+          doc: document,
+        });
+      if (error || !el) return error ?? 'target unavailable: element not found';
       overlay.pointAt(args.selector);
       scheduleOverlayClear(3000);
       return runVerifiedAction({
@@ -549,9 +596,19 @@ export default defineContentScript({
       modifiers?: string[];
       repeat?: number;
     }): Promise<string> {
-      const target = args.selector
-        ? document.querySelector<HTMLElement>(args.selector)
-        : ((document.activeElement as HTMLElement | null) ?? document.body);
+      const targetResolution = args.selector
+        ? resolveTopDocumentActionTarget<HTMLElement>({
+            selector: args.selector,
+            context: latestContext,
+            doc: document,
+          })
+        : {
+            element:
+              (document.activeElement as HTMLElement | null) ?? document.body,
+            error: null,
+          };
+      if (targetResolution.error) return targetResolution.error;
+      const target = targetResolution.element;
 
       if (!(target instanceof HTMLElement)) {
         return 'target unavailable: element not found';
@@ -678,6 +735,17 @@ export default defineContentScript({
       // Overlay messages kept for any external callers (e.g. query SSE flow
       // that uses overlay hints). Safe no-ops if unused.
       if (msg?.type === 'OVERLAY_POINT') {
+        const frameOwned = findFrameOwnedContextElement(
+          msg.selector as string,
+          latestContext,
+        );
+        if (frameOwned) {
+          sendResponse({
+            ok: false,
+            error: getUnsupportedFrameTargetMessage(frameOwned),
+          });
+          return false;
+        }
         overlay.pointAt(
           msg.selector as string,
           msg.label as string | undefined,
@@ -686,11 +754,33 @@ export default defineContentScript({
         return false;
       }
       if (msg?.type === 'OVERLAY_HIGHLIGHT') {
+        const frameOwned = findFrameOwnedContextElement(
+          msg.selector as string,
+          latestContext,
+        );
+        if (frameOwned) {
+          sendResponse({
+            ok: false,
+            error: getUnsupportedFrameTargetMessage(frameOwned),
+          });
+          return false;
+        }
         overlay.highlight(msg.selector as string);
         sendResponse({ ok: true });
         return false;
       }
       if (msg?.type === 'OVERLAY_PULSE') {
+        const frameOwned = findFrameOwnedContextElement(
+          msg.selector as string,
+          latestContext,
+        );
+        if (frameOwned) {
+          sendResponse({
+            ok: false,
+            error: getUnsupportedFrameTargetMessage(frameOwned),
+          });
+          return false;
+        }
         overlay.pulse(msg.selector as string);
         sendResponse({ ok: true });
         return false;

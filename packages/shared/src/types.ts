@@ -24,6 +24,15 @@ export interface InteractiveElement {
   invalid?: boolean;
   valuePresent?: boolean;
   placeholder?: string;
+  frameOwner?: FrameOwner;
+}
+
+export interface FrameOwner {
+  frameSelector: string;
+  innerSelector: string;
+  status: 'same_origin_unsupported';
+  frameTitle?: string;
+  frameUrl?: string;
 }
 
 export type SurfaceKind =
@@ -208,6 +217,8 @@ export interface ElementInspection {
   surface?: SurfaceKind;
   group?: InteractiveGroup;
   regionId?: string;
+  frameOwner?: FrameOwner;
+  unsupportedReason?: string;
 }
 
 export interface PageElementSearchResult {

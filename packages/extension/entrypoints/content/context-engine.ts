@@ -9,7 +9,7 @@
  * Output matches the PageContext interface in @tribora/shared.
  */
 
-/* global Document, DOMRect, Window */
+/* global Document, DOMRect, HTMLIFrameElement, Window */
 
 import {
   sanitizePageContextForModel,
@@ -23,6 +23,7 @@ import type {
   DetectionConfidence,
   DialogSurface,
   ElementInspection,
+  FrameOwner,
   FormField,
   FormSurface,
   InteractiveElement,
@@ -40,6 +41,10 @@ import type {
 } from '@tribora/shared';
 
 import { getStableSelector } from './selector';
+import {
+  FRAME_SELECTOR_DELIMITER,
+  getUnsupportedFrameTargetMessage,
+} from './frame-targeting';
 
 export interface AppRegistryEntry {
   name: string;
@@ -184,6 +189,7 @@ const MAX_TABLE_SURFACES = 6;
 const MAX_TABLE_COLUMNS = 16;
 const MAX_TABLE_ACTION_LABELS = 6;
 const MAX_TABLE_SELECTION_LABELS = 6;
+const MAX_FRAME_INTERACTIVE_ELEMENTS = 24;
 
 const REGION_SELECTORS = [
   'main',
@@ -280,6 +286,30 @@ function buildViewportSnapshot(win: Window): ViewportSnapshot {
   };
 }
 
+function getElementWindow(el: Element): Window {
+  return el.ownerDocument.defaultView ?? window;
+}
+
+function isHtmlElement(el: Element): el is HTMLElement {
+  return el instanceof getElementWindow(el).HTMLElement;
+}
+
+function isInputElement(el: Element): el is HTMLInputElement {
+  return el instanceof getElementWindow(el).HTMLInputElement;
+}
+
+function isTextAreaElement(el: Element): el is HTMLTextAreaElement {
+  return el instanceof getElementWindow(el).HTMLTextAreaElement;
+}
+
+function isSelectElement(el: Element): el is HTMLSelectElement {
+  return el instanceof getElementWindow(el).HTMLSelectElement;
+}
+
+function isButtonElement(el: Element): el is HTMLButtonElement {
+  return el instanceof getElementWindow(el).HTMLButtonElement;
+}
+
 function getInputState(
   el: Element,
 ): Pick<
@@ -292,17 +322,15 @@ function getInputState(
   | 'placeholder'
 > {
   const placeholder =
-    el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+    isInputElement(el) || isTextAreaElement(el)
       ? sanitizePageContextText(el.placeholder, 80)
       : undefined;
   const value =
-    el instanceof HTMLInputElement ||
-    el instanceof HTMLTextAreaElement ||
-    el instanceof HTMLSelectElement
+    isInputElement(el) || isTextAreaElement(el) || isSelectElement(el)
       ? el.value
       : '';
   const checked =
-    el instanceof HTMLInputElement && ['checkbox', 'radio'].includes(el.type)
+    isInputElement(el) && ['checkbox', 'radio'].includes(el.type)
       ? el.checked
       : el.getAttribute('aria-checked') === 'true'
         ? true
@@ -320,7 +348,7 @@ function getInputState(
       el.getAttribute('aria-readonly') === 'true',
     invalid:
       el.getAttribute('aria-invalid') === 'true' ||
-      (el instanceof HTMLInputElement && !el.validity.valid),
+      (isInputElement(el) && !el.validity.valid),
     valuePresent: normalizeText(value).length > 0,
     placeholder,
   };
@@ -353,9 +381,9 @@ function toKebabCase(value: string): string {
 }
 
 function isVisible(el: Element): boolean {
-  if (!(el instanceof HTMLElement)) return false;
+  if (!isHtmlElement(el)) return false;
   if (el.hidden) return false;
-  const style = window.getComputedStyle(el);
+  const style = getElementWindow(el).getComputedStyle(el);
   if (
     style.display === 'none' ||
     style.visibility === 'hidden' ||
@@ -369,10 +397,10 @@ function isVisible(el: Element): boolean {
 
 function isDisabled(el: Element): boolean {
   return (
-    (el instanceof HTMLButtonElement ||
-      el instanceof HTMLInputElement ||
-      el instanceof HTMLSelectElement ||
-      el instanceof HTMLTextAreaElement) &&
+    (isButtonElement(el) ||
+      isInputElement(el) ||
+      isSelectElement(el) ||
+      isTextAreaElement(el)) &&
     el.disabled
   );
 }
@@ -431,8 +459,8 @@ function deriveLabel(el: Element): string {
     if (checkboxLabel) return checkboxLabel;
   }
 
-  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-    if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+  if (isInputElement(el) || isTextAreaElement(el)) {
+    if (isInputElement(el) && el.type === 'checkbox') {
       const checkboxLabel = deriveCheckboxLabel(el);
       if (checkboxLabel) return checkboxLabel;
     }
@@ -445,7 +473,7 @@ function deriveLabel(el: Element): string {
     return '';
   }
 
-  if (el instanceof HTMLSelectElement) {
+  if (isSelectElement(el)) {
     const label = getControlLabelText(el);
     if (label) return label;
     const name = normalizeText(el.name);
@@ -1490,6 +1518,75 @@ export function buildInteractiveElementInventory(
   return ranked;
 }
 
+function getFrameDocument(iframe: HTMLIFrameElement): Document | null {
+  try {
+    return iframe.contentDocument?.body ? iframe.contentDocument : null;
+  } catch {
+    return null;
+  }
+}
+
+function getFrameUrl(iframe: HTMLIFrameElement): string | undefined {
+  try {
+    return iframe.contentWindow?.location.href || iframe.src || undefined;
+  } catch {
+    return iframe.src || undefined;
+  }
+}
+
+function buildFrameOwner(
+  iframe: HTMLIFrameElement,
+  frameDoc: Document,
+  innerSelector: string,
+): FrameOwner {
+  return {
+    frameSelector: getStableSelector(iframe),
+    innerSelector,
+    status: 'same_origin_unsupported',
+    frameTitle: sanitizePageContextText(frameDoc.title, 80),
+    frameUrl: sanitizePageContextUrl(getFrameUrl(iframe)),
+  };
+}
+
+function buildFrameInteractiveElementInventory(
+  doc: Document,
+): PageContext['interactiveElements'] {
+  const frameElements = Array.from(
+    doc.querySelectorAll('iframe'),
+  ) as HTMLIFrameElement[];
+
+  return frameElements
+    .flatMap((iframe) => {
+      const frameDoc = getFrameDocument(iframe);
+      if (!frameDoc) return [];
+
+      const frameSelector = getStableSelector(iframe);
+      const frameDialogs = extractDialogs(frameDoc);
+      const frameNavigation = extractNavigation(frameDoc);
+      const frameWorkspaceContext = extractWorkspaceContext(frameDoc);
+      const frameForms = extractForms(frameDoc);
+      const frameTables = extractTables(frameDoc);
+
+      return buildInteractiveElementInventory(
+        frameDoc,
+        {
+          dialogs: frameDialogs,
+          navigation: frameNavigation,
+          workspaceContext: frameWorkspaceContext,
+          forms: frameForms,
+          tables: frameTables,
+        },
+        MAX_FRAME_INTERACTIVE_ELEMENTS,
+      ).map((element) => ({
+        ...element,
+        selector: `${frameSelector}${FRAME_SELECTOR_DELIMITER}${element.selector}`,
+        priority: Math.min(element.priority ?? 1, 45),
+        frameOwner: buildFrameOwner(iframe, frameDoc, element.selector),
+      }));
+    })
+    .slice(0, MAX_FRAME_INTERACTIVE_ELEMENTS);
+}
+
 function sanitizeHref(el: Element): string | undefined {
   if (!(el instanceof HTMLAnchorElement) || !el.href) return undefined;
   return sanitizePageContextUrl(el.href);
@@ -1500,6 +1597,38 @@ export function inspectElementFromDom(
   context: PageContext,
   doc: Document = document,
 ): ElementInspection | null {
+  const frameOwnedMatch = context.interactiveElements.find(
+    (item) =>
+      item.frameOwner &&
+      (item.selector === selector ||
+        item.frameOwner.innerSelector === selector),
+  );
+  if (frameOwnedMatch) {
+    return {
+      selector: frameOwnedMatch.selector,
+      label:
+        frameOwnedMatch.label ||
+        frameOwnedMatch.frameOwner?.innerSelector ||
+        selector,
+      type: frameOwnedMatch.type,
+      tagName: 'iframe-child',
+      rect: frameOwnedMatch.rect,
+      visible: frameOwnedMatch.visible ?? true,
+      disabled: frameOwnedMatch.disabled,
+      selected: frameOwnedMatch.selected,
+      expanded: frameOwnedMatch.expanded,
+      checked: frameOwnedMatch.checked,
+      required: frameOwnedMatch.required,
+      readonly: frameOwnedMatch.readonly,
+      invalid: frameOwnedMatch.invalid,
+      valuePresent: frameOwnedMatch.valuePresent,
+      surface: frameOwnedMatch.surface,
+      group: frameOwnedMatch.group,
+      frameOwner: frameOwnedMatch.frameOwner,
+      unsupportedReason: getUnsupportedFrameTargetMessage(frameOwnedMatch),
+    };
+  }
+
   let el: Element | null = null;
   try {
     el = doc.querySelector(selector);
@@ -1625,6 +1754,7 @@ export function inspectPageRegionFromDom(
 
   const elements = sanitizedContext.interactiveElements
     .filter((item) => {
+      if (item.frameOwner) return item.selector === selectorOrId;
       if (!el) {
         return region
           ? findRegionIdForSelector(doc, sanitizedContext, item.selector) ===
@@ -1662,6 +1792,7 @@ function extractPrimaryActions(
   return interactiveElements
     .filter((item) => {
       if (!item.selector || !item.label) return false;
+      if (item.frameOwner) return false;
       if (item.surface === 'dialog') return true;
       return (
         item.group === 'primary_action' ||
@@ -1764,7 +1895,7 @@ export function buildPageContext(
     breadcrumbs,
     dialogs,
   });
-  const interactiveElements = buildInteractiveElementInventory(
+  const topDocumentInteractiveElements = buildInteractiveElementInventory(
     doc,
     {
       dialogs,
@@ -1775,6 +1906,15 @@ export function buildPageContext(
     },
     60,
   );
+  const interactiveElements = uniqueBy(
+    [
+      ...topDocumentInteractiveElements,
+      ...buildFrameInteractiveElementInventory(doc),
+    ],
+    (item) => item.selector,
+  )
+    .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0))
+    .slice(0, 60);
   const primaryActions = extractPrimaryActions(interactiveElements);
   const visibleText = extractVisibleText(doc);
   const pageSummary = buildPageSummary({
