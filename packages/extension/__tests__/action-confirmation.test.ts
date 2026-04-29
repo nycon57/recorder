@@ -25,6 +25,7 @@ describe('action confirmation prompt', () => {
       '#tribora-action-confirmation',
     );
     expect(dialog).toBeTruthy();
+    expect(document.activeElement).toBe(dialog);
     const cancel = Array.from(dialog!.querySelectorAll('button')).find(
       (button) => button.textContent === 'Cancel',
     );

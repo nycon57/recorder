@@ -38,6 +38,7 @@ export function requestActionConfirmation(
       border: `1px solid ${TRIBORA_EXTENSION_THEME.color.lineStrong}`,
       boxShadow: '0 18px 44px rgba(0, 0, 0, 0.44)',
       fontFamily: TRIBORA_EXTENSION_THEME.font.body,
+      outline: 'none',
       pointerEvents: 'auto',
     });
 
@@ -113,7 +114,8 @@ export function requestActionConfirmation(
     cancel.addEventListener('click', () => settle(false));
     approve.addEventListener('click', () => settle(true));
     container.addEventListener('keydown', onKeyDown);
-    approve.focus();
+    container.tabIndex = -1;
+    container.focus();
   });
 }
 

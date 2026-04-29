@@ -115,6 +115,27 @@ describe('action safety policy', () => {
     expect(JSON.stringify(result)).not.toContain('Acme draft strategy');
   });
 
+  it('blocks sensitive typed text even in ordinary fields', () => {
+    const input = element<HTMLInputElement>(
+      '<label for="notes">Notes</label><textarea id="notes"></textarea>',
+      '#notes',
+    );
+
+    const result = classifyBrowserAction({
+      toolName: 'type_in_element',
+      target: input,
+      selector: '#notes',
+      text: 'bearer super-secret-token-123456789',
+    });
+
+    expect(result).toMatchObject({
+      decision: 'block',
+      risk: 'sensitive',
+      reason: 'Action blocked: typed text appears sensitive.',
+    });
+    expect(JSON.stringify(result)).not.toContain('super-secret-token');
+  });
+
   it('blocks password, payment, and one-time-code fields', () => {
     const password = element<HTMLInputElement>(
       '<input id="password" type="password" />',
@@ -173,6 +194,23 @@ describe('action safety policy', () => {
         target: body,
         key: 'Enter',
         repeat: 9,
+      }),
+    ).toMatchObject({ decision: 'block', risk: 'shortcut' });
+
+    expect(
+      classifyBrowserAction({
+        toolName: 'press_key',
+        target: body,
+        key: 'Meta+S',
+      }),
+    ).toMatchObject({ decision: 'block', risk: 'shortcut' });
+
+    expect(
+      classifyBrowserAction({
+        toolName: 'press_key',
+        target: body,
+        key: 'Enter',
+        modifiers: ['Control'],
       }),
     ).toMatchObject({ decision: 'block', risk: 'shortcut' });
   });

@@ -60,6 +60,9 @@ const DESTRUCTIVE_LABEL_PATTERN =
 const SENSITIVE_FIELD_PATTERN =
   /\b(password|passcode|secret|token|api[-_\s]*key|private[-_\s]*key|access[-_\s]*key|bearer|credit[-_\s]*card|card[-_\s]*(number|code)|cc-number|cvv|cvc|ssn|social[-_\s]*security|mfa|otp|one[-_\s]*time|2fa|two[-_\s]*factor|auth(entication)?[-_\s]*code|security[-_\s]*code)\b/i;
 
+const SENSITIVE_TEXT_PATTERN =
+  /\b(?:bearer\s+[a-z0-9._~+/=-]{12,}|sk_(?:live|test)_[a-z0-9_]{8,}|pk_(?:live|test)_[a-z0-9_]{8,}|api[-_\s]*key\s*[:=]\s*\S{6,}|\d{3}-\d{2}-\d{4}|\d(?:[ -]?\d){13,18}|\d{6})\b/i;
+
 const MUTATING_KEY_PATTERN =
   /^(enter|space|spacebar|backspace|delete|del|escape)$/i;
 
@@ -70,6 +73,8 @@ const DANGEROUS_SHORTCUTS = new Set([
   'Meta+Q',
   'Meta+T',
   'Meta+N',
+  'Meta+S',
+  'Meta+Enter',
   'Meta+Shift+W',
   'Meta+Shift+R',
   'Control+L',
@@ -77,6 +82,8 @@ const DANGEROUS_SHORTCUTS = new Set([
   'Control+W',
   'Control+T',
   'Control+N',
+  'Control+S',
+  'Control+Enter',
   'Control+Shift+W',
   'Control+Shift+R',
   'Alt+ArrowLeft',
@@ -117,6 +124,15 @@ export function classifyBrowserAction(
   const targetLabel = describeTarget(target, args.selector);
 
   if (args.toolName === 'type_in_element') {
+    if (textLooksSensitive(args.text)) {
+      return {
+        decision: 'block',
+        risk: 'sensitive',
+        reason: 'Action blocked: typed text appears sensitive.',
+        targetLabel,
+      };
+    }
+
     if (isSensitiveTypingTarget(target)) {
       return {
         decision: 'block',
@@ -296,6 +312,11 @@ function isSensitiveTypingTarget(target: HTMLElement): boolean {
 
 function targetTextIsDestructive(target: HTMLElement): boolean {
   return DESTRUCTIVE_LABEL_PATTERN.test(targetDescriptor(target));
+}
+
+function textLooksSensitive(value: string | undefined): boolean {
+  if (!value) return false;
+  return SENSITIVE_TEXT_PATTERN.test(value);
 }
 
 function targetDescriptor(target: HTMLElement): string {
