@@ -3,7 +3,19 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-const from = jest.fn();
+type QueryResult = { data: unknown; error: unknown };
+type SingleFn = () => Promise<QueryResult>;
+type EqResult = { single: jest.Mock<SingleFn> };
+type EqFn = (column: string, value: unknown) => EqResult;
+type SelectResult = { eq: jest.Mock<EqFn> };
+type SelectFn = (columns: string) => SelectResult;
+type MockTableResult = {
+  select: jest.Mock<SelectFn>;
+  eq: jest.Mock<EqFn>;
+  single: jest.Mock<SingleFn>;
+};
+
+const from = jest.fn<(table: string) => MockTableResult>();
 const ONE_HOUR_MS = 60 * 60 * 1000;
 let validSessionExpiresAt: string;
 
@@ -25,10 +37,10 @@ function buildRequest(body: unknown): NextRequest {
   } as unknown as NextRequest;
 }
 
-function mockTableResult(data: unknown, error: unknown = null) {
-  const single = jest.fn().mockResolvedValue({ data, error });
-  const eq = jest.fn(() => ({ single }));
-  const select = jest.fn(() => ({ eq }));
+function mockTableResult(data: unknown, error: unknown = null): MockTableResult {
+  const single = jest.fn<SingleFn>().mockResolvedValue({ data, error });
+  const eq = jest.fn<EqFn>(() => ({ single }));
+  const select = jest.fn<SelectFn>(() => ({ eq }));
   return { select, eq, single };
 }
 
@@ -73,7 +85,7 @@ describe('POST /api/extension/auth/callback', () => {
 
     expect(response.status).toBe(200);
     expect(from).toHaveBeenCalledWith('session');
-    const sessionQuery = from.mock.results[0].value;
+    const sessionQuery = from.mock.results[0].value as MockTableResult;
     expect(sessionQuery.select).toHaveBeenCalledWith(
       'userId, token, expiresAt, activeOrganizationId',
     );
