@@ -8,29 +8,10 @@ import { ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 
 import { signIn } from '@/lib/auth/auth-client';
-
-function getExtensionAuthPath(): string {
-  if (typeof window === 'undefined') return '/dashboard';
-  const extensionAuthState = new URLSearchParams(window.location.search).get(
-    'extension_auth_state',
-  );
-  return extensionAuthState
-    ? `/extension/auth/callback?extension_auth_state=${encodeURIComponent(
-        extensionAuthState,
-      )}`
-    : '/dashboard';
-}
-
-function getExtensionAuthPagePath(pathname: '/sign-up'): string {
-  if (typeof window === 'undefined') return pathname;
-  const extensionAuthState = new URLSearchParams(window.location.search).get(
-    'extension_auth_state',
-  );
-  if (!extensionAuthState) return pathname;
-  return `${pathname}?extension_auth_state=${encodeURIComponent(
-    extensionAuthState,
-  )}`;
-}
+import {
+  getAuthPagePathWithExtensionState,
+  getExtensionAuthPath,
+} from '@/lib/auth/extension-auth-redirect';
 
 /**
  * Sign In Page - "Aurora Gateway"
@@ -325,7 +306,7 @@ export default function SignInPage() {
             <p className="text-sm" style={{ color: 'rgb(170, 203, 196)' }}>
               Don&apos;t have an account?{' '}
               <Link
-                href={getExtensionAuthPagePath('/sign-up')}
+                href={getAuthPagePathWithExtensionState('/sign-up')}
                 className="font-medium transition-colors duration-200"
                 style={{ color: '#00df82' }}
                 onMouseOver={(e) => (e.currentTarget.style.color = '#2cc295')}

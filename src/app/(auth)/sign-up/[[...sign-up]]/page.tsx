@@ -8,29 +8,10 @@ import { ArrowLeft, Zap, Search, Users, Brain, Loader2 } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 
 import { signIn, signUp } from '@/lib/auth/auth-client';
-
-function getExtensionAuthPath(): string {
-  if (typeof window === 'undefined') return '/dashboard';
-  const extensionAuthState = new URLSearchParams(window.location.search).get(
-    'extension_auth_state',
-  );
-  return extensionAuthState
-    ? `/extension/auth/callback?extension_auth_state=${encodeURIComponent(
-        extensionAuthState,
-      )}`
-    : '/dashboard';
-}
-
-function getExtensionAuthPagePath(pathname: '/sign-in'): string {
-  if (typeof window === 'undefined') return pathname;
-  const extensionAuthState = new URLSearchParams(window.location.search).get(
-    'extension_auth_state',
-  );
-  if (!extensionAuthState) return pathname;
-  return `${pathname}?extension_auth_state=${encodeURIComponent(
-    extensionAuthState,
-  )}`;
-}
+import {
+  getAuthPagePathWithExtensionState,
+  getExtensionAuthPath,
+} from '@/lib/auth/extension-auth-redirect';
 
 /**
  * Sign Up Page - "Begin Your Journey"
@@ -372,7 +353,7 @@ export default function SignUpPage() {
               <p className="text-sm" style={{ color: 'rgb(170, 203, 196)' }}>
                 Already have an account?{' '}
                 <Link
-                  href={getExtensionAuthPagePath('/sign-in')}
+                  href={getAuthPagePathWithExtensionState('/sign-in')}
                   className="font-medium transition-colors duration-200"
                   style={{ color: '#00df82' }}
                   onMouseOver={(e) => (e.currentTarget.style.color = '#2cc295')}
