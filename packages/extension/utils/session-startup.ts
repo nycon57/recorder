@@ -16,11 +16,6 @@ export interface MicBootstrapDecisionInput {
   errorMessage?: string | null;
 }
 
-export interface VoiceTargetSupportInput {
-  url?: string | null;
-  extensionBaseUrl?: string | null;
-}
-
 export interface VoiceTargetRegistrationInput {
   extensionEnabled: boolean;
   sessionActive: boolean;
@@ -88,22 +83,6 @@ export function shouldOpenMicPermissionBootstrap(
 ): boolean {
   if (!input.micPermissionGranted) return true;
   return isMicPermissionError(input.errorMessage);
-}
-
-export function isSupportedVoicePageTarget(
-  input: VoiceTargetSupportInput,
-): boolean {
-  if (!input.url) return false;
-  if (input.extensionBaseUrl && input.url.startsWith(input.extensionBaseUrl)) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(input.url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
 }
 
 export function buildUnavailableVoiceTargetToolResult(
