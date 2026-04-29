@@ -59,6 +59,7 @@ import { NextRequest, after } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 
 import {
+  sanitizeExtensionProductTelemetryEvent,
   sanitizePageContextForNetwork,
   type PageContext,
 } from '@tribora/shared';
@@ -776,27 +777,43 @@ export async function POST(request: NextRequest) {
 
   after(async () => {
     try {
+      const productEvent = sanitizeExtensionProductTelemetryEvent({
+        eventId: `query_${crypto.randomUUID()}`,
+        eventType: 'query',
+        occurredAt: new Date(requestStartTime).toISOString(),
+        app,
+        screen,
+        latencyMs: Date.now() - requestStartTime,
+        messageDirection: 'user',
+        messageLength: question.length,
+        sourceCount: resolvedSourceCount,
+        outcome: 'completed',
+        metadata: {
+          hadOrgKnowledge,
+          hadVendorKnowledge,
+        },
+      });
+      if (!productEvent) {
+        throw new Error('Extension query product telemetry failed validation');
+      }
+
       const supabase = createAdminClient();
       await supabase.from('extension_product_events').insert({
         org_id: orgId,
         actor_id:
           authCtx.authMethod === 'session' ? authCtx.userId : authCtx.keyId,
         auth_method: authCtx.authMethod,
-        event_id: `query_${crypto.randomUUID()}`,
-        event_type: 'query',
-        occurred_at: new Date(requestStartTime).toISOString(),
-        app,
-        screen,
-        latency_ms: Date.now() - requestStartTime,
-        message_direction: 'user',
-        message_length: question.length,
-        source_count: resolvedSourceCount,
-        outcome: 'completed',
-        metadata: {
-          hadOrgKnowledge,
-          hadVendorKnowledge,
-          authMethod: authCtx.authMethod,
-        },
+        event_id: productEvent.eventId,
+        event_type: productEvent.eventType,
+        occurred_at: productEvent.occurredAt,
+        app: productEvent.app,
+        screen: productEvent.screen,
+        latency_ms: productEvent.latencyMs,
+        message_direction: productEvent.messageDirection,
+        message_length: productEvent.messageLength,
+        source_count: productEvent.sourceCount,
+        outcome: productEvent.outcome,
+        metadata: productEvent.metadata ?? {},
       });
     } catch (err) {
       console.error(

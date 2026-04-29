@@ -69,17 +69,27 @@ function toRow(args: {
 export async function POST(request: NextRequest) {
   try {
     const authCtx = await requireApiKeyOrSession(request, 'query');
-    const body = (await request.json()) as { events?: unknown };
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return errors.badRequest('Invalid JSON body');
+    }
 
-    if (!Array.isArray(body.events) || body.events.length === 0) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return errors.badRequest('events[] is required');
     }
 
-    if (body.events.length > 100) {
+    const eventsBody = (body as { events?: unknown }).events;
+    if (!Array.isArray(eventsBody) || eventsBody.length === 0) {
+      return errors.badRequest('events[] is required');
+    }
+
+    if (eventsBody.length > 100) {
       return errors.badRequest('Too many events in one batch');
     }
 
-    const events = body.events.map(sanitizeExtensionProductTelemetryEvent);
+    const events = eventsBody.map(sanitizeExtensionProductTelemetryEvent);
     if (events.some((event) => event === null)) {
       return errors.badRequest(
         'One or more telemetry events are invalid or contain unsafe fields',
