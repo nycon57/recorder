@@ -48,6 +48,10 @@ import {
 } from '../utils/voice-tool-routing.js';
 import { createTurnGuards } from '../utils/turn-guards.js';
 import { buildContextSemanticFingerprint } from '../utils/context-telemetry.js';
+import {
+  mergePageContextWithPreviousKnowledge,
+  pageContextKnowledgeIdentityChanged,
+} from '../utils/context-knowledge.js';
 import { classifyTranscriptConfidence } from '../utils/voice-agent-policy.js';
 import { validateAndPersistExtensionAuthCallback } from '../utils/auth-session.js';
 
@@ -386,16 +390,7 @@ function mergePageContextWithPrevious(
   previous: PageContext | undefined,
   next: PageContext,
 ): PageContext {
-  return {
-    ...previous,
-    ...next,
-    vendorKnowledgeMatch:
-      next.vendorKnowledgeMatch ?? previous?.vendorKnowledgeMatch ?? null,
-    orgKnowledgeMatch:
-      next.orgKnowledgeMatch ?? previous?.orgKnowledgeMatch ?? null,
-    knowledgeAvailability:
-      next.knowledgeAvailability ?? previous?.knowledgeAvailability,
-  };
+  return mergePageContextWithPreviousKnowledge(previous, next);
 }
 
 async function sendWidgetVisibility(
@@ -1611,8 +1606,12 @@ async function handleGetPageContextTool(
       );
     }
 
+    const previousContext = latestContexts.get(targetTabId);
+    if (pageContextKnowledgeIdentityChanged(previousContext, rawContext)) {
+      liveContextHashes.delete(targetTabId);
+    }
     const mergedContext = mergePageContextWithPrevious(
-      latestContexts.get(targetTabId),
+      previousContext,
       rawContext,
     );
     latestContexts.set(targetTabId, mergedContext);
@@ -2014,6 +2013,7 @@ export default defineBackground(() => {
         vendorKnowledgeMatch?: PageContext['vendorKnowledgeMatch'];
         orgKnowledgeMatch?: PageContext['orgKnowledgeMatch'];
         knowledgeAvailability?: PageContext['knowledgeAvailability'];
+        knowledgeResolvedFor?: PageContext['knowledgeResolvedFor'];
       }>('/api/extension/context', {
         method: 'POST',
         body: JSON.stringify({ context }),
@@ -2034,6 +2034,10 @@ export default defineBackground(() => {
           enrichment.orgKnowledgeMatch ?? context.orgKnowledgeMatch ?? null,
         knowledgeAvailability:
           enrichment.knowledgeAvailability ?? context.knowledgeAvailability,
+        relevantWikiPages:
+          enrichment.relevantWikiPages ?? context.relevantWikiPages,
+        knowledgeResolvedFor:
+          enrichment.knowledgeResolvedFor ?? context.knowledgeResolvedFor,
       };
 
       latestContexts.set(tabId, mergedContext);
@@ -2092,6 +2096,9 @@ export default defineBackground(() => {
           targetLoadingTabs.delete(tabId);
           const previous = latestContexts.get(tabId);
           const rawContext = message.context as PageContext;
+          if (pageContextKnowledgeIdentityChanged(previous, rawContext)) {
+            liveContextHashes.delete(tabId);
+          }
           const context = mergePageContextWithPrevious(previous, rawContext);
           latestContexts.set(tabId, context);
 

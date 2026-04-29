@@ -25,6 +25,7 @@ export type {
   KnowledgeMatchCategory,
   KnowledgeMatch,
   KnowledgeAvailability,
+  KnowledgeResolvedFor,
   LiveContextSourceRef,
   LiveContextPack,
   ExtensionMessageType,
@@ -39,6 +40,9 @@ export type {
 } from './extension-debug.js';
 export {
   buildContextSemanticFingerprint,
+  buildKnowledgeResolvedFor,
+  knowledgeResolvedForContextMatches,
+  knowledgeResolvedForEquals,
   sanitizePageContextLocation,
 } from './context-telemetry.js';
 export type { SanitizedPageContextLocation } from './context-telemetry.js';

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type {
-  KnowledgeAvailability,
-  KnowledgeMatch,
-  LiveContextPack,
-  PageContext,
-} from '@tribora/shared';
 
+import {
+  buildKnowledgeResolvedFor,
+  knowledgeResolvedForContextMatches,
+  type KnowledgeAvailability,
+  type KnowledgeMatch,
+  type LiveContextPack,
+  type PageContext,
+} from '@tribora/shared';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { resolveExtensionContextMatches } from '@/lib/services/extension-context';
 import {
@@ -31,6 +33,10 @@ function screenFromUrl(url: string): string {
   } catch {
     return 'unknown';
   }
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 async function loadVendorPages(
@@ -95,6 +101,14 @@ export async function POST(request: NextRequest) {
     const resolvedApp = baseContext.app?.toLowerCase() || 'unknown';
     const resolvedScreen =
       baseContext.screen?.toLowerCase() || screenFromUrl(baseContext.url);
+    const resolvedAppSignature =
+      baseContext.appSignature ?? `${resolvedApp}:${resolvedScreen}`;
+    const currentKnowledgeResolvedFor = buildKnowledgeResolvedFor({
+      app: resolvedApp,
+      screen: resolvedScreen,
+      appSignature: resolvedAppSignature,
+      url: baseContext.url,
+    });
 
     let vendorKnowledgeMatch: KnowledgeMatch | null =
       baseContext.vendorKnowledgeMatch ?? null;
@@ -102,8 +116,20 @@ export async function POST(request: NextRequest) {
       baseContext.orgKnowledgeMatch ?? null;
     let knowledgeAvailability: KnowledgeAvailability | undefined =
       baseContext.knowledgeAvailability;
+    let relevantWikiPages = baseContext.relevantWikiPages;
 
-    if (!knowledgeAvailability) {
+    if (
+      !knowledgeAvailability ||
+      !knowledgeResolvedForContextMatches(
+        baseContext.knowledgeResolvedFor,
+        {
+          app: resolvedApp,
+          screen: resolvedScreen,
+          appSignature: resolvedAppSignature,
+          url: baseContext.url,
+        },
+      )
+    ) {
       const matches = await resolveExtensionContextMatches({
         orgId: authCtx.orgId,
         app: resolvedApp,
@@ -113,17 +139,19 @@ export async function POST(request: NextRequest) {
       vendorKnowledgeMatch = matches.vendorKnowledgeMatch;
       orgKnowledgeMatch = matches.orgKnowledgeMatch;
       knowledgeAvailability = matches.knowledgeAvailability;
+      relevantWikiPages = matches.relevantWikiPages;
     }
 
     const mergedContext: PageContext = {
       ...baseContext,
       app: resolvedApp,
       screen: resolvedScreen,
-      appSignature:
-        baseContext.appSignature ?? `${resolvedApp}:${resolvedScreen}`,
+      appSignature: resolvedAppSignature,
       vendorKnowledgeMatch,
       orgKnowledgeMatch,
       knowledgeAvailability,
+      relevantWikiPages,
+      knowledgeResolvedFor: currentKnowledgeResolvedFor,
     };
 
     const [orgPages, vendorPages] = await Promise.all([
@@ -141,20 +169,22 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(pack, { headers: CORS_HEADERS });
-  } catch (error: any) {
-    if (error.message === 'Unauthorized') {
+  } catch (error: unknown) {
+    const errorMessage = getErrorMessage(error);
+
+    if (errorMessage === 'Unauthorized') {
       return errors.unauthorized();
     }
-    if (error.message === 'Rate limit exceeded') {
+    if (errorMessage === 'Rate limit exceeded') {
       return errors.rateLimitExceeded();
     }
-    if (error.message === 'Insufficient scope') {
+    if (errorMessage === 'Insufficient scope') {
       return errors.forbidden();
     }
     if (
-      error.message === 'Organization context required' ||
-      error.message === 'User organization not found' ||
-      error.message?.includes('not found in database')
+      errorMessage === 'Organization context required' ||
+      errorMessage === 'User organization not found' ||
+      errorMessage.includes('not found in database')
     ) {
       return errors.forbidden();
     }
