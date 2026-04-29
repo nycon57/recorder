@@ -20,6 +20,8 @@ import { detectPII, logPIIDetection, sanitizeVisualDescription } from '@/lib/uti
 
 import type { ProgressCallback } from '../job-processor';
 
+import { enqueueCompileWikiJob } from './compile-wiki-queue';
+
 type Job = Database['public']['Tables']['jobs']['Row'];
 
 interface WorkflowPayload {
@@ -198,6 +200,7 @@ async function runExtractionPipeline(
     const steps = await synthesizeFromTranscriptOnly(transcriptText, isLongRecording);
     await storeWorkflow(supabase, recordingId, orgId, recording.title, steps, 0.5);
     progressCallback?.(100, 'Text-only workflow extraction complete');
+    await enqueueCompileWikiAfterWorkflow(supabase, { recordingId, orgId });
     return;
   }
 
@@ -210,6 +213,7 @@ async function runExtractionPipeline(
     width: 0,
     height: 0,
     sizeBytes: 0,
+    mimeType: 'image/jpeg',
   }));
 
   const ocrResults: OCRResult[] = frameRows.map((row) => ({
@@ -275,7 +279,7 @@ async function runExtractionPipeline(
   // is NOT fatal to workflow_extraction — the workflow was extracted, and a
   // compile_wiki job can be re-enqueued manually if this fails.
   try {
-    await enqueueCompileWikiJob(supabase, { recordingId, orgId });
+    await enqueueCompileWikiAfterWorkflow(supabase, { recordingId, orgId });
   } catch (error) {
     console.error(
       `[WorkflowExtraction] Failed to enqueue compile_wiki for ${recordingId}:`,
@@ -294,36 +298,18 @@ async function runExtractionPipeline(
  * Payload shape is intentionally `{ recordingId, orgId }` to match
  * `CompileWikiPayload` in `src/lib/workers/handlers/compile-wiki.ts`.
  */
-async function enqueueCompileWikiJob(
+async function enqueueCompileWikiAfterWorkflow(
   supabase: ReturnType<typeof createAdminClient>,
   args: { recordingId: string; orgId: string }
 ): Promise<void> {
-  const { recordingId, orgId } = args;
-  const dedupeKey = `compile_wiki:${recordingId}`;
-
-  const { error } = await supabase.from('jobs').insert({
-    type: 'compile_wiki',
-    status: 'pending',
-    payload: { recordingId, orgId },
-    dedupe_key: dedupeKey,
-    priority: 2, // JOB_PRIORITY.NORMAL
-  });
-
-  if (error) {
-    // Unique-violation on dedupe_key means another worker already queued
-    // this recording's compile_wiki job — that's the desired behaviour.
-    if (error.code === '23505') {
-      console.log(
-        `[WorkflowExtraction] compile_wiki already queued for ${recordingId} (dedupe_key=${dedupeKey})`
-      );
-      return;
-    }
-    throw new Error(`Failed to enqueue compile_wiki job: ${error.message}`);
+  try {
+    await enqueueCompileWikiJob(supabase, { ...args, source: 'WorkflowExtraction' });
+  } catch (error) {
+    console.error(
+      `[WorkflowExtraction] Failed to enqueue compile_wiki for ${args.recordingId}:`,
+      error
+    );
   }
-
-  console.log(
-    `[WorkflowExtraction] Enqueued compile_wiki job for ${recordingId} (dedupe_key=${dedupeKey})`
-  );
 }
 
 /**

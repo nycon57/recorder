@@ -512,6 +512,13 @@ export const POST = apiHandler(
               context: { requestId, recordingId, jobType: firstJobType },
               error: jobError as Error,
             });
+            await supabase
+              .from('content')
+              .update({
+                status: SOURCE_STATUS.UPLOADING,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', recordingId);
             return errors.internalError(requestId);
           }
         }

@@ -101,17 +101,19 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
 
     // Store content in transcript table (reusing existing structure)
-    const { error: transcriptError } = await supabaseAdmin
+    const { data: transcript, error: transcriptError } = await supabaseAdmin
       .from('transcripts')
       .insert({
-        recording_id: recording.id,
+        content_id: recording.id,
         language: 'en', // Default to English for text notes
         text: content,
         confidence: 1.0, // Perfect confidence for user-created content
         provider: 'user_input',
-      });
+      })
+      .select('id')
+      .single();
 
-    if (transcriptError) {
+    if (transcriptError || !transcript) {
       console.error('[Text Note] Transcript error:', transcriptError);
 
       // Clean up recording
@@ -127,17 +129,28 @@ export const POST = apiHandler(async (request: NextRequest) => {
       .eq('id', recording.id);
 
     // Enqueue processing job for document generation
-    await supabaseAdmin.from('jobs').insert({
+    const { error: jobError } = await supabaseAdmin.from('jobs').insert({
       type: 'doc_generate' as JobType,
       status: 'pending',
+      content_id: recording.id,
       payload: {
         recordingId: recording.id,
+        transcriptId: transcript.id,
         orgId,
         contentType: 'text',
         format,
       },
       run_at: new Date().toISOString(),
+      dedupe_key: `doc_generate:${recording.id}`,
     });
+
+    if (jobError) {
+      console.error('[Text Note] Job enqueue error:', jobError);
+      await supabaseAdmin.from('transcripts').delete().eq('id', transcript.id);
+      await supabaseAdmin.from('content').delete().eq('id', recording.id);
+
+      return errors.internalError(requestId);
+    }
 
     // Update status to indicate doc generation in progress
     await supabaseAdmin
@@ -158,11 +171,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
       requestId,
       201,
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Text Note] Request error:', error);
 
     // Check if it's a validation error
-    if (error.message?.includes('Invalid request body')) {
+    if (
+      error instanceof Error &&
+      error.message.includes('Invalid request body')
+    ) {
       return errors.validationError(error.message, requestId);
     }
 

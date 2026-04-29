@@ -225,4 +225,32 @@ describe('POST /api/recordings/[id]/metadata', () => {
       }),
     );
   });
+
+  it('rolls metadata status back to uploading when job enqueue fails', async () => {
+    jobsInsert.mockImplementation(() =>
+      Promise.resolve({
+        error: { message: 'queue unavailable' },
+      }),
+    );
+
+    const response = await POST(makeRequest({
+      title: 'Screen demo',
+      storagePath: 'org_1/recordings/rec_1/raw.webm',
+    }), {
+      params: Promise.resolve({ id: 'rec_1' }),
+    });
+
+    expect(response.status).toBe(500);
+    expect(contentUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storage_path_raw: 'org_1/recordings/rec_1/raw.webm',
+        status: 'uploaded',
+      }),
+    );
+    expect(contentUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'uploading',
+      }),
+    );
+  });
 });

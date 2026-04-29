@@ -5,10 +5,12 @@
  * PERF-AI-006: Includes OpenAI fallback for API failures.
  */
 
-import { googleAI, PROMPTS, GOOGLE_CONFIG } from '@/lib/google/client';
+import OpenAI from 'openai';
+
+import { googleAI, GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { isAgentEnabled } from '@/lib/services/agent-config';
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
 import {
@@ -25,9 +27,10 @@ import {
   getAnalysisPrompt,
   type AnalysisType,
 } from '@/lib/services/analysis-templates';
-import OpenAI from 'openai';
 import { checkAutoPublish } from '@/lib/workers/hooks/auto-publish';
 import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
+
+import { enqueueCompileWikiJob } from './compile-wiki-queue';
 
 // PERF-AI-006: Lazy-initialized OpenAI client for fallback
 let openaiClient: OpenAI | null = null;
@@ -45,16 +48,21 @@ function getOpenAIClient(): OpenAI {
 /**
  * PERF-AI-006: Check if a Gemini error is recoverable via fallback
  */
-function isRecoverableGeminiError(error: any): boolean {
-  const errorMessage = error?.message || String(error);
+function isRecoverableGeminiError(error: unknown): boolean {
+  const errorStatus =
+    typeof error === 'object' && error !== null && 'status' in error
+      ? (error as { status?: unknown }).status
+      : undefined;
+  const errorMessage =
+    error instanceof Error ? error.message : String(error);
   return (
     errorMessage.includes('503') ||
     errorMessage.includes('overloaded') ||
     errorMessage.includes('RESOURCE_EXHAUSTED') ||
     errorMessage.includes('rate limit') ||
     errorMessage.includes('quota') ||
-    error?.status === 503 ||
-    error?.status === 429
+    errorStatus === 503 ||
+    errorStatus === 429
   );
 }
 
@@ -114,7 +122,7 @@ interface DocifyPayload {
  */
 export async function generateDocument(
   job: Job,
-  progressCallback?: (percent: number, message: string, data?: any) => void,
+  progressCallback?: (percent: number, message: string, data?: Json) => void,
 ): Promise<void> {
   const payload = job.payload as unknown as DocifyPayload;
   const { recordingId, transcriptId, orgId } = payload;
@@ -210,11 +218,12 @@ export async function generateDocument(
       );
     }
 
-    const hasVisualContext =
+    const hasVisualContext = Boolean(
       transcript.visual_events &&
-      (transcript.visual_events as any[]).length > 0;
+      (transcript.visual_events as unknown[]).length > 0,
+    );
     const visualEventsCount = hasVisualContext
-      ? (transcript.visual_events as any[]).length
+      ? (transcript.visual_events as unknown[]).length
       : 0;
 
     logger.info('Loaded transcript', {
@@ -245,7 +254,7 @@ export async function generateDocument(
       .single();
 
     const title = recording?.title || 'Untitled Recording';
-    const metadata = (recording?.metadata || {}) as Record<string, any>;
+    const metadata = (recording?.metadata || {}) as Record<string, unknown>;
     const analysisType = (recording?.analysis_type as AnalysisType) || null;
     const skipAnalysis = recording?.skip_analysis || false;
 
@@ -295,8 +304,9 @@ export async function generateDocument(
     }
 
     // Extract duration from words_json
-    const wordsData = (transcript.words_json || {}) as Record<string, any>;
-    const durationSeconds = wordsData.duration || 0;
+    const wordsData = (transcript.words_json || {}) as Record<string, unknown>;
+    const durationSeconds =
+      typeof wordsData.duration === 'number' ? wordsData.duration : 0;
 
     // Build context for Gemini
     const contextInfo = [
@@ -310,11 +320,11 @@ export async function generateDocument(
     // Format visual events if available
     let visualContext = '';
     if (hasVisualContext) {
-      const visualEvents = transcript.visual_events as any[];
+      const visualEvents = transcript.visual_events as Array<Record<string, unknown>>;
       visualContext =
         '\n\nVISUAL EVENTS (what happened on screen):\n' +
         visualEvents
-          .map((event: any, index: number) => {
+          .map((event, index: number) => {
             const parts = [
               `${index + 1}. [${event.timestamp}]`,
               event.type ? `(${event.type})` : '',
@@ -357,7 +367,10 @@ export async function generateDocument(
         title,
         duration: durationSeconds,
         hasVisualContext,
-        customContext: metadata.description,
+        customContext:
+          typeof metadata.description === 'string'
+            ? metadata.description
+            : undefined,
       });
 
       if (!analysisPrompt) {
@@ -506,7 +519,7 @@ export async function generateDocument(
       if (!generatedContent) {
         throw new Error('Gemini returned empty response');
       }
-    } catch (geminiError: any) {
+    } catch (geminiError: unknown) {
       // PERF-AI-006: Attempt fallback on recoverable errors
       if (isRecoverableGeminiError(geminiError) && process.env.OPENAI_API_KEY) {
         logger.warn(
@@ -514,7 +527,10 @@ export async function generateDocument(
           {
             context: {
               recordingId,
-              error: geminiError.message || String(geminiError),
+              error:
+                geminiError instanceof Error
+                  ? geminiError.message
+                  : String(geminiError),
             },
           },
         );
@@ -659,7 +675,14 @@ export async function generateDocument(
       });
       await Promise.all([embeddingsInsert, workflowInsert]);
     } else {
-      await embeddingsInsert;
+      await Promise.all([
+        embeddingsInsert,
+        enqueueCompileWikiJob(supabase, {
+          recordingId,
+          orgId,
+          source: 'Docify',
+        }),
+      ]);
     }
 
     logger.info('Enqueued embedding generation', {
