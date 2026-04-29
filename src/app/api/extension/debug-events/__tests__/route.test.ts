@@ -108,7 +108,7 @@ describe('POST /api/extension/debug-events', () => {
           {
             sessionId: 'session_1',
             seq: 2,
-            eventType: 'page_context_checked',
+            eventType: 'low_confidence_user_message',
             occurredAt: '2026-04-29T12:00:01.000Z',
             urlHost: 'example.com',
             urlPath: 'settings/users?token=secret',
