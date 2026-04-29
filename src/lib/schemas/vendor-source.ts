@@ -34,6 +34,12 @@ export type VendorIngestInput = z.infer<typeof vendorIngestInputSchema>;
 export const vendorResyncInputSchema = z.object({
   sourceId: z.string().uuid('sourceId must be a valid UUID'),
   force: z.boolean().optional(),
+  maxPages: z
+    .number()
+    .int('Max pages must be a whole number')
+    .min(1, 'Max pages must be at least 1')
+    .max(500, 'Max pages cannot exceed 500')
+    .optional(),
 });
 
 export type VendorResyncInput = z.infer<typeof vendorResyncInputSchema>;

@@ -79,7 +79,11 @@ export function NewIngestForm({ onSuccess, defaultApp }: NewIngestFormProps) {
       const syncRes = await fetch('/api/admin/vendor-sources/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceId, force: values.force ?? true }),
+        body: JSON.stringify({
+          sourceId,
+          force: values.force ?? true,
+          ...(values.maxPages ? { maxPages: values.maxPages } : {}),
+        }),
       });
 
       const syncJson = await syncRes.json().catch(() => null);

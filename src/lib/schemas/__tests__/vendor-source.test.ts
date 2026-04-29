@@ -140,15 +140,25 @@ describe('vendorResyncInputSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  test('accepts sourceId with optional force', () => {
+  test('accepts sourceId with optional force and maxPages', () => {
     const result = vendorResyncInputSchema.safeParse({
       sourceId: '123e4567-e89b-12d3-a456-426614174000',
       force: true,
+      maxPages: 25,
     });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.force).toBe(true);
+      expect(result.data.maxPages).toBe(25);
     }
+  });
+
+  test('rejects invalid maxPages override', () => {
+    const result = vendorResyncInputSchema.safeParse({
+      sourceId: '123e4567-e89b-12d3-a456-426614174000',
+      maxPages: 501,
+    });
+    expect(result.success).toBe(false);
   });
 
   test('rejects non-UUID sourceId', () => {

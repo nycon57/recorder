@@ -175,6 +175,7 @@ export function createVendorSourceSyncService(
 
     async scheduleSources(options?: {
       force?: boolean;
+      maxPages?: number;
       mode?: VendorSourceSyncMode;
       sourceId?: string;
       /** Audit provenance — system-admin user who initiated this sync (TRIB-146). */
@@ -246,6 +247,9 @@ export function createVendorSourceSyncService(
         // Plumb audit provenance from the API caller (back-compat: null for scheduled jobs)
         if (triggeredByUserId) {
           payload.triggered_by_user_id = triggeredByUserId;
+        }
+        if (options?.maxPages) {
+          payload.maxPages = options.maxPages;
         }
         const insert = buildVendorSourceSyncJobInsert(source, payload);
 

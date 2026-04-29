@@ -50,12 +50,13 @@ export const POST = apiHandler(async (request: NextRequest) => {
       return errors.badRequest(msg);
     }
 
-    const { sourceId, force } = parsed.data;
+    const { sourceId, force, maxPages } = parsed.data;
     const syncService = createVendorSourceSyncService();
     const [result] = await syncService.scheduleSources({
       sourceId,
       mode: 'manual',
       force: force ?? true,
+      maxPages,
       triggeredByUserId,
     });
 
