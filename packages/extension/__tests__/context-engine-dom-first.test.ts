@@ -27,6 +27,13 @@ function setPage(html: string, path = '/dashboard/customers') {
   window.history.pushState({}, '', path);
 }
 
+function expectNoFragments(payload: unknown, fragments: string[]) {
+  const serialized = JSON.stringify(payload);
+  fragments.forEach((fragment) => {
+    expect(serialized).not.toContain(fragment);
+  });
+}
+
 describe('DOM-first page context engine', () => {
   beforeEach(() => {
     jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
@@ -76,7 +83,7 @@ describe('DOM-first page context engine', () => {
     expect(email).toMatchObject({
       valuePresent: true,
       required: true,
-      placeholder: 'name@example.com',
+      placeholder: '[REDACTED]',
     });
     expect(JSON.stringify(context)).not.toContain('secret@example.com');
   });
@@ -123,11 +130,15 @@ describe('DOM-first page context engine', () => {
   });
 
   it('searches and inspects current DOM elements without exposing raw input values', () => {
+    const fakeSecret = ['sk', 'live', 'secret'].join('_');
     setPage(`
       <main>
         <h1>Project settings</h1>
         <section aria-label="Secrets">
-          <label>API token <input id="token" type="password" value="sk_live_secret" /></label>
+          <label>API token <input id="token" type="password" value="${fakeSecret}" placeholder="api_key=super-secret-token" /></label>
+          <select id="account"><option selected>Acme confidential account</option></select>
+          <a id="profile" href="https://user:pass@example.com/customer?token=secret#billing" aria-label="Email jane@example.com" title="Contact jane@example.com">Jane jane@example.com</a>
+          <a href="https://example.com/private?token=secret" aria-label="Private jane@example.com">Private jane@example.com</a>
           <button id="rotate" aria-expanded="false">Rotate token</button>
         </section>
       </main>
@@ -136,6 +147,11 @@ describe('DOM-first page context engine', () => {
     const context = buildPageContext(document, window);
     const matches = searchPageElementsFromDom('rotate', context, document);
     const token = inspectElementFromDom('#token', context, document);
+    const account = inspectElementFromDom('#account', context, document);
+    const profile = inspectElementFromDom('#profile', context, document);
+    const privateLink = context.interactiveElements.find((element) =>
+      element.label.includes('Private'),
+    );
     const region = inspectPageRegionFromDom(
       context.regions?.[0]?.id ?? 'region-1',
       context,
@@ -143,10 +159,74 @@ describe('DOM-first page context engine', () => {
     );
 
     expect(matches[0]).toMatchObject({ selector: '#rotate', expanded: false });
-    expect(token).toMatchObject({ selector: '#token', valuePresent: true });
-    expect(JSON.stringify({ matches, token, region })).not.toContain(
-      'sk_live_secret',
-    );
+    expect(token).toMatchObject({
+      selector: '#token',
+      valuePresent: true,
+      placeholder: 'api_key=[REDACTED]',
+    });
+    expectNoFragments({ matches, token, region }, [
+      fakeSecret,
+      'super-secret-token',
+    ]);
+    expect(account?.text).toBeUndefined();
+    expect(profile).toMatchObject({
+      href: 'https://example.com/customer',
+      text: 'Jane [REDACTED]',
+      ariaLabel: 'Email [REDACTED]',
+      title: 'Contact [REDACTED]',
+    });
+    expectNoFragments({ profile, region }, [
+      'jane@example.com',
+      'user:pass',
+      'token=secret',
+    ]);
+    const privateSelector = privateLink?.selector ?? 'body';
+    expect(privateLink?.selector).toBeTruthy();
+    expect(privateSelector).not.toContain('jane@example.com');
+    expect(privateSelector).not.toContain('[REDACTED]');
+    expect(document.querySelector(privateSelector)).toBeTruthy();
     expect(region.elements.length).toBeGreaterThan(0);
+  });
+
+  it('does not use unlabeled form control values as fallback labels', () => {
+    setPage(`
+      <main>
+        <h1>Profile</h1>
+        <input id="unlabeled-email" value="secret@example.com" />
+        <select id="unlabeled-account">
+          <option selected>Acme confidential account</option>
+        </select>
+        <label>Status <select id="status"><option selected>Active</option></select></label>
+      </main>
+    `);
+
+    const context = buildPageContext(document, window);
+
+    expect(context.interactiveElements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          selector: '#unlabeled-email',
+          label: '',
+          valuePresent: true,
+        }),
+        expect.objectContaining({
+          selector: '#unlabeled-account',
+          label: '',
+          valuePresent: true,
+        }),
+        expect.objectContaining({
+          selector: '#status',
+          label: 'Status',
+        }),
+      ]),
+    );
+    expect(context.forms?.[0]?.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          selector: '#status',
+          label: 'Status',
+        }),
+      ]),
+    );
   });
 });

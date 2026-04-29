@@ -15,6 +15,7 @@ export type ExtensionDebugSessionEventType =
   | 'page_context_checked'
   | 'contextual_update_sent'
   | 'user_message'
+  | 'low_confidence_user_message'
   | 'assistant_message'
   | 'assistant_reply_watchdog_fired'
   | 'duplicate_assistant_reply'

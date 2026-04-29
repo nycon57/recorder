@@ -5,8 +5,10 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 import { buildKnowledgeResolvedFor, type PageContext } from '@tribora/shared';
 
-const resolveExtensionContextMatches = jest.fn();
-const buildLiveContextPack = jest.fn();
+const resolveExtensionContextMatches = jest.fn<() => Promise<unknown>>();
+const buildLiveContextPack = jest.fn<
+  (input: { context: PageContext; [key: string]: unknown }) => unknown
+>();
 
 jest.mock('@/lib/utils/api-key-auth', () => ({
   requireApiKeyOrSession: async () => ({
@@ -80,6 +82,13 @@ function baseContext(overrides: Partial<PageContext> = {}): PageContext {
   };
 }
 
+function getFirstPackContext(): PageContext {
+  expect(buildLiveContextPack).toHaveBeenCalledTimes(1);
+  const firstArg = buildLiveContextPack.mock.calls[0]?.[0];
+  expect(firstArg).toBeDefined();
+  return (firstArg as { context: PageContext }).context;
+}
+
 describe('POST /api/extension/live-context', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -112,6 +121,9 @@ describe('POST /api/extension/live-context', () => {
   it('re-resolves matches when supplied knowledge has no provenance', async () => {
     const { POST } = await import('../route');
     const context = baseContext({
+      visibleText: 'Customer email jane@example.com',
+      pageSummary:
+        'Contact jane@example.com has phone +1 (415) 555-2671 on file.',
       vendorKnowledgeMatch: {
         matched: true,
         basis: 'exact',
@@ -135,11 +147,13 @@ describe('POST /api/extension/live-context', () => {
       orgId: 'org_test',
       app: 'hubspot',
       screen: 'contact-record',
-      url: context.url,
+      url: 'https://app.hubspot.com/contacts/123',
     });
     expect(buildLiveContextPack).toHaveBeenCalledWith(
       expect.objectContaining({
         context: expect.objectContaining({
+          url: 'https://app.hubspot.com/contacts/123',
+          pageSummary: 'Contact [REDACTED] has phone [REDACTED] on file.',
           vendorKnowledgeMatch: expect.objectContaining({
             screen: 'contact-record',
             pageIds: [],
@@ -154,6 +168,7 @@ describe('POST /api/extension/live-context', () => {
         }),
       }),
     );
+    expect(getFirstPackContext()).not.toHaveProperty('visibleText');
   });
 
   it('accepts supplied matches when provenance matches the current context', async () => {
@@ -189,5 +204,85 @@ describe('POST /api/extension/live-context', () => {
         }),
       }),
     );
+  });
+
+  it('uses the URL screen fallback when sanitized screen is unknown', async () => {
+    const { POST } = await import('../route');
+    const context = baseContext({
+      screen: undefined,
+      appSignature: undefined,
+      url: 'https://app.hubspot.com/settings/users?token=secret',
+    });
+
+    const response = await POST(buildRequest({ context }));
+
+    expect(response.status).toBe(200);
+    expect(resolveExtensionContextMatches).toHaveBeenCalledWith({
+      orgId: 'org_test',
+      app: 'hubspot',
+      screen: 'users',
+      url: 'https://app.hubspot.com/settings/users',
+    });
+    expect(getFirstPackContext()).toMatchObject({
+      screen: 'users',
+      appSignature: 'hubspot:users',
+    });
+  });
+
+  it('sanitizes posted context before building the live model pack', async () => {
+    const { POST } = await import('../route');
+    const context = baseContext({
+      pageSummary:
+        'Contact jane@example.com token api_key=super-secret-token visible in page',
+      selectedEntity: {
+        title: 'Jane jane@example.com',
+      },
+      visibleText: 'Raw body text with card 4242 4242 4242 4242',
+      forms: [
+        {
+          label: 'Login',
+          fields: [
+            {
+              label: 'Email jane@example.com',
+              selector: '#email',
+              type: 'email',
+              required: true,
+              valuePresent: true,
+              placeholder: 'jane@example.com',
+            },
+          ],
+        },
+      ],
+    });
+
+    const response = await POST(buildRequest({ context }));
+
+    expect(response.status).toBe(200);
+    const packContext = getFirstPackContext();
+    expect(packContext).toMatchObject({
+      url: 'https://app.hubspot.com/contacts/123',
+      pageSummary:
+        'Contact [REDACTED] token api_key=[REDACTED] visible in page',
+      selectedEntity: {
+        title: 'Jane [REDACTED]',
+      },
+      forms: [
+        {
+          label: 'Login',
+          selector: undefined,
+          fields: [
+            {
+              label: 'Email [REDACTED]',
+              selector: '#email',
+              type: 'email',
+              required: true,
+            },
+          ],
+        },
+      ],
+    });
+    expect(packContext).not.toHaveProperty('visibleText');
+    expect(JSON.stringify(packContext)).not.toContain('super-secret-token');
+    expect(JSON.stringify(packContext)).not.toContain('4242');
   });
 });

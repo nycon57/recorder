@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   buildKnowledgeResolvedFor,
   knowledgeResolvedForContextMatches,
+  sanitizePageContextForNetwork,
   type KnowledgeAvailability,
   type KnowledgeMatch,
   type LiveContextPack,
@@ -37,6 +38,11 @@ function screenFromUrl(url: string): string {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function usableAppSignature(value: string | undefined): string | undefined {
+  if (!value || value.toLowerCase() === 'unknown:unknown') return undefined;
+  return value;
 }
 
 async function loadVendorPages(
@@ -88,7 +94,7 @@ async function loadOrgPages(args: {
 
 export async function POST(request: NextRequest) {
   try {
-    const authCtx = await requireApiKeyOrSession(request, 'context');
+    const authCtx = await requireApiKeyOrSession(request, 'query');
     const body = (await request.json()) as {
       context?: PageContext;
     };
@@ -97,12 +103,18 @@ export async function POST(request: NextRequest) {
       return errors.badRequest('context is required');
     }
 
-    const baseContext = body.context;
-    const resolvedApp = baseContext.app?.toLowerCase() || 'unknown';
+    const baseContext = sanitizePageContextForNetwork(body.context);
+    const normalizedApp = baseContext.app?.toLowerCase();
+    const normalizedScreen = baseContext.screen?.toLowerCase();
+    const resolvedApp =
+      normalizedApp && normalizedApp !== 'unknown' ? normalizedApp : 'unknown';
     const resolvedScreen =
-      baseContext.screen?.toLowerCase() || screenFromUrl(baseContext.url);
+      normalizedScreen && normalizedScreen !== 'unknown'
+        ? normalizedScreen
+        : screenFromUrl(baseContext.url);
     const resolvedAppSignature =
-      baseContext.appSignature ?? `${resolvedApp}:${resolvedScreen}`;
+      usableAppSignature(baseContext.appSignature) ??
+      `${resolvedApp}:${resolvedScreen}`;
     const currentKnowledgeResolvedFor = buildKnowledgeResolvedFor({
       app: resolvedApp,
       screen: resolvedScreen,
@@ -120,15 +132,12 @@ export async function POST(request: NextRequest) {
 
     if (
       !knowledgeAvailability ||
-      !knowledgeResolvedForContextMatches(
-        baseContext.knowledgeResolvedFor,
-        {
-          app: resolvedApp,
-          screen: resolvedScreen,
-          appSignature: resolvedAppSignature,
-          url: baseContext.url,
-        },
-      )
+      !knowledgeResolvedForContextMatches(baseContext.knowledgeResolvedFor, {
+        app: resolvedApp,
+        screen: resolvedScreen,
+        appSignature: resolvedAppSignature,
+        url: baseContext.url,
+      })
     ) {
       const matches = await resolveExtensionContextMatches({
         orgId: authCtx.orgId,

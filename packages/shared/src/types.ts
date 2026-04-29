@@ -279,7 +279,7 @@ export interface PageContext {
   appVersion?: string; // If detectable
   screen: string; // "lead-detail" | "opportunity-list" | etc.
   appSignature?: string; // "app:screen"
-  url: string; // Current URL (sanitized of sensitive params)
+  url: string; // Raw in content/local cache; sanitized before network/model/debug use
   title: string; // Page title
   interactiveElements: InteractiveElement[];
   detectionConfidence?: DetectionConfidence;
@@ -301,7 +301,7 @@ export interface PageContext {
   relevantWikiPages?: string[];
   knowledgeResolvedFor?: KnowledgeResolvedFor;
   breadcrumbs?: string[]; // Navigation breadcrumbs if present
-  visibleText?: string; // Truncated visible text for context (max 2000 chars)
+  visibleText?: string; // Local-only raw DOM text; omitted from sanitized network/model payloads
 }
 
 // Message types for extension messaging between content script and background service worker
