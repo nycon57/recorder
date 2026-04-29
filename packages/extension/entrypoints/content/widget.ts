@@ -5,6 +5,8 @@
  * script based on SESSION_EVENT messages from the offscreen document.
  */
 
+/* global HTMLCanvasElement, CSSStyleDeclaration */
+
 import { TRIBORA_EXTENSION_THEME } from '../../utils/tribora-theme.js';
 
 const WIDGET_ID = 'tribora-widget';
@@ -70,10 +72,16 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
     zIndex: '2147483647',
     pointerEvents: 'none',
     display: 'none',
+    alignItems: 'center',
+    gap: '8px',
     transition: `all ${TRIBORA_EXTENSION_THEME.motion.medium} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
   });
 
-  const pill = document.createElement('div');
+  const pill = document.createElement('button');
+  pill.type = 'button';
+  pill.setAttribute('aria-label', 'Start Tribora voice session');
+  pill.setAttribute('aria-pressed', 'false');
+  pill.setAttribute('title', 'Start Tribora voice session');
   apply(pill, {
     display: 'flex',
     alignItems: 'center',
@@ -88,6 +96,10 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
     transition: `all ${TRIBORA_EXTENSION_THEME.motion.medium} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
     pointerEvents: 'auto',
     cursor: 'pointer',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    color: 'inherit',
+    font: 'inherit',
   });
 
   pill.addEventListener('click', () => {
@@ -110,7 +122,7 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
     fontFamily: TRIBORA_EXTENSION_THEME.font.display,
     color: TRIBORA_EXTENSION_THEME.color.signalInk,
     flexShrink: '0',
-    letterSpacing: '-0.02em',
+    letterSpacing: '0',
     transition: `all ${TRIBORA_EXTENSION_THEME.motion.medium} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
     boxShadow: `0 0 14px ${COLOR_SIGNAL_GLOW}`,
   });
@@ -123,7 +135,7 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
     fontWeight: '600',
     color: TRIBORA_EXTENSION_THEME.color.inkMuted,
     whiteSpace: 'nowrap',
-    letterSpacing: '-0.01em',
+    letterSpacing: '0',
   });
   hotkeyHint.textContent = 'Talk with Tribora';
 
@@ -146,7 +158,7 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
     fontWeight: '500',
     color: TRIBORA_EXTENSION_THEME.color.inkDim,
     textTransform: 'uppercase',
-    letterSpacing: '0.08em',
+    letterSpacing: '0.04em',
     whiteSpace: 'nowrap',
     display: 'none',
     transition: `opacity ${TRIBORA_EXTENSION_THEME.motion.fast} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
@@ -178,8 +190,8 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '0',
-    marginLeft: '4px',
     flexShrink: '0',
+    pointerEvents: 'auto',
     transition: `background ${TRIBORA_EXTENSION_THEME.motion.fast} ${TRIBORA_EXTENSION_THEME.motion.ease}`,
   });
   stopBtn.setAttribute('aria-label', 'Stop conversation');
@@ -213,8 +225,8 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
   pill.appendChild(canvas);
   pill.appendChild(spinner);
   pill.appendChild(label);
-  pill.appendChild(stopBtn);
   container.appendChild(pill);
+  container.appendChild(stopBtn);
   document.documentElement.appendChild(container);
 
   let currentState: WidgetState = 'hidden';
@@ -276,6 +288,10 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
   function setIdle() {
     currentState = 'idle';
     stopAnimation();
+    pill.disabled = false;
+    pill.setAttribute('aria-label', 'Start Tribora voice session');
+    pill.setAttribute('aria-pressed', 'false');
+    pill.setAttribute('title', 'Start Tribora voice session');
     apply(orb, { display: 'flex' });
     apply(hotkeyHint, { display: 'inline' });
     apply(canvas, { display: 'none' });
@@ -291,6 +307,10 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
   function setConnecting() {
     currentState = 'connecting';
     stopAnimation();
+    pill.disabled = true;
+    pill.setAttribute('aria-label', 'Tribora voice session connecting');
+    pill.setAttribute('aria-pressed', 'true');
+    pill.setAttribute('title', 'Tribora voice session connecting');
     hideIdleElements();
     apply(canvas, { display: 'none' });
     apply(spinner, { display: 'block' });
@@ -305,6 +325,10 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
     currentState = 'listening';
     currentColor = COLOR_SIGNAL;
     currentGlow = COLOR_SIGNAL_GLOW;
+    pill.disabled = true;
+    pill.setAttribute('aria-label', 'Tribora is listening');
+    pill.setAttribute('aria-pressed', 'true');
+    pill.setAttribute('title', 'Tribora is listening');
     hideIdleElements();
     apply(canvas, { display: 'block' });
     apply(spinner, { display: 'none' });
@@ -322,6 +346,10 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
   function setThinking() {
     currentState = 'thinking';
     stopAnimation();
+    pill.disabled = true;
+    pill.setAttribute('aria-label', 'Tribora is thinking');
+    pill.setAttribute('aria-pressed', 'true');
+    pill.setAttribute('title', 'Tribora is thinking');
     hideIdleElements();
     apply(canvas, { display: 'none' });
     apply(spinner, { display: 'block' });
@@ -335,6 +363,10 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
     currentState = 'speaking';
     currentColor = COLOR_LIVE;
     currentGlow = COLOR_LIVE_GLOW;
+    pill.disabled = true;
+    pill.setAttribute('aria-label', 'Tribora is speaking');
+    pill.setAttribute('aria-pressed', 'true');
+    pill.setAttribute('title', 'Tribora is speaking');
     hideIdleElements();
     apply(canvas, { display: 'block' });
     apply(spinner, { display: 'none' });
@@ -350,7 +382,7 @@ export function createWidget(callbacks: WidgetCallbacks = {}): AssistantWidget {
   }
 
   function show() {
-    apply(container, { display: 'block' });
+    apply(container, { display: 'flex' });
     if (currentState === 'hidden') setIdle();
   }
 
@@ -394,6 +426,13 @@ function injectWidgetStyles() {
     '@keyframes tribora-widget-spin {',
     '  from { transform: rotate(0deg); }',
     '  to { transform: rotate(360deg); }',
+    '}',
+    '#tribora-widget button:focus-visible {',
+    `  outline: 2px solid ${TRIBORA_EXTENSION_THEME.color.signal};`,
+    '  outline-offset: 3px;',
+    '}',
+    '#tribora-widget button:disabled {',
+    '  cursor: default;',
     '}',
   ].join('\n');
   (document.head ?? document.documentElement).appendChild(style);
