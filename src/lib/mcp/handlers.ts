@@ -17,6 +17,12 @@ import {
   type CompiledMemoryAnswerObservability,
 } from '@/lib/services/compiled-memory-answer-context';
 import { generateCompiledMemoryGroundedAnswer } from '@/lib/services/compiled-memory-answer';
+import {
+  getOrgWikiPage,
+  getVendorWikiPage,
+  searchCompiledOrgWikiPages,
+  searchVendorWikiPages,
+} from '@/lib/services/wiki-search';
 
 /** Org context passed to every handler. */
 export interface McpToolContext {
@@ -47,7 +53,7 @@ interface RelatedConceptJoinRow {
   id: string;
   name: string;
   concept_type: string;
-  mention_count: number;
+  mention_count: number | null;
   description: string | null;
   org_id: string;
 }
@@ -227,6 +233,90 @@ export async function handleSearchRecordings(
 }
 
 // ---------------------------------------------------------------------------
+// searchKnowledge
+// ---------------------------------------------------------------------------
+
+interface SearchKnowledgeInput {
+  query: string;
+  limit: number;
+  app?: string;
+  screen?: string;
+  contentTypes?: string[];
+}
+
+type SearchKnowledgeResult =
+  | (SearchRecordingResult & { source: 'recording' })
+  | Awaited<ReturnType<typeof searchCompiledOrgWikiPages>>[number]
+  | Awaited<ReturnType<typeof searchVendorWikiPages>>[number];
+
+export async function handleSearchKnowledge(
+  input: SearchKnowledgeInput,
+  ctx: McpToolContext
+): Promise<SearchKnowledgeResult[]> {
+  const limit = Math.max(1, Math.min(20, input.limit ?? 5));
+  const [recordings, orgWiki, vendorWiki] = await Promise.all([
+    handleSearchRecordings(
+      {
+        query: input.query,
+        limit,
+        contentTypes: input.contentTypes,
+      },
+      ctx,
+    ).catch((error) => {
+      console.warn('[MCP] searchKnowledge recording search failed:', error);
+      return [] as SearchRecordingResult[];
+    }),
+    searchCompiledOrgWikiPages({
+      orgId: ctx.orgId,
+      query: input.query,
+      limit,
+    }),
+    searchVendorWikiPages({
+      query: input.query,
+      limit,
+      app: input.app,
+      screen: input.screen,
+    }),
+  ]);
+
+  return [
+    ...orgWiki,
+    ...vendorWiki,
+    ...recordings.map((recording) => ({
+      ...recording,
+      source: 'recording' as const,
+    })),
+  ]
+    .sort((left, right) => (right.similarity ?? 0) - (left.similarity ?? 0))
+    .slice(0, limit);
+}
+
+// ---------------------------------------------------------------------------
+// getWikiPage
+// ---------------------------------------------------------------------------
+
+interface GetWikiPageInput {
+  source: 'org_wiki' | 'vendor_wiki';
+  pageId: string;
+}
+
+export async function handleGetWikiPage(
+  input: GetWikiPageInput,
+  ctx: McpToolContext
+): Promise<Awaited<ReturnType<typeof getOrgWikiPage>>> {
+  const page =
+    input.source === 'org_wiki'
+      ? await getOrgWikiPage({ orgId: ctx.orgId, pageId: input.pageId })
+      : await getVendorWikiPage({ pageId: input.pageId });
+
+  if (!page) {
+    throw new McpToolError('not_found', 'Wiki page not found or not accessible');
+  }
+
+  return page;
+}
+
+// ---------------------------------------------------------------------------
 // searchConcepts
 // ---------------------------------------------------------------------------
 
@@ -314,7 +404,7 @@ export async function handleSearchConcepts(
     name: concept.name,
     type: concept.concept_type,
     description: concept.description ?? null,
-    mentionCount: concept.mention_count,
+    mentionCount: concept.mention_count ?? 0,
   }));
 }
 
@@ -369,7 +459,7 @@ export async function handleExploreKnowledgeGraph(
     name: rootConcept.name,
     type: rootConcept.concept_type,
     description: rootConcept.description ?? null,
-    mentionCount: rootConcept.mention_count,
+    mentionCount: rootConcept.mention_count ?? 0,
   };
 
   // Traverse relationships up to the requested depth using BFS
@@ -397,9 +487,17 @@ export async function handleExploreKnowledgeGraph(
 
     const nextFrontier: string[] = [];
 
-    for (const rel of relationships ?? []) {
+    const relationshipRows = (relationships ?? []) as unknown as Array<{
+      relationship_type: string;
+      strength: number | null;
+      related: RelatedConceptJoinRow | RelatedConceptJoinRow[] | null;
+    }>;
+
+    for (const rel of relationshipRows) {
       // Supabase returns the joined row as a nested object
-      const related = rel.related as unknown as RelatedConceptJoinRow | null;
+      const related = (
+        Array.isArray(rel.related) ? rel.related[0] : rel.related
+      ) as RelatedConceptJoinRow | null;
       if (!related?.id || related.org_id !== ctx.orgId) continue;
       if (visited.has(related.id)) continue;
 
@@ -412,10 +510,10 @@ export async function handleExploreKnowledgeGraph(
           name: related.name,
           type: related.concept_type,
           description: related.description ?? null,
-          mentionCount: related.mention_count,
+          mentionCount: related.mention_count ?? 0,
         },
         relationship: rel.relationship_type,
-        strength: Math.round(rel.strength * 100) / 100,
+        strength: Math.round((rel.strength ?? 0) * 100) / 100,
       });
     }
 
