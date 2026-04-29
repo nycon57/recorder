@@ -95,6 +95,10 @@ describe('POST /api/extension/debug-events', () => {
             screen: 'contact-record',
             conversationId: 'conversation_jane@example.com',
             pageInstanceId: 'page_token_secret_123456789012345678901234567890',
+            tabId: 'tab_jane@example.com',
+            windowId: 'window_secret_token',
+            bindingEpoch: 'epoch_secret_token',
+            durationMs: 'duration_secret_token',
             messageText: 'My email is jane@example.com',
             inputTextPreview: 'api_key=super-secret-token',
             resultText: 'Card 4242 4242 4242 4242',
@@ -130,6 +134,10 @@ describe('POST /api/extension/debug-events', () => {
       urlPath: '/contact',
       conversationId: '[REDACTED]',
       pageInstanceId: '[REDACTED][REDACTED]',
+      tabId: null,
+      windowId: null,
+      bindingEpoch: null,
+      durationMs: null,
       messageText: 'My email is [REDACTED]',
       inputTextPreview: '[input present]',
       resultText: 'Card [REDACTED]',
@@ -139,6 +147,7 @@ describe('POST /api/extension/debug-events', () => {
     expect(JSON.stringify(row.payload)).not.toContain('super-secret-token');
     expect(JSON.stringify(row.payload)).not.toContain('4242');
     expect(JSON.stringify(row.payload)).not.toContain('jane@example.com');
+    expect(JSON.stringify(row.payload)).not.toContain('secret_token');
     expect(row.payload).not.toHaveProperty('rawContext');
     expect(row.payload).not.toHaveProperty('visibleText');
     expect(row.payload).not.toHaveProperty('input');
