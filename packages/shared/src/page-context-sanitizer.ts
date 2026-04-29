@@ -526,7 +526,7 @@ export function sanitizePageContextForNetwork(
             sanitizePageContextText(context.knowledgeResolvedFor.host, 140) ??
             'unknown',
           path:
-            sanitizePageContextText(
+            sanitizePageContextLocator(
               context.knowledgeResolvedFor.path,
               PAGE_CONTEXT_SANITIZER_LIMITS.selector,
             ) ?? '/',

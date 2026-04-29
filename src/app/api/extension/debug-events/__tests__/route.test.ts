@@ -98,6 +98,10 @@ describe('POST /api/extension/debug-events', () => {
             resultText: 'Card 4242 4242 4242 4242',
             pageSummary: 'Call +1 (415) 555-2671',
             selectedEntityTitle: 'Jane jane@example.com',
+            rawContext: {
+              visibleText: 'Raw page body with jane@example.com',
+            },
+            input: 'api_key=super-secret-token',
           },
           {
             sessionId: 'session_1',
@@ -131,6 +135,9 @@ describe('POST /api/extension/debug-events', () => {
     expect(JSON.stringify(row.payload)).not.toContain('super-secret-token');
     expect(JSON.stringify(row.payload)).not.toContain('4242');
     expect(JSON.stringify(row.payload)).not.toContain('jane@example.com');
+    expect(row.payload).not.toHaveProperty('rawContext');
+    expect(row.payload).not.toHaveProperty('visibleText');
+    expect(row.payload).not.toHaveProperty('input');
     const secondRow = insert.mock.calls[1]?.[0] as unknown as {
       payload: Record<string, unknown>;
     };

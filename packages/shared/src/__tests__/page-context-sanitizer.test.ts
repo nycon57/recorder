@@ -199,6 +199,13 @@ describe('page context sanitizer', () => {
             '#safe-action',
           ],
         },
+        knowledgeResolvedFor: {
+          app: 'hubspot',
+          screen: 'contact-record',
+          appSignature: 'hubspot:contact-record',
+          host: 'app.hubspot.com',
+          path: '/contacts/123456789',
+        },
       }),
     );
 
@@ -225,6 +232,7 @@ describe('page context sanitizer', () => {
     expect(sanitized.vendorKnowledgeMatch?.selectorHints).toEqual([
       '#safe-action',
     ]);
+    expect(sanitized.knowledgeResolvedFor?.path).toBe('/contacts/123456789');
 
     const serialized = JSON.stringify(sanitized);
     expect(serialized).not.toContain('jane@example.com');

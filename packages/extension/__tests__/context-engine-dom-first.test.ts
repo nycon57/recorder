@@ -83,7 +83,7 @@ describe('DOM-first page context engine', () => {
     expect(email).toMatchObject({
       valuePresent: true,
       required: true,
-      placeholder: 'name@example.com',
+      placeholder: '[REDACTED]',
     });
     expect(JSON.stringify(context)).not.toContain('secret@example.com');
   });
@@ -135,7 +135,7 @@ describe('DOM-first page context engine', () => {
       <main>
         <h1>Project settings</h1>
         <section aria-label="Secrets">
-          <label>API token <input id="token" type="password" value="${fakeSecret}" /></label>
+          <label>API token <input id="token" type="password" value="${fakeSecret}" placeholder="api_key=super-secret-token" /></label>
           <select id="account"><option selected>Acme confidential account</option></select>
           <a id="profile" href="https://user:pass@example.com/customer?token=secret#billing" aria-label="Email jane@example.com" title="Contact jane@example.com">Jane jane@example.com</a>
           <a href="https://example.com/private?token=secret" aria-label="Private jane@example.com">Private jane@example.com</a>
@@ -159,8 +159,15 @@ describe('DOM-first page context engine', () => {
     );
 
     expect(matches[0]).toMatchObject({ selector: '#rotate', expanded: false });
-    expect(token).toMatchObject({ selector: '#token', valuePresent: true });
-    expectNoFragments({ matches, token, region }, [fakeSecret]);
+    expect(token).toMatchObject({
+      selector: '#token',
+      valuePresent: true,
+      placeholder: 'api_key=[REDACTED]',
+    });
+    expectNoFragments({ matches, token, region }, [
+      fakeSecret,
+      'super-secret-token',
+    ]);
     expect(account?.text).toBeUndefined();
     expect(profile).toMatchObject({
       href: 'https://example.com/customer',

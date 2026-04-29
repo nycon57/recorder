@@ -8,6 +8,8 @@ import {
   buildContextSemanticFingerprint,
   sanitizePageContextForNetwork,
   sanitizePageContextLocation,
+  sanitizePageContextSelector,
+  sanitizePageContextText,
 } from '@tribora/shared';
 
 import { apiFetch } from './api-client.js';
@@ -25,16 +27,6 @@ export interface ActiveDebugSessionState {
   tabId: number;
   windowId: number | null;
   conversationId: string | null;
-}
-
-function clipText(
-  value: string | null | undefined,
-  limit = 400,
-): string | null {
-  const normalized = (value ?? '').replace(/\s+/g, ' ').trim();
-  if (!normalized) return null;
-  if (normalized.length <= limit) return normalized;
-  return `${normalized.slice(0, limit - 1)}…`;
 }
 
 export async function getDebugSessionLoggingEnabled(): Promise<boolean> {
@@ -126,8 +118,11 @@ export function buildPageContextDebugFields(
     knowledgeMode: sanitizedContext.knowledgeAvailability?.mode ?? 'unknown',
     vendorMatchBasis: sanitizedContext.vendorKnowledgeMatch?.basis ?? 'unknown',
     orgMatchBasis: sanitizedContext.orgKnowledgeMatch?.basis ?? 'unknown',
-    pageSummary: clipText(sanitizedContext.pageSummary, 500),
-    selectedEntityTitle: clipText(sanitizedContext.selectedEntity?.title, 200),
+    pageSummary: sanitizePageContextText(sanitizedContext.pageSummary, 500),
+    selectedEntityTitle: sanitizePageContextText(
+      sanitizedContext.selectedEntity?.title,
+      200,
+    ),
     fingerprint: buildContextSemanticFingerprint(sanitizedContext),
   };
 }
@@ -172,37 +167,39 @@ export function summarizeToolCallArgs(
   const firstTargetLabel =
     typeof firstTarget?.label === 'string' ? firstTarget.label : null;
   const firstTargetSelector =
-    typeof firstTarget?.selector === 'string' ? firstTarget.selector : null;
+    typeof firstTarget?.selector === 'string'
+      ? sanitizePageContextSelector(firstTarget.selector)
+      : null;
 
   return {
     selector:
       typeof payload.selector === 'string'
-        ? payload.selector
+        ? (sanitizePageContextSelector(payload.selector) ?? null)
         : firstTargetSelector,
     label:
       typeof payload.label === 'string'
-        ? clipText(payload.label, 160)
+        ? (sanitizePageContextText(payload.label, 160) ?? null)
         : typeof payload.query === 'string'
-          ? clipText(payload.query, 160)
+          ? (sanitizePageContextText(payload.query, 160) ?? null)
           : typeof payload.regionId === 'string'
-            ? clipText(payload.regionId, 160)
+            ? (sanitizePageContextText(payload.regionId, 160) ?? null)
             : keyCombo
-              ? clipText(keyCombo, 160)
+              ? (sanitizePageContextText(keyCombo, 160) ?? null)
               : firstTargetLabel
-                ? clipText(
+                ? (sanitizePageContextText(
                     targets.length > 1
                       ? `${firstTargetLabel} (+${targets.length - 1} more)`
                       : firstTargetLabel,
                     160,
-                  )
+                  ) ?? null)
                 : typeof payload.elementLabel === 'string'
-                  ? clipText(payload.elementLabel, 160)
+                  ? (sanitizePageContextText(payload.elementLabel, 160) ?? null)
                   : null,
     action:
       typeof payload.action === 'string'
-        ? payload.action
+        ? (sanitizePageContextText(payload.action, 80) ?? null)
         : typeof firstTarget?.action === 'string'
-          ? firstTarget.action
+          ? (sanitizePageContextText(firstTarget.action, 80) ?? null)
           : name === 'click_element'
             ? 'click'
             : name === 'hover_element'
@@ -237,7 +234,7 @@ export function summarizeToolResult(args: {
   if (args.error) {
     return {
       resultText: null,
-      error: clipText(args.error, 500),
+      error: sanitizePageContextText(args.error, 500) ?? null,
     };
   }
 
@@ -263,8 +260,59 @@ export function summarizeToolResult(args: {
   }
 
   return {
-    resultText: clipText(args.result, 500),
+    resultText: sanitizePageContextText(args.result, 500) ?? null,
     error: null,
+  };
+}
+
+function sanitizeDebugSessionEventForNetwork(
+  event: ExtensionDebugSessionEventInput,
+): ExtensionDebugSessionEventInput {
+  const location =
+    event.urlHost || event.urlPath
+      ? sanitizePageContextLocation(
+          `https://${event.urlHost ?? 'unknown'}${
+            event.urlPath?.startsWith('/')
+              ? event.urlPath
+              : `/${event.urlPath ?? ''}`
+          }`,
+        )
+      : null;
+
+  return {
+    sessionId: event.sessionId,
+    seq: event.seq,
+    turnId: sanitizePageContextText(event.turnId, 120) ?? null,
+    eventType: event.eventType,
+    occurredAt: event.occurredAt,
+    urlHost: location ? location.host : null,
+    urlPath: location ? location.path : null,
+    app: sanitizePageContextText(event.app, 80) ?? null,
+    screen: sanitizePageContextText(event.screen, 80) ?? null,
+    knowledgeMode: event.knowledgeMode,
+    vendorMatchBasis: event.vendorMatchBasis,
+    orgMatchBasis: event.orgMatchBasis,
+    messageText: sanitizePageContextText(event.messageText, 500) ?? null,
+    toolName: sanitizePageContextText(event.toolName, 80) ?? null,
+    selector: sanitizePageContextSelector(event.selector) ?? null,
+    label: sanitizePageContextText(event.label, 140) ?? null,
+    action: sanitizePageContextText(event.action, 80) ?? null,
+    inputTextPreview: event.inputTextPreview ? '[input present]' : null,
+    inputTextLength: event.inputTextLength ?? null,
+    resultText: sanitizePageContextText(event.resultText, 500) ?? null,
+    error: sanitizePageContextText(event.error, 260) ?? null,
+    pageSummary: sanitizePageContextText(event.pageSummary, 500) ?? null,
+    selectedEntityTitle:
+      sanitizePageContextText(event.selectedEntityTitle, 200) ?? null,
+    tabId: event.tabId ?? null,
+    windowId: event.windowId ?? null,
+    conversationId: sanitizePageContextText(event.conversationId, 120) ?? null,
+    fingerprint: sanitizePageContextText(event.fingerprint, 120) ?? null,
+    bindingEpoch: event.bindingEpoch ?? null,
+    pageInstanceId: sanitizePageContextText(event.pageInstanceId, 120) ?? null,
+    contentInstanceId:
+      sanitizePageContextText(event.contentInstanceId, 120) ?? null,
+    durationMs: event.durationMs ?? null,
   };
 }
 
@@ -275,6 +323,8 @@ export async function postDebugSessionEvents(
 
   await apiFetch('/api/extension/debug-events', {
     method: 'POST',
-    body: JSON.stringify({ events }),
+    body: JSON.stringify({
+      events: events.map(sanitizeDebugSessionEventForNetwork),
+    }),
   });
 }

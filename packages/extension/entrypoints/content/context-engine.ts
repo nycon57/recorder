@@ -293,7 +293,7 @@ function getInputState(
 > {
   const placeholder =
     el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
-      ? clipText(el.placeholder, 80) || undefined
+      ? sanitizePageContextText(el.placeholder, 80)
       : undefined;
   const value =
     el instanceof HTMLInputElement ||
@@ -1534,7 +1534,6 @@ export function inspectElementFromDom(
     tagName: el.tagName.toLowerCase(),
     text: text || undefined,
     ariaLabel,
-    placeholder,
     title,
     href: sanitizeHref(el),
     rect: getElementRect(el),
@@ -1548,6 +1547,7 @@ export function inspectElementFromDom(
     group: contextMatch?.group,
     regionId: findRegionIdForElement(context.regions ?? [], el),
     ...getInputState(el),
+    placeholder,
   };
 }
 

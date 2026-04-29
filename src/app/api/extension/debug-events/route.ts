@@ -44,7 +44,11 @@ function sanitizeDebugEvent(
   );
 
   return {
-    ...event,
+    sessionId: event.sessionId,
+    seq: event.seq,
+    turnId: sanitizePageContextText(event.turnId, 120) ?? null,
+    eventType: event.eventType,
+    occurredAt: event.occurredAt,
     urlHost: event.urlHost ? location.host : event.urlHost,
     urlPath: event.urlPath ? location.path : event.urlPath,
     app: sanitizePageContextText(event.app, 80) ?? event.app,
@@ -72,6 +76,10 @@ function sanitizeDebugEvent(
     contentInstanceId:
       sanitizePageContextText(event.contentInstanceId, 120) ??
       event.contentInstanceId,
+    tabId: event.tabId ?? null,
+    windowId: event.windowId ?? null,
+    bindingEpoch: event.bindingEpoch ?? null,
+    durationMs: event.durationMs ?? null,
   };
 }
 
