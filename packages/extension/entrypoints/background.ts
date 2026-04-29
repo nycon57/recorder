@@ -2304,6 +2304,7 @@ export default defineBackground(() => {
 
   // ── Recording (tab capture) ─────────────────────────────────────────────────
   let activeRecorder: TabRecorder | null = null;
+  let activeUploadPromise: Promise<{ recordingId: string }> | null = null;
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'RECORDING_START') {
@@ -2325,6 +2326,10 @@ export default defineBackground(() => {
       void (async () => {
         try {
           if (!activeRecorder) {
+            if (activeUploadPromise) {
+              const { recordingId } = await activeUploadPromise;
+              return sendResponse({ ok: true, recordingId });
+            }
             return sendResponse({ ok: false, error: 'Not recording' });
           }
           const blob = await activeRecorder.stop();
@@ -2337,7 +2342,7 @@ export default defineBackground(() => {
             });
           };
 
-          const { recordingId } = await uploadRecording(
+          activeUploadPromise = uploadRecording(
             blob,
             {
               filename: `extension-${Date.now()}.webm`,
@@ -2361,11 +2366,15 @@ export default defineBackground(() => {
             },
           );
 
+          const { recordingId } = await activeUploadPromise;
+
           void chrome.storage.session.remove(UPLOAD_STATE_KEY);
           sendResponse({ ok: true, recordingId });
         } catch (err) {
           void chrome.storage.session.remove('tribora_upload_state');
           sendResponse({ ok: false, error: (err as Error).message });
+        } finally {
+          activeUploadPromise = null;
         }
       })();
       return true;

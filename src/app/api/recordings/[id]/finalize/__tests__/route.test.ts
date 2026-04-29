@@ -172,4 +172,27 @@ describe('POST /api/recordings/[id]/finalize', () => {
     );
     expect(jobsInsert).not.toHaveBeenCalled();
   });
+
+  it('treats duplicate transcription enqueue as an idempotent finalize success', async () => {
+    jobsInsert.mockImplementation(() =>
+      Promise.resolve({
+        error: { code: '23505', message: 'duplicate key value' },
+      }),
+    );
+
+    const response = await POST(makeRequest({
+      storagePath: 'org_1/recordings/rec_1/raw.webm',
+      storageBucket: 'content',
+      idempotencyKey: 'idem_existing_1',
+    }), {
+      params: Promise.resolve({ id: 'rec_1' }),
+    });
+
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    expect(json.data).toMatchObject({
+      recovered: true,
+      message: 'Upload already finalized. Transcription will begin shortly.',
+    });
+  });
 });

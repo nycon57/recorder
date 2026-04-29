@@ -30,8 +30,24 @@ const finalizeSchema = z
     storagePath: z.string().min(1).optional(),
     storageBucket: z.enum(['content', 'recordings']).optional(),
     startProcessing: z.boolean().optional().default(true),
+    idempotencyKey: z.string().min(8).max(200).optional(),
   })
   .passthrough();
+
+function getIdempotencyKey(
+  request: NextRequest,
+  body: z.infer<typeof finalizeSchema>,
+): string | undefined {
+  return (
+    body.idempotencyKey ||
+    request.headers.get('Idempotency-Key') ||
+    undefined
+  );
+}
+
+function isDuplicateKeyError(error: { code?: string } | null | undefined) {
+  return error?.code === '23505';
+}
 
 // POST /api/recordings/[id]/finalize - Finalize upload and start processing
 export const POST = apiHandler(
@@ -64,6 +80,7 @@ export const POST = apiHandler(
       storageBucket: providedStorageBucket,
       startProcessing,
     } = bodyResult.data;
+    const idempotencyKey = getIdempotencyKey(request, bodyResult.data);
 
     // Verify content exists and belongs to org before accepting any storage path.
     const { data: existingRecording, error: fetchError } = await supabase
@@ -142,6 +159,9 @@ export const POST = apiHandler(
           sizeBytes,
           uploadedAt: new Date().toISOString(),
           storageBucket: storageValidation.bucket,
+          ...(idempotencyKey
+            ? { upload_idempotency_key: idempotencyKey }
+            : {}),
         },
         updated_at: new Date().toISOString(),
       })
@@ -172,6 +192,13 @@ export const POST = apiHandler(
       });
 
       if (jobError) {
+        if (isDuplicateKeyError(jobError)) {
+          return successResponse({
+            recording,
+            recovered: true,
+            message: 'Upload already finalized. Transcription will begin shortly.',
+          });
+        }
         console.error('Error enqueueing transcription job:', jobError);
         // Don't fail the request, job can be retried
       }
