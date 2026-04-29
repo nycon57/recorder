@@ -13,7 +13,7 @@ import {
   EXTENSION_AUTH_PENDING_KEY,
   assertFreshSessionShape,
   buildExtensionSignInUrl,
-  isTrustedExtensionAuthCallbackUrl as isTrustedExtensionAuthCallbackUrlForBase,
+  isTrustedExtensionAuthCallbackUrlForBase,
   readValidatedExtensionAuthCallbackToken,
   type PendingExtensionAuthState,
 } from './auth-callback.js';
@@ -117,7 +117,7 @@ async function clearPendingExtensionAuthState(): Promise<void> {
   await chrome.storage.session.remove(EXTENSION_AUTH_PENDING_KEY);
 }
 
-export function isTrustedExtensionAuthCallbackUrl(
+export function isTrustedExtensionAuthCallbackRuntimeUrl(
   callbackUrl: string | null | undefined,
 ): boolean {
   return isTrustedExtensionAuthCallbackUrlForBase(callbackUrl, API_BASE_URL);
