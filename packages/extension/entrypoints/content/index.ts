@@ -35,7 +35,7 @@ import {
 
 import { createWidget } from './widget';
 import { createDomOverlay } from './dom-overlay';
-import { createDomObserver } from './dom-observer';
+import { createDomObserver, type DomObserver } from './dom-observer';
 import {
   buildPageContext,
   inspectElementFromDom,
@@ -75,8 +75,10 @@ export default defineContentScript({
       });
     }
 
-    const initialContext: PageContext = buildPageContext(document, window);
-    let latestContext: PageContext = initialContext;
+    let latestContext: PageContext | null = null;
+    let observer: DomObserver | null = null;
+    let collectionActive = false;
+
     const publishPageContext = (context: PageContext): void => {
       updatePageInstance();
       latestContext = context;
@@ -98,14 +100,30 @@ export default defineContentScript({
       );
     };
 
-    publishPageContext(initialContext);
+    function startPageContextCollection(): void {
+      if (collectionActive) return;
+      collectionActive = true;
 
-    const observer = createDomObserver((ctx: PageContext) => {
-      publishPageContext(ctx);
-    });
-    observer.start();
+      const initialContext = buildPageContext(document, window);
+      publishPageContext(initialContext);
 
-    async function getFreshLatestContext(): Promise<PageContext> {
+      observer = createDomObserver((ctx: PageContext) => {
+        if (!collectionActive) return;
+        publishPageContext(ctx);
+      });
+      observer.start();
+    }
+
+    function stopPageContextCollection(): void {
+      collectionActive = false;
+      observer?.stop();
+      observer = null;
+      latestContext = null;
+    }
+
+    async function getFreshLatestContext(): Promise<PageContext | null> {
+      if (!collectionActive || !observer) return latestContext;
+
       const refreshed = await observer.flush();
       if (refreshed) {
         latestContext = refreshed;
@@ -124,6 +142,7 @@ export default defineContentScript({
       const deadline = Date.now() + timeoutMs;
 
       while (Date.now() <= deadline) {
+        if (!collectionActive || !observer) return;
         const refreshed = await observer.forceRescan();
         latestContext = refreshed;
 
@@ -215,6 +234,7 @@ export default defineContentScript({
               enabled?: boolean;
               active?: boolean;
               isActiveTarget?: boolean;
+              canCollectPageContext?: boolean;
             }
           | undefined;
 
@@ -230,6 +250,9 @@ export default defineContentScript({
         }
 
         widget.show();
+        if (resp?.canCollectPageContext === true) {
+          startPageContextCollection();
+        }
 
         if (bootstrapState.mode === 'connecting') {
           widget.setConnecting();
@@ -245,6 +268,7 @@ export default defineContentScript({
     // ── Tool execution helpers ────────────────────────────────────────────────
     async function execGetPageContext(): Promise<string> {
       const context = await getFreshLatestContext();
+      if (!context) return 'No page context available.';
       return JSON.stringify({
         ...context,
         appSignature:
@@ -258,6 +282,14 @@ export default defineContentScript({
       limit?: number;
     }): Promise<string> {
       const context = await getFreshLatestContext();
+      if (!context) {
+        return JSON.stringify({
+          query: typeof args.query === 'string' ? args.query : '',
+          matches: [],
+          matchCount: 0,
+          truncated: false,
+        } satisfies PageElementSearchResult);
+      }
       const query = typeof args.query === 'string' ? args.query : '';
       const limit =
         typeof args.limit === 'number' && Number.isFinite(args.limit)
@@ -282,6 +314,7 @@ export default defineContentScript({
       selector?: string;
     }): Promise<string> {
       const context = await getFreshLatestContext();
+      if (!context) return JSON.stringify({ element: null });
       const selector = typeof args.selector === 'string' ? args.selector : '';
       const inspection = selector
         ? inspectElementFromDom(selector, context, document)
@@ -294,6 +327,9 @@ export default defineContentScript({
       regionId?: string;
     }): Promise<string> {
       const context = await getFreshLatestContext();
+      if (!context) {
+        return JSON.stringify({ region: null, snippets: [], elements: [] });
+      }
       const selector =
         typeof args.regionId === 'string'
           ? args.regionId
@@ -343,8 +379,10 @@ export default defineContentScript({
       cancelOverlayClear();
       const el = document.querySelector<HTMLElement>(args.selector);
       if (!el) return 'target unavailable: element not found';
+      const context = latestContext;
+      if (!context) return 'target unavailable: page context unavailable';
       const previousFingerprint =
-        buildContextSemanticFingerprint(latestContext);
+        buildContextSemanticFingerprint(context);
       const previousUrl = window.location.href;
       overlay.pointAt(args.selector);
       scheduleOverlayClear(1500);
@@ -367,8 +405,10 @@ export default defineContentScript({
       cancelOverlayClear();
       const el = document.querySelector<HTMLElement>(args.selector);
       if (!el) return 'target unavailable: element not found';
+      const context = latestContext;
+      if (!context) return 'target unavailable: page context unavailable';
       const previousFingerprint =
-        buildContextSemanticFingerprint(latestContext);
+        buildContextSemanticFingerprint(context);
       const previousUrl = window.location.href;
       overlay.pointAt(args.selector);
       scheduleOverlayClear(2500);
@@ -397,8 +437,10 @@ export default defineContentScript({
       cancelOverlayClear();
       const el = document.querySelector<HTMLElement>(args.selector);
       if (!el) return 'target unavailable: element not found';
+      const context = latestContext;
+      if (!context) return 'target unavailable: page context unavailable';
       const previousFingerprint =
-        buildContextSemanticFingerprint(latestContext);
+        buildContextSemanticFingerprint(context);
       const previousUrl = window.location.href;
       overlay.pointAt(args.selector);
       scheduleOverlayClear(2500);
@@ -450,9 +492,11 @@ export default defineContentScript({
         return 'target unavailable: element not found';
       }
 
+      const context = latestContext;
+      if (!context) return 'target unavailable: page context unavailable';
       cancelOverlayClear();
       const previousFingerprint =
-        buildContextSemanticFingerprint(latestContext);
+        buildContextSemanticFingerprint(context);
       const previousUrl = window.location.href;
       if (args.selector) {
         overlay.pointAt(args.selector);
@@ -517,7 +561,19 @@ export default defineContentScript({
         } else {
           widget.hide();
           overlay.clear();
+          stopPageContextCollection();
         }
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (msg?.type === 'PAGE_CONTEXT_COLLECTION_START') {
+        startPageContextCollection();
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (msg?.type === 'PAGE_CONTEXT_COLLECTION_STOP') {
+        stopPageContextCollection();
+        overlay.clear();
         sendResponse({ ok: true });
         return false;
       }

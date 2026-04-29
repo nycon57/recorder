@@ -3,6 +3,7 @@
 import {
   deriveWidgetBootstrapState,
   isSupportedVoiceTargetUrl,
+  shouldCollectPageContext,
   shouldRegisterVoiceTarget,
 } from '../utils/session-startup';
 
@@ -101,6 +102,40 @@ describe('voice session startup helpers', () => {
         candidateTabId: 42,
         candidateTabActive: true,
         candidateUrl: 'chrome://settings',
+      }),
+    ).toBe(false);
+  });
+
+  it('collects page context only when extension, session, and target tab allow it', () => {
+    expect(
+      shouldCollectPageContext({
+        extensionEnabled: true,
+        sessionActive: true,
+        isHomeTab: true,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldCollectPageContext({
+        extensionEnabled: false,
+        sessionActive: true,
+        isHomeTab: true,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldCollectPageContext({
+        extensionEnabled: true,
+        sessionActive: false,
+        isHomeTab: true,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldCollectPageContext({
+        extensionEnabled: true,
+        sessionActive: true,
+        isHomeTab: false,
       }),
     ).toBe(false);
   });
