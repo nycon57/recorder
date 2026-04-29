@@ -6,7 +6,7 @@
  * Accepts:
  *   {
  *     question: string;
- *     context: PageContext;       // { url, appSignature, elements? }
+ *     context: PageContext;       // { url, appSignature, elements? | interactiveElements? }
  *     conversationId?: string;
  *     orgId?: string;             // ignored — resolved from session
  *   }
@@ -60,6 +60,7 @@ import { GoogleGenAI } from '@google/genai';
 
 import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
+import type { Json } from '@/lib/types/database';
 import type { CompiledMemoryCitationLayer } from '@/lib/services/compiled-memory-context';
 import {
   buildExtensionCompiledMemoryPrompt,
@@ -147,6 +148,18 @@ interface PageContext {
   url: string;
   appSignature: string;
   elements?: Array<{ selector: string; label: string }>;
+  interactiveElements?: Array<{ selector: string; label: string }>;
+}
+
+function normalizePromptElements(
+  context: PageContext,
+): Array<{ selector: string; label: string }> {
+  const legacyElements = context.elements ?? [];
+  if (legacyElements.length > 0) {
+    return legacyElements;
+  }
+
+  return context.interactiveElements ?? [];
 }
 
 /** Lazy Gemini client — no import-time env var reads (Fluid Compute safe). */
@@ -276,7 +289,6 @@ class TagStreamParser {
   private drain(): void {
     // Loop until we can't make progress (either buffer is empty or holds
     // only a potential tag prefix).
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const bracketIdx = this.buffer.indexOf('[');
 
@@ -395,14 +407,15 @@ export async function POST(request: NextRequest) {
     // API key auth has no userId — use the keyId as a stable identifier
     // for user-memory features (which gracefully degrade for SDK callers).
     userId = authCtx.authMethod === 'session' ? authCtx.userId : authCtx.keyId;
-  } catch (error: any) {
-    if (error.message === 'Unauthorized') {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'Unauthorized') {
       return errors.unauthorized();
     }
-    if (error.message === 'Rate limit exceeded') {
+    if (message === 'Rate limit exceeded') {
       return errors.rateLimitExceeded();
     }
-    if (error.message === 'Insufficient scope') {
+    if (message === 'Insufficient scope') {
       return errors.forbidden();
     }
     return errors.forbidden();
@@ -551,7 +564,7 @@ export async function POST(request: NextRequest) {
           app,
           screen,
           question,
-          elements: context.elements ?? [],
+          elements: normalizePromptElements(context),
           answerContext,
         });
 
@@ -692,7 +705,7 @@ export async function POST(request: NextRequest) {
         }));
 
       if (rows.length > 0) {
-        await (supabase.from('user_wiki_interactions') as any).insert(rows);
+        await supabase.from('user_wiki_interactions').insert(rows);
       }
     } catch (err) {
       // Best-effort — don't let interaction tracking crash anything
@@ -710,7 +723,7 @@ export async function POST(request: NextRequest) {
     after(async () => {
       try {
         const supabase = createAdminClient();
-        await (supabase.from('vendor_usage_events') as any).insert({
+        await supabase.from('vendor_usage_events').insert({
           vendor_org_id: authCtx.orgId,
           customer_org_id: orgId !== authCtx.orgId ? orgId : null,
           api_key_id: authCtx.keyId,
@@ -737,7 +750,7 @@ export async function POST(request: NextRequest) {
 
     await recordKnowledgeTelemetryEvent({
       type: 'knowledge.extension.query.outcome',
-      payload: telemetryPayload as any,
+      payload: telemetryPayload as unknown as Json,
     });
   });
 
