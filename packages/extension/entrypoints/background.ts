@@ -20,11 +20,7 @@ import { scheduleTokenRefresh } from '../utils/token-refresh.js';
 import { createTabRecorder } from '../utils/tab-recorder.js';
 import { uploadRecording } from '../utils/recording-uploader.js';
 import type { TabRecorder } from '../utils/tab-recorder.js';
-import {
-  apiFetch,
-  getStoredSession,
-  setStoredSession,
-} from '../utils/api-client.js';
+import { apiFetch, getStoredSession } from '../utils/api-client.js';
 import {
   advanceDebugTurn,
   buildDebugEventInput,
@@ -53,6 +49,7 @@ import {
 import { createTurnGuards } from '../utils/turn-guards.js';
 import { buildContextSemanticFingerprint } from '../utils/context-telemetry.js';
 import { classifyTranscriptConfidence } from '../utils/voice-agent-policy.js';
+import { validateAndPersistExtensionAuthCallback } from '../utils/auth-session.js';
 
 const BG = '[Tribora bg]';
 const EXTENSION_ENABLED_KEY = 'tribora_extension_enabled';
@@ -2134,11 +2131,21 @@ export default defineBackground(() => {
 
       case 'AUTH_CALLBACK':
         void (async () => {
-          if (message.session) {
-            await setStoredSession(message.session);
+          try {
+            await validateAndPersistExtensionAuthCallback({
+              state: message.state,
+              session: message.session,
+              callbackUrl: message.callbackUrl ?? sender.url ?? sender.tab?.url,
+            });
             sendResponse({ ok: true });
-          } else {
-            sendResponse({ ok: false, error: 'No session data' });
+          } catch (error) {
+            sendResponse({
+              ok: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Auth callback rejected',
+            });
           }
         })();
         return true;

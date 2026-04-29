@@ -123,6 +123,17 @@ describe("middleware auth routing", () => {
     },
   );
 
+  it("lets the extension auth callback reach its token validation route", async () => {
+    const response = await middleware(
+      new NextRequest("http://localhost:3000/api/extension/auth/callback", {
+        method: "POST",
+      }),
+    );
+
+    expect(betterFetchMock).not.toHaveBeenCalled();
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
   it("adds custom-domain headers before allowlisted extension route bypass", async () => {
     resolveWhiteLabelByDomainMock.mockResolvedValue({
       id: "config-1",
