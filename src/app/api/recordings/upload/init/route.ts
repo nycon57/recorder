@@ -59,6 +59,7 @@ const initUploadSchema = z.object({
 });
 
 type InitUploadRequest = z.infer<typeof initUploadSchema>;
+type UploadMetadata = Record<string, unknown>;
 
 function getIdempotencyKey(
   request: NextRequest,
@@ -159,7 +160,7 @@ export const POST = withRateLimit(
       if (source === 'extension' && idempotencyKey) {
         const { data: existingUpload, error: existingError } = await supabase
           .from('content')
-          .select('id, status, content_type, file_type')
+          .select('id, status, content_type, file_type, metadata')
           .eq('org_id', orgId)
           .eq('created_by', userId)
           .eq('metadata->>source', 'extension')
@@ -176,6 +177,25 @@ export const POST = withRateLimit(
         }
 
         if (existingUpload) {
+          const existingMetadata =
+            typeof existingUpload.metadata === 'object' &&
+            existingUpload.metadata !== null &&
+            !Array.isArray(existingUpload.metadata)
+              ? (existingUpload.metadata as UploadMetadata)
+              : {};
+          const expiresAt =
+            typeof existingMetadata.upload_expires_at === 'string'
+              ? Date.parse(existingMetadata.upload_expires_at)
+              : Number.NaN;
+
+          if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+            return errors.badRequest(
+              'Upload retry window expired',
+              { currentStatus: existingUpload.status },
+              requestId,
+            );
+          }
+
           if (existingUpload.status !== SOURCE_STATUS.UPLOADING) {
             return successResponse(
               {

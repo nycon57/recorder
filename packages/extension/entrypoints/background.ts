@@ -2324,9 +2324,11 @@ export default defineBackground(() => {
     }
     if (message?.type === 'RECORDING_STOP') {
       void (async () => {
+        let uploadPromiseToClear: Promise<{ recordingId: string }> | null = null;
         try {
           if (activeUploadPromise) {
-            const { recordingId } = await activeUploadPromise;
+            uploadPromiseToClear = activeUploadPromise;
+            const { recordingId } = await uploadPromiseToClear;
             return sendResponse({ ok: true, recordingId });
           }
 
@@ -2343,7 +2345,7 @@ export default defineBackground(() => {
             });
           };
 
-          activeUploadPromise = (async () => {
+          uploadPromiseToClear = (async () => {
             const blob = await recorder.stop();
 
             return uploadRecording(
@@ -2370,8 +2372,9 @@ export default defineBackground(() => {
               },
             );
           })();
+          activeUploadPromise = uploadPromiseToClear;
 
-          const { recordingId } = await activeUploadPromise;
+          const { recordingId } = await uploadPromiseToClear;
 
           void chrome.storage.session.remove(UPLOAD_STATE_KEY);
           sendResponse({ ok: true, recordingId });
@@ -2379,7 +2382,9 @@ export default defineBackground(() => {
           void chrome.storage.session.remove('tribora_upload_state');
           sendResponse({ ok: false, error: (err as Error).message });
         } finally {
-          activeUploadPromise = null;
+          if (activeUploadPromise === uploadPromiseToClear) {
+            activeUploadPromise = null;
+          }
         }
       })();
       return true;

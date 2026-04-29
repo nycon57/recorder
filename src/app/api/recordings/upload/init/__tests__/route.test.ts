@@ -229,4 +229,33 @@ describe('POST /api/recordings/upload/init', () => {
     });
     expect(json.data).not.toHaveProperty('uploadUrl');
   });
+
+  it('rejects expired idempotent upload recovery windows', async () => {
+    existingUpload = {
+      id: 'rec_existing',
+      status: 'uploading',
+      content_type: 'recording',
+      file_type: 'webm',
+      metadata: {
+        upload_expires_at: '2026-04-22T00:00:00.000Z',
+      },
+    };
+
+    const response = await POST(
+      new Request('http://localhost/api/recordings/upload/init', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'idem_existing_1' },
+        body: JSON.stringify({
+          filename: 'screen demo.webm',
+          mimeType: 'video/webm',
+          fileSize: 1024,
+          source: 'extension',
+        }),
+      }) as unknown as NextRequest,
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockCheckAndConsumeQuota).not.toHaveBeenCalled();
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
+  });
 });
