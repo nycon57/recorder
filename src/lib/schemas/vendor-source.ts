@@ -18,7 +18,7 @@ export const vendorIngestInputSchema = z.object({
     .string()
     .min(1, 'Source URL is required')
     .url('Must be a valid URL')
-    .refine((u) => u.startsWith('http'), 'URL must use http or https protocol'),
+    .refine((u) => u.startsWith('https://'), 'URL must use https protocol'),
   maxPages: z
     .number()
     .int('Max pages must be a whole number')
@@ -34,6 +34,12 @@ export type VendorIngestInput = z.infer<typeof vendorIngestInputSchema>;
 export const vendorResyncInputSchema = z.object({
   sourceId: z.string().uuid('sourceId must be a valid UUID'),
   force: z.boolean().optional(),
+  maxPages: z
+    .number()
+    .int('Max pages must be a whole number')
+    .min(1, 'Max pages must be at least 1')
+    .max(500, 'Max pages cannot exceed 500')
+    .optional(),
 });
 
 export type VendorResyncInput = z.infer<typeof vendorResyncInputSchema>;

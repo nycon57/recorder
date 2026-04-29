@@ -13,6 +13,27 @@ import {
 } from './vendor-source-adapters';
 
 type JobInsert = Database['public']['Tables']['jobs']['Insert'];
+type SupabaseResult<T> = {
+  data: T | null;
+  error: { code?: string; message: string } | null;
+};
+type VendorSourceListQuery = PromiseLike<SupabaseResult<VendorSourceRow[]>> & {
+  select(columns: string): VendorSourceListQuery;
+  in(column: string, values: string[]): VendorSourceListQuery;
+  eq(column: string, value: unknown): VendorSourceListQuery;
+  order(column: string, options: { ascending: boolean }): VendorSourceListQuery;
+};
+type VendorSourceLookupQuery = {
+  select(columns: string): VendorSourceLookupQuery;
+  eq(column: string, value: unknown): VendorSourceLookupQuery;
+  maybeSingle(): Promise<SupabaseResult<VendorSourceRow>>;
+};
+type JobInsertQuery = {
+  insert(insert: JobInsert): JobInsertQuery;
+  select(columns: string): JobInsertQuery;
+  single(): Promise<SupabaseResult<{ id?: string }>>;
+};
+type VendorSourceSyncSupabase = ReturnType<typeof createAdminClient>;
 
 const DEFAULT_FRESHNESS_TARGET_MS = 7 * 24 * 60 * 60 * 1000;
 export const FAILED_SOURCE_RETRY_MS = 60 * 60 * 1000;
@@ -101,7 +122,7 @@ export function buildVendorSourceSyncJobInsert(
 }
 
 export function createVendorSourceSyncService(
-  supabase = createAdminClient(),
+  supabase = createAdminClient() as VendorSourceSyncSupabase,
 ) {
   const registry = createVendorSourceRegistryService(supabase);
 
@@ -115,7 +136,7 @@ export function createVendorSourceSyncService(
     }
 
     const { data, error } = await (supabase
-      .from('vendor_doc_sources') as any)
+      .from('vendor_doc_sources') as unknown as VendorSourceListQuery)
       .select('*')
       .in('app', allowlist)
       .eq('official_source', true)
@@ -135,7 +156,7 @@ export function createVendorSourceSyncService(
     sourceId: string,
   ): Promise<VendorSourceRow | null> {
     const { data, error } = await (supabase
-      .from('vendor_doc_sources') as any)
+      .from('vendor_doc_sources') as unknown as VendorSourceLookupQuery)
       .select('*')
       .eq('id', sourceId)
       .maybeSingle();
@@ -154,6 +175,7 @@ export function createVendorSourceSyncService(
 
     async scheduleSources(options?: {
       force?: boolean;
+      maxPages?: number;
       mode?: VendorSourceSyncMode;
       sourceId?: string;
       /** Audit provenance — system-admin user who initiated this sync (TRIB-146). */
@@ -178,6 +200,16 @@ export function createVendorSourceSyncService(
             app: 'unknown',
             status: 'missing',
             reason: 'Vendor source was not found',
+          });
+          continue;
+        }
+
+        if (source.terms_review_status !== 'approved') {
+          results.push({
+            sourceId: source.id,
+            app: source.app,
+            status: 'unsupported',
+            reason: `Vendor source must be terms-approved before sync (status: ${source.terms_review_status})`,
           });
           continue;
         }
@@ -216,10 +248,13 @@ export function createVendorSourceSyncService(
         if (triggeredByUserId) {
           payload.triggered_by_user_id = triggeredByUserId;
         }
+        if (options?.maxPages) {
+          payload.maxPages = options.maxPages;
+        }
         const insert = buildVendorSourceSyncJobInsert(source, payload);
 
         const { data, error } = await (supabase
-          .from('jobs') as any)
+          .from('jobs') as unknown as JobInsertQuery)
           .insert(insert)
           .select('id')
           .single();

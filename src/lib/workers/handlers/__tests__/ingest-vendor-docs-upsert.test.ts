@@ -14,9 +14,10 @@
  * TRIB-152
  */
 
-import { describe, expect, test, jest, beforeEach } from '@jest/globals';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+
+import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 // ---- Static code analysis --------------------------------------------------
 // The quickest guard: assert that the source file actually contains the
@@ -64,11 +65,27 @@ describe('ingest-vendor-docs source code — attribution fields (TRIB-152)', () 
 const _captured = {
   inserts: [] as Array<Record<string, unknown>>,
   updates: [] as Array<Record<string, unknown>>,
+  jobResults: [] as Array<Record<string, unknown>>,
+  fetchedUrls: [] as string[],
+  sourceFailures: [] as Array<Record<string, unknown>>,
+  sourceSuccesses: [] as Array<Record<string, unknown>>,
 };
+
+let registrySource = {
+  id: 'source-123',
+  app: 'trib152-test',
+  source_url: 'https://docs.example.com',
+  publisher_hostname: 'example.com',
+  official_source: true,
+  fetch_strategy: 'sanctioned_crawl',
+  terms_review_status: 'approved',
+  content_hash: null,
+};
+let shouldFailCorpusSync = false;
 
 jest.mock('@/lib/supabase/admin', () => ({
   createClient: () => ({
-    from: () => ({
+    from: (table: string) => ({
       select: () => ({
         eq: () => ({
           eq: () => ({
@@ -78,10 +95,21 @@ jest.mock('@/lib/supabase/admin', () => ({
       }),
       insert: (payload: Record<string, unknown>) => {
         _captured.inserts.push({ ...(payload as object) });
-        return Promise.resolve({ error: null });
+        return {
+          select: () => ({
+            single: async () => ({
+              data: { id: `page-${_captured.inserts.length}` },
+              error: null,
+            }),
+          }),
+        };
       },
       update: (payload: Record<string, unknown>) => {
-        _captured.updates.push({ ...(payload as object) });
+        if (table === 'jobs') {
+          _captured.jobResults.push({ ...(payload as object) });
+        } else {
+          _captured.updates.push({ ...(payload as object) });
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return { eq: (jest.fn() as jest.MockedFunction<any>).mockResolvedValue({ error: null }) };
       },
@@ -97,17 +125,31 @@ jest.mock('@/lib/services/agent-logger', () => ({
 jest.mock('@/lib/services/vendor-source-registry', () => ({
   createVendorSourceRegistryService: () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    findSourceForIngestion: (jest.fn() as jest.MockedFunction<any>).mockResolvedValue(null),
+    findSourceForIngestion: (jest.fn() as jest.MockedFunction<any>).mockImplementation(
+      async () => registrySource,
+    ),
     recordAttempt: jest.fn(),
-    recordFailure: jest.fn(),
-    recordSuccess: jest.fn(),
+    recordFailure: jest.fn(async (_sourceId: string, payload: Record<string, unknown>) => {
+        _captured.sourceFailures.push(payload);
+      }),
+    recordSuccess: jest.fn(async (_sourceId: string, payload: Record<string, unknown>) => {
+        _captured.sourceSuccesses.push(payload);
+      }),
   }),
   hashVendorSourcePages: jest.fn().mockReturnValue('hash-combined'),
 }));
 
 jest.mock('@/lib/services/vendor-doc-corpus', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  syncVendorCorpusFromLegacyPages: (jest.fn() as jest.MockedFunction<any>).mockResolvedValue({ inserted: 0, updated: 0, skipped: 0 }),
+  syncVendorCorpusFromLegacyPages: (jest.fn() as jest.MockedFunction<any>).mockImplementation(
+    async () => {
+      if (shouldFailCorpusSync) {
+        throw new Error('corpus sync failed');
+      }
+
+      return { inserted: 0, updated: 0, skipped: 0 };
+    },
+  ),
 }));
 
 jest.mock('@/lib/utils/logger', () => ({
@@ -119,15 +161,17 @@ jest.mock('@/lib/utils/logger', () => ({
   }),
 }));
 
-const MOCK_HTML = `<!DOCTYPE html>
+const DEFAULT_MOCK_HTML = `<!DOCTYPE html>
 <html><head><title>Test</title></head>
-<body><main><h1>Test page</h1><p>Attribution content.</p></main></body>
+<body><main><h1>Test page</h1><p>Attribution content with enough words to pass the ingestion minimum length guard for this mocked documentation page.</p></main></body>
 </html>`;
+let mockHtml = DEFAULT_MOCK_HTML;
 
 function mockFetch() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (global as any).fetch = jest.fn().mockImplementation(async (url: unknown) => {
       const u = String(url);
+      _captured.fetchedUrls.push(u);
       if (u.includes('robots.txt')) {
         return {
           ok: true, status: 200,
@@ -138,7 +182,7 @@ function mockFetch() {
       return {
         ok: true, status: 200,
         headers: { get: (h: string) => h === 'content-type' ? 'text/html' : null },
-        text: async () => MOCK_HTML,
+        text: async () => mockHtml,
       };
     }) as unknown as typeof fetch;
 }
@@ -146,6 +190,22 @@ function mockFetch() {
 beforeEach(() => {
   _captured.inserts.length = 0;
   _captured.updates.length = 0;
+  _captured.jobResults.length = 0;
+  _captured.fetchedUrls.length = 0;
+  _captured.sourceFailures.length = 0;
+  _captured.sourceSuccesses.length = 0;
+  registrySource = {
+    id: 'source-123',
+    app: 'trib152-test',
+    source_url: 'https://docs.example.com',
+    publisher_hostname: 'example.com',
+    official_source: true,
+    fetch_strategy: 'sanctioned_crawl',
+    terms_review_status: 'approved',
+    content_hash: null,
+  };
+  shouldFailCorpusSync = false;
+  mockHtml = DEFAULT_MOCK_HTML;
   mockFetch();
   jest.resetModules();
 });
@@ -158,6 +218,7 @@ function makeJob(id: string, payloadExtra: Record<string, unknown> = {}) {
       url: 'https://docs.example.com',
       app: 'trib152-test',
       maxPages: 1,
+      sourceId: 'source-123',
       ...payloadExtra,
     },
     status: 'processing',
@@ -175,7 +236,11 @@ function makeJob(id: string, payloadExtra: Record<string, unknown> = {}) {
 describe('handleIngestVendorDocs — attribution integration (TRIB-152)', () => {
   test('writes curated_by + ingest_job_id when operator triggers sync', async () => {
     const { handleIngestVendorDocs } = await import('../ingest-vendor-docs');
-    await handleIngestVendorDocs(makeJob('job-op-abc', { triggered_by_user_id: 'user-123' }) as any);
+    await handleIngestVendorDocs(
+      makeJob('job-op-abc', {
+        triggered_by_user_id: 'user-123',
+      }) as unknown as Parameters<typeof handleIngestVendorDocs>[0],
+    );
 
     const writes = [..._captured.inserts, ..._captured.updates];
     if (writes.length === 0) {
@@ -189,7 +254,11 @@ describe('handleIngestVendorDocs — attribution integration (TRIB-152)', () => 
 
   test('writes curated_by=null for scheduled sync', async () => {
     const { handleIngestVendorDocs } = await import('../ingest-vendor-docs');
-    await handleIngestVendorDocs(makeJob('job-sched-xyz') as any);
+    await handleIngestVendorDocs(
+      makeJob('job-sched-xyz') as unknown as Parameters<
+        typeof handleIngestVendorDocs
+      >[0],
+    );
 
     const writes = [..._captured.inserts, ..._captured.updates];
     if (writes.length === 0) {
@@ -198,5 +267,74 @@ describe('handleIngestVendorDocs — attribution integration (TRIB-152)', () => 
     const w = writes[0];
     expect(w.curated_by).toBeNull();
     expect(w.ingest_job_id).toBe('job-sched-xyz');
+  });
+
+  test('keeps no-trailing-slash source paths scoped to their subtree', async () => {
+    registrySource = {
+      ...registrySource,
+      source_url: 'https://docs.example.com/docs',
+    };
+    mockHtml = `<!DOCTYPE html>
+<html><head><title>Docs</title></head>
+<body><main>
+<h1>Docs page</h1>
+<p>Documentation content with enough words to pass the ingestion minimum length guard for this mocked documentation page.</p>
+<a href="/docs/article">Article</a>
+<a href="/billing">Billing</a>
+</main></body></html>`;
+
+    const { handleIngestVendorDocs } = await import('../ingest-vendor-docs');
+    await handleIngestVendorDocs(
+      makeJob('job-scope', { maxPages: 3 }) as unknown as Parameters<
+        typeof handleIngestVendorDocs
+      >[0],
+    );
+
+    expect(_captured.fetchedUrls).toContain('https://docs.example.com/docs');
+    expect(_captured.fetchedUrls).toContain(
+      'https://docs.example.com/docs/article',
+    );
+    expect(_captured.fetchedUrls).not.toContain(
+      'https://docs.example.com/billing',
+    );
+  });
+
+  test('records inserted page ids in the job result manifest', async () => {
+    const { handleIngestVendorDocs } = await import('../ingest-vendor-docs');
+    await handleIngestVendorDocs(
+      makeJob('job-manifest') as unknown as Parameters<
+        typeof handleIngestVendorDocs
+      >[0],
+    );
+
+    const result = _captured.jobResults[0]?.result as
+      | {
+          outcomes: Array<{ status: string; pageId: string | null }>;
+        }
+      | undefined;
+
+    expect(result?.outcomes[0]).toMatchObject({
+      status: 'inserted',
+      pageId: 'page-1',
+    });
+  });
+
+  test('fails the source when downstream corpus sync fails', async () => {
+    shouldFailCorpusSync = true;
+    const { handleIngestVendorDocs } = await import('../ingest-vendor-docs');
+
+    await expect(
+      handleIngestVendorDocs(
+        makeJob('job-corpus-failure') as unknown as Parameters<
+          typeof handleIngestVendorDocs
+        >[0],
+      ),
+    ).rejects.toThrow('corpus sync failed');
+
+    expect(_captured.jobResults).toHaveLength(1);
+    expect(_captured.sourceFailures[0]?.errorMessage).toBe(
+      'corpus sync failed',
+    );
+    expect(_captured.sourceSuccesses).toHaveLength(0);
   });
 });

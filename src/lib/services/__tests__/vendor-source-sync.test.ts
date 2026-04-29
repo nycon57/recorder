@@ -4,6 +4,7 @@ import {
   FAILED_SOURCE_RETRY_MS,
   buildVendorSourceSyncDedupeKey,
   buildVendorSourceSyncJobInsert,
+  createVendorSourceSyncService,
   isVendorSourceDueForSync,
   parseFreshnessTargetMs,
 } from '../vendor-source-sync';
@@ -127,5 +128,123 @@ describe('vendor-source-sync', () => {
         syncType: 'manual',
       },
     });
+  });
+
+  test('applies manual maxPages override to source-backed job payloads', async () => {
+    const source = makeSource({
+      id: 'approved-source',
+      terms_review_status: 'approved',
+    });
+    const insertedPayloads: Array<Record<string, unknown>> = [];
+
+    const supabase = {
+      from(table: string) {
+        if (table === 'vendor_doc_sources') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            async maybeSingle() {
+              return { data: source, error: null };
+            },
+          };
+        }
+
+        if (table === 'jobs') {
+          return {
+            insert(insert: { payload?: Record<string, unknown> }) {
+              insertedPayloads.push(insert.payload ?? {});
+              return this;
+            },
+            select() {
+              return this;
+            },
+            async single() {
+              return { data: { id: 'job-1' }, error: null };
+            },
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      },
+    };
+
+    await createVendorSourceSyncService(
+      supabase as unknown as Parameters<typeof createVendorSourceSyncService>[0],
+    ).scheduleSources({
+      sourceId: source.id,
+      force: true,
+      mode: 'manual',
+      maxPages: 3,
+    });
+
+    expect(insertedPayloads[0]).toMatchObject({
+      app: 'hubspot',
+      sourceId: 'approved-source',
+      syncType: 'manual',
+      maxPages: 3,
+    });
+  });
+
+  test('refuses to queue sources before terms approval', async () => {
+    const source = makeSource({
+      id: 'pending-source',
+      app: 'hubspot',
+      terms_review_status: 'pending',
+    });
+    let jobsInsertCount = 0;
+
+    const supabase = {
+      from(table: string) {
+        if (table === 'vendor_doc_sources') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            async maybeSingle() {
+              return { data: source, error: null };
+            },
+          };
+        }
+
+        if (table === 'jobs') {
+          return {
+            insert() {
+              jobsInsertCount += 1;
+              return this;
+            },
+            select() {
+              return this;
+            },
+            async single() {
+              return { data: { id: 'job-1' }, error: null };
+            },
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      },
+    };
+
+    const results = await createVendorSourceSyncService(
+      supabase as unknown as Parameters<typeof createVendorSourceSyncService>[0],
+    ).scheduleSources({ sourceId: source.id, force: true, mode: 'manual' });
+
+    expect(results).toEqual([
+      {
+        sourceId: 'pending-source',
+        app: 'hubspot',
+        status: 'unsupported',
+        reason:
+          'Vendor source must be terms-approved before sync (status: pending)',
+      },
+    ]);
+    expect(jobsInsertCount).toBe(0);
   });
 });

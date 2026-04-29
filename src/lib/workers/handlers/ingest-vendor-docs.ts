@@ -6,7 +6,7 @@
  * respect, cheerio for HTML parsing, and SHA256 content hashing for
  * deduplication on re-crawl.
  *
- * Job payload: { url: string, app: string, maxPages?: number }
+ * Job payload: { sourceId: string, url: string, app: string, maxPages?: number }
  *
  * Pipeline:
  *   1. Parse seed URL, fetch and parse robots.txt for the domain
@@ -28,12 +28,15 @@ import { withAgentLogging } from '@/lib/services/agent-logger';
 import {
   createVendorSourceRegistryService,
   hashVendorSourcePages,
+  type VendorFetchStrategy,
+  type VendorSourceRow,
 } from '@/lib/services/vendor-source-registry';
 import { syncVendorCorpusFromLegacyPages } from '@/lib/services/vendor-doc-corpus';
 import { createLogger } from '@/lib/utils/logger';
 import type { Database } from '@/lib/types/database';
 
 import type { ProgressCallback } from '../job-processor';
+
 import { shouldSkipVendorWikiPageUpdate } from './ingest-vendor-docs-skip';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
@@ -45,8 +48,8 @@ const logger = createLogger({ service: 'ingest-vendor-docs' });
 // ---------------------------------------------------------------------------
 
 interface IngestVendorDocsPayload {
-  url: string;
-  app: string;
+  url?: string;
+  app?: string;
   maxPages?: number;
   sourceId?: string;
   syncType?: 'scheduled' | 'manual';
@@ -66,6 +69,37 @@ interface CrawledPage {
 interface RobotsRules {
   disallowedPaths: string[];
   crawlDelay: number;
+}
+
+interface CrawlScope {
+  allowedHost: string;
+  exactPath: string;
+  pathPrefix: string;
+}
+
+interface SourceAcquisitionPlan {
+  app: string;
+  seedUrl: string;
+  maxPages: number;
+  strategy: VendorFetchStrategy;
+  scope: CrawlScope;
+}
+
+interface PageWriteOutcome {
+  sourceUrl: string;
+  screen: string;
+  contentHash: string;
+  status: 'inserted' | 'updated' | 'unchanged' | 'failed';
+  pageId: string | null;
+  error?: string;
+}
+
+interface PageWriteManifest {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  outcomes: PageWriteOutcome[];
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +165,10 @@ async function fetchRobotsTxt(baseUrl: string): Promise<RobotsRules> {
       headers: { 'User-Agent': 'Tribora-DocCrawler/1.0' },
     });
 
-    if (!response.ok) return rules;
+    if (response.status === 404) return rules;
+    if (!response.ok) {
+      throw new Error(`robots.txt returned HTTP ${response.status}`);
+    }
 
     const text = await response.text();
     let inWildcardBlock = false;
@@ -151,10 +188,13 @@ async function fetchRobotsTxt(baseUrl: string): Promise<RobotsRules> {
       }
     }
   } catch (error) {
-    logger.warn('Failed to fetch robots.txt, proceeding without restrictions', {
+    logger.warn('Failed to fetch robots.txt', {
       context: { baseUrl },
       error: error as Error,
     });
+    throw new Error(
+      `Unable to evaluate robots.txt for governed vendor source ${baseUrl}`,
+    );
   }
 
   return rules;
@@ -177,6 +217,72 @@ function isSameDomain(url: string, baseOrigin: string): boolean {
   } catch {
     return false;
   }
+}
+
+function normalizeHost(hostname: string): string {
+  return hostname.toLowerCase().replace(/^www\./, '');
+}
+
+function isWithinCrawlScope(url: string, scope: CrawlScope): boolean {
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname || '/';
+    return (
+      normalizeHost(parsed.hostname) === scope.allowedHost &&
+      (pathname === scope.exactPath || pathname.startsWith(scope.pathPrefix))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function buildPathPrefix(sourceUrl: string): string {
+  const parsed = new URL(sourceUrl);
+  if (parsed.pathname === '/' || parsed.pathname === '') return '/';
+  if (parsed.pathname.endsWith('/')) return parsed.pathname;
+  return `${parsed.pathname}/`;
+}
+
+function buildSourceAcquisitionPlan(
+  source: VendorSourceRow,
+  payload: IngestVendorDocsPayload,
+): SourceAcquisitionPlan {
+  if (source.terms_review_status !== 'approved') {
+    throw new Error(
+      `Vendor source ${source.id} is not approved for ingestion (${source.terms_review_status})`,
+    );
+  }
+
+  if (!source.official_source) {
+    throw new Error(`Vendor source ${source.id} is not marked as official`);
+  }
+
+  const seed = new URL(source.source_url);
+  const seedHost = normalizeHost(seed.hostname);
+  const publisherHost = normalizeHost(source.publisher_hostname);
+  if (seedHost !== publisherHost && !seedHost.endsWith(`.${publisherHost}`)) {
+    throw new Error(
+      `Vendor source ${source.id} URL is outside publisher host ${source.publisher_hostname}`,
+    );
+  }
+
+  if (!['sanctioned_crawl', 'static_site'].includes(source.fetch_strategy)) {
+    throw new Error(
+      `Vendor fetch strategy ${source.fetch_strategy} is not yet supported by ingest_vendor_docs`,
+    );
+  }
+
+  return {
+    app: source.app,
+    seedUrl: seed.toString(),
+    maxPages: payload.maxPages ?? DEFAULT_MAX_PAGES,
+    strategy: source.fetch_strategy,
+    scope: {
+      allowedHost: seedHost,
+      exactPath: seed.pathname || '/',
+      pathPrefix: buildPathPrefix(seed.toString()),
+    },
+  };
 }
 
 function normalizeUrl(href: string, baseUrl: string): string | null {
@@ -424,7 +530,8 @@ function extractElementSelectors($: cheerio.CheerioAPI): string[] {
 function extractLinks(
   html: string,
   currentUrl: string,
-  baseOrigin: string
+  baseOrigin: string,
+  scope: CrawlScope,
 ): string[] {
   const $ = cheerio.load(html);
   const links = new Set<string>();
@@ -434,7 +541,11 @@ function extractLinks(
     if (!href) return;
 
     const normalized = normalizeUrl(href, currentUrl);
-    if (normalized && isSameDomain(normalized, baseOrigin)) {
+    if (
+      normalized &&
+      isSameDomain(normalized, baseOrigin) &&
+      isWithinCrawlScope(normalized, scope)
+    ) {
       links.add(normalized);
     }
   });
@@ -451,6 +562,7 @@ async function crawlSite(
   app: string,
   maxPages: number,
   robotsRules: RobotsRules,
+  scope: CrawlScope,
   progressCallback?: ProgressCallback
 ): Promise<CrawledPage[]> {
   const parsed = new URL(seedUrl);
@@ -466,6 +578,10 @@ async function crawlSite(
 
     if (visited.has(url)) continue;
     visited.add(url);
+    if (!isWithinCrawlScope(url, scope)) {
+      logger.debug('Skipping out-of-scope URL', { context: { url } });
+      continue;
+    }
 
     // Check robots.txt
     const urlPath = new URL(url).pathname;
@@ -518,7 +634,7 @@ async function crawlSite(
     }
 
     // Extract and enqueue links
-    const links = extractLinks(html, url, baseOrigin);
+    const links = extractLinks(html, url, baseOrigin, scope);
     for (const link of links) {
       if (!visited.has(link) && !queue.includes(link)) {
         queue.push(link);
@@ -627,11 +743,13 @@ async function upsertPages(
     jobId?: string | null;
   },
   progressCallback?: ProgressCallback
-): Promise<{ inserted: number; updated: number; skipped: number }> {
+): Promise<PageWriteManifest> {
   const supabase = createAdminClient();
   let inserted = 0;
   let updated = 0;
   let skipped = 0;
+  let failed = 0;
+  const outcomes: PageWriteOutcome[] = [];
 
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i];
@@ -641,14 +759,20 @@ async function upsertPages(
       progressCallback(percent, `Saving page ${i + 1}/${pages.length}: ${page.screen}`);
     }
 
-    // Check for existing page by app + screen
+    // Source-scoped identity first. Legacy app+screen lookup is retained only
+    // for old non-source jobs, which are now rejected before execution.
     type VendorRow = Database['public']['Tables']['vendor_wiki_pages']['Row'];
-    const { data: existing } = await supabase
-      .from('vendor_wiki_pages')
-      .select('*')
-      .eq('app', app)
-      .eq('screen', page.screen)
-      .maybeSingle() as { data: VendorRow | null };
+    let existingQuery = supabase.from('vendor_wiki_pages').select('*');
+    if (options?.vendorSourceId) {
+      existingQuery = existingQuery
+        .eq('vendor_source_id', options.vendorSourceId)
+        .eq('source_url', page.url);
+    } else {
+      existingQuery = existingQuery.eq('app', app).eq('screen', page.screen);
+    }
+    const { data: existing } = await existingQuery.maybeSingle() as {
+      data: VendorRow | null;
+    };
 
     if (existing) {
       // Skip only when both the page content and the registry mapping already match.
@@ -661,6 +785,13 @@ async function upsertPages(
         })
       ) {
         skipped++;
+        outcomes.push({
+          sourceUrl: page.url,
+          screen: page.screen,
+          contentHash: page.contentHash,
+          status: 'unchanged',
+          pageId: existing.id,
+        });
         logger.debug('Skipping unchanged page', {
           context: { app, screen: page.screen },
         });
@@ -671,6 +802,7 @@ async function upsertPages(
       // builder resolves vendor_wiki_pages to `never` due to missing
       // Relationships metadata in the generated types)
       const { error } = await (supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from('vendor_wiki_pages') as any)
         .update({
           content: page.markdownContent,
@@ -685,16 +817,33 @@ async function upsertPages(
         .eq('id', existing.id);
 
       if (error) {
+        failed++;
+        outcomes.push({
+          sourceUrl: page.url,
+          screen: page.screen,
+          contentHash: page.contentHash,
+          status: 'failed',
+          pageId: existing.id,
+          error: error.message,
+        });
         logger.error('Failed to update vendor wiki page', {
           context: { app, screen: page.screen },
           error,
         });
       } else {
         updated++;
+        outcomes.push({
+          sourceUrl: page.url,
+          screen: page.screen,
+          contentHash: page.contentHash,
+          status: 'updated',
+          pageId: existing.id,
+        });
       }
     } else {
       // Insert new page
-      const { error } = await (supabase
+      const { data: insertedRow, error } = await (supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from('vendor_wiki_pages') as any)
         .insert({
           app,
@@ -706,20 +855,53 @@ async function upsertPages(
           vendor_source_id: options?.vendorSourceId ?? null,
           curated_by: options?.triggeredByUserId ?? null,
           ingest_job_id: options?.jobId ?? null,
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) {
+        failed++;
+        outcomes.push({
+          sourceUrl: page.url,
+          screen: page.screen,
+          contentHash: page.contentHash,
+          status: 'failed',
+          pageId: null,
+          error: error.message,
+        });
         logger.error('Failed to insert vendor wiki page', {
           context: { app, screen: page.screen },
           error,
         });
       } else {
         inserted++;
+        outcomes.push({
+          sourceUrl: page.url,
+          screen: page.screen,
+          contentHash: page.contentHash,
+          status: 'inserted',
+          pageId: insertedRow?.id ?? null,
+        });
       }
     }
   }
 
-  return { inserted, updated, skipped };
+  return { inserted, updated, skipped, failed, outcomes };
+}
+
+async function recordVendorIngestJobResult(
+  jobId: string,
+  manifest: PageWriteManifest,
+): Promise<void> {
+  const supabase = createAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.from('jobs') as any)
+    .update({ result: manifest })
+    .eq('id', jobId);
+
+  if (error) {
+    throw new Error(`Failed to record vendor ingest manifest: ${error.message}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -732,11 +914,26 @@ export async function handleIngestVendorDocs(
 ): Promise<void> {
   const payload = job.payload as unknown as IngestVendorDocsPayload;
 
-  if (!payload?.url || !payload?.app) {
-    throw new Error('ingest_vendor_docs requires { url, app } in payload');
+  if (!payload?.sourceId) {
+    throw new Error('ingest_vendor_docs requires { sourceId } in payload');
   }
 
-  const { url: seedUrl, app, maxPages = DEFAULT_MAX_PAGES } = payload;
+  const registry = createVendorSourceRegistryService();
+  const attemptedAt = new Date().toISOString();
+  const registrySource = await registry.findSourceForIngestion({
+    sourceId: payload.sourceId,
+    app: payload.app ?? '',
+    sourceUrl: payload.url ?? 'https://example.com',
+  });
+
+  if (!registrySource) {
+    throw new Error(`Vendor source ${payload.sourceId} was not found`);
+  }
+
+  await registry.recordAttempt(registrySource.id, attemptedAt);
+
+  const acquisitionPlan = buildSourceAcquisitionPlan(registrySource, payload);
+  const { seedUrl, app, maxPages } = acquisitionPlan;
 
   // Validate URL
   let parsedUrl: URL;
@@ -758,7 +955,9 @@ export async function handleIngestVendorDocs(
       seedUrl,
       app,
       maxPages,
-      sourceId: payload.sourceId ?? null,
+      sourceId: payload.sourceId,
+      strategy: acquisitionPlan.strategy,
+      pathPrefix: acquisitionPlan.scope.pathPrefix,
       jobId: job.id,
       triggeredByUserId,
     },
@@ -775,23 +974,6 @@ export async function handleIngestVendorDocs(
       inputSummary: `Crawl ${seedUrl} for app="${app}", maxPages=${maxPages}${triggeredByUserId ? `, triggered_by=${triggeredByUserId}` : ''}`,
     },
     async () => {
-      // Step 1: Fetch robots.txt
-      const registry = createVendorSourceRegistryService();
-      const attemptedAt = new Date().toISOString();
-      const registrySource = await registry.findSourceForIngestion({
-        sourceId: payload.sourceId,
-        app,
-        sourceUrl: seedUrl,
-      });
-
-      if (payload.sourceId && !registrySource) {
-        throw new Error(`Vendor source ${payload.sourceId} was not found`);
-      }
-
-      if (registrySource) {
-        await registry.recordAttempt(registrySource.id, attemptedAt);
-      }
-
       // Step 1: Fetch robots.txt
       if (progressCallback) progressCallback(2, 'Fetching robots.txt...');
       try {
@@ -811,6 +993,7 @@ export async function handleIngestVendorDocs(
           app,
           maxPages,
           robotsRules,
+          acquisitionPlan.scope,
           progressCallback
         );
 
@@ -823,16 +1006,7 @@ export async function handleIngestVendorDocs(
             context: { seedUrl },
           });
 
-          if (registrySource) {
-            await registry.recordFailure(registrySource.id, {
-              attemptedAt,
-              failedAt: new Date().toISOString(),
-              errorMessage: 'No pages found to ingest',
-            });
-          }
-
-          if (progressCallback) progressCallback(100, 'No pages found to ingest');
-          return;
+          throw new Error('No pages found to ingest');
         }
 
         // Step 3: Upsert into vendor_wiki_pages with hash dedup
@@ -844,58 +1018,64 @@ export async function handleIngestVendorDocs(
           pages,
           app,
           {
-            vendorSourceId: registrySource?.id ?? null,
+            vendorSourceId: registrySource.id,
             triggeredByUserId: triggeredByUserId,
             jobId: job.id,
           },
           progressCallback
         );
 
-        try {
-          const corpusResult = await syncVendorCorpusFromLegacyPages({ app });
-          logger.info('Vendor corpus sync after ingestion complete', {
-            context: {
-              app,
-              inserted: corpusResult.inserted,
-              updated: corpusResult.updated,
-              skipped: corpusResult.skipped,
-            },
-          });
-        } catch (corpusError) {
-          logger.error('Vendor corpus sync after ingestion failed', {
-            context: { app, sourceId: registrySource?.id ?? null },
-            error: corpusError as Error,
-          });
-        }
+        await recordVendorIngestJobResult(job.id, result);
 
-        if (registrySource) {
-          const combinedHashInput = hashVendorSourcePages(
-            pages.map((page) => ({
-              screen: page.screen,
-              contentHash: page.contentHash,
-            }))
+        if (result.failed > 0) {
+          throw new Error(
+            `Vendor source ingestion failed to persist ${result.failed} of ${pages.length} pages`,
           );
-
-          const sourceContentHash = combinedHashInput
-            ? createHash('sha256').update(combinedHashInput).digest('hex')
-            : registrySource.content_hash ?? '';
-
-          await registry.recordSuccess(registrySource.id, {
-            attemptedAt,
-            succeededAt: new Date().toISOString(),
-            contentHash: sourceContentHash,
-          });
         }
+
+        if (result.inserted + result.updated + result.skipped === 0) {
+          throw new Error('Vendor source ingestion did not persist any pages');
+        }
+
+        const corpusResult = await syncVendorCorpusFromLegacyPages({ app });
+        logger.info('Vendor corpus sync after ingestion complete', {
+          context: {
+            app,
+            inserted: corpusResult.inserted,
+            updated: corpusResult.updated,
+            skipped: corpusResult.skipped,
+          },
+        });
+
+        const combinedHashInput = hashVendorSourcePages(
+          result.outcomes
+            .filter((outcome) => outcome.status !== 'failed')
+            .map((outcome) => ({
+              screen: outcome.screen,
+              contentHash: outcome.contentHash,
+            }))
+        );
+
+        const sourceContentHash = combinedHashInput
+          ? createHash('sha256').update(combinedHashInput).digest('hex')
+          : registrySource.content_hash ?? '';
+
+        await registry.recordSuccess(registrySource.id, {
+          attemptedAt,
+          succeededAt: new Date().toISOString(),
+          contentHash: sourceContentHash,
+        });
 
         logger.info('Vendor doc ingestion complete', {
           context: {
             app,
             seedUrl,
-            sourceId: registrySource?.id ?? null,
+            sourceId: registrySource.id,
             totalCrawled: pages.length,
             inserted: result.inserted,
             updated: result.updated,
             skipped: result.skipped,
+            failed: result.failed,
           },
         });
 
