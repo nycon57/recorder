@@ -14,6 +14,7 @@ const generateContentStream =
 const buildExtensionCompiledMemoryPrompt =
   jest.fn<(args: PromptArgs) => string>();
 const resolveCompiledMemoryAnswerContext = jest.fn<() => Promise<unknown>>();
+const mockRequireApiKeyOrSession = jest.fn();
 
 jest.mock('@google/genai', () => ({
   GoogleGenAI: jest.fn().mockImplementation(() => ({
@@ -29,12 +30,8 @@ jest.mock('next/server', () => ({
 }));
 
 jest.mock('@/lib/utils/api-key-auth', () => ({
-  requireApiKeyOrSession: async () => ({
-    orgId: 'org_test',
-    userId: 'user_test',
-    role: 'admin',
-    authMethod: 'session',
-  }),
+  requireApiKeyOrSession: (...args: unknown[]) =>
+    mockRequireApiKeyOrSession(...args),
 }));
 
 jest.mock('@/lib/utils/api', () => ({
@@ -122,6 +119,12 @@ describe('POST /api/extension/query', () => {
     generateContentStream.mockResolvedValue(
       streamText('Use [ELEMENT:#save:Save deal] now.'),
     );
+    mockRequireApiKeyOrSession.mockResolvedValue({
+      orgId: 'org_test',
+      userId: 'user_test',
+      role: 'admin',
+      authMethod: 'session',
+    });
   });
 
   it('passes SDK interactiveElements selector and label refs into the prompt and stream path', async () => {
@@ -164,6 +167,48 @@ describe('POST /api/extension/query', () => {
     expect(streamBody).toContain('"type":"element_ref"');
     expect(streamBody).toContain('"selector":"#save"');
     expect(streamBody).toContain('"label":"Save deal"');
+  });
+
+  it('accepts API-key auth for SDK queries without a browser session', async () => {
+    mockRequireApiKeyOrSession.mockResolvedValueOnce({
+      orgId: 'vendor_org',
+      userId: 'api_key_user',
+      role: 'admin',
+      authMethod: 'api_key',
+      keyId: 'key_1',
+      customerOrgId: 'customer_org',
+    });
+    const { POST } = await import('../route');
+
+    const request = buildRequest({
+      question: 'What should I do on this account page?',
+      context: {
+        url: 'https://example.com/accounts/123',
+        appSignature: 'salesforce:account-detail',
+        interactiveElements: [
+          {
+            selector: '#next-step',
+            label: 'Next step',
+            type: 'button',
+          },
+        ],
+      },
+    });
+    request.headers.set('authorization', 'Bearer sk_live_test_key');
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(mockRequireApiKeyOrSession).toHaveBeenCalledWith(
+      request,
+      'query',
+    );
+    expect(buildExtensionCompiledMemoryPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        elements: [{ selector: '#next-step', label: 'Next step' }],
+      }),
+    );
+    expect(await response.text()).toContain('"type":"element_ref"');
   });
 
   it('uses DOM-grounded generation when compiled memory has no sources but page context exists', async () => {
