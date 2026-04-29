@@ -1,4 +1,7 @@
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
+import { resolveOrgWikiPagesByVector } from '@/lib/services/org-wiki-embedding';
+import { resolveVendorCorpusPages } from '@/lib/services/vendor-doc-corpus';
 import type {
   KnowledgeAvailability,
   KnowledgeMatch,
@@ -26,6 +29,7 @@ type RankableKnowledgeRow = {
   screen?: string | null;
   topic?: string | null;
   element_selectors?: unknown;
+  vectorScore?: number | null;
 };
 
 export interface KnowledgeMatchCandidate {
@@ -137,6 +141,132 @@ function extractUrlRankingTokens(url: string): string[] {
   }
 }
 
+function buildPageRelevanceQuery(args: {
+  app: string;
+  screen: string;
+  url: string;
+}): string {
+  const urlTokens = extractUrlRankingTokens(args.url).join(' ');
+  return uniqueStrings([args.app, args.screen, urlTokens]).join(' ');
+}
+
+function normalizeVectorScore(score: number | null | undefined): number {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return 0;
+  if (score <= 0) return 0;
+  if (score >= 1) return 1;
+  return score;
+}
+
+async function generatePageRelevanceEmbedding(args: {
+  app: string;
+  screen: string;
+  url: string;
+}): Promise<number[] | null> {
+  const input = buildPageRelevanceQuery(args);
+  if (!input) return null;
+
+  try {
+    const { embedding } = await generateEmbeddingWithFallback(
+      input,
+      'RETRIEVAL_QUERY',
+    );
+    return embedding;
+  } catch (error) {
+    console.warn(
+      '[extension-context] page relevance embedding failed, falling back to lexical ranking:',
+      error,
+    );
+    return null;
+  }
+}
+
+async function resolveVendorPageVectorScores(args: {
+  app: string;
+  screen: string;
+  url: string;
+  pageIds: string[];
+}): Promise<Map<string, number>> {
+  if (args.pageIds.length === 0) return new Map();
+
+  const questionEmbedding = await generatePageRelevanceEmbedding(args);
+  if (!questionEmbedding) return new Map();
+
+  try {
+    const matches = await resolveVendorCorpusPages({
+      app: args.app,
+      screen: args.screen,
+      questionEmbedding,
+      limit: Math.max(args.pageIds.length, 10),
+    });
+    const allowedPageIds = new Set(args.pageIds);
+    const scores = new Map<string, number>();
+
+    for (const match of matches) {
+      if (!match.vendorPageId || !allowedPageIds.has(match.vendorPageId)) {
+        continue;
+      }
+      const current = scores.get(match.vendorPageId) ?? 0;
+      scores.set(match.vendorPageId, Math.max(current, match.confidence));
+    }
+
+    return scores;
+  } catch (error) {
+    console.warn(
+      '[extension-context] vendor page vector ranking failed, falling back to lexical ranking:',
+      error,
+    );
+    return new Map();
+  }
+}
+
+async function resolveOrgPageVectorScores(args: {
+  orgId: string;
+  app: string;
+  screen: string;
+  url: string;
+  pageIds: string[];
+}): Promise<Map<string, number>> {
+  if (args.pageIds.length === 0) return new Map();
+
+  const questionEmbedding = await generatePageRelevanceEmbedding(args);
+  if (!questionEmbedding) return new Map();
+
+  try {
+    const matches = await resolveOrgWikiPagesByVector({
+      orgId: args.orgId,
+      questionEmbedding,
+      limit: Math.max(args.pageIds.length, 10),
+    });
+    const allowedPageIds = new Set(args.pageIds);
+    const scores = new Map<string, number>();
+
+    for (const match of matches) {
+      if (!allowedPageIds.has(match.id)) continue;
+      const current = scores.get(match.id) ?? 0;
+      scores.set(match.id, Math.max(current, match.confidence));
+    }
+
+    return scores;
+  } catch (error) {
+    console.warn(
+      '[extension-context] org page vector ranking failed, falling back to lexical ranking:',
+      error,
+    );
+    return new Map();
+  }
+}
+
+function applyVectorScores<T extends RankableKnowledgeRow>(
+  rows: T[],
+  scores: Map<string, number>,
+): T[] {
+  if (scores.size === 0) return rows;
+  return rows.map((row) => ({
+    ...row,
+    vectorScore: scores.get(row.id) ?? row.vectorScore ?? null,
+  }));
+}
+
 export function rankKnowledgeRowsByPageRelevance<
   T extends RankableKnowledgeRow,
 >(
@@ -175,8 +305,15 @@ export function rankKnowledgeRowsByPageRelevance<
       normalizedScreen && normalizedScreen === args.screen.toLowerCase()
         ? 12
         : 0;
+    const vectorBoost = normalizeVectorScore(row.vectorScore) * 12;
 
-    return exactScreenBoost + screenOverlap * 5 + urlOverlap * 2 + overlap;
+    return (
+      exactScreenBoost +
+      vectorBoost +
+      screenOverlap * 5 +
+      urlOverlap * 2 +
+      overlap
+    );
   };
 
   return rows
@@ -380,10 +517,19 @@ async function fetchVendorMatchCandidates(
     return [];
   }
 
-  const rows = rankKnowledgeRowsByPageRelevance(data ?? [], {
+  const vectorScores = await resolveVendorPageVectorScores({
+    app: exactApp,
     screen,
     url,
+    pageIds: (data ?? []).map((row) => row.id),
   });
+  const rows = rankKnowledgeRowsByPageRelevance(
+    applyVectorScores(data ?? [], vectorScores),
+    {
+      screen,
+      url,
+    },
+  );
   const exactRows = rows.filter(
     (row) => row.app === exactApp && row.screen === screen.toLowerCase(),
   );
@@ -483,10 +629,20 @@ async function fetchOrgMatchCandidates(
     return [];
   }
 
-  const rows = rankKnowledgeRowsByPageRelevance(data ?? [], {
+  const vectorScores = await resolveOrgPageVectorScores({
+    orgId,
+    app: exactApp,
     screen,
     url,
+    pageIds: (data ?? []).map((row) => row.id),
   });
+  const rows = rankKnowledgeRowsByPageRelevance(
+    applyVectorScores(data ?? [], vectorScores),
+    {
+      screen,
+      url,
+    },
+  );
   const exactRows = rows.filter(
     (row) => row.app === exactApp && row.screen === screen.toLowerCase(),
   );
