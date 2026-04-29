@@ -117,6 +117,13 @@ interface DocifyPayload {
   orgId: string;
 }
 
+export function shouldDeferCompileWikiToWorkflow(
+  contentType: string | null | undefined,
+  workflowExtractionEnabled: boolean,
+): boolean {
+  return contentType === 'recording' && workflowExtractionEnabled;
+}
+
 /**
  * Generate document from transcript using Google Gemini
  */
@@ -162,6 +169,17 @@ export async function generateDocument(
       },
     });
 
+    const { data: existingContent } = await supabase
+      .from('content')
+      .select('content_type')
+      .eq('id', recordingId)
+      .eq('org_id', orgId)
+      .single();
+    const workflowOwnsCompile = shouldDeferCompileWikiToWorkflow(
+      existingContent?.content_type,
+      await isAgentEnabled(orgId, 'workflow_extraction'),
+    );
+
     // Ensure recording status is correct
     await supabase
       .from('content')
@@ -191,6 +209,14 @@ export async function generateDocument(
       console.log(
         `[Docify] Enqueued embedding generation job for existing document`,
       );
+    }
+
+    if (!workflowOwnsCompile) {
+      await enqueueCompileWikiJob(supabase, {
+        recordingId,
+        orgId,
+        source: 'Docify',
+      });
     }
 
     return;
@@ -658,9 +684,10 @@ export async function generateDocument(
     });
 
     // Enqueue workflow extraction in parallel for screen recordings when the agent is enabled
-    const shouldExtractWorkflow =
-      recording?.content_type === 'recording' &&
-      (await isAgentEnabled(orgId, 'workflow_extraction'));
+    const shouldExtractWorkflow = shouldDeferCompileWikiToWorkflow(
+      recording?.content_type,
+      await isAgentEnabled(orgId, 'workflow_extraction'),
+    );
 
     if (shouldExtractWorkflow) {
       const workflowInsert = supabase.from('jobs').insert({
