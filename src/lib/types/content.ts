@@ -42,6 +42,8 @@ export const FILE_EXTENSION_TO_CONTENT_TYPE: Record<FileType, ContentType> = {
   md: 'text',
 };
 
+export type UploadContext = 'recording' | 'library';
+
 /**
  * MIME type to file extension mapping
  */
@@ -84,8 +86,7 @@ export const FILE_TYPE_TO_MIME_TYPE: Record<FileType, string> = {
   ogg: 'audio/ogg',
   // Documents
   pdf: 'application/pdf',
-  docx:
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   doc: 'application/msword',
   // Text
   txt: 'text/plain',
@@ -244,13 +245,17 @@ export const SEGMENTATION_CONFIG = {
 /**
  * Get optimal segment duration based on total video duration
  */
-export function getOptimalSegmentDuration(totalDurationSeconds: number): number {
+export function getOptimalSegmentDuration(
+  totalDurationSeconds: number,
+): number {
   if (totalDurationSeconds <= SEGMENTATION_CONFIG.SPLIT_THRESHOLD_SECONDS) {
     // No splitting needed
     return totalDurationSeconds;
   }
 
-  if (totalDurationSeconds <= SEGMENTATION_CONFIG.LONG_VIDEO_THRESHOLD_SECONDS) {
+  if (
+    totalDurationSeconds <= SEGMENTATION_CONFIG.LONG_VIDEO_THRESHOLD_SECONDS
+  ) {
     // Standard 25-minute segments for 30-60 min videos
     return SEGMENTATION_CONFIG.STANDARD_SEGMENT_SECONDS;
   }
@@ -274,7 +279,9 @@ export function calculateSegmentCount(totalDurationSeconds: number): number {
 /**
  * Get processing strategy based on duration
  */
-export function getProcessingStrategy(totalDurationSeconds: number): 'single' | 'segmented' {
+export function getProcessingStrategy(
+  totalDurationSeconds: number,
+): 'single' | 'segmented' {
   return totalDurationSeconds <= SEGMENTATION_CONFIG.SPLIT_THRESHOLD_SECONDS
     ? 'single'
     : 'segmented';
@@ -293,8 +300,8 @@ export function estimateProcessingTime(totalDurationSeconds: number): {
 
   if (strategy === 'single') {
     // Single-pass: ~1-2 min per minute of video
-    const minTime = Math.ceil(totalDurationSeconds / 60 * 1);
-    const maxTime = Math.ceil(totalDurationSeconds / 60 * 2);
+    const minTime = Math.ceil((totalDurationSeconds / 60) * 1);
+    const maxTime = Math.ceil((totalDurationSeconds / 60) * 2);
     return {
       minMinutes: minTime,
       maxMinutes: maxTime,
@@ -331,15 +338,26 @@ export const ACCEPTED_FILE_EXTENSIONS: Record<ContentType, string[]> = {
   text: ['.txt', '.md'],
 };
 
+function resolveContentTypeForFile(
+  fileType: FileType,
+  options: { uploadContext?: UploadContext } = {},
+): ContentType {
+  if (fileType === 'webm' && options.uploadContext === 'library') {
+    return 'video';
+  }
+  return FILE_EXTENSION_TO_CONTENT_TYPE[fileType];
+}
+
 /**
  * Helper function to get content type from MIME type
  */
 export function getContentTypeFromMimeType(
-  mimeType: string
+  mimeType: string,
+  options: { uploadContext?: UploadContext } = {},
 ): ContentType | null {
   const fileType = MIME_TYPE_TO_FILE_TYPE[mimeType];
   if (!fileType) return null;
-  return FILE_EXTENSION_TO_CONTENT_TYPE[fileType];
+  return resolveContentTypeForFile(fileType, options);
 }
 
 /**
@@ -357,9 +375,7 @@ export function getFileTypeFromExtension(filename: string): FileType | null {
   if (!ext) return null;
 
   // Find matching file type
-  for (const [fileType, extensions] of Object.entries(
-    ACCEPTED_FILE_EXTENSIONS
-  )) {
+  for (const extensions of Object.values(ACCEPTED_FILE_EXTENSIONS)) {
     if (extensions.includes(`.${ext}`)) {
       return ext as FileType;
     }
@@ -373,14 +389,15 @@ export function getFileTypeFromExtension(filename: string): FileType | null {
  */
 export function isValidFileType(
   mimeType: string,
-  contentType?: ContentType
+  contentType?: ContentType,
+  options: { uploadContext?: UploadContext } = {},
 ): boolean {
   const fileType = MIME_TYPE_TO_FILE_TYPE[mimeType];
   if (!fileType) return false;
 
   // If content type is specified, verify the file type matches
   if (contentType) {
-    const expectedContentType = FILE_EXTENSION_TO_CONTENT_TYPE[fileType];
+    const expectedContentType = resolveContentTypeForFile(fileType, options);
     return expectedContentType === contentType;
   }
 
@@ -390,7 +407,10 @@ export function isValidFileType(
 /**
  * Helper function to validate file size
  */
-export function isValidFileSize(size: number, contentType: ContentType): boolean {
+export function isValidFileSize(
+  size: number,
+  contentType: ContentType,
+): boolean {
   return size <= FILE_SIZE_LIMITS[contentType];
 }
 
@@ -400,11 +420,15 @@ export function isValidFileSize(size: number, contentType: ContentType): boolean
  */
 export function isValidDuration(
   durationSeconds: number | null | undefined,
-  contentType: ContentType
+  contentType: ContentType,
 ): boolean {
   const limit = DURATION_LIMITS[contentType];
   // If no limit or no duration provided, consider it valid
-  if (limit === null || durationSeconds === null || durationSeconds === undefined) {
+  if (
+    limit === null ||
+    durationSeconds === null ||
+    durationSeconds === undefined
+  ) {
     return true;
   }
   return durationSeconds <= limit;
@@ -426,7 +450,9 @@ export function formatDurationSeconds(seconds: number): string {
   const remainingMinutes = minutes % 60;
 
   if (hours > 0) {
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours} hour${hours > 1 ? 's' : ''}`;
+    return remainingMinutes > 0
+      ? `${hours}h ${remainingMinutes}m`
+      : `${hours} hour${hours > 1 ? 's' : ''}`;
   }
   return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
 }
@@ -471,8 +497,14 @@ export function requiresTextExtraction(contentType: ContentType): boolean {
  */
 export function getProcessingJobs(
   contentType: ContentType,
-  fileType?: FileType
-): Array<'transcribe' | 'extract_audio' | 'extract_text_pdf' | 'extract_text_docx' | 'process_text_note'> {
+  fileType?: FileType,
+): Array<
+  | 'transcribe'
+  | 'extract_audio'
+  | 'extract_text_pdf'
+  | 'extract_text_docx'
+  | 'process_text_note'
+> {
   switch (contentType) {
     case 'recording':
       return ['transcribe'];
@@ -522,7 +554,8 @@ export interface UploadValidationResult {
  */
 export function validateFileForUpload(
   file: File,
-  durationSeconds?: number
+  durationSeconds?: number,
+  options: { uploadContext?: UploadContext } = {},
 ): UploadValidationResult {
   // Check MIME type
   const fileType = getFileTypeFromMimeType(file.type);
@@ -533,7 +566,7 @@ export function validateFileForUpload(
     };
   }
 
-  const contentType = FILE_EXTENSION_TO_CONTENT_TYPE[fileType];
+  const contentType = resolveContentTypeForFile(fileType, options);
   if (!contentType) {
     return {
       valid: false,
@@ -550,7 +583,10 @@ export function validateFileForUpload(
   }
 
   // Check duration (if provided) for video/audio content
-  if (durationSeconds !== undefined && !isValidDuration(durationSeconds, contentType)) {
+  if (
+    durationSeconds !== undefined &&
+    !isValidDuration(durationSeconds, contentType)
+  ) {
     const maxDuration = DURATION_LIMIT_LABELS[contentType];
     const actualDuration = formatDurationSeconds(durationSeconds);
     return {

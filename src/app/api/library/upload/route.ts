@@ -7,11 +7,11 @@ import {
   errors,
   generateRequestId,
 } from '@/lib/utils/api';
+import { withRateLimit } from '@/lib/rate-limit/middleware';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { QuotaManager } from '@/lib/services/quotas/quota-manager';
 import {
   validateFileForUpload,
-  getFileTypeFromMimeType,
-  FILE_EXTENSION_TO_CONTENT_TYPE,
   getProcessingJobs,
   formatFileSize,
   FILE_SIZE_LIMIT_LABELS,
@@ -25,6 +25,93 @@ import {
 import type { ContentType, FileType, JobType } from '@/lib/types/database';
 
 const logger = createLogger({ service: 'library-upload' });
+const MAX_BATCH_FILES = 10;
+
+interface UploadFormOptions {
+  analysisType: string;
+  skipAnalysis: boolean;
+}
+
+interface ValidatedUploadFile {
+  file: File;
+  index: number;
+  contentType: ContentType;
+  fileType: FileType;
+}
+
+type UploadResult =
+  | {
+      index: number;
+      status: 'error';
+      title: string;
+      error: string | undefined;
+    }
+  | {
+      index: number;
+      status: 'success';
+      id: string;
+      title: string;
+      contentType: ContentType;
+      fileType: FileType;
+      fileSize: number;
+      uploadUrl?: string;
+    };
+
+type JobPayload = {
+  recordingId: string;
+  orgId: string;
+  contentType: ContentType;
+  fileType: FileType;
+  transcriptId?: string;
+  videoPath?: string;
+  pdfPath?: string;
+  docxPath?: string;
+};
+
+function parseUploadOptions(formData: FormData): UploadFormOptions {
+  const rawAnalysisType = formData.get('analysisType');
+  const rawSkipAnalysis = formData.get('skipAnalysis');
+
+  return {
+    analysisType:
+      typeof rawAnalysisType === 'string' && rawAnalysisType.length > 0
+        ? rawAnalysisType
+        : 'general',
+    skipAnalysis:
+      typeof rawSkipAnalysis === 'string' ? rawSkipAnalysis === 'true' : false,
+  };
+}
+
+async function rollbackContent(
+  contentId: string,
+  storagePath?: string,
+): Promise<boolean> {
+  if (storagePath) {
+    const { error } = await supabaseAdmin.storage
+      .from('content')
+      .remove([storagePath]);
+    if (error) {
+      logger.error('Failed to remove uploaded storage during rollback', {
+        context: { contentId, storagePath },
+        error,
+      });
+    }
+  }
+
+  const { error: deleteError } = await supabaseAdmin
+    .from('content')
+    .delete()
+    .eq('id', contentId);
+  if (deleteError) {
+    logger.error('Failed to remove content row during upload rollback', {
+      context: { contentId, storagePath },
+      error: deleteError,
+    });
+    return false;
+  }
+
+  return true;
+}
 
 /**
  * POST /api/library/upload
@@ -70,75 +157,126 @@ const logger = createLogger({ service: 'library-upload' });
  *   - 413: Payload too large (handled by Next.js)
  *   - 500: Internal server error
  */
-export const POST = apiHandler(async (request: NextRequest) => {
-  const requestId = generateRequestId();
-  const { orgId, userId } = await requireOrg();
+export const POST = withRateLimit(
+  apiHandler(async (request: NextRequest) => {
+    const requestId = generateRequestId();
+    const { orgId, userId } = await requireOrg();
+    let reservedQuota = 0;
 
-  try {
-    // Parse multipart form data
-    const formData = await request.formData();
-    const files = formData.getAll('files') as File[];
+    try {
+      // Parse multipart form data
+      const formData = await request.formData();
+      const files = formData.getAll('files') as File[];
+      const uploadOptions = parseUploadOptions(formData);
 
-    if (!files || files.length === 0) {
-      logger.info('No files provided in upload request', {
-        context: { requestId, orgId, userId },
+      if (!files || files.length === 0) {
+        logger.info('No files provided in upload request', {
+          context: { requestId, orgId, userId },
+        });
+        return errors.badRequest('No files provided', undefined, requestId);
+      }
+
+      if (files.length > MAX_BATCH_FILES) {
+        logger.warn('Too many files in upload request', {
+          context: { requestId, orgId, userId },
+          data: { fileCount: files.length, maxFiles: 10 },
+        });
+        return errors.badRequest(
+          'Too many files. Maximum 10 files per request.',
+          { maxFiles: MAX_BATCH_FILES },
+          requestId,
+        );
+      }
+
+      const validatedFiles: ValidatedUploadFile[] = [];
+      const validationFailures: UploadResult[] = [];
+
+      files.forEach((file, index) => {
+        const validation = validateFileForUpload(file, undefined, {
+          uploadContext: 'library',
+        });
+        if (
+          !validation.valid ||
+          !validation.contentType ||
+          !validation.fileType
+        ) {
+          validationFailures.push({
+            index,
+            status: 'error',
+            title: file.name,
+            error: validation.error,
+          });
+          return;
+        }
+
+        if (validation.contentType === 'recording') {
+          validationFailures.push({
+            index,
+            status: 'error',
+            title: file.name,
+            error:
+              'Screen recordings must be created via /api/recordings endpoint',
+          });
+          return;
+        }
+
+        validatedFiles.push({
+          file,
+          index,
+          contentType: validation.contentType,
+          fileType: validation.fileType,
+        });
       });
-      return errors.badRequest('No files provided', undefined, requestId);
-    }
 
-    if (files.length > 10) {
-      logger.warn('Too many files in upload request', {
-        context: { requestId, orgId, userId },
-        data: { fileCount: files.length, maxFiles: 10 },
-      });
-      return errors.badRequest(
-        'Too many files. Maximum 10 files per request.',
-        { maxFiles: 10 },
-        requestId,
+      if (validatedFiles.length === 0) {
+        return successResponse(
+          {
+            uploads: validationFailures,
+            summary: {
+              total: files.length,
+              successful: 0,
+              failed: validationFailures.length,
+            },
+          },
+          requestId,
+          400,
+        );
+      }
+
+      const quotaCheck = await QuotaManager.checkAndConsumeQuota(
+        orgId,
+        'recording',
+        validatedFiles.length,
       );
-    }
+      if (!quotaCheck.allowed) {
+        return errors.quotaExceeded({
+          remaining: quotaCheck.remaining,
+          limit: quotaCheck.limit,
+          resetAt: quotaCheck.resetAt.toISOString(),
+          message: quotaCheck.message,
+        });
+      }
+      reservedQuota = validatedFiles.length;
 
-    // Log request start
-    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
-    logger.info('Starting file upload request', {
-      context: { requestId, orgId, userId },
-      data: {
-        fileCount: files.length,
-        totalSizeBytes: totalSize,
-        totalSizeMB: parseFloat((totalSize / 1024 / 1024).toFixed(2)),
-        filenames: files.map((f) => f.name),
-      },
-    });
+      // Log request start
+      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+      logger.info('Starting file upload request', {
+        context: { requestId, orgId, userId },
+        data: {
+          fileCount: files.length,
+          totalSizeBytes: totalSize,
+          totalSizeMB: parseFloat((totalSize / 1024 / 1024).toFixed(2)),
+          filenames: files.map((f) => f.name),
+        },
+      });
 
-    // Process each file
-    const uploadResults = await Promise.all(
-      files.map(async (file, index) => {
+      const uploadResults: UploadResult[] = [...validationFailures];
+
+      // Process files sequentially to avoid buffering large multipart batches concurrently.
+      for (const { file, index, contentType, fileType } of validatedFiles) {
+        let activeContentId: string | undefined;
+        let activeStoragePath: string | undefined;
         try {
-          // Validate file
-          const validation = validateFileForUpload(file);
-          if (!validation.valid) {
-            return {
-              index,
-              status: 'error' as const,
-              title: file.name,
-              error: validation.error,
-            };
-          }
-
-          const contentType = validation.contentType!;
-          const fileType = validation.fileType!;
-
-          // Prevent recordings from being uploaded via this endpoint
-          if (contentType === 'recording') {
-            return {
-              index,
-              status: 'error' as const,
-              title: file.name,
-              error:
-                'Screen recordings must be created via /api/recordings endpoint',
-            };
-          }
-
           // Sanitize filename to prevent path traversal
           const sanitizedFilename = file.name
             .replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -157,9 +295,13 @@ export const POST = apiHandler(async (request: NextRequest) => {
               original_filename: sanitizedFilename,
               mime_type: file.type,
               file_size: file.size,
+              analysis_type: uploadOptions.analysisType,
+              skip_analysis: uploadOptions.skipAnalysis,
               metadata: {
                 source: 'library_upload',
                 uploaded_at: new Date().toISOString(),
+                analysisType: uploadOptions.analysisType,
+                skipAnalysis: uploadOptions.skipAnalysis,
               },
             })
             .select()
@@ -170,13 +312,17 @@ export const POST = apiHandler(async (request: NextRequest) => {
               context: { requestId, orgId, userId, filename: file.name },
               error: dbError as Error,
             });
-            return {
+            await QuotaManager.releaseQuota(orgId, 'recording');
+            reservedQuota = Math.max(0, reservedQuota - 1);
+            uploadResults.push({
               index,
               status: 'error' as const,
               title: file.name,
               error: 'Failed to create database record',
-            };
+            });
+            continue;
           }
+          activeContentId = recording.id;
 
           logger.info('Database record created', {
             context: { requestId, orgId, recordingId: recording.id },
@@ -195,16 +341,16 @@ export const POST = apiHandler(async (request: NextRequest) => {
             recording.id,
             fileType,
           );
+          activeStoragePath = storagePath;
 
           // Upload file to Supabase Storage
           const fileBuffer = await file.arrayBuffer();
-          const { data: uploadData, error: uploadError } =
-            await supabaseAdmin.storage
-              .from('content')
-              .upload(storagePath, fileBuffer, {
-                contentType: file.type,
-                upsert: false,
-              });
+          const { error: uploadError } = await supabaseAdmin.storage
+            .from('content')
+            .upload(storagePath, fileBuffer, {
+              contentType: file.type,
+              upsert: false,
+            });
 
           if (uploadError) {
             logger.error('Storage upload failed', {
@@ -217,8 +363,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
               error: uploadError as Error,
             });
 
-            // Clean up database record
-            await supabaseAdmin.from('content').delete().eq('id', recording.id);
+            const rolledBack = await rollbackContent(recording.id);
+            if (rolledBack) {
+              await QuotaManager.releaseQuota(orgId, 'recording');
+              reservedQuota = Math.max(0, reservedQuota - 1);
+            }
 
             // Provide more specific error messages
             let errorMessage = `Storage upload failed: ${uploadError.message}`;
@@ -247,12 +396,13 @@ export const POST = apiHandler(async (request: NextRequest) => {
               errorMessage = `File type not supported. Supported formats: MP4, MOV, WEBM, AVI (video), MP3, WAV, M4A, OGG (audio), PDF, DOCX (documents), TXT, MD (text).`;
             }
 
-            return {
+            uploadResults.push({
               index,
               status: 'error' as const,
               title: file.name,
               error: errorMessage,
-            };
+            });
+            continue;
           }
 
           // Update recording with storage path
@@ -274,8 +424,53 @@ export const POST = apiHandler(async (request: NextRequest) => {
           const firstJobType = jobTypes[0];
 
           if (firstJobType) {
+            let transcriptId: string | undefined;
+
+            if (firstJobType === 'process_text_note') {
+              const textContent = Buffer.from(fileBuffer).toString('utf-8');
+              const { data: transcript, error: transcriptError } =
+                await supabaseAdmin
+                  .from('transcripts')
+                  .insert({
+                    content_id: recording.id,
+                    text: textContent,
+                    language: 'en',
+                    provider: 'library_upload',
+                    words_json: {
+                      source: 'library_upload',
+                      originalFilename: sanitizedFilename,
+                    },
+                  })
+                  .select('id')
+                  .single();
+
+              if (transcriptError || !transcript) {
+                logger.error('Text transcript creation failed', {
+                  context: { requestId, orgId, recordingId: recording.id },
+                  error: transcriptError as Error,
+                });
+                const rolledBack = await rollbackContent(
+                  recording.id,
+                  storagePath,
+                );
+                if (rolledBack) {
+                  await QuotaManager.releaseQuota(orgId, 'recording');
+                  reservedQuota = Math.max(0, reservedQuota - 1);
+                }
+                uploadResults.push({
+                  index,
+                  status: 'error' as const,
+                  title: file.name,
+                  error: 'Failed to create text transcript',
+                });
+                continue;
+              }
+
+              transcriptId = transcript.id;
+            }
+
             // Build job payload with correct path field based on job type
-            const jobPayload: any = {
+            const jobPayload: JobPayload = {
               recordingId: recording.id,
               orgId,
               contentType,
@@ -289,14 +484,42 @@ export const POST = apiHandler(async (request: NextRequest) => {
               jobPayload.pdfPath = storagePath;
             } else if (firstJobType === 'extract_text_docx') {
               jobPayload.docxPath = storagePath;
+            } else if (firstJobType === 'process_text_note') {
+              jobPayload.transcriptId = transcriptId;
             }
 
-            await supabaseAdmin.from('jobs').insert({
-              type: firstJobType as JobType,
-              status: 'pending',
-              payload: jobPayload,
-              run_at: new Date().toISOString(),
-            });
+            const { error: jobError } = await supabaseAdmin
+              .from('jobs')
+              .insert({
+                type: firstJobType as JobType,
+                status: 'pending',
+                content_id: recording.id,
+                payload: jobPayload,
+                dedupe_key: `${firstJobType}:${recording.id}`,
+                run_at: new Date().toISOString(),
+              });
+
+            if (jobError) {
+              logger.error('Processing job enqueue failed', {
+                context: { requestId, orgId, recordingId: recording.id },
+                error: jobError as Error,
+              });
+              const rolledBack = await rollbackContent(
+                recording.id,
+                storagePath,
+              );
+              if (rolledBack) {
+                await QuotaManager.releaseQuota(orgId, 'recording');
+                reservedQuota = Math.max(0, reservedQuota - 1);
+              }
+              uploadResults.push({
+                index,
+                status: 'error' as const,
+                title: file.name,
+                error: 'Failed to enqueue processing job',
+              });
+              continue;
+            }
 
             // Update recording status based on first job
             const newStatus =
@@ -319,7 +542,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
             .from('content')
             .createSignedUrl(storagePath, 3600); // 1 hour expiry
 
-          return {
+          uploadResults.push({
             index,
             status: 'success' as const,
             id: recording.id,
@@ -328,60 +551,81 @@ export const POST = apiHandler(async (request: NextRequest) => {
             fileType,
             fileSize: file.size,
             uploadUrl: signedUrlData?.signedUrl,
-          };
-        } catch (error: any) {
+          });
+          reservedQuota = Math.max(0, reservedQuota - 1);
+        } catch (error: unknown) {
           logger.error('File processing error', {
             context: { requestId, orgId, userId, filename: file.name, index },
             error: error as Error,
           });
-          return {
+          const rolledBack = activeContentId
+            ? await rollbackContent(activeContentId, activeStoragePath)
+            : true;
+          if (rolledBack) {
+            await QuotaManager.releaseQuota(orgId, 'recording');
+            reservedQuota = Math.max(0, reservedQuota - 1);
+          }
+          uploadResults.push({
             index,
             status: 'error' as const,
             title: file.name,
-            error: error.message || 'Unknown error occurred',
-          };
+            error:
+              error instanceof Error ? error.message : 'Unknown error occurred',
+          });
         }
-      }),
-    );
+      }
 
-    // Calculate summary
-    const successful = uploadResults.filter(
-      (r) => r.status === 'success',
-    ).length;
-    const failed = uploadResults.filter((r) => r.status === 'error').length;
+      uploadResults.sort((a, b) => a.index - b.index);
 
-    logger.info('Upload request completed', {
-      context: { requestId, orgId, userId },
-      data: {
-        total: uploadResults.length,
-        successful,
-        failed,
-        successRate: parseFloat(
-          ((successful / uploadResults.length) * 100).toFixed(2),
-        ),
-      },
-    });
+      // Calculate summary
+      const successful = uploadResults.filter(
+        (r) => r.status === 'success',
+      ).length;
+      const failed = uploadResults.filter((r) => r.status === 'error').length;
 
-    return successResponse(
-      {
-        uploads: uploadResults,
-        summary: {
+      logger.info('Upload request completed', {
+        context: { requestId, orgId, userId },
+        data: {
           total: uploadResults.length,
           successful,
           failed,
+          successRate: parseFloat(
+            ((successful / uploadResults.length) * 100).toFixed(2),
+          ),
         },
-      },
-      requestId,
-      successful > 0 ? 201 : 400,
-    );
-  } catch (error: any) {
-    logger.error('Upload request error', {
-      context: { requestId, orgId, userId },
-      error: error as Error,
-    });
-    return errors.internalError(requestId);
-  }
-});
+      });
+
+      return successResponse(
+        {
+          uploads: uploadResults,
+          summary: {
+            total: uploadResults.length,
+            successful,
+            failed,
+          },
+        },
+        requestId,
+        successful > 0 ? 201 : 400,
+      );
+    } catch (error: unknown) {
+      if (reservedQuota > 0) {
+        await QuotaManager.releaseQuota(orgId, 'recording', reservedQuota);
+      }
+      logger.error('Upload request error', {
+        context: { requestId, orgId, userId },
+        error: error as Error,
+      });
+      return errors.internalError(requestId);
+    }
+  }),
+  {
+    limiter: 'upload',
+    identifier: async () => {
+      const { orgId } = await requireOrg();
+      return orgId;
+    },
+  },
+);
 
 /**
  * GET /api/library/upload

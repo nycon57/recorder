@@ -17,6 +17,7 @@ import {
 import type { ProgressCallback } from '../job-processor';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
+type TranscriptRow = Database['public']['Tables']['transcripts']['Row'];
 
 interface ProcessTextNotePayload {
   recordingId: string;
@@ -56,7 +57,7 @@ export async function handleProcessTextNote(
   try {
     // If transcriptId is provided, fetch existing transcript
     // Otherwise, check if transcript was already created
-    let transcript: any = null;
+    let transcript: TranscriptRow | null = null;
 
     if (transcriptId) {
       const { data, error } = await supabase
@@ -150,7 +151,11 @@ export async function handleProcessTextNote(
         .update({
           text: cleanedText,
           words_json: {
-            ...(transcript.words_json as any),
+            ...(typeof transcript.words_json === 'object' &&
+            !Array.isArray(transcript.words_json) &&
+            transcript.words_json !== null
+              ? transcript.words_json
+              : {}),
             originalLength: textContent.length,
             cleanedLength: cleanedText.length,
             wasTruncated,
