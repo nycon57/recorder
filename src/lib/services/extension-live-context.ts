@@ -1,6 +1,10 @@
 import crypto from 'node:crypto';
 
-import type { LiveContextPack, PageContext } from '@tribora/shared';
+import {
+  sanitizePageContextForModel,
+  type LiveContextPack,
+  type PageContext,
+} from '@tribora/shared';
 
 export interface LiveContextSourcePage {
   id: string;
@@ -49,7 +53,8 @@ export function buildLiveContextPack(args: {
   orgPages: LiveContextSourcePage[];
   vendorPages: LiveContextSourcePage[];
 }): LiveContextPack {
-  const { context, orgPages, vendorPages } = args;
+  const { orgPages, vendorPages } = args;
+  const context = sanitizePageContextForModel(args.context);
   const sections: string[] = [];
 
   sections.push(

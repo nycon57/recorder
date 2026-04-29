@@ -11,6 +11,8 @@
 
 import {
   buildContextSemanticFingerprint,
+  sanitizePageContextForModel,
+  sanitizePageContextForNetwork,
   type OverlayTarget,
   type PageElementSearchResult,
   type PageContext,
@@ -81,11 +83,12 @@ export default defineContentScript({
 
     const publishPageContext = (context: PageContext): void => {
       updatePageInstance();
-      latestContext = context;
+      const sanitizedContext = sanitizePageContextForNetwork(context);
+      latestContext = sanitizedContext;
       chrome.runtime.sendMessage(
         {
           type: 'PAGE_CONTEXT_UPDATED',
-          context,
+          context: sanitizedContext,
           contentInstanceId,
           pageInstanceId,
         },
@@ -269,11 +272,13 @@ export default defineContentScript({
     async function execGetPageContext(): Promise<string> {
       const context = await getFreshLatestContext();
       if (!context) return 'No page context available.';
+      const sanitizedContext = sanitizePageContextForModel(context);
       return JSON.stringify({
-        ...context,
+        ...sanitizedContext,
         appSignature:
-          context.appSignature ?? `${context.app}:${context.screen}`,
-        interactiveElements: context.interactiveElements,
+          sanitizedContext.appSignature ??
+          `${sanitizedContext.app}:${sanitizedContext.screen}`,
+        interactiveElements: sanitizedContext.interactiveElements,
       });
     }
 
@@ -381,8 +386,7 @@ export default defineContentScript({
       if (!el) return 'target unavailable: element not found';
       const context = latestContext;
       if (!context) return 'target unavailable: page context unavailable';
-      const previousFingerprint =
-        buildContextSemanticFingerprint(context);
+      const previousFingerprint = buildContextSemanticFingerprint(context);
       const previousUrl = window.location.href;
       overlay.pointAt(args.selector);
       scheduleOverlayClear(1500);
@@ -407,8 +411,7 @@ export default defineContentScript({
       if (!el) return 'target unavailable: element not found';
       const context = latestContext;
       if (!context) return 'target unavailable: page context unavailable';
-      const previousFingerprint =
-        buildContextSemanticFingerprint(context);
+      const previousFingerprint = buildContextSemanticFingerprint(context);
       const previousUrl = window.location.href;
       overlay.pointAt(args.selector);
       scheduleOverlayClear(2500);
@@ -439,8 +442,7 @@ export default defineContentScript({
       if (!el) return 'target unavailable: element not found';
       const context = latestContext;
       if (!context) return 'target unavailable: page context unavailable';
-      const previousFingerprint =
-        buildContextSemanticFingerprint(context);
+      const previousFingerprint = buildContextSemanticFingerprint(context);
       const previousUrl = window.location.href;
       overlay.pointAt(args.selector);
       scheduleOverlayClear(2500);
@@ -495,8 +497,7 @@ export default defineContentScript({
       const context = latestContext;
       if (!context) return 'target unavailable: page context unavailable';
       cancelOverlayClear();
-      const previousFingerprint =
-        buildContextSemanticFingerprint(context);
+      const previousFingerprint = buildContextSemanticFingerprint(context);
       const previousUrl = window.location.href;
       if (args.selector) {
         overlay.pointAt(args.selector);
@@ -582,7 +583,7 @@ export default defineContentScript({
           updatePageInstance();
           sendResponse({
             type: 'PAGE_CONTEXT_RESPONSE',
-            payload: context,
+            payload: context ? sanitizePageContextForNetwork(context) : null,
             bindingEpoch:
               typeof msg.route?.bindingEpoch === 'number'
                 ? msg.route.bindingEpoch
@@ -594,7 +595,9 @@ export default defineContentScript({
         return true;
       }
       if (msg?.type === 'PAGE_CONTEXT_ENRICHED' && msg.context) {
-        latestContext = msg.context as PageContext;
+        latestContext = sanitizePageContextForNetwork(
+          msg.context as PageContext,
+        );
         sendResponse({ ok: true });
         return false;
       }

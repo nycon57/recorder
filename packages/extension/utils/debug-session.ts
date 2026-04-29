@@ -1,9 +1,12 @@
+/* global chrome */
+
 import type {
   ExtensionDebugSessionEventInput,
   PageContext,
 } from '@tribora/shared';
 import {
   buildContextSemanticFingerprint,
+  sanitizePageContextForNetwork,
   sanitizePageContextLocation,
 } from '@tribora/shared';
 
@@ -112,19 +115,20 @@ export function buildPageContextDebugFields(
   | 'selectedEntityTitle'
   | 'fingerprint'
 > {
-  const location = sanitizePageContextLocation(context.url);
+  const sanitizedContext = sanitizePageContextForNetwork(context);
+  const location = sanitizePageContextLocation(sanitizedContext.url);
 
   return {
     urlHost: location.host,
     urlPath: location.path,
-    app: context.app,
-    screen: context.screen,
-    knowledgeMode: context.knowledgeAvailability?.mode ?? 'unknown',
-    vendorMatchBasis: context.vendorKnowledgeMatch?.basis ?? 'unknown',
-    orgMatchBasis: context.orgKnowledgeMatch?.basis ?? 'unknown',
-    pageSummary: clipText(context.pageSummary, 500),
-    selectedEntityTitle: clipText(context.selectedEntity?.title, 200),
-    fingerprint: buildContextSemanticFingerprint(context),
+    app: sanitizedContext.app,
+    screen: sanitizedContext.screen,
+    knowledgeMode: sanitizedContext.knowledgeAvailability?.mode ?? 'unknown',
+    vendorMatchBasis: sanitizedContext.vendorKnowledgeMatch?.basis ?? 'unknown',
+    orgMatchBasis: sanitizedContext.orgKnowledgeMatch?.basis ?? 'unknown',
+    pageSummary: clipText(sanitizedContext.pageSummary, 500),
+    selectedEntityTitle: clipText(sanitizedContext.selectedEntity?.title, 200),
+    fingerprint: buildContextSemanticFingerprint(sanitizedContext),
   };
 }
 

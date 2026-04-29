@@ -26,13 +26,19 @@
 
 import { NextRequest, NextResponse, after } from 'next/server';
 
-import { buildKnowledgeResolvedFor, type PageContext } from '@tribora/shared';
+import {
+  buildKnowledgeResolvedFor,
+  sanitizePageContextForNetwork,
+  sanitizePageContextText,
+  type PageContext,
+} from '@tribora/shared';
 import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 import { resolveExtensionContextMatches } from '@/lib/services/extension-context';
 import { buildExtensionContextTelemetry } from '@/lib/services/extension-context-telemetry';
 import { recordKnowledgeTelemetryEvent } from '@/lib/services/knowledge-telemetry';
+import type { Json } from '@/lib/types/database';
 import { logger } from '@/lib/monitoring/logger';
 
 export const runtime = 'nodejs';
@@ -59,12 +65,29 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function sanitizeIncomingUrl(url: string): string {
+  return sanitizePageContextForNetwork({
+    app: 'unknown',
+    screen: 'unknown',
+    appSignature: 'unknown:unknown',
+    url,
+    title: '',
+    interactiveElements: [],
+  }).url;
+}
+
+function sanitizeIncomingAppSignature(
+  value: string | undefined,
+): string | undefined {
+  return sanitizePageContextText(value, 120);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const requestStartedAt = Date.now();
 
     // TRIB-56: Accept API key auth (Bearer sk_live_...) alongside session auth.
-    const authCtx = await requireApiKeyOrSession(request, 'context');
+    const authCtx = await requireApiKeyOrSession(request, 'query');
 
     const body = await request.json();
     const { url, appSignature, context } = body as {
@@ -73,8 +96,14 @@ export async function POST(request: NextRequest) {
       context?: PageContext;
     };
 
-    const resolvedUrl = context?.url ?? url;
-    const resolvedAppSignature = context?.appSignature ?? appSignature;
+    const sanitizedIncomingContext = context
+      ? sanitizePageContextForNetwork(context)
+      : undefined;
+    const resolvedUrl =
+      sanitizedIncomingContext?.url ?? (url ? sanitizeIncomingUrl(url) : url);
+    const resolvedAppSignature =
+      sanitizedIncomingContext?.appSignature ??
+      sanitizeIncomingAppSignature(appSignature);
 
     if (!resolvedUrl || typeof resolvedUrl !== 'string') {
       return errors.badRequest('url is required');
@@ -86,12 +115,12 @@ export async function POST(request: NextRequest) {
     // Parse appSignature: "salesforce:lead-detail" → { app, screen }
     const colonIdx = resolvedAppSignature.indexOf(':');
     const app =
-      context?.app?.toLowerCase() ??
+      sanitizedIncomingContext?.app?.toLowerCase() ??
       (colonIdx !== -1
         ? resolvedAppSignature.slice(0, colonIdx).toLowerCase()
         : resolvedAppSignature.toLowerCase());
     const screen =
-      context?.screen?.toLowerCase() ??
+      sanitizedIncomingContext?.screen?.toLowerCase() ??
       (colonIdx !== -1
         ? resolvedAppSignature.slice(colonIdx + 1).toLowerCase()
         : screenFromUrl(resolvedUrl));
@@ -110,21 +139,21 @@ export async function POST(request: NextRequest) {
         ? resolvedAppSignature
         : `${app}:${screen}`,
       url: resolvedUrl,
-      title: context?.title ?? '',
-      interactiveElements: context?.interactiveElements ?? [],
-      detectionConfidence: context?.detectionConfidence,
-      pageSummary: context?.pageSummary,
-      headings: context?.headings ?? [],
-      navigation: context?.navigation ?? [],
-      primaryActions: context?.primaryActions ?? [],
-      selectedEntity: context?.selectedEntity,
-      workspaceContext: context?.workspaceContext,
-      viewport: context?.viewport,
-      regions: context?.regions ?? [],
-      snippets: context?.snippets ?? [],
-      forms: context?.forms ?? [],
-      tables: context?.tables ?? [],
-      dialogs: context?.dialogs ?? [],
+      title: sanitizedIncomingContext?.title ?? '',
+      interactiveElements: sanitizedIncomingContext?.interactiveElements ?? [],
+      detectionConfidence: sanitizedIncomingContext?.detectionConfidence,
+      pageSummary: sanitizedIncomingContext?.pageSummary,
+      headings: sanitizedIncomingContext?.headings ?? [],
+      navigation: sanitizedIncomingContext?.navigation ?? [],
+      primaryActions: sanitizedIncomingContext?.primaryActions ?? [],
+      selectedEntity: sanitizedIncomingContext?.selectedEntity,
+      workspaceContext: sanitizedIncomingContext?.workspaceContext,
+      viewport: sanitizedIncomingContext?.viewport,
+      regions: sanitizedIncomingContext?.regions ?? [],
+      snippets: sanitizedIncomingContext?.snippets ?? [],
+      forms: sanitizedIncomingContext?.forms ?? [],
+      tables: sanitizedIncomingContext?.tables ?? [],
+      dialogs: sanitizedIncomingContext?.dialogs ?? [],
       vendorKnowledgeMatch: matches.vendorKnowledgeMatch,
       orgKnowledgeMatch: matches.orgKnowledgeMatch,
       knowledgeAvailability: matches.knowledgeAvailability,
@@ -137,8 +166,7 @@ export async function POST(request: NextRequest) {
           : `${app}:${screen}`,
         url: resolvedUrl,
       }),
-      breadcrumbs: context?.breadcrumbs ?? [],
-      visibleText: context?.visibleText,
+      breadcrumbs: sanitizedIncomingContext?.breadcrumbs ?? [],
     };
     const telemetry = buildExtensionContextTelemetry({
       context: mergedContext,
@@ -166,7 +194,7 @@ export async function POST(request: NextRequest) {
 
         await recordKnowledgeTelemetryEvent({
           type: 'extension.context.checked',
-          payload: telemetry,
+          payload: telemetry as unknown as Json,
         });
       } catch (error) {
         logger.warn('Failed to record extension context telemetry', {
