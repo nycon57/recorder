@@ -27,19 +27,6 @@ export function findFrameOwnedContextElement(
   );
 }
 
-function findTopDocumentContextElement(
-  selector: string,
-  context: PageContext | null | undefined,
-): InteractiveElement | null {
-  if (!selector || !context) return null;
-
-  return (
-    context.interactiveElements.find(
-      (element) => !element.frameOwner && element.selector === selector,
-    ) ?? null
-  );
-}
-
 export function getUnsupportedFrameTargetMessage(
   element: InteractiveElement,
 ): string {
@@ -79,11 +66,7 @@ export function resolveTopDocumentActionTarget<T extends HTMLElement>(args: {
   }
 
   const frameOwned = findFrameOwnedContextElement(args.selector, args.context);
-  const topDocumentOwned = findTopDocumentContextElement(
-    args.selector,
-    args.context,
-  );
-  if (frameOwned && !topDocumentOwned) {
+  if (frameOwned) {
     return {
       element: null,
       error: getUnsupportedFrameTargetMessage(frameOwned),
