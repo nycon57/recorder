@@ -19,6 +19,8 @@
  *     TOOL_CALL      { callId, name, args }
  */
 
+/* global chrome */
+
 import { Conversation } from '@elevenlabs/client';
 import type { VoiceConversation } from '@elevenlabs/client';
 
@@ -27,6 +29,7 @@ import {
   primeConversationAudio,
   startConversationAudioPrimingWindow,
 } from '../../utils/conversation-audio.js';
+import { buildTriboraVoiceAgentInstructions } from '../../utils/voice-agent-policy.js';
 
 type PendingToolCall = {
   resolve: (value: string) => void;
@@ -159,6 +162,14 @@ async function startSession(signedUrl: string, tabId: number): Promise<void> {
     })) as VoiceConversation;
 
     activeConversation = conversation;
+    try {
+      conversation.sendContextualUpdate(buildTriboraVoiceAgentInstructions());
+    } catch (err) {
+      console.warn(
+        `${LOG} Identity instructions failed:`,
+        (err as Error).message,
+      );
+    }
     stopAudioPriming?.();
     stopAudioPriming = startConversationAudioPrimingWindow({
       getConversation: () => activeConversation,

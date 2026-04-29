@@ -7,6 +7,8 @@
  * it survives page navigations.
  */
 
+/* global chrome, defineContentScript */
+
 import {
   buildContextSemanticFingerprint,
   type OverlayTarget,
@@ -203,7 +205,7 @@ export default defineContentScript({
     }): string {
       cancelOverlayClear();
       const el = document.querySelector(args.selector);
-      if (!el) return 'element not found';
+      if (!el) return 'target unavailable: element not found';
       if (args.action === 'highlight') overlay.highlight(args.selector);
       else if (args.action === 'pulse') overlay.pulse(args.selector);
       else overlay.pointAt(args.selector, args.label ?? '');
@@ -221,7 +223,7 @@ export default defineContentScript({
           return false;
         }
       });
-      if (targets.length === 0) return 'element not found';
+      if (targets.length === 0) return 'target unavailable: element not found';
       overlay.showTargets(targets);
       scheduleOverlayClear(8000);
       return 'highlighted';
@@ -232,7 +234,7 @@ export default defineContentScript({
     }): Promise<string> {
       cancelOverlayClear();
       const el = document.querySelector<HTMLElement>(args.selector);
-      if (!el) return 'element not found';
+      if (!el) return 'target unavailable: element not found';
       const previousFingerprint =
         buildContextSemanticFingerprint(latestContext);
       const previousUrl = window.location.href;
@@ -256,7 +258,7 @@ export default defineContentScript({
     }): Promise<string> {
       cancelOverlayClear();
       const el = document.querySelector<HTMLElement>(args.selector);
-      if (!el) return 'element not found';
+      if (!el) return 'target unavailable: element not found';
       const previousFingerprint =
         buildContextSemanticFingerprint(latestContext);
       const previousUrl = window.location.href;
@@ -286,7 +288,7 @@ export default defineContentScript({
     }): Promise<string> {
       cancelOverlayClear();
       const el = document.querySelector<HTMLElement>(args.selector);
-      if (!el) return 'element not found';
+      if (!el) return 'target unavailable: element not found';
       const previousFingerprint =
         buildContextSemanticFingerprint(latestContext);
       const previousUrl = window.location.href;
@@ -315,7 +317,7 @@ export default defineContentScript({
     }): Promise<string> {
       cancelOverlayClear();
       const el = document.querySelector<HTMLElement>(args.selector);
-      if (!el) return 'element not found';
+      if (!el) return 'target unavailable: element not found';
       overlay.pointAt(args.selector);
       scheduleOverlayClear(3000);
       return runVerifiedAction({
@@ -336,7 +338,9 @@ export default defineContentScript({
         ? document.querySelector<HTMLElement>(args.selector)
         : ((document.activeElement as HTMLElement | null) ?? document.body);
 
-      if (!(target instanceof HTMLElement)) return 'element not found';
+      if (!(target instanceof HTMLElement)) {
+        return 'target unavailable: element not found';
+      }
 
       cancelOverlayClear();
       const previousFingerprint =

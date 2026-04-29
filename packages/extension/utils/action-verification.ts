@@ -1,3 +1,5 @@
+/* global Window */
+
 type VerifiedActionKind = 'click' | 'hover' | 'type' | 'scroll' | 'keyboard';
 
 interface ElementSnapshot {
@@ -112,10 +114,10 @@ function describeClickOutcome(
     return 'clicked (verified: target became hidden)';
   }
   if (mutationCount > 0) {
-    return `clicked (verified: observed ${mutationCount} DOM mutation${mutationCount === 1 ? '' : 's'})`;
+    return 'click uncertain: page changed, but completion was not confirmed';
   }
   if (!before.active && after.active) {
-    return 'clicked (partial verification: target gained focus)';
+    return 'click uncertain: target gained focus, but completion was not confirmed';
   }
   return 'click may not have taken effect: no visible UI change detected after 250ms';
 }
@@ -132,7 +134,7 @@ function describeHoverOutcome(
     return `hovered (verified: expanded state changed to ${after.ariaExpanded})`;
   }
   if (mutationCount > 0) {
-    return `hovered (verified: observed ${mutationCount} DOM mutation${mutationCount === 1 ? '' : 's'})`;
+    return 'hover uncertain: page changed, but the target state was not confirmed';
   }
   return 'hover may not have revealed anything: no visible UI change detected after 250ms';
 }
@@ -146,7 +148,7 @@ function describeTypeOutcome(
     return 'typed (verified: field value updated)';
   }
   if (mutationCount > 0) {
-    return `typed (partial verification: observed ${mutationCount} DOM mutation${mutationCount === 1 ? '' : 's'})`;
+    return 'type uncertain: page changed, but the field value was not confirmed';
   }
   return 'typed (warning: field value did not change after 250ms)';
 }
@@ -204,7 +206,7 @@ function describeKeyboardOutcome(args: {
     return `pressed ${args.actionLabel} (verified: field value changed)`;
   }
   if (args.mutationCount > 0) {
-    return `pressed ${args.actionLabel} (verified: observed ${args.mutationCount} DOM mutation${args.mutationCount === 1 ? '' : 's'})`;
+    return `pressed ${args.actionLabel} (uncertain: page changed, but completion was not confirmed)`;
   }
   return `pressed ${args.actionLabel} (warning: no visible UI change detected after 250ms)`;
 }
@@ -234,6 +236,7 @@ export async function runVerifiedAction(args: {
   const baseResult = args.action();
   if (
     baseResult === 'element not found' ||
+    baseResult.startsWith('target unavailable') ||
     baseResult.startsWith('failed') ||
     baseResult === 'element is not an input field'
   ) {
