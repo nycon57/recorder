@@ -39,6 +39,23 @@ export type {
   ExtensionDebugSessionEventInput,
   ExtensionDebugSessionStoredEvent,
 } from './extension-debug.js';
+export type {
+  ExtensionProductTelemetryEventType,
+  ExtensionTelemetryKnowledgeMode,
+  ExtensionTelemetryMatchBasis,
+  ExtensionTelemetryMatchCategory,
+  ExtensionTelemetryAuthMethod,
+  ExtensionTelemetryJson,
+  ExtensionProductTelemetryEventInput,
+  ExtensionProductTelemetryStoredEvent,
+} from './extension-telemetry.js';
+export {
+  EXTENSION_PRODUCT_TELEMETRY_EVENT_TYPES,
+  findUnsafeTelemetryField,
+  isExtensionProductTelemetryEventType,
+  isUnsafeTelemetryFieldName,
+  sanitizeExtensionProductTelemetryEvent,
+} from './extension-telemetry.js';
 export {
   buildContextSemanticFingerprint,
   buildKnowledgeResolvedFor,

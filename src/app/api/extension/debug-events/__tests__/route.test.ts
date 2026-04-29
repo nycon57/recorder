@@ -74,11 +74,14 @@ function buildRequest(body: unknown): NextRequest {
 
 describe('POST /api/extension/debug-events', () => {
   beforeEach(() => {
+    jest.resetModules();
     jest.clearAllMocks();
+    delete process.env.TRIBORA_ENABLE_EXTENSION_RAW_DEBUG_EVENTS;
     insert.mockResolvedValue({ error: null });
   });
 
-  it('redacts debug event payloads before persistence', async () => {
+  it('redacts debug event payloads before persistence when raw debug is env-gated on', async () => {
+    process.env.TRIBORA_ENABLE_EXTENSION_RAW_DEBUG_EVENTS = 'true';
     const { POST } = await import('../route');
 
     const response = await POST(
@@ -158,6 +161,27 @@ describe('POST /api/extension/debug-events', () => {
       urlHost: 'example.com',
       urlPath: '/settings/users',
     });
+  });
+
+  it('rejects raw debug content when raw debug ingest is not env-gated on', async () => {
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        events: [
+          {
+            sessionId: 'session_1',
+            seq: 1,
+            eventType: 'user_message',
+            occurredAt: '2026-04-29T12:00:00.000Z',
+            messageText: 'Raw user transcript should not be ingested',
+          },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(insert).not.toHaveBeenCalled();
   });
 
   it('rejects unknown event types and invalid timestamps', async () => {
