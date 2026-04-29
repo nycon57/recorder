@@ -25,6 +25,12 @@ export interface VoiceTargetRegistrationInput {
   candidateUrl?: string | null;
 }
 
+export interface PageContextCollectionInput {
+  extensionEnabled: boolean;
+  sessionActive: boolean;
+  isHomeTab: boolean;
+}
+
 const MIC_PERMISSION_PATTERNS = [
   'permission dismissed',
   'microphone permission denied',
@@ -115,4 +121,10 @@ export function shouldRegisterVoiceTarget(
   if (input.activeTargetTabId === input.candidateTabId) return true;
   if (input.activeTargetTabId === null) return true;
   return input.candidateTabActive;
+}
+
+export function shouldCollectPageContext(
+  input: PageContextCollectionInput,
+): boolean {
+  return input.extensionEnabled && input.sessionActive && input.isHomeTab;
 }

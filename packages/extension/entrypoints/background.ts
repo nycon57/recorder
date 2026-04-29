@@ -35,6 +35,7 @@ import type { ActiveDebugSessionState } from '../utils/debug-session.js';
 import {
   buildUnavailableVoiceTargetToolResult,
   isSupportedVoiceTargetUrl,
+  shouldCollectPageContext,
   shouldOpenMicPermissionBootstrap,
   shouldRegisterVoiceTarget,
 } from '../utils/session-startup.js';
@@ -407,6 +408,32 @@ async function sendWidgetVisibility(
   }
 }
 
+async function sendPageContextCollectionState(
+  tabId: number,
+  collect: boolean,
+): Promise<void> {
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: collect
+        ? 'PAGE_CONTEXT_COLLECTION_START'
+        : 'PAGE_CONTEXT_COLLECTION_STOP',
+    });
+  } catch {
+    // Ignore unsupported pages or tabs without a loaded content script.
+  }
+}
+
+async function stopPageContextCollectionEverywhere(): Promise<void> {
+  const tabs = await chrome.tabs.query({});
+
+  await Promise.all(
+    tabs.map(async (tab) => {
+      if (!tab.id) return;
+      await sendPageContextCollectionState(tab.id, false);
+    }),
+  );
+}
+
 async function hideWidgetsEverywhere(): Promise<void> {
   const tabs = await chrome.tabs.query({});
 
@@ -625,6 +652,10 @@ async function persistVoiceTargetState(): Promise<void> {
 }
 
 async function clearVoiceTargetState(): Promise<void> {
+  if (activeTargetTabId !== null) {
+    await sendPageContextCollectionState(activeTargetTabId, false);
+    clearTabInstanceState(activeTargetTabId);
+  }
   activeTargetTabId = null;
   activeTargetWindowId = null;
   voiceSessionActive = false;
@@ -647,11 +678,16 @@ async function setActiveVoiceTarget(
     if (previousTargetTabId !== tabId || reason === 'session_start_rebind') {
       resetTargetFreshness(tabId, reason);
     }
+    if (previousTargetTabId !== null && previousTargetTabId !== tabId) {
+      await sendPageContextCollectionState(previousTargetTabId, false);
+      clearTabInstanceState(previousTargetTabId);
+    }
     if (activeDebugSession) {
       activeDebugSession.tabId = tabId;
       activeDebugSession.windowId = activeTargetWindowId;
     }
     await persistVoiceTargetState();
+    await sendPageContextCollectionState(tabId, true);
     console.log(
       `${BG} Voice target set to tab=${tabId} epoch=${activeTargetBindingEpoch} pageInstance=${
         pageInstanceIds.get(tabId) ?? 'unknown'
@@ -669,9 +705,10 @@ async function clearActiveVoiceTarget(
   reason: string,
 ): Promise<void> {
   if (activeTargetTabId !== tabId) return;
+  await sendPageContextCollectionState(tabId, false);
+  clearTabInstanceState(tabId);
   activeTargetTabId = null;
   activeTargetWindowId = null;
-  liveContextHashes.delete(tabId);
   resetTargetFreshness(tabId, reason);
   await persistVoiceTargetState();
   console.log(
@@ -1834,11 +1871,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (enabled && active && tabId !== undefined) {
         await maybeRegisterVoiceTarget(tabId, 'content_state_request');
       }
+      const isActiveTarget = tabId !== undefined && tabId === activeTargetTabId;
       return {
         enabled,
         active,
-        isActiveTarget: tabId !== undefined && tabId === activeTargetTabId,
+        isActiveTarget,
         activeTargetTabId,
+        canCollectPageContext: shouldCollectPageContext({
+          extensionEnabled: enabled,
+          sessionActive: active,
+          isHomeTab: isActiveTarget,
+        }),
       };
     })()
       .then((state) =>
@@ -1847,6 +1890,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           active: state.active,
           isActiveTarget: state.isActiveTarget,
           activeTargetTabId: state.activeTargetTabId,
+          canCollectPageContext: state.canCollectPageContext,
         }),
       )
       .catch((err) =>
@@ -1918,6 +1962,13 @@ export default defineBackground(() => {
       }
       await endAgentSession();
       await closeOffscreen();
+      await stopPageContextCollectionEverywhere();
+      latestContexts.clear();
+      contextUpdateSeq.clear();
+      contextFingerprints.clear();
+      liveContextHashes.clear();
+      contentInstanceIds.clear();
+      pageInstanceIds.clear();
       await hideWidgetsEverywhere();
       if (tab.id) {
         await sendWidgetVisibility(tab.id, false);
@@ -2088,33 +2139,57 @@ export default defineBackground(() => {
       case 'PAGE_CONTEXT_UPDATED': {
         const tabId = sender.tab?.id;
         if (tabId !== undefined && message.context) {
-          updateContentInstanceFromMessage({
-            tabId,
-            contentInstanceId: message.contentInstanceId,
-            pageInstanceId: message.pageInstanceId,
-          });
-          targetLoadingTabs.delete(tabId);
-          const previous = latestContexts.get(tabId);
-          const rawContext = message.context as PageContext;
-          if (pageContextKnowledgeIdentityChanged(previous, rawContext)) {
-            liveContextHashes.delete(tabId);
-          }
-          const context = mergePageContextWithPrevious(previous, rawContext);
-          latestContexts.set(tabId, context);
+          void (async () => {
+            const [extensionEnabled, sessionActive] = await Promise.all([
+              getExtensionEnabled(),
+              hasActiveVoiceSession(),
+            ]);
+            const canCollect = shouldCollectPageContext({
+              extensionEnabled,
+              sessionActive,
+              isHomeTab: tabId === activeTargetTabId,
+            });
 
-          const fingerprint = buildContextSemanticFingerprint(context);
-          if (contextFingerprints.get(tabId) === fingerprint) {
-            return false;
-          }
-          contextFingerprints.set(tabId, fingerprint);
-          void maybeRegisterVoiceTarget(tabId, 'page_context_updated').then(
-            (registered) => {
-              void enrichPageContext(tabId, context);
-              if (registered) {
-                void sendLiveContextUpdate(tabId, context);
+            if (!canCollect) {
+              clearTabInstanceState(tabId);
+              await sendPageContextCollectionState(tabId, false);
+              return;
+            }
+
+            try {
+              const tab = await chrome.tabs.get(tabId);
+              if (!isSupportedPageTargetUrl(tab.url)) {
+                clearTabInstanceState(tabId);
+                await sendPageContextCollectionState(tabId, false);
+                return;
               }
-            },
-          );
+            } catch {
+              clearTabInstanceState(tabId);
+              return;
+            }
+
+            updateContentInstanceFromMessage({
+              tabId,
+              contentInstanceId: message.contentInstanceId,
+              pageInstanceId: message.pageInstanceId,
+            });
+            targetLoadingTabs.delete(tabId);
+            const previous = latestContexts.get(tabId);
+            const rawContext = message.context as PageContext;
+            if (pageContextKnowledgeIdentityChanged(previous, rawContext)) {
+              liveContextHashes.delete(tabId);
+            }
+            const context = mergePageContextWithPrevious(previous, rawContext);
+            latestContexts.set(tabId, context);
+
+            const fingerprint = buildContextSemanticFingerprint(context);
+            if (contextFingerprints.get(tabId) === fingerprint) {
+              return;
+            }
+            contextFingerprints.set(tabId, fingerprint);
+            void enrichPageContext(tabId, context);
+            void sendLiveContextUpdate(tabId, context);
+          })();
         }
         return false;
       }
