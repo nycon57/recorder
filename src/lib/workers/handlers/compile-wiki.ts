@@ -39,7 +39,7 @@ import {
 } from '@/lib/services/agent-config';
 import { withAgentLogging } from '@/lib/services/agent-logger';
 import { requestApproval } from '@/lib/services/agent-permissions';
-import { generateOrgWikiPageEmbedding } from '@/lib/services/org-wiki-embedding';
+import { generateOrgWikiPageEmbeddingBestEffort } from '@/lib/services/org-wiki-embedding';
 import {
   ROUTING_REVIEW_AGENT_TYPE,
   ROUTING_REVIEW_ACTION_TYPE,
@@ -295,7 +295,7 @@ async function runCompilationPipeline(
   // Require *some* substantive source to compile from. If every input is
   // empty, skip rather than hallucinate a wiki page.
   const workflowSteps: WorkflowStep[] = Array.isArray(workflow?.steps)
-    ? (workflow!.steps as WorkflowStep[])
+    ? (workflow!.steps as unknown as WorkflowStep[])
     : [];
   const hasWorkflowSteps = workflowSteps.length > 0;
   const hasDocument = !!document?.markdown && document.markdown.trim().length > 0;
@@ -465,19 +465,7 @@ async function runCompilationPipeline(
     );
   }
 
-  // ---- Step 7 — Best-effort embedding generation (TRIB-36) -----------------
-  progressCallback?.(95, 'Generating embedding (best-effort)...');
-
-  try {
-    await runBestEffortEmbedding(newPage.id);
-  } catch (embeddingError) {
-    console.warn(
-      `[compile-wiki] Embedding generation skipped for page ${newPage.id}:`,
-      embeddingError instanceof Error ? embeddingError.message : embeddingError
-    );
-  }
-
-  // ---- Step 8 — Relationship extraction (TRIB-39) --------------------------
+  // ---- Step 7 — Relationship extraction (TRIB-39) --------------------------
   progressCallback?.(97, 'Extracting wiki relationships (best-effort)...');
 
   await runRelationshipExtraction({
@@ -489,7 +477,7 @@ async function runCompilationPipeline(
     recordingId,
   });
 
-  // ---- Step 9 — Cross-page contradiction detection (TRIB-41) ---------------
+  // ---- Step 8 — Cross-page contradiction detection (TRIB-41) ---------------
   progressCallback?.(99, 'Detecting cross-page contradictions (best-effort)...');
 
   await runCrossPageContradictionDetection({
@@ -500,6 +488,14 @@ async function runCompilationPipeline(
     screen: classification.screen,
     topic: classification.topic,
     content: generatedContent,
+    recordingId,
+  });
+
+  // ---- Step 9 — Best-effort embedding generation (TRIB-36) -----------------
+  progressCallback?.(99, 'Generating final embedding (best-effort)...');
+  await runBestEffortEmbedding(newPage.id, {
+    source: 'compile-wiki.new-page',
+    orgId,
     recordingId,
   });
 
@@ -1101,7 +1097,12 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
   // input for Step 4 (relationship extraction). Flagged contradictions return
   // null to indicate "don't re-extract relationships" — the page content was
   // not mutated, so the existing edges are still valid.
-  let relationshipTarget: { pageId: string; content: string } | null = null;
+  let relationshipTarget: {
+    pageId: string;
+    content: string;
+    contentChanged: boolean;
+    embeddingContext: string;
+  } | null = null;
 
   if (diff.action === 'redundant') {
     relationshipTarget = await applyRedundantUpdate({
@@ -1161,7 +1162,7 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
   // ---- 93% — Relationship extraction (TRIB-39) -----------------------------
   if (relationshipTarget) {
     progressCallback?.(93, 'Extracting wiki relationships (best-effort)...');
-    await runRelationshipExtraction({
+    const backlinksChanged = await runRelationshipExtraction({
       supabase,
       orgId,
       pageId: relationshipTarget.pageId,
@@ -1169,6 +1170,8 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
       content: relationshipTarget.content,
       recordingId,
     });
+    const shouldRefreshEmbedding =
+      relationshipTarget.contentChanged || backlinksChanged;
 
     // ---- 97% — Cross-page contradiction detection (TRIB-41) ----------------
     progressCallback?.(97, 'Detecting cross-page contradictions (best-effort)...');
@@ -1182,6 +1185,17 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
       content: relationshipTarget.content,
       recordingId,
     });
+
+    if (shouldRefreshEmbedding) {
+      progressCallback?.(99, 'Refreshing final wiki embedding (best-effort)...');
+      await runBestEffortEmbedding(relationshipTarget.pageId, {
+        source: relationshipTarget.embeddingContext,
+        orgId,
+        recordingId,
+        contentChanged: relationshipTarget.contentChanged,
+        backlinksChanged,
+      });
+    }
   }
 
   progressCallback?.(100, `Update path completed (${diff.action})`);
@@ -1373,7 +1387,12 @@ async function applyRedundantUpdate(args: {
   recordingId: string;
   recordingTitle: string | null;
   nowIso: string;
-}): Promise<{ pageId: string; content: string }> {
+}): Promise<{
+  pageId: string;
+  content: string;
+  contentChanged: boolean;
+  embeddingContext: string;
+}> {
   const { supabase, existingPage, recordingId, recordingTitle, nowIso } = args;
 
   const newConfidence = clampConfidence(
@@ -1417,7 +1436,12 @@ async function applyRedundantUpdate(args: {
 
   // Content unchanged on redundant — return existing content so Step 4 can
   // still refresh/upsert relationships (idempotent via on-conflict).
-  return { pageId: existingPage.id, content: existingPage.content };
+  return {
+    pageId: existingPage.id,
+    content: existingPage.content,
+    contentChanged: false,
+    embeddingContext: 'compile-wiki.redundant',
+  };
 }
 
 async function applyAdditiveUpdate(args: {
@@ -1427,7 +1451,12 @@ async function applyAdditiveUpdate(args: {
   recordingTitle: string | null;
   diff: WikiDiffResult;
   nowIso: string;
-}): Promise<{ pageId: string; content: string }> {
+}): Promise<{
+  pageId: string;
+  content: string;
+  contentChanged: boolean;
+  embeddingContext: string;
+}> {
   const { supabase, existingPage, recordingId, recordingTitle, diff, nowIso } = args;
 
   const mergedContent = diff.merged_content?.trim();
@@ -1446,7 +1475,12 @@ async function applyAdditiveUpdate(args: {
       recordingTitle,
       summary: 'Additive classification but LLM returned no merged content — source recorded only',
     });
-    return { pageId: existingPage.id, content: existingPage.content };
+    return {
+      pageId: existingPage.id,
+      content: existingPage.content,
+      contentChanged: false,
+      embeddingContext: 'compile-wiki.additive-source-only',
+    };
   }
 
   const newConfidence = clampConfidence(
@@ -1490,7 +1524,12 @@ async function applyAdditiveUpdate(args: {
       `(+${diff.additions.length} additions, confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`
   );
 
-  return { pageId: existingPage.id, content: mergedContent };
+  return {
+    pageId: existingPage.id,
+    content: mergedContent,
+    contentChanged: mergedContent !== existingPage.content,
+    embeddingContext: 'compile-wiki.additive',
+  };
 }
 
 async function applyContradictionFlagged(args: {
@@ -1567,7 +1606,12 @@ async function applyContradictionWithSupersede(args: {
   diff: WikiDiffResult;
   nowIso: string;
   classification: WikiClassification;
-}): Promise<{ pageId: string; content: string } | null> {
+}): Promise<{
+  pageId: string;
+  content: string;
+  contentChanged: boolean;
+  embeddingContext: string;
+} | null> {
   const {
     supabase,
     existingPage,
@@ -1669,22 +1713,17 @@ async function applyContradictionWithSupersede(args: {
     summary: `Auto-applied contradiction resolution (supersedes ${existingPage.id}, ${diff.contradictions.length} conflicts)`,
   });
 
-  // Best-effort embedding for the newly inserted row.
-  try {
-    await runBestEffortEmbedding(newPage.id);
-  } catch (embeddingError) {
-    console.warn(
-      `[compile-wiki] Embedding generation skipped for superseding page ${newPage.id}:`,
-      embeddingError instanceof Error ? embeddingError.message : embeddingError
-    );
-  }
-
   console.log(
     `[compile-wiki] Contradiction auto-applied: superseded ${existingPage.id} → ${newPage.id} ` +
       `(${diff.contradictions.length} conflicts resolved, confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`
   );
 
-  return { pageId: newPage.id, content: mergedContent };
+  return {
+    pageId: newPage.id,
+    content: mergedContent,
+    contentChanged: true,
+    embeddingContext: 'compile-wiki.auto-supersede',
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1783,13 +1822,9 @@ async function insertWikiPageSource(
  * compile_wiki job still completes — the page simply ships without an
  * embedding and TRIB-36's backfill can catch it on the next pass.
  */
-async function runBestEffortEmbedding(pageId: string): Promise<void> {
-  try {
-    await generateOrgWikiPageEmbedding(pageId);
-  } catch (error) {
-    console.warn(
-      `[compile-wiki] Embedding generation failed for page ${pageId}:`,
-      error
-    );
-  }
+async function runBestEffortEmbedding(
+  pageId: string,
+  context: Record<string, unknown>
+): Promise<boolean> {
+  return generateOrgWikiPageEmbeddingBestEffort(pageId, context);
 }
