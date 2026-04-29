@@ -27,6 +27,13 @@ function setPage(html: string, path = '/dashboard/customers') {
   window.history.pushState({}, '', path);
 }
 
+function expectNoFragments(payload: unknown, fragments: string[]) {
+  const serialized = JSON.stringify(payload);
+  fragments.forEach((fragment) => {
+    expect(serialized).not.toContain(fragment);
+  });
+}
+
 describe('DOM-first page context engine', () => {
   beforeEach(() => {
     jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
@@ -123,11 +130,12 @@ describe('DOM-first page context engine', () => {
   });
 
   it('searches and inspects current DOM elements without exposing raw input values', () => {
+    const fakeSecret = ['sk', 'live', 'secret'].join('_');
     setPage(`
       <main>
         <h1>Project settings</h1>
         <section aria-label="Secrets">
-          <label>API token <input id="token" type="password" value="sk_live_secret" /></label>
+          <label>API token <input id="token" type="password" value="${fakeSecret}" /></label>
           <select id="account"><option selected>Acme confidential account</option></select>
           <a id="profile" href="https://user:pass@example.com/customer?token=secret#billing" aria-label="Email jane@example.com" title="Contact jane@example.com">Jane jane@example.com</a>
           <a href="https://example.com/private?token=secret" aria-label="Private jane@example.com">Private jane@example.com</a>
@@ -141,6 +149,9 @@ describe('DOM-first page context engine', () => {
     const token = inspectElementFromDom('#token', context, document);
     const account = inspectElementFromDom('#account', context, document);
     const profile = inspectElementFromDom('#profile', context, document);
+    const privateLink = context.interactiveElements.find((element) =>
+      element.label.includes('Private'),
+    );
     const region = inspectPageRegionFromDom(
       context.regions?.[0]?.id ?? 'region-1',
       context,
@@ -149,9 +160,7 @@ describe('DOM-first page context engine', () => {
 
     expect(matches[0]).toMatchObject({ selector: '#rotate', expanded: false });
     expect(token).toMatchObject({ selector: '#token', valuePresent: true });
-    expect(JSON.stringify({ matches, token, region })).not.toContain(
-      'sk_live_secret',
-    );
+    expectNoFragments({ matches, token, region }, [fakeSecret]);
     expect(account?.text).toBeUndefined();
     expect(profile).toMatchObject({
       href: 'https://example.com/customer',
@@ -159,11 +168,16 @@ describe('DOM-first page context engine', () => {
       ariaLabel: 'Email [REDACTED]',
       title: 'Contact [REDACTED]',
     });
-    expect(JSON.stringify({ profile, region })).not.toContain(
+    expectNoFragments({ profile, region }, [
       'jane@example.com',
-    );
-    expect(JSON.stringify({ profile, region })).not.toContain('user:pass');
-    expect(JSON.stringify({ profile, region })).not.toContain('token=secret');
+      'user:pass',
+      'token=secret',
+    ]);
+    const privateSelector = privateLink?.selector ?? 'body';
+    expect(privateLink?.selector).toBeTruthy();
+    expect(privateSelector).not.toContain('jane@example.com');
+    expect(privateSelector).not.toContain('[REDACTED]');
+    expect(document.querySelector(privateSelector)).toBeTruthy();
     expect(region.elements.length).toBeGreaterThan(0);
   });
 

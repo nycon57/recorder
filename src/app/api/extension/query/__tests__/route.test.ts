@@ -244,6 +244,11 @@ describe('POST /api/extension/query', () => {
               type: 'input',
               placeholder: 'jane@example.com',
             },
+            {
+              selector: 'button[aria-label="Email jane@example.com"]',
+              label: 'Email jane@example.com',
+              type: 'button',
+            },
           ],
           snippets: [
             {
@@ -280,8 +285,15 @@ describe('POST /api/extension/query', () => {
       }),
     });
     expect(promptArgs?.pageContext).not.toHaveProperty('visibleText');
+    expect(
+      (promptArgs?.pageContext as { interactiveElements?: unknown[] })
+        .interactiveElements,
+    ).toHaveLength(1);
     expect(JSON.stringify(promptArgs)).not.toContain('super-secret-token');
     expect(JSON.stringify(promptArgs)).not.toContain('4242');
     expect(JSON.stringify(promptArgs)).not.toContain('user:pass');
+    expect(JSON.stringify(promptArgs)).not.toContain(
+      'button[aria-label="[REDACTED]"]',
+    );
   });
 });

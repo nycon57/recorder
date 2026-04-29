@@ -20,7 +20,7 @@ jest.mock('next/server', () => ({
     ) => Response.json(body, init),
   },
   after: (callback: () => void | Promise<void>) => {
-    void callback();
+    return callback();
   },
 }));
 
@@ -195,5 +195,60 @@ describe('POST /api/extension/context', () => {
     ).not.toContain('super-secret-token');
     expect(JSON.stringify(telemetryInput)).not.toContain('4242');
     expect(recordKnowledgeTelemetryEvent).toHaveBeenCalled();
+  });
+
+  it('derives appSignature from sanitized context app and screen when omitted', async () => {
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        context: baseContext({
+          app: 'HubSpot',
+          screen: 'Contact Detail',
+          appSignature: undefined,
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(resolveExtensionContextMatches).toHaveBeenCalledWith({
+      orgId: 'org_test',
+      app: 'hubspot',
+      screen: 'contact detail',
+      url: 'https://app.hubspot.com/contacts/123',
+    });
+    expect(buildExtensionContextTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          appSignature: 'hubspot:contact detail',
+          knowledgeResolvedFor: expect.objectContaining({
+            appSignature: 'hubspot:contact detail',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('falls back to supplied signature when context app and screen are unknown', async () => {
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        appSignature: 'totalexpert:dashboard',
+        context: baseContext({
+          app: undefined,
+          screen: undefined,
+          appSignature: undefined,
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(resolveExtensionContextMatches).toHaveBeenCalledWith({
+      orgId: 'org_test',
+      app: 'totalexpert',
+      screen: 'dashboard',
+      url: 'https://app.hubspot.com/contacts/123',
+    });
   });
 });

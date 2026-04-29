@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import {
   sanitizePageContextLocation,
+  sanitizePageContextSelector,
   sanitizePageContextText,
   type ExtensionDebugSessionEventInput,
 } from '@tribora/shared';
@@ -47,7 +48,7 @@ function sanitizeDebugEvent(
     screen: sanitizePageContextText(event.screen, 80) ?? event.screen,
     messageText: sanitizePageContextText(event.messageText, 500) ?? null,
     toolName: sanitizePageContextText(event.toolName, 80) ?? event.toolName,
-    selector: sanitizePageContextText(event.selector, 220) ?? event.selector,
+    selector: sanitizePageContextSelector(event.selector) ?? null,
     label: sanitizePageContextText(event.label, 140) ?? event.label,
     action: sanitizePageContextText(event.action, 80) ?? event.action,
     inputTextPreview:

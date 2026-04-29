@@ -112,6 +112,34 @@ export function sanitizePageContextText(
   return clipText(redactSensitiveText(normalized), limit);
 }
 
+export function sanitizePageContextSelector(
+  value: string | null | undefined,
+  limit: number = PAGE_CONTEXT_SANITIZER_LIMITS.selector,
+): string | undefined {
+  const normalized = normalizeText(value);
+  if (!normalized) return undefined;
+
+  if (hasSensitiveLocatorText(normalized)) {
+    return undefined;
+  }
+
+  return clipText(normalized, limit);
+}
+
+export const sanitizePageContextLocator = sanitizePageContextSelector;
+
+function hasSensitiveLocatorText(value: string): boolean {
+  return (
+    /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(value) ||
+    /\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|passwd|pwd)\s*[:=]/i.test(
+      value,
+    ) ||
+    /\bsk_(?:live|test)_[a-z0-9_=-]{6,}\b/i.test(value) ||
+    /(?:^|[/?&#])token=/i.test(value) ||
+    /:\/\/[^/\s:@]+:[^/\s@]+@/.test(value)
+  );
+}
+
 function sanitizeStringList(
   values: string[] | undefined,
   limit: number,
@@ -175,10 +203,9 @@ function sanitizeKnowledgeMatch(
       0,
       PAGE_CONTEXT_SANITIZER_LIMITS.wikiPages,
     ),
-    selectorHints: sanitizeStringList(
+    selectorHints: sanitizeSelectorList(
       match.selectorHints,
       PAGE_CONTEXT_SANITIZER_LIMITS.selectorHints,
-      PAGE_CONTEXT_SANITIZER_LIMITS.selector,
     ),
     basisCategory: match.basisCategory,
     basisLabel: sanitizePageContextText(match.basisLabel),
@@ -202,15 +229,25 @@ function sanitizeKnowledgeAvailability(
   };
 }
 
+function sanitizeSelectorList(
+  values: string[] | undefined,
+  limit: number,
+): string[] | undefined {
+  const sanitized = (values ?? [])
+    .slice(0, limit)
+    .map((value) => sanitizePageContextSelector(value))
+    .filter((value): value is string => Boolean(value));
+  return sanitized.length ? sanitized : undefined;
+}
+
 function sanitizeInteractiveElement(
   element: InteractiveElement,
-): InteractiveElement {
+): InteractiveElement | null {
+  const selector = sanitizePageContextSelector(element.selector);
+  if (!selector) return null;
+
   return {
-    selector:
-      sanitizePageContextText(
-        element.selector,
-        PAGE_CONTEXT_SANITIZER_LIMITS.selector,
-      ) ?? '',
+    selector,
     label: sanitizePageContextText(element.label) ?? '',
     type: sanitizePageContextText(element.type, 60) ?? 'unknown',
     ariaLabel: sanitizePageContextText(element.ariaLabel),
@@ -237,33 +274,26 @@ function sanitizeHeading(heading: ContextHeading): ContextHeading {
   return {
     level: heading.level,
     text: sanitizePageContextText(heading.text) ?? '',
-    selector: sanitizePageContextText(
-      heading.selector,
-      PAGE_CONTEXT_SANITIZER_LIMITS.selector,
-    ),
+    selector: sanitizePageContextSelector(heading.selector),
   };
 }
 
 function sanitizeNavigationItem(item: NavigationItem): NavigationItem {
   return {
     label: sanitizePageContextText(item.label) ?? '',
-    selector: sanitizePageContextText(
-      item.selector,
-      PAGE_CONTEXT_SANITIZER_LIMITS.selector,
-    ),
+    selector: sanitizePageContextSelector(item.selector),
     current: item.current,
     kind: item.kind,
   };
 }
 
-function sanitizePageAction(action: PageAction): PageAction {
+function sanitizePageAction(action: PageAction): PageAction | null {
+  const selector = sanitizePageContextSelector(action.selector);
+  if (!selector) return null;
+
   return {
     label: sanitizePageContextText(action.label) ?? '',
-    selector:
-      sanitizePageContextText(
-        action.selector,
-        PAGE_CONTEXT_SANITIZER_LIMITS.selector,
-      ) ?? '',
+    selector,
     priority: action.priority,
     group: action.group,
     surface: action.surface,
@@ -294,10 +324,7 @@ function sanitizeWorkspaceItem(
   return {
     kind: item.kind,
     value: sanitizePageContextText(item.value) ?? '',
-    selector: sanitizePageContextText(
-      item.selector,
-      PAGE_CONTEXT_SANITIZER_LIMITS.selector,
-    ),
+    selector: sanitizePageContextSelector(item.selector),
   };
 }
 
@@ -311,14 +338,13 @@ function sanitizeWorkspaceContext(
   return { items };
 }
 
-function sanitizeRegion(region: PageRegion): PageRegion {
+function sanitizeRegion(region: PageRegion): PageRegion | null {
+  const selector = sanitizePageContextSelector(region.selector);
+  if (!selector) return null;
+
   return {
     id: sanitizePageContextText(region.id, 80) ?? '',
-    selector:
-      sanitizePageContextText(
-        region.selector,
-        PAGE_CONTEXT_SANITIZER_LIMITS.selector,
-      ) ?? '',
+    selector,
     kind: region.kind,
     label: sanitizePageContextText(region.label),
     summary: sanitizePageContextText(region.summary, 220),
@@ -329,14 +355,13 @@ function sanitizeRegion(region: PageRegion): PageRegion {
   };
 }
 
-function sanitizeSnippet(snippet: ContextSnippet): ContextSnippet {
+function sanitizeSnippet(snippet: ContextSnippet): ContextSnippet | null {
+  const selector = sanitizePageContextSelector(snippet.selector);
+  if (!selector) return null;
+
   return {
     id: sanitizePageContextText(snippet.id, 80) ?? '',
-    selector:
-      sanitizePageContextText(
-        snippet.selector,
-        PAGE_CONTEXT_SANITIZER_LIMITS.selector,
-      ) ?? '',
+    selector,
     regionId: sanitizePageContextText(snippet.regionId, 80),
     kind: snippet.kind,
     text:
@@ -348,14 +373,13 @@ function sanitizeSnippet(snippet: ContextSnippet): ContextSnippet {
   };
 }
 
-function sanitizeFormField(field: FormField): FormField {
+function sanitizeFormField(field: FormField): FormField | null {
+  const selector = sanitizePageContextSelector(field.selector);
+  if (!selector) return null;
+
   return {
     label: sanitizePageContextText(field.label) ?? '',
-    selector:
-      sanitizePageContextText(
-        field.selector,
-        PAGE_CONTEXT_SANITIZER_LIMITS.selector,
-      ) ?? '',
+    selector,
     type: sanitizePageContextText(field.type, 60) ?? 'text',
     required: field.required,
   };
@@ -364,23 +388,18 @@ function sanitizeFormField(field: FormField): FormField {
 function sanitizeForm(form: FormSurface): FormSurface {
   return {
     label: sanitizePageContextText(form.label),
-    selector: sanitizePageContextText(
-      form.selector,
-      PAGE_CONTEXT_SANITIZER_LIMITS.selector,
-    ),
+    selector: sanitizePageContextSelector(form.selector),
     fields: form.fields
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.formFields)
-      .map(sanitizeFormField),
+      .map(sanitizeFormField)
+      .filter((field): field is FormField => Boolean(field)),
   };
 }
 
 function sanitizeTable(table: TableSurface): TableSurface {
   return {
     label: sanitizePageContextText(table.label),
-    selector: sanitizePageContextText(
-      table.selector,
-      PAGE_CONTEXT_SANITIZER_LIMITS.selector,
-    ),
+    selector: sanitizePageContextSelector(table.selector),
     columns:
       sanitizeStringList(
         table.columns,
@@ -399,14 +418,13 @@ function sanitizeTable(table: TableSurface): TableSurface {
   };
 }
 
-function sanitizeDialog(dialog: DialogSurface): DialogSurface {
+function sanitizeDialog(dialog: DialogSurface): DialogSurface | null {
+  const selector = sanitizePageContextSelector(dialog.selector);
+  if (!selector) return null;
+
   return {
     title: sanitizePageContextText(dialog.title),
-    selector:
-      sanitizePageContextText(
-        dialog.selector,
-        PAGE_CONTEXT_SANITIZER_LIMITS.selector,
-      ) ?? '',
+    selector,
     description: sanitizePageContextText(dialog.description, 220),
     actionLabels:
       sanitizeStringList(
@@ -440,7 +458,8 @@ export function sanitizePageContextForNetwork(
       ) ?? '',
     interactiveElements: (context.interactiveElements ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.interactiveElements)
-      .map(sanitizeInteractiveElement),
+      .map(sanitizeInteractiveElement)
+      .filter((element): element is InteractiveElement => Boolean(element)),
     detectionConfidence: context.detectionConfidence,
     pageSummary: sanitizePageContextText(
       context.pageSummary,
@@ -454,16 +473,19 @@ export function sanitizePageContextForNetwork(
       .map(sanitizeNavigationItem),
     primaryActions: (context.primaryActions ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.primaryActions)
-      .map(sanitizePageAction),
+      .map(sanitizePageAction)
+      .filter((action): action is PageAction => Boolean(action)),
     selectedEntity: sanitizeSelectedEntity(context.selectedEntity),
     workspaceContext: sanitizeWorkspaceContext(context.workspaceContext),
     viewport: sanitizeViewport(context.viewport),
     regions: (context.regions ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.regions)
-      .map(sanitizeRegion),
+      .map(sanitizeRegion)
+      .filter((region): region is PageRegion => Boolean(region)),
     snippets: (context.snippets ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.snippets)
-      .map(sanitizeSnippet),
+      .map(sanitizeSnippet)
+      .filter((snippet): snippet is ContextSnippet => Boolean(snippet)),
     forms: (context.forms ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.forms)
       .map(sanitizeForm),
@@ -472,7 +494,8 @@ export function sanitizePageContextForNetwork(
       .map(sanitizeTable),
     dialogs: (context.dialogs ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.dialogs)
-      .map(sanitizeDialog),
+      .map(sanitizeDialog)
+      .filter((dialog): dialog is DialogSurface => Boolean(dialog)),
     vendorKnowledgeMatch: sanitizeKnowledgeMatch(context.vendorKnowledgeMatch),
     orgKnowledgeMatch: sanitizeKnowledgeMatch(context.orgKnowledgeMatch),
     knowledgeAvailability: sanitizeKnowledgeAvailability(

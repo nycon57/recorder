@@ -82,6 +82,22 @@ function sanitizeIncomingAppSignature(
   return sanitizePageContextText(value, 120);
 }
 
+function usableAppSignature(value: string | undefined): string | undefined {
+  if (!value || value.toLowerCase() === 'unknown:unknown') return undefined;
+  return value;
+}
+
+function deriveAppSignatureFromContext(
+  context: PageContext | undefined,
+): string | undefined {
+  const app = context?.app?.toLowerCase();
+  const screen = context?.screen?.toLowerCase();
+  if (!app || app === 'unknown' || !screen || screen === 'unknown') {
+    return undefined;
+  }
+  return `${app}:${screen}`;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const requestStartedAt = Date.now();
@@ -102,8 +118,10 @@ export async function POST(request: NextRequest) {
     const resolvedUrl =
       sanitizedIncomingContext?.url ?? (url ? sanitizeIncomingUrl(url) : url);
     const resolvedAppSignature =
-      sanitizedIncomingContext?.appSignature ??
-      sanitizeIncomingAppSignature(appSignature);
+      usableAppSignature(sanitizedIncomingContext?.appSignature) ??
+      deriveAppSignatureFromContext(sanitizedIncomingContext) ??
+      sanitizeIncomingAppSignature(appSignature) ??
+      undefined;
 
     if (!resolvedUrl || typeof resolvedUrl !== 'string') {
       return errors.badRequest('url is required');
@@ -114,16 +132,20 @@ export async function POST(request: NextRequest) {
 
     // Parse appSignature: "salesforce:lead-detail" → { app, screen }
     const colonIdx = resolvedAppSignature.indexOf(':');
+    const contextApp = sanitizedIncomingContext?.app?.toLowerCase();
+    const contextScreen = sanitizedIncomingContext?.screen?.toLowerCase();
     const app =
-      sanitizedIncomingContext?.app?.toLowerCase() ??
-      (colonIdx !== -1
-        ? resolvedAppSignature.slice(0, colonIdx).toLowerCase()
-        : resolvedAppSignature.toLowerCase());
+      contextApp && contextApp !== 'unknown'
+        ? contextApp
+        : colonIdx !== -1
+          ? resolvedAppSignature.slice(0, colonIdx).toLowerCase()
+          : resolvedAppSignature.toLowerCase();
     const screen =
-      sanitizedIncomingContext?.screen?.toLowerCase() ??
-      (colonIdx !== -1
-        ? resolvedAppSignature.slice(colonIdx + 1).toLowerCase()
-        : screenFromUrl(resolvedUrl));
+      contextScreen && contextScreen !== 'unknown'
+        ? contextScreen
+        : colonIdx !== -1
+          ? resolvedAppSignature.slice(colonIdx + 1).toLowerCase()
+          : screenFromUrl(resolvedUrl);
 
     const matches = await resolveExtensionContextMatches({
       orgId: authCtx.orgId,

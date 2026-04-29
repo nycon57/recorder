@@ -412,7 +412,7 @@ function getElementSemanticText(el: Element): string {
   clone.querySelectorAll('input, textarea, select, option').forEach((item) => {
     item.remove();
   });
-  return normalizeText(clone.innerText || clone.textContent);
+  return normalizeText(clone.textContent);
 }
 
 function deriveLabel(el: Element): string {

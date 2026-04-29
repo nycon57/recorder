@@ -49,8 +49,10 @@ export type { SanitizedPageContextLocation } from './context-telemetry.js';
 export {
   PAGE_CONTEXT_SANITIZER_LIMITS,
   redactSensitiveText,
+  sanitizePageContextLocator,
   sanitizePageContextForModel,
   sanitizePageContextForNetwork,
+  sanitizePageContextSelector,
   sanitizePageContextText,
   sanitizePageContextUrl,
 } from './page-context-sanitizer.js';

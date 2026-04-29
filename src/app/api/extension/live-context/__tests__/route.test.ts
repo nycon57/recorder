@@ -82,6 +82,13 @@ function baseContext(overrides: Partial<PageContext> = {}): PageContext {
   };
 }
 
+function getFirstPackContext(): PageContext {
+  expect(buildLiveContextPack).toHaveBeenCalledTimes(1);
+  const firstArg = buildLiveContextPack.mock.calls[0]?.[0];
+  expect(firstArg).toBeDefined();
+  return (firstArg as { context: PageContext }).context;
+}
+
 describe('POST /api/extension/live-context', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -161,13 +168,7 @@ describe('POST /api/extension/live-context', () => {
         }),
       }),
     );
-    expect(
-      (
-        buildLiveContextPack.mock.calls[0]?.[0] as {
-          context: PageContext;
-        }
-      ).context,
-    ).not.toHaveProperty('visibleText');
+    expect(getFirstPackContext()).not.toHaveProperty('visibleText');
   });
 
   it('accepts supplied matches when provenance matches the current context', async () => {
@@ -205,6 +206,29 @@ describe('POST /api/extension/live-context', () => {
     );
   });
 
+  it('uses the URL screen fallback when sanitized screen is unknown', async () => {
+    const { POST } = await import('../route');
+    const context = baseContext({
+      screen: undefined,
+      appSignature: undefined,
+      url: 'https://app.hubspot.com/settings/users?token=secret',
+    });
+
+    const response = await POST(buildRequest({ context }));
+
+    expect(response.status).toBe(200);
+    expect(resolveExtensionContextMatches).toHaveBeenCalledWith({
+      orgId: 'org_test',
+      app: 'hubspot',
+      screen: 'users',
+      url: 'https://app.hubspot.com/settings/users',
+    });
+    expect(getFirstPackContext()).toMatchObject({
+      screen: 'users',
+      appSignature: 'hubspot:users',
+    });
+  });
+
   it('sanitizes posted context before building the live model pack', async () => {
     const { POST } = await import('../route');
     const context = baseContext({
@@ -234,9 +258,7 @@ describe('POST /api/extension/live-context', () => {
     const response = await POST(buildRequest({ context }));
 
     expect(response.status).toBe(200);
-    const packContext = (
-      buildLiveContextPack.mock.calls[0]?.[0] as { context: PageContext }
-    ).context;
+    const packContext = getFirstPackContext();
     expect(packContext).toMatchObject({
       url: 'https://app.hubspot.com/contacts/123',
       pageSummary:

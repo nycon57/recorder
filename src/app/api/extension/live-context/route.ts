@@ -40,6 +40,11 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function usableAppSignature(value: string | undefined): string | undefined {
+  if (!value || value.toLowerCase() === 'unknown:unknown') return undefined;
+  return value;
+}
+
 async function loadVendorPages(
   pageIds: string[],
 ): Promise<LiveContextSourcePage[]> {
@@ -99,11 +104,17 @@ export async function POST(request: NextRequest) {
     }
 
     const baseContext = sanitizePageContextForNetwork(body.context);
-    const resolvedApp = baseContext.app?.toLowerCase() || 'unknown';
+    const normalizedApp = baseContext.app?.toLowerCase();
+    const normalizedScreen = baseContext.screen?.toLowerCase();
+    const resolvedApp =
+      normalizedApp && normalizedApp !== 'unknown' ? normalizedApp : 'unknown';
     const resolvedScreen =
-      baseContext.screen?.toLowerCase() || screenFromUrl(baseContext.url);
+      normalizedScreen && normalizedScreen !== 'unknown'
+        ? normalizedScreen
+        : screenFromUrl(baseContext.url);
     const resolvedAppSignature =
-      baseContext.appSignature ?? `${resolvedApp}:${resolvedScreen}`;
+      usableAppSignature(baseContext.appSignature) ??
+      `${resolvedApp}:${resolvedScreen}`;
     const currentKnowledgeResolvedFor = buildKnowledgeResolvedFor({
       app: resolvedApp,
       screen: resolvedScreen,

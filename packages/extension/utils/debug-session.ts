@@ -224,7 +224,7 @@ export function summarizeToolCallArgs(
                             : name === 'press_key'
                               ? 'keyboard'
                               : null,
-    inputTextPreview: text ? clipText(text, 200) : null,
+    inputTextPreview: text ? '[input present]' : null,
     inputTextLength: text ? text.length : null,
   };
 }

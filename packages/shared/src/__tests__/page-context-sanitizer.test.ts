@@ -30,8 +30,9 @@ describe('page context sanitizer', () => {
   });
 
   it('omits visibleText from network and model payloads', () => {
+    const fakeSecret = ['sk', 'live', 'secret'].join('_');
     const raw = buildContext({
-      visibleText: 'Long body text with jane@example.com and sk_live_secret',
+      visibleText: `Long body text with jane@example.com and ${fakeSecret}`,
     });
 
     expect(sanitizePageContextForNetwork(raw)).not.toHaveProperty(
@@ -41,6 +42,7 @@ describe('page context sanitizer', () => {
   });
 
   it('redacts sensitive tokens and PII in retained labels', () => {
+    const fakeSecret = ['sk', 'live', 'abcdefghijkl'].join('_');
     const sanitized = sanitizePageContextForNetwork(
       buildContext({
         pageSummary:
@@ -52,7 +54,7 @@ describe('page context sanitizer', () => {
         interactiveElements: [
           {
             selector: '#token',
-            label: 'Secret sk_live_abcdefghijkl',
+            label: `Secret ${fakeSecret}`,
             type: 'button',
           },
         ],
@@ -64,7 +66,7 @@ describe('page context sanitizer', () => {
     expect(serialized).not.toContain('415');
     expect(serialized).not.toContain('123-45-6789');
     expect(serialized).not.toContain('4242');
-    expect(serialized).not.toContain('sk_live_abcdefghijkl');
+    expect(serialized).not.toContain(fakeSecret);
     expect(serialized).not.toContain('secret-token-123');
     expect(serialized).toContain('[REDACTED]');
   });
@@ -144,5 +146,88 @@ describe('page context sanitizer', () => {
       type: 'password',
       required: true,
     });
+  });
+
+  it('omits sensitive selector values instead of redacting inside CSS locators', () => {
+    const uuidSelector =
+      '[data-row-id="123e4567-e89b-12d3-a456-426614174000"]';
+    const sanitized = sanitizePageContextForNetwork(
+      buildContext({
+        interactiveElements: [
+          {
+            selector: 'button[aria-label="Email jane@example.com"]',
+            label: 'Email jane@example.com',
+            type: 'button',
+          },
+          {
+            selector: '#save',
+            label: 'Save',
+            type: 'button',
+          },
+          {
+            selector: uuidSelector,
+            label: 'Open row',
+            type: 'button',
+          },
+        ],
+        forms: [
+          {
+            label: 'Contact',
+            fields: [
+              {
+                label: 'Email jane@example.com',
+                selector: 'input[aria-label="jane@example.com"]',
+                type: 'email',
+              },
+              {
+                label: 'Name',
+                selector: '#name',
+                type: 'text',
+              },
+            ],
+          },
+        ],
+        vendorKnowledgeMatch: {
+          matched: true,
+          basis: 'app_signature',
+          confidence: 0.8,
+          app: 'hubspot',
+          screen: 'contact-record',
+          pageIds: [],
+          selectorHints: [
+            'button[aria-label="Email jane@example.com"]',
+            '#safe-action',
+          ],
+        },
+      }),
+    );
+
+    expect(sanitized.interactiveElements).toEqual([
+      expect.objectContaining({
+        selector: '#save',
+        label: 'Save',
+        type: 'button',
+      }),
+      expect.objectContaining({
+        selector: uuidSelector,
+        label: 'Open row',
+        type: 'button',
+      }),
+    ]);
+    expect(sanitized.forms?.[0]?.fields).toEqual([
+      {
+        label: 'Name',
+        selector: '#name',
+        type: 'text',
+        required: undefined,
+      },
+    ]);
+    expect(sanitized.vendorKnowledgeMatch?.selectorHints).toEqual([
+      '#safe-action',
+    ]);
+
+    const serialized = JSON.stringify(sanitized);
+    expect(serialized).not.toContain('jane@example.com');
+    expect(serialized).not.toContain('[aria-label="[REDACTED]"]');
   });
 });
