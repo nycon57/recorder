@@ -32,6 +32,11 @@ type RankableKnowledgeRow = {
   vectorScore?: number | null;
 };
 
+type PageRelevanceVectorContext = {
+  question: string;
+  questionEmbedding: number[];
+};
+
 export interface KnowledgeMatchCandidate {
   pageIds: string[];
   basis: Exclude<KnowledgeMatchBasis, 'none'>;
@@ -62,6 +67,9 @@ const BASIS_WEIGHT: Record<Exclude<KnowledgeMatchBasis, 'none'>, number> = {
   app_only: 2,
   domain_alias: 1,
 };
+
+const MIN_VECTOR_SEARCH_LIMIT = 10;
+const MAX_VECTOR_SEARCH_LIMIT = 50;
 
 const KNOWN_DOMAIN_ALIASES: Array<{ app: string; hostPattern: RegExp }> = [
   { app: 'salesforce', hostPattern: /(?:^|\.)salesforce\.com$/i },
@@ -157,14 +165,21 @@ function normalizeVectorScore(score: number | null | undefined): number {
   return score;
 }
 
-async function generatePageRelevanceEmbedding(args: {
-  app: string;
-  screen: string;
-  url: string;
-}): Promise<number[] | null> {
-  const input = buildPageRelevanceQuery(args);
-  if (!input) return null;
+function vectorSearchLimit(pageCount: number): number {
+  return Math.min(
+    Math.max(pageCount, MIN_VECTOR_SEARCH_LIMIT),
+    MAX_VECTOR_SEARCH_LIMIT,
+  );
+}
 
+function logVectorFallback(message: string, error: unknown): void {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  console.warn(message, { errorMessage });
+}
+
+async function generatePageRelevanceEmbedding(
+  input: string,
+): Promise<number[] | null> {
   try {
     const { embedding } = await generateEmbeddingWithFallback(
       input,
@@ -172,7 +187,7 @@ async function generatePageRelevanceEmbedding(args: {
     );
     return embedding;
   } catch (error) {
-    console.warn(
+    logVectorFallback(
       '[extension-context] page relevance embedding failed, falling back to lexical ranking:',
       error,
     );
@@ -180,40 +195,62 @@ async function generatePageRelevanceEmbedding(args: {
   }
 }
 
+async function buildPageRelevanceVectorContext(args: {
+  app: string;
+  screen: string;
+  url: string;
+}): Promise<PageRelevanceVectorContext | null> {
+  const question = buildPageRelevanceQuery(args);
+  if (!question) return null;
+
+  const questionEmbedding = await generatePageRelevanceEmbedding(question);
+  if (!questionEmbedding) return null;
+
+  return { question, questionEmbedding };
+}
+
 async function resolveVendorPageVectorScores(args: {
   app: string;
   screen: string;
   url: string;
   pageIds: string[];
+  vectorContext: PageRelevanceVectorContext | null;
 }): Promise<Map<string, number>> {
   if (args.pageIds.length === 0) return new Map();
 
-  const questionEmbedding = await generatePageRelevanceEmbedding(args);
-  if (!questionEmbedding) return new Map();
-  const question = buildPageRelevanceQuery(args);
+  if (!args.vectorContext) return new Map();
 
   try {
     const matches = await resolveVendorCorpusPages({
       app: args.app,
       screen: args.screen,
-      question,
-      questionEmbedding,
-      limit: Math.max(args.pageIds.length, 10),
+      question: args.vectorContext.question,
+      questionEmbedding: args.vectorContext.questionEmbedding,
+      limit: vectorSearchLimit(args.pageIds.length),
     });
     const allowedPageIds = new Set(args.pageIds);
     const scores = new Map<string, number>();
 
     for (const match of matches) {
-      if (!match.vendorPageId || !allowedPageIds.has(match.vendorPageId)) {
+      const confidence =
+        typeof match.confidence === 'number' &&
+        Number.isFinite(match.confidence)
+          ? match.confidence
+          : null;
+      if (
+        !match.vendorPageId ||
+        !allowedPageIds.has(match.vendorPageId) ||
+        confidence === null
+      ) {
         continue;
       }
       const current = scores.get(match.vendorPageId) ?? 0;
-      scores.set(match.vendorPageId, Math.max(current, match.confidence));
+      scores.set(match.vendorPageId, Math.max(current, confidence));
     }
 
     return scores;
   } catch (error) {
-    console.warn(
+    logVectorFallback(
       '[extension-context] vendor page vector ranking failed, falling back to lexical ranking:',
       error,
     );
@@ -227,30 +264,35 @@ async function resolveOrgPageVectorScores(args: {
   screen: string;
   url: string;
   pageIds: string[];
+  vectorContext: PageRelevanceVectorContext | null;
 }): Promise<Map<string, number>> {
   if (args.pageIds.length === 0) return new Map();
 
-  const questionEmbedding = await generatePageRelevanceEmbedding(args);
-  if (!questionEmbedding) return new Map();
+  if (!args.vectorContext) return new Map();
 
   try {
     const matches = await resolveOrgWikiPagesByVector({
       orgId: args.orgId,
-      questionEmbedding,
-      limit: Math.max(args.pageIds.length, 10),
+      questionEmbedding: args.vectorContext.questionEmbedding,
+      limit: vectorSearchLimit(args.pageIds.length),
     });
     const allowedPageIds = new Set(args.pageIds);
     const scores = new Map<string, number>();
 
     for (const match of matches) {
-      if (!allowedPageIds.has(match.id)) continue;
+      const confidence =
+        typeof match.confidence === 'number' &&
+        Number.isFinite(match.confidence)
+          ? match.confidence
+          : null;
+      if (!allowedPageIds.has(match.id) || confidence === null) continue;
       const current = scores.get(match.id) ?? 0;
-      scores.set(match.id, Math.max(current, match.confidence));
+      scores.set(match.id, Math.max(current, confidence));
     }
 
     return scores;
   } catch (error) {
-    console.warn(
+    logVectorFallback(
       '[extension-context] org page vector ranking failed, falling back to lexical ranking:',
       error,
     );
@@ -493,6 +535,7 @@ async function fetchVendorMatchCandidates(
   app: string,
   screen: string,
   url: string,
+  vectorContext: PageRelevanceVectorContext | null,
 ): Promise<KnowledgeMatchCandidate[]> {
   const domainAlias = extractDomainAppAlias(url);
   const appCandidates = uniqueStrings([
@@ -524,6 +567,7 @@ async function fetchVendorMatchCandidates(
     screen,
     url,
     pageIds: (data ?? []).map((row) => row.id),
+    vectorContext,
   });
   const rows = rankKnowledgeRowsByPageRelevance(
     applyVectorScores(data ?? [], vectorScores),
@@ -603,6 +647,7 @@ async function fetchOrgMatchCandidates(
   app: string,
   screen: string,
   url: string,
+  vectorContext: PageRelevanceVectorContext | null,
 ): Promise<KnowledgeMatchCandidate[]> {
   const domainAlias = extractDomainAppAlias(url);
   const appCandidates = uniqueStrings([
@@ -637,6 +682,7 @@ async function fetchOrgMatchCandidates(
     screen,
     url,
     pageIds: (data ?? []).map((row) => row.id),
+    vectorContext,
   });
   const rows = rankKnowledgeRowsByPageRelevance(
     applyVectorScores(data ?? [], vectorScores),
@@ -705,23 +751,38 @@ export async function resolveExtensionContextMatches(
   args: ResolveExtensionContextMatchesArgs,
 ): Promise<ResolveExtensionContextMatchesResult> {
   const supabase = createAdminClient();
-  const vendorMatch = chooseKnowledgeMatch(
-    await fetchVendorMatchCandidates(
+  const normalizedApp = args.app.toLowerCase();
+  const normalizedScreen = args.screen.toLowerCase();
+  const domainAlias = extractDomainAppAlias(args.url);
+  const effectiveApp =
+    normalizedApp !== 'unknown' ? normalizedApp : (domainAlias ?? normalizedApp);
+  const vectorContext =
+    effectiveApp === 'unknown'
+      ? null
+      : await buildPageRelevanceVectorContext({
+          app: effectiveApp,
+          screen: normalizedScreen,
+          url: args.url,
+        });
+  const [vendorCandidates, orgCandidates] = await Promise.all([
+    fetchVendorMatchCandidates(
       supabase,
-      args.app.toLowerCase(),
-      args.screen.toLowerCase(),
+      normalizedApp,
+      normalizedScreen,
       args.url,
+      vectorContext,
     ),
-  );
-  const orgMatch = chooseKnowledgeMatch(
-    await fetchOrgMatchCandidates(
+    fetchOrgMatchCandidates(
       supabase,
       args.orgId,
-      args.app.toLowerCase(),
-      args.screen.toLowerCase(),
+      normalizedApp,
+      normalizedScreen,
       args.url,
+      vectorContext,
     ),
-  );
+  ]);
+  const vendorMatch = chooseKnowledgeMatch(vendorCandidates);
+  const orgMatch = chooseKnowledgeMatch(orgCandidates);
 
   return {
     vendorKnowledgeMatch: toKnowledgeMatch({
