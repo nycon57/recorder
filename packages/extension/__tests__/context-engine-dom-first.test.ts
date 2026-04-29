@@ -130,6 +130,7 @@ describe('DOM-first page context engine', () => {
           <label>API token <input id="token" type="password" value="sk_live_secret" /></label>
           <select id="account"><option selected>Acme confidential account</option></select>
           <a id="profile" href="https://user:pass@example.com/customer?token=secret#billing" aria-label="Email jane@example.com" title="Contact jane@example.com">Jane jane@example.com</a>
+          <a href="https://example.com/private?token=secret" aria-label="Private jane@example.com">Private jane@example.com</a>
           <button id="rotate" aria-expanded="false">Rotate token</button>
         </section>
       </main>

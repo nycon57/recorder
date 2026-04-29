@@ -13,7 +13,7 @@ const generateContentStream =
   jest.fn<() => Promise<AsyncGenerator<StreamChunk>>>();
 const buildExtensionCompiledMemoryPrompt =
   jest.fn<(args: PromptArgs) => string>();
-const resolveCompiledMemoryAnswerContext = jest.fn();
+const resolveCompiledMemoryAnswerContext = jest.fn<() => Promise<unknown>>();
 
 jest.mock('@google/genai', () => ({
   GoogleGenAI: jest.fn().mockImplementation(() => ({
@@ -223,5 +223,65 @@ describe('POST /api/extension/query', () => {
       }),
     );
     expect(await response.text()).not.toContain('help center');
+  });
+
+  it('sanitizes posted page context before building the model prompt', async () => {
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        question: 'What is on this page?',
+        context: {
+          url: 'https://user:pass@example.com/deals/123?token=secret#notes',
+          appSignature: 'salesforce:opportunity-detail',
+          pageSummary:
+            'Contact jane@example.com token api_key=super-secret-token visible in page',
+          visibleText: 'Raw body with card 4242 4242 4242 4242',
+          interactiveElements: [
+            {
+              selector: '#email',
+              label: 'Email jane@example.com',
+              type: 'input',
+              placeholder: 'jane@example.com',
+            },
+          ],
+          snippets: [
+            {
+              id: 'snippet-1',
+              selector: 'p',
+              kind: 'text',
+              text: 'Call +1 (415) 555-2671',
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const promptArgs = buildExtensionCompiledMemoryPrompt.mock.calls[0]?.[0];
+    expect(promptArgs).toMatchObject({
+      elements: [{ selector: '#email', label: 'Email [REDACTED]' }],
+      pageContext: expect.objectContaining({
+        url: 'https://example.com/deals/123',
+        pageSummary:
+          'Contact [REDACTED] token api_key=[REDACTED] visible in page',
+        interactiveElements: [
+          expect.objectContaining({
+            selector: '#email',
+            label: 'Email [REDACTED]',
+            placeholder: '[REDACTED]',
+          }),
+        ],
+        snippets: [
+          expect.objectContaining({
+            text: 'Call [REDACTED]',
+          }),
+        ],
+      }),
+    });
+    expect(promptArgs?.pageContext).not.toHaveProperty('visibleText');
+    expect(JSON.stringify(promptArgs)).not.toContain('super-secret-token');
+    expect(JSON.stringify(promptArgs)).not.toContain('4242');
+    expect(JSON.stringify(promptArgs)).not.toContain('user:pass');
   });
 });

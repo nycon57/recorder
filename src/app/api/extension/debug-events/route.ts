@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { ExtensionDebugSessionEventInput } from '@tribora/shared';
 
+import {
+  sanitizePageContextLocation,
+  sanitizePageContextText,
+  type ExtensionDebugSessionEventInput,
+} from '@tribora/shared';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 import { errors } from '@/lib/utils/api';
@@ -28,9 +32,48 @@ function isValidEventInput(
   );
 }
 
+function sanitizeDebugEvent(
+  event: ExtensionDebugSessionEventInput,
+): ExtensionDebugSessionEventInput {
+  const location = sanitizePageContextLocation(
+    `https://${event.urlHost ?? 'unknown'}${event.urlPath ?? '/'}`,
+  );
+
+  return {
+    ...event,
+    urlHost: event.urlHost ? location.host : event.urlHost,
+    urlPath: event.urlPath ? location.path : event.urlPath,
+    app: sanitizePageContextText(event.app, 80) ?? event.app,
+    screen: sanitizePageContextText(event.screen, 80) ?? event.screen,
+    messageText: sanitizePageContextText(event.messageText, 500) ?? null,
+    toolName: sanitizePageContextText(event.toolName, 80) ?? event.toolName,
+    selector: sanitizePageContextText(event.selector, 220) ?? event.selector,
+    label: sanitizePageContextText(event.label, 140) ?? event.label,
+    action: sanitizePageContextText(event.action, 80) ?? event.action,
+    inputTextPreview:
+      sanitizePageContextText(event.inputTextPreview, 160) ?? null,
+    resultText: sanitizePageContextText(event.resultText, 500) ?? null,
+    error: sanitizePageContextText(event.error, 260) ?? event.error,
+    pageSummary: sanitizePageContextText(event.pageSummary, 500) ?? null,
+    selectedEntityTitle:
+      sanitizePageContextText(event.selectedEntityTitle, 200) ?? null,
+    conversationId:
+      sanitizePageContextText(event.conversationId, 120) ??
+      event.conversationId,
+    fingerprint:
+      sanitizePageContextText(event.fingerprint, 120) ?? event.fingerprint,
+    pageInstanceId:
+      sanitizePageContextText(event.pageInstanceId, 120) ??
+      event.pageInstanceId,
+    contentInstanceId:
+      sanitizePageContextText(event.contentInstanceId, 120) ??
+      event.contentInstanceId,
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const authCtx = await requireApiKeyOrSession(request, 'context');
+    const authCtx = await requireApiKeyOrSession(request, 'query');
     const body = (await request.json()) as {
       events?: unknown;
     };
@@ -49,8 +92,9 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createAdminClient();
-    const rows: Database['public']['Tables']['events']['Insert'][] = events.map(
-      (event) => ({
+    const sanitizedEvents = events.map(sanitizeDebugEvent);
+    const rows: Database['public']['Tables']['events']['Insert'][] =
+      sanitizedEvents.map((event) => ({
         type: 'extension.debug_session.event',
         payload: {
           ...event,
@@ -59,8 +103,7 @@ export async function POST(request: NextRequest) {
             authCtx.authMethod === 'session' ? authCtx.userId : authCtx.keyId,
           authMethod: authCtx.authMethod,
         },
-      }),
-    );
+      }));
 
     for (const row of rows) {
       // Repo-wide Supabase typing currently narrows admin inserts to `never`
@@ -80,20 +123,21 @@ export async function POST(request: NextRequest) {
       },
       { headers: CORS_HEADERS },
     );
-  } catch (error: any) {
-    if (error.message === 'Unauthorized') {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'Unauthorized') {
       return errors.unauthorized();
     }
-    if (error.message === 'Rate limit exceeded') {
+    if (message === 'Rate limit exceeded') {
       return errors.rateLimitExceeded();
     }
-    if (error.message === 'Insufficient scope') {
+    if (message === 'Insufficient scope') {
       return errors.forbidden();
     }
     if (
-      error.message === 'Organization context required' ||
-      error.message === 'User organization not found' ||
-      error.message?.includes('not found in database')
+      message === 'Organization context required' ||
+      message === 'User organization not found' ||
+      message.includes('not found in database')
     ) {
       return errors.forbidden();
     }

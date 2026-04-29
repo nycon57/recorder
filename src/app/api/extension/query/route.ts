@@ -57,8 +57,11 @@
 
 import { NextRequest, after } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
-import type { PageContext } from '@tribora/shared';
 
+import {
+  sanitizePageContextForNetwork,
+  type PageContext,
+} from '@tribora/shared';
 import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import type { Json } from '@/lib/types/database';
@@ -433,7 +436,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     question = body.question;
-    context = body.context;
+    context = body.context
+      ? sanitizePageContextForNetwork(body.context)
+      : body.context;
   } catch {
     return errors.badRequest('Invalid JSON body');
   }
