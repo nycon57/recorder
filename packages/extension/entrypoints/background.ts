@@ -11,6 +11,8 @@
  *   - Token refresh + auth state
  */
 
+/* global chrome, defineBackground */
+
 import type { LiveContextPack, PageContext } from '@tribora/shared';
 import { sanitizePageContextLocation } from '@tribora/shared';
 
@@ -37,6 +39,7 @@ import type { ActiveDebugSessionState } from '../utils/debug-session.js';
 import { shouldOpenMicPermissionBootstrap } from '../utils/session-startup.js';
 import { createTurnGuards } from '../utils/turn-guards.js';
 import { buildContextSemanticFingerprint } from '../utils/context-telemetry.js';
+import { classifyTranscriptConfidence } from '../utils/voice-agent-policy.js';
 
 const BG = '[Tribora bg]';
 const EXTENSION_ENABLED_KEY = 'tribora_extension_enabled';
@@ -730,12 +733,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         typeof transcript?.message === 'string' ? transcript.message : null;
 
       if (messageText) {
-        const turnId =
+        const transcriptConfidence =
           source === 'user'
+            ? classifyTranscriptConfidence(messageText)
+            : { lowConfidence: false, reason: null };
+
+        const turnId =
+          source === 'user' && !transcriptConfidence.lowConfidence
             ? advanceDebugTurn(activeDebugSession)
             : activeDebugSession.currentTurnId;
 
-        if (source === 'user' && turnId) {
+        if (source === 'user' && transcriptConfidence.lowConfidence) {
+          queueDebugSessionEvent({
+            eventType: 'low_confidence_user_message',
+            turnId,
+            tabId: activeDebugSession.tabId,
+            windowId: activeDebugSession.windowId,
+            conversationId: activeDebugSession.conversationId,
+            messageText,
+            resultText: `Ignored low-confidence transcript: ${transcriptConfidence.reason ?? 'unknown'}`,
+            ...getDebugContextFields(activeDebugSession.tabId),
+          });
+        }
+
+        if (
+          source === 'user' &&
+          turnId &&
+          !transcriptConfidence.lowConfidence
+        ) {
           turnGuards.startTurn(turnId);
         }
 

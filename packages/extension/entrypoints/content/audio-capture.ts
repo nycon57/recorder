@@ -13,11 +13,14 @@
  * Part of TRIB-25: Deepgram STT + push-to-talk.
  */
 
+/* global chrome, MediaStream */
+
 import { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_WIN } from "@tribora/shared";
 import type { SttState } from "@tribora/shared";
 
 import { createHotkey } from "../../utils/hotkey.js";
 import { createDeepgramSession } from "../../utils/deepgram-client.js";
+import { isLowConfidenceTranscript } from "../../utils/voice-agent-policy.js";
 
 export interface AudioCapture {
   /** Attach keyboard listeners to begin listening for the hotkey. */
@@ -158,8 +161,9 @@ export function createAudioCapture(
     state = { status: "idle" };
 
     // Only deliver a transcript if we got meaningful content
-    if (finalTranscript.trim()) {
-      onTranscript(finalTranscript.trim());
+    const cleanedTranscript = finalTranscript.trim();
+    if (cleanedTranscript && !isLowConfidenceTranscript(cleanedTranscript)) {
+      onTranscript(cleanedTranscript);
     }
   };
 
