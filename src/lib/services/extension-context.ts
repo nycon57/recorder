@@ -190,11 +190,13 @@ async function resolveVendorPageVectorScores(args: {
 
   const questionEmbedding = await generatePageRelevanceEmbedding(args);
   if (!questionEmbedding) return new Map();
+  const question = buildPageRelevanceQuery(args);
 
   try {
     const matches = await resolveVendorCorpusPages({
       app: args.app,
       screen: args.screen,
+      question,
       questionEmbedding,
       limit: Math.max(args.pageIds.length, 10),
     });
