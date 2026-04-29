@@ -5,9 +5,9 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 import type { PageContext } from '@tribora/shared';
 
-const resolveExtensionContextMatches = jest.fn();
-const buildExtensionContextTelemetry = jest.fn();
-const recordKnowledgeTelemetryEvent = jest.fn();
+const resolveExtensionContextMatches = jest.fn<() => Promise<unknown>>();
+const buildExtensionContextTelemetry = jest.fn<() => unknown>();
+const recordKnowledgeTelemetryEvent = jest.fn<() => Promise<void>>();
 
 jest.mock('next/server', () => ({
   NextRequest: class {},
@@ -184,15 +184,14 @@ describe('POST /api/extension/context', () => {
         }),
       }),
     );
+    const telemetryInput = buildExtensionContextTelemetry.mock.calls[0]?.[0] as {
+      context: PageContext;
+    };
+    expect(telemetryInput.context).not.toHaveProperty('visibleText');
     expect(
-      buildExtensionContextTelemetry.mock.calls[0][0].context,
-    ).not.toHaveProperty('visibleText');
-    expect(
-      JSON.stringify(buildExtensionContextTelemetry.mock.calls[0][0]),
+      JSON.stringify(telemetryInput),
     ).not.toContain('super-secret-token');
-    expect(
-      JSON.stringify(buildExtensionContextTelemetry.mock.calls[0][0]),
-    ).not.toContain('4242');
+    expect(JSON.stringify(telemetryInput)).not.toContain('4242');
     expect(recordKnowledgeTelemetryEvent).toHaveBeenCalled();
   });
 });

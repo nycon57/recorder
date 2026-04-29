@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 import { buildKnowledgeResolvedFor, type PageContext } from '@tribora/shared';
 
-const resolveExtensionContextMatches = jest.fn();
-const buildLiveContextPack = jest.fn();
+const resolveExtensionContextMatches = jest.fn<() => Promise<unknown>>();
+const buildLiveContextPack = jest.fn<() => unknown>();
 
 jest.mock('@/lib/utils/api-key-auth', () => ({
   requireApiKeyOrSession: async () => ({
@@ -232,7 +232,9 @@ describe('POST /api/extension/live-context', () => {
     const response = await POST(buildRequest({ context }));
 
     expect(response.status).toBe(200);
-    const packContext = buildLiveContextPack.mock.calls[0][0].context;
+    const packContext = (
+      buildLiveContextPack.mock.calls[0]?.[0] as { context: PageContext }
+    ).context;
     expect(packContext).toMatchObject({
       url: 'https://app.hubspot.com/contacts/123',
       pageSummary:
