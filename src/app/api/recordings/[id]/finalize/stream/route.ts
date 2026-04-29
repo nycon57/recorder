@@ -22,6 +22,19 @@ import {
   SOURCE_STATUS,
   getQueuedSourceStatusForJob,
 } from '@/lib/utils/status-helpers';
+import {
+  CURRENT_RECORDING_STORAGE_BUCKET,
+  LEGACY_RECORDING_STORAGE_BUCKET,
+  buildContentRecordingStoragePath,
+  buildLegacyRecordingStoragePath,
+  findExactStorageObject,
+  inferRecordingStorageBucket,
+  validateRecordingStoragePath,
+} from '@/lib/recordings/storage-contract';
+import type {
+  ContentType,
+  FileType,
+} from '@/lib/types/content';
 import type { Database, Json } from '@/lib/types/database';
 
 const logger = createLogger({ endpoint: 'finalize-stream' });
@@ -30,7 +43,17 @@ type JobType = Database['public']['Tables']['jobs']['Row']['type'];
 type ContentRow = Database['public']['Tables']['content']['Row'];
 
 interface FinalizeParams {
-  params: { id: string };
+  params: Promise<{ id?: string }>;
+}
+
+function isValidRecordingId(recordingId: unknown): recordingId is string {
+  return typeof recordingId === 'string' && recordingId.trim().length > 0;
+}
+
+function metadataObject(metadata: Json | null): { [key: string]: Json | undefined } {
+  return typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata)
+    ? (metadata as { [key: string]: Json | undefined })
+    : {};
 }
 
 /**
@@ -40,7 +63,17 @@ interface FinalizeParams {
 export const GET = apiHandler(
   async (request: NextRequest, context: FinalizeParams) => {
     const requestId = request.headers.get('x-request-id') || 'unknown';
-    const recordingId = context.params.id;
+    const { id: recordingId } = await context.params;
+
+    if (!isValidRecordingId(recordingId)) {
+      return new Response(
+        JSON.stringify({ message: 'Recording ID is required' }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
 
     logger.info('Streaming finalize request initiated', {
       context: { recordingId, requestId },
@@ -64,7 +97,7 @@ export const GET = apiHandler(
     // Verify recording exists and belongs to org
     const { data: recording, error: recordingError } = await supabaseAdmin
       .from('content')
-      .select('id, org_id, status, title, storage_path_raw')
+      .select('id, org_id, status, title, storage_path_raw, metadata, content_type, file_type')
       .eq('id', recordingId)
       .eq('org_id', orgId)
       .single();
@@ -86,46 +119,106 @@ export const GET = apiHandler(
       },
     });
 
-    // Construct expected storage path
+    const existingMetadata = metadataObject(recording.metadata);
+
+    // Construct and validate expected storage path before any storage lookup or stream setup.
+    const contentType = recording.content_type as ContentType | null;
+    const fileType = recording.file_type as FileType | null;
     const storagePath =
       recording.storage_path_raw ||
-      `org_${orgId}/recordings/${recordingId}/raw.webm`;
+      (contentType && fileType
+        ? buildContentRecordingStoragePath(
+            orgId,
+            contentType,
+            recordingId,
+            fileType,
+          )
+        : buildLegacyRecordingStoragePath(orgId, recordingId));
+
+    const storageBucket = recording.storage_path_raw
+      ? inferRecordingStorageBucket({
+          storagePath,
+          storageBucket: existingMetadata.storageBucket,
+          orgId,
+          recordingId,
+        })
+      : contentType && fileType
+        ? CURRENT_RECORDING_STORAGE_BUCKET
+        : LEGACY_RECORDING_STORAGE_BUCKET;
+
+    const storageValidation = validateRecordingStoragePath({
+      storagePath,
+      bucket: storageBucket,
+      orgId,
+      recordingId,
+      contentType,
+      fileType,
+      allowLegacyRecordingsBucket: true,
+    });
+
+    if (!storageValidation.valid) {
+      return new Response(
+        JSON.stringify({
+          message: storageValidation.message,
+          details: storageValidation.details,
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
 
     // Verify the file exists in storage
     logger.info('Verifying file exists in storage', {
-      context: { recordingId, storagePath },
+      context: {
+        recordingId,
+        storagePath: storageValidation.storagePath,
+        storageBucket: storageValidation.bucket,
+      },
     });
 
-    const { data: fileData, error: fileError } = await supabaseAdmin.storage
-      .from('content')
-      .list(`org_${orgId}/recordings/${recordingId}`);
+    const fileData = await findExactStorageObject(
+      supabaseAdmin,
+      storageValidation.bucket,
+      storageValidation.storagePath,
+    );
 
-    if (fileError || !fileData || fileData.length === 0) {
+    if (!fileData.exists) {
       logger.error('File not found in storage', {
-        context: { recordingId, storagePath },
-        error: fileError as Error | undefined,
+        context: {
+          recordingId,
+          storagePath: storageValidation.storagePath,
+          storageBucket: storageValidation.bucket,
+        },
+        error: fileData.error as Error | undefined,
       });
       throw new Error(
         'File not found in storage. Please ensure the recording was uploaded successfully.',
       );
     }
 
-    // Get file info
-    const file = fileData.find((f) => f.name === 'raw.webm');
-    if (!file) {
-      logger.error('raw.webm file not found', {
-        context: { recordingId, availableFiles: fileData.map((f) => f.name) },
-      });
-      throw new Error('raw.webm file not found in storage');
-    }
+    const file = fileData.object;
 
     logger.info('File found in storage', {
       context: {
         recordingId,
-        fileName: file.name,
-        fileSize: file.metadata?.size,
+        fileName: file?.name,
+        fileSize: file?.metadata?.size,
       },
     });
+    const storageObjectSize = file?.metadata?.size;
+    if (typeof storageObjectSize !== 'number') {
+      logger.warn('Storage object size missing; recording metadata will use zero bytes', {
+        context: {
+          recordingId,
+          storagePath: storageValidation.storagePath,
+          storageBucket: storageValidation.bucket,
+        },
+      });
+    }
+    const sizeBytes =
+      typeof storageObjectSize === 'number' ? storageObjectSize : 0;
 
     // Create SSE stream before any processing starts
     const stream = createSSEStream(recordingId);
@@ -157,13 +250,15 @@ export const GET = apiHandler(
     const { data: updatedRecording, error: updateError } = await supabaseAdmin
       .from('content')
       .update({
-        storage_path_raw: storagePath,
+        storage_path_raw: storageValidation.storagePath,
         status: newStatus,
         error_message: null, // Clear any previous errors
         metadata: {
-          sizeBytes: file.metadata?.size || 0,
+          ...existingMetadata,
+          sizeBytes,
           uploadedAt: new Date().toISOString(),
-        },
+          storageBucket: storageValidation.bucket,
+        } satisfies { [key: string]: Json | undefined },
         updated_at: new Date().toISOString(),
       })
       .eq('id', recordingId)
@@ -194,7 +289,7 @@ export const GET = apiHandler(
       {
         recordingId,
         status: newStatus,
-        fileSize: file.metadata?.size || 0,
+        fileSize: sizeBytes,
       },
     );
 
@@ -216,65 +311,71 @@ export const GET = apiHandler(
       return createSSEResponse(stream);
     }
 
-    // Create processing jobs for the full pipeline
+    // Create only the first processing job. The worker handlers enqueue dependent
+    // jobs after prerequisite transcript/document rows exist.
     logger.info('Creating processing jobs', {
       context: { recordingId, orgId },
     });
 
-    const jobTypes: JobType[] = [
-      'transcribe',
-      'doc_generate',
-      'generate_embeddings',
-    ];
-
-    // Prepare job payloads with all necessary data
-    const jobs = jobTypes.map((type) => {
-      const payload: { [key: string]: Json | undefined } = { recordingId, orgId };
-
-      // Add type-specific payload data
-      if (type === 'transcribe') {
-        payload.storagePath = storagePath;
-      }
-
-      return {
-        type,
-        status: 'pending' as const,
-        payload,
-        attempts: 0,
-        max_attempts: 3,
-        run_at: new Date().toISOString(),
-      };
-    });
+    const transcribeJob = {
+      type: 'transcribe' as JobType,
+      status: 'pending' as const,
+      payload: {
+        recordingId,
+        orgId,
+        storagePath: storageValidation.storagePath,
+        storageBucket: storageValidation.bucket,
+        contentType: recording.content_type,
+        fileType: recording.file_type,
+      } satisfies { [key: string]: Json | undefined },
+      attempts: 0,
+      max_attempts: 3,
+      run_at: new Date().toISOString(),
+      dedupe_key: `transcribe:${recordingId}`,
+    };
 
     logger.info('Job configurations prepared', {
       context: { recordingId },
-      data: { jobCount: jobs.length, jobTypes },
+      data: { jobCount: 1, jobTypes: [transcribeJob.type] },
     });
 
     streamingManager.sendLog(recordingId, 'Creating processing pipeline...', {
-      jobTypes,
+      jobTypes: [transcribeJob.type],
     });
 
     // Create jobs in database
-    const { data: createdJobs, error: jobError } = await supabaseAdmin
+    const { data: createdJob, error: jobError } = await supabaseAdmin
       .from('jobs')
-      .insert(jobs)
-      .select('id, type, payload');
+      .insert(transcribeJob)
+      .select('id, type, status, payload')
+      .single();
 
-    if (jobError || !createdJobs) {
-      logger.error('Failed to create jobs', {
-        context: { recordingId, orgId, requestId },
-        error: jobError,
-      });
+    let createdJobs = createdJob ? [createdJob] : null;
 
-      streamingManager.sendError(
-        recordingId,
-        'Failed to create processing jobs. Please try reprocessing from the recordings list.',
-      );
+    if (jobError) {
+      const { data: existingJob, error: existingJobError } = await supabaseAdmin
+        .from('jobs')
+        .select('id, type, status, payload')
+        .eq('dedupe_key', transcribeJob.dedupe_key)
+        .in('status', ['pending', 'processing'])
+        .maybeSingle();
 
-      throw new Error('Failed to create processing jobs');
+      if (existingJobError || !existingJob) {
+        logger.error('Failed to create or reuse processing job', {
+          context: { recordingId, orgId, requestId },
+          error: jobError as Error | undefined,
+        });
+
+        streamingManager.sendError(
+          recordingId,
+          'Failed to create processing jobs. Please try reprocessing from the recordings list.',
+        );
+
+        throw new Error('Failed to create processing jobs');
+      }
+
+      createdJobs = [existingJob];
     }
-
     logger.info('Jobs created successfully', {
       context: { recordingId, orgId },
       data: { jobCount: createdJobs.length, jobs: createdJobs },
@@ -287,6 +388,29 @@ export const GET = apiHandler(
         jobs: createdJobs.map((j) => ({ id: j.id, type: j.type })),
       },
     );
+
+    const runnableJobs = createdJobs.filter((job) => job.status === 'pending');
+
+    if (runnableJobs.length === 0) {
+      logger.info('Processing job already active; skipping duplicate execution', {
+        context: { recordingId, orgId },
+        data: { jobs: createdJobs },
+      });
+
+      streamingManager.sendLog(
+        recordingId,
+        'Processing is already running for this recording.',
+        {
+          jobs: createdJobs.map((j) => ({
+            id: j.id,
+            type: j.type,
+            status: j.status,
+          })),
+        },
+      );
+
+      return createSSEResponse(stream);
+    }
 
     streamingManager.sendProgress(
       recordingId,
@@ -307,12 +431,12 @@ export const GET = apiHandler(
 
     logger.info('Starting inline job execution', {
       context: { recordingId },
-      data: { jobIds: createdJobs.map((j) => j.id) },
+      data: { jobIds: runnableJobs.map((j) => j.id) },
     });
 
     // Execute pipeline asynchronously (don't block SSE response)
     executeJobPipelineWithStreaming(
-      createdJobs.map((j) => j.id),
+      runnableJobs.map((j) => j.id),
       recordingId,
       3,
     ).catch((error) => {
@@ -341,7 +465,7 @@ export const GET = apiHandler(
 export const POST = apiHandler(
   async (request: NextRequest, context: FinalizeParams) => {
     const requestId = request.headers.get('x-request-id') || 'unknown';
-    const recordingId = context.params.id;
+    const { id: recordingId } = await context.params;
 
     logger.info('POST streaming finalize request initiated', {
       context: { recordingId, requestId },

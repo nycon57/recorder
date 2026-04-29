@@ -66,6 +66,7 @@ const logger = createLogger({ service: 'streaming-job-executor' });
 type Job = Database['public']['Tables']['jobs']['Row'];
 type JobType = Job['type'];
 type JobStatus = Job['status'];
+type JobPayload = Record<string, unknown> | null;
 
 interface JobHandler {
   (job: Job, progressCallback?: ProgressCallback): Promise<void>;
@@ -175,6 +176,154 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
   ingest_vendor_docs: handleIngestVendorDocs,
 };
 
+const PIPELINE_JOB_ORDER: JobType[] = [
+  'transcribe',
+  'doc_generate',
+  'generate_embeddings',
+  'generate_metadata',
+  'workflow_extraction',
+  'compile_wiki',
+];
+const PIPELINE_JOB_TYPES = new Set<JobType>(PIPELINE_JOB_ORDER);
+
+function getPayload(job: Pick<Job, 'payload'>): JobPayload {
+  return typeof job.payload === 'object' && job.payload !== null
+    ? (job.payload as Record<string, unknown>)
+    : null;
+}
+
+function hasStringPayloadValue(
+  payload: JobPayload,
+  key: string,
+): boolean {
+  return typeof payload?.[key] === 'string' && payload[key].length > 0;
+}
+
+async function maybeFillEmbeddingsDocumentId(job: Job): Promise<Job> {
+  const payload = getPayload(job);
+
+  if (
+    job.type !== 'generate_embeddings' ||
+    !payload ||
+    hasStringPayloadValue(payload, 'documentId')
+  ) {
+    return job;
+  }
+
+  const recordingId = payload.recordingId;
+  const orgId = payload.orgId;
+  if (typeof recordingId !== 'string' || recordingId.length === 0) {
+    return job;
+  }
+
+  const supabase = createAdminClient();
+  let query = supabase
+    .from('documents')
+    .select('id')
+    .eq('content_id', recordingId);
+
+  if (typeof orgId === 'string' && orgId.length > 0) {
+    query = query.eq('org_id', orgId);
+  }
+
+  const { data: document, error } = await query.maybeSingle();
+  if (error || !document?.id) {
+    return job;
+  }
+
+  const nextPayload = {
+    ...payload,
+    documentId: document.id,
+  };
+
+  const { data: updatedJob, error: updateError } = await supabase
+    .from('jobs')
+    .update({ payload: nextPayload })
+    .eq('id', job.id)
+    .eq('status', 'pending')
+    .select('*')
+    .single();
+
+  if (updateError || !updatedJob) {
+    logger.warn('Unable to attach document prerequisite to embeddings job', {
+      context: { jobId: job.id, recordingId, documentId: document.id },
+      error: updateError as Error | undefined,
+    });
+    return job;
+  }
+
+  return updatedJob;
+}
+
+function hasPrerequisites(job: Pick<Job, 'type' | 'payload'>): boolean {
+  const payload = getPayload(job);
+
+  if (!hasStringPayloadValue(payload, 'recordingId')) {
+    return false;
+  }
+
+  if (job.type === 'doc_generate') {
+    return hasStringPayloadValue(payload, 'transcriptId');
+  }
+
+  if (job.type === 'generate_embeddings') {
+    return (
+      hasStringPayloadValue(payload, 'transcriptId') &&
+      hasStringPayloadValue(payload, 'documentId')
+    );
+  }
+
+  if (job.type === 'compile_wiki') {
+    return true;
+  }
+
+  return true;
+}
+
+function sortPipelineJobs(a: Pick<Job, 'type'>, b: Pick<Job, 'type'>): number {
+  const aIndex = PIPELINE_JOB_ORDER.indexOf(a.type);
+  const bIndex = PIPELINE_JOB_ORDER.indexOf(b.type);
+
+  return (
+    (aIndex === -1 ? PIPELINE_JOB_ORDER.length : aIndex) -
+    (bIndex === -1 ? PIPELINE_JOB_ORDER.length : bIndex)
+  );
+}
+
+export async function findRunnableDependentJobs(
+  contentId: string,
+  seenJobIds: Set<string>,
+): Promise<Job[]> {
+  const supabase = createAdminClient();
+  const { data: jobs, error } = await supabase
+    .from('jobs')
+    .select('*')
+    .eq('payload->>recordingId', contentId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+
+  if (error || !jobs) {
+    logger.warn('Unable to load dependent pipeline jobs', {
+      context: { contentId },
+      error: error as Error | undefined,
+    });
+    return [];
+  }
+
+  const runnableJobs: Job[] = [];
+  for (const job of jobs) {
+    if (seenJobIds.has(job.id)) continue;
+    if (!PIPELINE_JOB_TYPES.has(job.type)) continue;
+
+    const preparedJob = await maybeFillEmbeddingsDocumentId(job);
+    if (hasPrerequisites(preparedJob)) {
+      runnableJobs.push(preparedJob);
+    }
+  }
+
+  return runnableJobs.sort(sortPipelineJobs);
+}
+
 /**
  * Execute a single job with streaming progress updates
  * This is designed to be called from the streaming reprocess endpoint
@@ -213,8 +362,7 @@ export async function executeJobWithStreaming(
       context: { jobId, contentId, jobType: job.type },
     });
 
-    // Mark job as processing
-    await supabase
+    const { data: claimedJob, error: claimError } = await supabase
       .from('jobs')
       .update({
         status: 'processing' as JobStatus,
@@ -222,18 +370,37 @@ export async function executeJobWithStreaming(
         progress_percent: 0,
         progress_message: 'Starting job...',
       })
-      .eq('id', jobId);
+      .eq('id', jobId)
+      .eq('status', 'pending')
+      .select('*')
+      .maybeSingle();
+
+    if (claimError) {
+      throw new Error(`Failed to claim job: ${claimError.message}`);
+    }
+
+    if (!claimedJob) {
+      logger.info('Skipping streaming job because it was already claimed', {
+        context: { jobId, contentId, currentStatus: job.status },
+      });
+      streamingManager.sendLog(
+        contentId,
+        `${job.type} is already running or no longer pending.`,
+        { jobId, jobType: job.type, status: job.status },
+      );
+      return;
+    }
 
     // Stream initial progress
     streamingManager.sendProgress(contentId, 'all', 0, `Starting ${job.type}...`, {
       jobId,
-      jobType: job.type,
+      jobType: claimedJob.type,
     });
 
     // Get handler for job type
-    const handler = JOB_HANDLERS[job.type as JobType];
+    const handler = JOB_HANDLERS[claimedJob.type as JobType];
     if (!handler) {
-      throw new Error(`Unknown job type: ${job.type}`);
+      throw new Error(`Unknown job type: ${claimedJob.type}`);
     }
 
     // Create streaming progress callback
@@ -249,13 +416,13 @@ export async function executeJobWithStreaming(
 
     // Execute handler with progress callback
     logger.info('Calling job handler', {
-      context: { jobId, contentId, jobType: job.type },
+      context: { jobId, contentId, jobType: claimedJob.type },
     });
 
-    await handler(job, progressCallback);
+    await handler(claimedJob, progressCallback);
 
     logger.info('Job handler completed successfully', {
-      context: { jobId, contentId, jobType: job.type },
+      context: { jobId, contentId, jobType: claimedJob.type },
     });
 
     // Mark job as completed
@@ -272,11 +439,11 @@ export async function executeJobWithStreaming(
     // Stream completion
     streamingManager.sendProgress(contentId, 'all', 100, `${job.type} completed successfully`, {
       jobId,
-      jobType: job.type,
+      jobType: claimedJob.type,
     });
 
     logger.info('Job completed successfully', {
-      context: { jobId, contentId, jobType: job.type },
+      context: { jobId, contentId, jobType: claimedJob.type },
     });
 
   } catch (error) {
@@ -287,7 +454,7 @@ export async function executeJobWithStreaming(
       error: error as Error,
     });
 
-    const attemptCount = job.attempts + 1;
+    const attemptCount = (job.attempts ?? 0) + 1;
     const shouldRetry = attemptCount < maxRetries;
 
     if (shouldRetry) {
@@ -367,45 +534,58 @@ export async function executeJobPipelineWithStreaming(
     { jobIds }
   );
 
-  for (let i = 0; i < jobIds.length; i++) {
-    const jobId = jobIds[i];
+  const queuedJobIds = [...jobIds];
+  const seenJobIds = new Set<string>();
 
-    logger.info(`Executing pipeline job ${i + 1}/${jobIds.length}`, {
+  for (let i = 0; i < queuedJobIds.length; i++) {
+    const totalSteps = queuedJobIds.length;
+    const jobId = queuedJobIds[i];
+    seenJobIds.add(jobId);
+
+    logger.info(`Executing pipeline job ${i + 1}/${totalSteps}`, {
       context: { contentId, jobId },
     });
 
     streamingManager.sendLog(
       contentId,
-      `Processing step ${i + 1}/${jobIds.length}`,
+      `Processing step ${i + 1}/${totalSteps}`,
       { jobId }
     );
 
     try {
       await executeJobWithStreaming(jobId, contentId, maxRetries);
+
+      const dependentJobs = await findRunnableDependentJobs(
+        contentId,
+        seenJobIds,
+      );
+      for (const dependentJob of dependentJobs) {
+        seenJobIds.add(dependentJob.id);
+        queuedJobIds.push(dependentJob.id);
+      }
     } catch (error) {
       logger.error('Pipeline job failed', {
         context: { contentId, jobId, step: i + 1 },
         error: error as Error,
       });
 
-      // Continue with remaining jobs even if one fails
-      // (some jobs like embeddings are non-critical)
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      streamingManager.sendLog(
+      streamingManager.sendError(
         contentId,
-        `Step ${i + 1} failed: ${errorMsg}, continuing with next step`,
-        { jobId, error: errorMsg }
+        `Step ${i + 1} failed: ${errorMsg}`,
+        { jobId, error: errorMsg },
       );
+      throw error;
     }
   }
 
   logger.info('Job pipeline execution completed', {
-    context: { contentId, jobCount: jobIds.length },
+    context: { contentId, jobCount: queuedJobIds.length },
   });
 
   streamingManager.sendComplete(
     contentId,
     'Pipeline completed',
-    { totalJobs: jobIds.length }
+    { totalJobs: queuedJobIds.length }
   );
 }
