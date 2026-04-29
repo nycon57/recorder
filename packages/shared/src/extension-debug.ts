@@ -52,6 +52,10 @@ export interface ExtensionDebugSessionEventInput {
   windowId?: number | null;
   conversationId?: string | null;
   fingerprint?: string | null;
+  bindingEpoch?: number | null;
+  pageInstanceId?: string | null;
+  contentInstanceId?: string | null;
+  durationMs?: number | null;
 }
 
 export interface ExtensionDebugSessionStoredEvent

@@ -25,6 +25,10 @@ import { typeIntoElement } from '../../utils/dom-input.js';
 import { pressKey } from '../../utils/dom-keyboard.js';
 import { deriveWidgetBootstrapState } from '../../utils/session-startup.js';
 import { shouldClearOverlayForSessionEvent } from '../../utils/session-visuals.js';
+import {
+  buildPageInstanceId,
+  type VoiceToolRouteMeta,
+} from '../../utils/voice-tool-routing.js';
 
 import { createWidget } from './widget';
 import { createDomOverlay } from './dom-overlay';
@@ -41,13 +45,48 @@ export default defineContentScript({
     console.log(`${LOG} Loaded on`, window.location.href);
 
     // ── Page context + SPA observer ───────────────────────────────────────────
+    const contentInstanceId =
+      typeof crypto?.randomUUID === 'function'
+        ? `content_${crypto.randomUUID()}`
+        : `content_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    let pageInstanceSeq = 1;
+    let pageInstanceHref = window.location.href;
+    let pageInstanceId = buildPageInstanceId({
+      contentInstanceId,
+      sequence: pageInstanceSeq,
+      href: pageInstanceHref,
+    });
+    function updatePageInstance(): void {
+      if (window.location.href === pageInstanceHref) return;
+      pageInstanceHref = window.location.href;
+      pageInstanceSeq += 1;
+      pageInstanceId = buildPageInstanceId({
+        contentInstanceId,
+        sequence: pageInstanceSeq,
+        href: pageInstanceHref,
+      });
+    }
+
     const initialContext: PageContext = buildPageContext(document, window);
     let latestContext: PageContext = initialContext;
     const publishPageContext = (context: PageContext): void => {
+      updatePageInstance();
       latestContext = context;
       chrome.runtime.sendMessage(
-        { type: 'PAGE_CONTEXT_UPDATED', context },
-        () => void chrome.runtime.lastError,
+        {
+          type: 'PAGE_CONTEXT_UPDATED',
+          context,
+          contentInstanceId,
+          pageInstanceId,
+        },
+        () => {
+          if (chrome.runtime.lastError) {
+            console.warn(
+              `${LOG} PAGE_CONTEXT_UPDATED delivery failed:`,
+              chrome.runtime.lastError.message,
+            );
+          }
+        },
       );
     };
 
@@ -370,10 +409,30 @@ export default defineContentScript({
       return result;
     }
 
-    function replyTool(callId: string, result?: string, error?: string): void {
+    function replyTool(
+      callId: string,
+      route: VoiceToolRouteMeta | null,
+      result?: string,
+      error?: string,
+    ): void {
       chrome.runtime.sendMessage(
-        { type: 'TOOL_RESULT', callId, result, error },
-        () => void chrome.runtime.lastError,
+        {
+          type: 'TOOL_RESULT',
+          callId,
+          result,
+          error,
+          bindingEpoch: route?.bindingEpoch ?? null,
+          pageInstanceId,
+          contentInstanceId,
+        },
+        () => {
+          if (chrome.runtime.lastError) {
+            console.warn(
+              `${LOG} TOOL_RESULT delivery failed:`,
+              chrome.runtime.lastError.message,
+            );
+          }
+        },
       );
     }
 
@@ -394,9 +453,19 @@ export default defineContentScript({
         return false;
       }
       if (msg?.type === 'GET_PAGE_CONTEXT') {
-        void getFreshLatestContext().then((context) =>
-          sendResponse({ type: 'PAGE_CONTEXT_RESPONSE', payload: context }),
-        );
+        void getFreshLatestContext().then((context) => {
+          updatePageInstance();
+          sendResponse({
+            type: 'PAGE_CONTEXT_RESPONSE',
+            payload: context,
+            bindingEpoch:
+              typeof msg.route?.bindingEpoch === 'number'
+                ? msg.route.bindingEpoch
+                : null,
+            pageInstanceId,
+            contentInstanceId,
+          });
+        });
         return true;
       }
       if (msg?.type === 'PAGE_CONTEXT_ENRICHED' && msg.context) {
@@ -472,13 +541,29 @@ export default defineContentScript({
 
       // Tool calls from background (offscreen-originated)
       if (msg?.type === 'TOOL_CALL') {
-        const { callId, name, args } = msg as {
+        const { callId, name, args, route } = msg as {
           callId: string;
           name: string;
           args: Record<string, unknown>;
+          route?: VoiceToolRouteMeta;
         };
         void (async () => {
           try {
+            updatePageInstance();
+            const routeMeta = route ?? null;
+            if (
+              routeMeta?.pageInstanceId &&
+              routeMeta.pageInstanceId !== pageInstanceId
+            ) {
+              replyTool(
+                callId,
+                routeMeta,
+                undefined,
+                'Page changed before the tool could run',
+              );
+              return;
+            }
+
             let result = '';
             switch (name) {
               case 'get_page_context':
@@ -521,12 +606,18 @@ export default defineContentScript({
                 );
                 break;
               default:
-                replyTool(callId, undefined, `Unknown tool: ${name}`);
+                replyTool(
+                  callId,
+                  routeMeta,
+                  undefined,
+                  `Unknown tool: ${name}`,
+                );
                 return;
             }
-            replyTool(callId, result);
+            updatePageInstance();
+            replyTool(callId, routeMeta, result);
           } catch (err) {
-            replyTool(callId, undefined, (err as Error).message);
+            replyTool(callId, route ?? null, undefined, (err as Error).message);
           }
         })();
         sendResponse({ ok: true });
