@@ -127,6 +127,41 @@ export async function generateOrgWikiPageEmbedding(pageId: string): Promise<void
   });
 }
 
+export interface GenerateOrgWikiPageEmbeddingBestEffortContext {
+  source?: string;
+  orgId?: string;
+  recordingId?: string;
+  pageId?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Best-effort wrapper for content-mutation callers.
+ *
+ * Returns `true` when the embedding was generated, `false` when generation
+ * failed. It intentionally never throws so wiki compilation and admin review
+ * writes can commit their primary content mutation even if the vector provider
+ * or embedding write is temporarily unavailable.
+ */
+export async function generateOrgWikiPageEmbeddingBestEffort(
+  pageId: string,
+  context: GenerateOrgWikiPageEmbeddingBestEffortContext = {}
+): Promise<boolean> {
+  try {
+    await generateOrgWikiPageEmbedding(pageId);
+    return true;
+  } catch (error) {
+    logger.warn('Best-effort org wiki page embedding generation failed', {
+      context: {
+        ...context,
+        pageId,
+      },
+      error: error instanceof Error ? error : undefined,
+    });
+    return false;
+  }
+}
+
 export interface ResolveOrgWikiPagesByVectorArgs {
   orgId: string;
   questionEmbedding: number[];

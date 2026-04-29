@@ -32,6 +32,7 @@ import { requireAdmin } from '@/lib/utils/api';
 import { logger } from '@/lib/utils/logger';
 import type { Database, Json } from '@/lib/types/database';
 import { reviewApproval } from '@/lib/services/agent-permissions';
+import { generateOrgWikiPageEmbeddingBestEffort } from '@/lib/services/org-wiki-embedding';
 import {
   buildKnowledgeReviewTelemetry,
   recordKnowledgeTelemetryEvent,
@@ -418,7 +419,7 @@ async function recordReviewOutcome(input: {
       outcome: input.outcome,
       contentLength: input.contentLength ?? null,
       errorMessage: input.errorMessage ?? null,
-    }),
+    }) as unknown as Json,
   });
 }
 
@@ -496,6 +497,13 @@ export async function approveContradiction(input: {
       newContent: nextContent,
       userId,
       nowIso: new Date().toISOString(),
+    });
+    await generateOrgWikiPageEmbeddingBestEffort(newPageId, {
+      source: 'admin-wiki-review.approve-contradiction',
+      orgId,
+      userId,
+      supersededPageId: page.id,
+      logEntryIndex: input.logEntryIndex,
     });
 
     logger.info('Wiki contradiction approved', {
@@ -895,6 +903,14 @@ export async function editAndApproveContradiction(input: {
       userId,
       nowIso: new Date().toISOString(),
     });
+    await generateOrgWikiPageEmbeddingBestEffort(newPageId, {
+      source: 'admin-wiki-review.edit-and-approve-contradiction',
+      orgId,
+      userId,
+      supersededPageId: page.id,
+      logEntryIndex: input.logEntryIndex,
+      contentLength: editedContent.length,
+    });
 
     logger.info('Wiki contradiction edited and approved', {
       context: {
@@ -951,7 +967,7 @@ export async function editAndApproveContradiction(input: {
         logEntryIndex: input.logEntryIndex,
         action: 'editAndApproveContradiction',
         outcome: 'error',
-        contentLength: input.editedContent?.trim().length || null,
+        contentLength: input.editedContent?.trim().length || undefined,
         errorMessage: message,
       });
     }

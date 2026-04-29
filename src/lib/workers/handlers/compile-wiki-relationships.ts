@@ -146,9 +146,9 @@ function clampConfidence(value: number | null | undefined): number {
 
 export async function runRelationshipExtraction(
   inputs: RunRelationshipExtractionInputs
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await extractAndWriteRelationships(inputs);
+    return await extractAndWriteRelationships(inputs);
   } catch (error) {
     // Step 4 is additive — never fail the parent compile_wiki job.
     console.warn(
@@ -156,6 +156,7 @@ export async function runRelationshipExtraction(
         `(org=${inputs.orgId}, recording=${inputs.recordingId}): ` +
         `${error instanceof Error ? error.message : String(error)}`
     );
+    return false;
   }
 }
 
@@ -165,11 +166,11 @@ export async function runRelationshipExtraction(
 
 async function extractAndWriteRelationships(
   inputs: RunRelationshipExtractionInputs
-): Promise<void> {
+): Promise<boolean> {
   const { supabase, orgId, pageId, topic, content, recordingId } = inputs;
 
   if (!content || content.trim().length === 0) {
-    return;
+    return false;
   }
 
   // ---- 1. Load sibling pages in the same org (topic → id lookup) ----------
@@ -201,7 +202,7 @@ async function extractAndWriteRelationships(
     console.log(
       `[compile-wiki] Step 4: no sibling pages in org ${orgId}, skipping relationship extraction for page ${pageId}`
     );
-    return;
+    return false;
   }
 
   const candidates: ExtractedRelationshipCandidate[] = [];
@@ -234,7 +235,7 @@ async function extractAndWriteRelationships(
     console.log(
       `[compile-wiki] Step 4: no relationship candidates for page ${pageId}`
     );
-    return;
+    return false;
   }
 
   // ---- 4. Resolve topics → page ids and dedupe by (topic, type) -----------
@@ -260,7 +261,7 @@ async function extractAndWriteRelationships(
       `[compile-wiki] Step 4: no resolvable targets for page ${pageId} ` +
         `(${candidates.length} candidates, ${topicIndex.size} known topics)`
     );
-    return;
+    return false;
   }
 
   // ---- 5. Build bidirectional rows (symmetric for 'related') --------------
@@ -296,7 +297,7 @@ async function extractAndWriteRelationships(
     }
   }
 
-  if (rows.length === 0) return;
+  if (rows.length === 0) return false;
 
   // ---- 6. Upsert with on-conflict dedupe ----------------------------------
   const { error: upsertError } = await supabase
@@ -312,10 +313,12 @@ async function extractAndWriteRelationships(
     );
   }
 
+  let contentChanged = false;
+
   // ---- 7. Render Obsidian backlinks into the page body -------------------
   // Best-effort: failures log but don't propagate up.
   try {
-    await renderRelationshipBacklinks({
+    contentChanged = await renderRelationshipBacklinks({
       supabase,
       pageId,
       content,
@@ -334,6 +337,8 @@ async function extractAndWriteRelationships(
     `[compile-wiki] Step 4: wrote ${rows.length} relationship edge(s) for page ${pageId} ` +
       `(${extractedCount} extracted, ${inferredCount} inferred, ${bracketTargets.length} bracket links)`
   );
+
+  return contentChanged;
 }
 
 // ---------------------------------------------------------------------------
@@ -556,7 +561,7 @@ async function renderRelationshipBacklinks(params: {
   pageId: string;
   content: string;
   relationships: ExtractedRelationshipCandidate[];
-}): Promise<void> {
+}): Promise<boolean> {
   const { supabase, pageId, content, relationships } = params;
 
   // One line per unique target topic.
@@ -566,7 +571,7 @@ async function renderRelationshipBacklinks(params: {
       uniqueTargets.set(r.target_topic, r);
     }
   }
-  if (uniqueTargets.size === 0) return;
+  if (uniqueTargets.size === 0) return false;
 
   const lines = Array.from(uniqueTargets.values())
     .sort((a, b) => a.target_topic.localeCompare(b.target_topic))
@@ -593,7 +598,7 @@ async function renderRelationshipBacklinks(params: {
     : `${content.trimEnd()}\n\n${block}\n`;
 
   // No-op if we didn't actually change anything.
-  if (updated === content) return;
+  if (updated === content) return false;
 
   const { error } = await supabase
     .from('org_wiki_pages')
@@ -605,6 +610,8 @@ async function renderRelationshipBacklinks(params: {
       `Failed to write Related Pages block to page ${pageId}: ${error.message}`
     );
   }
+
+  return true;
 }
 
 function escapeRegex(value: string): string {
