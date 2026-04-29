@@ -4,6 +4,8 @@ import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 const from = jest.fn();
+const ONE_HOUR_MS = 60 * 60 * 1000;
+let validSessionExpiresAt: string;
 
 jest.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: {
@@ -33,12 +35,13 @@ function mockTableResult(data: unknown, error: unknown = null) {
 describe('POST /api/extension/auth/callback', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    validSessionExpiresAt = new Date(Date.now() + ONE_HOUR_MS).toISOString();
     from.mockImplementation((table: string) => {
       if (table === 'session') {
         return mockTableResult({
           userId: 'user-1',
           token: 'validated-token',
-          expiresAt: '2026-04-29T05:00:00.000Z',
+          expiresAt: validSessionExpiresAt,
           activeOrganizationId: 'org-1',
         });
       }
@@ -89,7 +92,7 @@ describe('POST /api/extension/auth/callback', () => {
         slug: 'org-one',
       },
       token: 'validated-token',
-      expiresAt: new Date('2026-04-29T05:00:00.000Z').getTime(),
+      expiresAt: new Date(validSessionExpiresAt).getTime(),
     });
   });
 
