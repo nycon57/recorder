@@ -76,6 +76,15 @@ function buildRequest(body: unknown): NextRequest {
   } as unknown as NextRequest;
 }
 
+function buildInvalidJsonRequest(): NextRequest {
+  return {
+    json: async () => {
+      throw new Error('invalid json');
+    },
+    headers: new Headers(),
+  } as unknown as NextRequest;
+}
+
 describe('POST /api/extension/telemetry/events', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -140,6 +149,18 @@ describe('POST /api/extension/telemetry/events', () => {
     );
 
     expect(response.status).toBe(400);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed JSON and non-object bodies as validation errors', async () => {
+    const { POST } = await import('../route');
+
+    const malformedResponse = await POST(buildInvalidJsonRequest());
+    expect(malformedResponse.status).toBe(400);
+
+    const nullResponse = await POST(buildRequest(null));
+    expect(nullResponse.status).toBe(400);
+
     expect(upsert).not.toHaveBeenCalled();
   });
 
