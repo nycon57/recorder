@@ -18,7 +18,7 @@ export const vendorIngestInputSchema = z.object({
     .string()
     .min(1, 'Source URL is required')
     .url('Must be a valid URL')
-    .refine((u) => u.startsWith('http'), 'URL must use http or https protocol'),
+    .refine((u) => u.startsWith('https://'), 'URL must use https protocol'),
   maxPages: z
     .number()
     .int('Max pages must be a whole number')

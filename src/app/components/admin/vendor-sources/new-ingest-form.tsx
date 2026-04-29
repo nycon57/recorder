@@ -31,8 +31,8 @@ interface NewIngestFormProps {
 }
 
 /**
- * RHF + Zod form for triggering a new vendor source ingest.
- * POSTs to POST /api/admin/vendor-sources/ingest.
+ * RHF + Zod form for registering and syncing a new vendor source.
+ * Registers through POST /api/admin/vendor-sources, then queues by sourceId.
  * Used by both /admin/vendor-sources/new page and the AddSourceButton dialog.
  *
  * TRIB-149
@@ -53,32 +53,51 @@ export function NewIngestForm({ onSuccess, defaultApp }: NewIngestFormProps) {
   async function onSubmit(values: VendorIngestInput) {
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/admin/vendor-sources/ingest', {
+      const registerRes = await fetch('/api/admin/vendor-sources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
       });
 
-      const json = await res.json().catch(() => null);
+      const registerJson = await registerRes.json().catch(() => null);
 
-      if (!res.ok) {
+      if (!registerRes.ok) {
         const message =
-          json?.error?.message ?? `Request failed (${res.status})`;
-
-        if (res.status === 200 && json?.data?.status === 'skipped') {
-          // Dedupe key hit — already pending/processing
-          toast.info(json.data.message ?? 'A sync job is already pending or processing for this source.');
-        } else {
-          toast.error(message);
-        }
+          registerJson?.message ??
+          registerJson?.error?.message ??
+          `Source registration failed (${registerRes.status})`;
+        toast.error(message);
         return;
       }
 
-      const jobId: string = json?.data?.jobId ?? '';
-      const status: string = json?.data?.status ?? 'queued';
+      const sourceId = registerJson?.data?.source?.id;
+      if (!sourceId) {
+        toast.error('Source registration did not return a source ID.');
+        return;
+      }
+
+      const syncRes = await fetch('/api/admin/vendor-sources/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceId, force: values.force ?? true }),
+      });
+
+      const syncJson = await syncRes.json().catch(() => null);
+
+      if (!syncRes.ok) {
+        const message =
+          syncJson?.message ??
+          syncJson?.error?.message ??
+          `Sync queue failed (${syncRes.status})`;
+        toast.error(message);
+        return;
+      }
+
+      const jobId: string = syncJson?.data?.jobId ?? '';
+      const status: string = syncJson?.data?.status ?? 'queued';
 
       if (status === 'skipped') {
-        toast.info(json?.data?.message ?? 'Sync job was skipped — a job is already pending or processing.');
+        toast.info(syncJson?.data?.message ?? 'Sync job was skipped — a job is already pending or processing.');
       } else {
         toast.success(`Sync queued`, {
           description: `Job ${jobId} enqueued for ${values.app}`,

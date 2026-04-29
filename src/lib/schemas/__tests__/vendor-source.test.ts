@@ -70,6 +70,14 @@ describe('vendorIngestInputSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  test('rejects http url', () => {
+    const result = vendorIngestInputSchema.safeParse({
+      app: 'hubspot',
+      url: 'http://docs.hubspot.com',
+    });
+    expect(result.success).toBe(false);
+  });
+
   test('rejects invalid url format', () => {
     const result = vendorIngestInputSchema.safeParse({
       app: 'hubspot',
