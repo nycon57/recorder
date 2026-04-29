@@ -14,9 +14,10 @@
  * TRIB-152
  */
 
-import { describe, expect, test, jest, beforeEach } from '@jest/globals';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+
+import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 // ---- Static code analysis --------------------------------------------------
 // The quickest guard: assert that the source file actually contains the
@@ -97,7 +98,16 @@ jest.mock('@/lib/services/agent-logger', () => ({
 jest.mock('@/lib/services/vendor-source-registry', () => ({
   createVendorSourceRegistryService: () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    findSourceForIngestion: (jest.fn() as jest.MockedFunction<any>).mockResolvedValue(null),
+    findSourceForIngestion: (jest.fn() as jest.MockedFunction<any>).mockResolvedValue({
+      id: 'source-123',
+      app: 'trib152-test',
+      source_url: 'https://docs.example.com',
+      publisher_hostname: 'example.com',
+      official_source: true,
+      fetch_strategy: 'sanctioned_crawl',
+      terms_review_status: 'approved',
+      content_hash: null,
+    }),
     recordAttempt: jest.fn(),
     recordFailure: jest.fn(),
     recordSuccess: jest.fn(),
@@ -121,7 +131,7 @@ jest.mock('@/lib/utils/logger', () => ({
 
 const MOCK_HTML = `<!DOCTYPE html>
 <html><head><title>Test</title></head>
-<body><main><h1>Test page</h1><p>Attribution content.</p></main></body>
+<body><main><h1>Test page</h1><p>Attribution content with enough words to pass the ingestion minimum length guard for this mocked documentation page.</p></main></body>
 </html>`;
 
 function mockFetch() {
@@ -158,6 +168,7 @@ function makeJob(id: string, payloadExtra: Record<string, unknown> = {}) {
       url: 'https://docs.example.com',
       app: 'trib152-test',
       maxPages: 1,
+      sourceId: 'source-123',
       ...payloadExtra,
     },
     status: 'processing',
@@ -175,7 +186,11 @@ function makeJob(id: string, payloadExtra: Record<string, unknown> = {}) {
 describe('handleIngestVendorDocs — attribution integration (TRIB-152)', () => {
   test('writes curated_by + ingest_job_id when operator triggers sync', async () => {
     const { handleIngestVendorDocs } = await import('../ingest-vendor-docs');
-    await handleIngestVendorDocs(makeJob('job-op-abc', { triggered_by_user_id: 'user-123' }) as any);
+    await handleIngestVendorDocs(
+      makeJob('job-op-abc', {
+        triggered_by_user_id: 'user-123',
+      }) as unknown as Parameters<typeof handleIngestVendorDocs>[0],
+    );
 
     const writes = [..._captured.inserts, ..._captured.updates];
     if (writes.length === 0) {
@@ -189,7 +204,11 @@ describe('handleIngestVendorDocs — attribution integration (TRIB-152)', () => 
 
   test('writes curated_by=null for scheduled sync', async () => {
     const { handleIngestVendorDocs } = await import('../ingest-vendor-docs');
-    await handleIngestVendorDocs(makeJob('job-sched-xyz') as any);
+    await handleIngestVendorDocs(
+      makeJob('job-sched-xyz') as unknown as Parameters<
+        typeof handleIngestVendorDocs
+      >[0],
+    );
 
     const writes = [..._captured.inserts, ..._captured.updates];
     if (writes.length === 0) {
