@@ -159,14 +159,14 @@ export default defineContentScript({
           | {
               enabled?: boolean;
               active?: boolean;
-              isHomeTab?: boolean;
+              isActiveTarget?: boolean;
             }
           | undefined;
 
         const bootstrapState = deriveWidgetBootstrapState({
           extensionEnabled: resp?.enabled === true,
           sessionActive: resp?.active === true,
-          isHomeTab: resp?.isHomeTab === true,
+          isActiveTarget: resp?.isActiveTarget === true,
         });
 
         if (!bootstrapState.visible) {

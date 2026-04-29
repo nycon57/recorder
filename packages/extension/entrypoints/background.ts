@@ -36,7 +36,12 @@ import {
   summarizeToolResult,
 } from '../utils/debug-session.js';
 import type { ActiveDebugSessionState } from '../utils/debug-session.js';
-import { shouldOpenMicPermissionBootstrap } from '../utils/session-startup.js';
+import {
+  buildUnavailableVoiceTargetToolResult,
+  isSupportedVoiceTargetUrl,
+  shouldOpenMicPermissionBootstrap,
+  shouldRegisterVoiceTarget,
+} from '../utils/session-startup.js';
 import { createTurnGuards } from '../utils/turn-guards.js';
 import { buildContextSemanticFingerprint } from '../utils/context-telemetry.js';
 import { classifyTranscriptConfidence } from '../utils/voice-agent-policy.js';
@@ -45,12 +50,27 @@ const BG = '[Tribora bg]';
 const EXTENSION_ENABLED_KEY = 'tribora_extension_enabled';
 const LEGACY_WIDGET_VISIBLE_KEY = 'tribora_widget_visible';
 const MIC_PERMISSION_GRANTED_KEY = 'micPermissionGranted';
+const VOICE_TARGET_STATE_KEY = 'tribora_voice_target_state';
 const OFFSCREEN_URL = 'offscreen.html';
 const MIC_PERMISSION_URL = 'mic-permission.html';
 
 const API_BASE_URL =
   (import.meta.env as Record<string, string>).VITE_TRIBORA_API_URL ||
   'http://localhost:3000';
+
+type VoiceTargetState = {
+  sessionActive: boolean;
+  activeTargetTabId: number | null;
+  windowId: number | null;
+  urlHost: string | null;
+  urlPath: string | null;
+  updatedAt: number;
+};
+
+type OffscreenSessionState = {
+  active?: boolean;
+  tabId?: number | null;
+};
 
 // ─── Offscreen document lifecycle ─────────────────────────────────────────────
 
@@ -428,11 +448,209 @@ async function openMicPermissionPage(tabId: number): Promise<void> {
   }
 }
 
-// ─── Active session tracking ──────────────────────────────────────────────────
-// The session's "home tab" is where the user started it. Tools route back to
-// this tab. On home-tab close we end the session.
+// ─── Active voice target tracking ─────────────────────────────────────────────
+// Offscreen owns the long-lived audio session. Background owns the movable page
+// target that receives events/tools while the voice session remains alive.
 
-let sessionTabId: number | null = null;
+let voiceSessionActive = false;
+let activeTargetTabId: number | null = null;
+let activeTargetWindowId: number | null = null;
+
+function isSupportedPageTargetUrl(url?: string | null): boolean {
+  return isSupportedVoiceTargetUrl(url);
+}
+
+async function queryOffscreenSessionState(): Promise<OffscreenSessionState> {
+  try {
+    // @ts-expect-error — chrome.offscreen is MV3; types may lag
+    if (!(await chrome.offscreen.hasDocument?.())) {
+      return {};
+    }
+    return ((await chrome.runtime.sendMessage({
+      target: 'offscreen',
+      kind: 'QUERY_STATE',
+    })) ?? {}) as OffscreenSessionState;
+  } catch {
+    return {};
+  }
+}
+
+async function persistVoiceTargetState(): Promise<void> {
+  let location: { urlHost: string | null; urlPath: string | null } = {
+    urlHost: null,
+    urlPath: null,
+  };
+
+  if (activeTargetTabId !== null) {
+    try {
+      const tab = await chrome.tabs.get(activeTargetTabId);
+      const fallback = buildFallbackDebugLocation(tab.url);
+      location = {
+        urlHost: fallback.urlHost,
+        urlPath: fallback.urlPath,
+      };
+      activeTargetWindowId = tab.windowId ?? activeTargetWindowId;
+    } catch {
+      activeTargetTabId = null;
+      activeTargetWindowId = null;
+    }
+  }
+
+  await chrome.storage.session.set({
+    [VOICE_TARGET_STATE_KEY]: {
+      sessionActive: voiceSessionActive,
+      activeTargetTabId,
+      windowId: activeTargetWindowId,
+      ...location,
+      updatedAt: Date.now(),
+    } satisfies VoiceTargetState,
+  });
+}
+
+async function clearVoiceTargetState(): Promise<void> {
+  activeTargetTabId = null;
+  activeTargetWindowId = null;
+  voiceSessionActive = false;
+  await chrome.storage.session.remove(VOICE_TARGET_STATE_KEY);
+}
+
+async function setActiveVoiceTarget(
+  tabId: number,
+  reason: string,
+): Promise<boolean> {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!isSupportedPageTargetUrl(tab.url)) {
+      console.log(`${BG} Voice target unavailable (${reason}) for ${tab.url}`);
+      return false;
+    }
+    activeTargetTabId = tabId;
+    activeTargetWindowId = tab.windowId ?? null;
+    if (activeDebugSession) {
+      activeDebugSession.tabId = tabId;
+      activeDebugSession.windowId = activeTargetWindowId;
+    }
+    await persistVoiceTargetState();
+    console.log(`${BG} Voice target set to tab ${tabId} (${reason})`);
+    return true;
+  } catch (err) {
+    console.warn(`${BG} Voice target set failed:`, (err as Error).message);
+    return false;
+  }
+}
+
+async function clearActiveVoiceTarget(
+  tabId: number,
+  reason: string,
+): Promise<void> {
+  if (activeTargetTabId !== tabId) return;
+  activeTargetTabId = null;
+  activeTargetWindowId = null;
+  liveContextHashes.delete(tabId);
+  await persistVoiceTargetState();
+  console.log(`${BG} Voice target tab ${tabId} cleared (${reason})`);
+}
+
+async function restoreVoiceSessionState(): Promise<void> {
+  const [stored, offscreenState] = await Promise.all([
+    chrome.storage.session.get(VOICE_TARGET_STATE_KEY),
+    queryOffscreenSessionState(),
+  ]);
+  const targetState = stored[VOICE_TARGET_STATE_KEY] as
+    | VoiceTargetState
+    | undefined;
+
+  voiceSessionActive = offscreenState.active === true;
+  activeTargetTabId =
+    voiceSessionActive && typeof targetState?.activeTargetTabId === 'number'
+      ? targetState.activeTargetTabId
+      : null;
+  activeTargetWindowId =
+    voiceSessionActive && typeof targetState?.windowId === 'number'
+      ? targetState.windowId
+      : null;
+
+  if (activeTargetTabId !== null) {
+    try {
+      const tab = await chrome.tabs.get(activeTargetTabId);
+      if (!isSupportedPageTargetUrl(tab.url)) {
+        activeTargetTabId = null;
+        activeTargetWindowId = null;
+      }
+    } catch {
+      activeTargetTabId = null;
+      activeTargetWindowId = null;
+    }
+  }
+
+  if (!voiceSessionActive) {
+    activeTargetTabId = null;
+    activeTargetWindowId = null;
+  }
+
+  await persistVoiceTargetState();
+}
+
+async function hasActiveVoiceSession(): Promise<boolean> {
+  if (voiceSessionActive) return true;
+  await restoreVoiceSessionState();
+  return voiceSessionActive;
+}
+
+async function getActiveVoiceTargetTabId(): Promise<number | null> {
+  if (activeTargetTabId === null) return null;
+
+  try {
+    const tab = await chrome.tabs.get(activeTargetTabId);
+    if (!isSupportedPageTargetUrl(tab.url)) {
+      await clearActiveVoiceTarget(activeTargetTabId, 'unsupported_page');
+      return null;
+    }
+    return activeTargetTabId;
+  } catch {
+    const staleTabId = activeTargetTabId;
+    if (staleTabId !== null) {
+      await clearActiveVoiceTarget(staleTabId, 'missing_tab');
+    }
+    return null;
+  }
+}
+
+function buildUnavailableToolResult(toolName: string): string {
+  return buildUnavailableVoiceTargetToolResult(toolName);
+}
+
+async function maybeRegisterVoiceTarget(
+  tabId: number,
+  reason: string,
+): Promise<boolean> {
+  const [extensionEnabled, sessionActive] = await Promise.all([
+    getExtensionEnabled(),
+    hasActiveVoiceSession(),
+  ]);
+
+  let tab: chrome.tabs.Tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch {
+    return false;
+  }
+
+  if (
+    !shouldRegisterVoiceTarget({
+      extensionEnabled,
+      sessionActive,
+      activeTargetTabId,
+      candidateTabId: tabId,
+      candidateTabActive: tab.active === true,
+      candidateUrl: tab.url,
+    })
+  ) {
+    return false;
+  }
+
+  return setActiveVoiceTarget(tabId, reason);
+}
 
 async function startAgentSession(
   tabId: number,
@@ -444,13 +662,18 @@ async function startAgentSession(
     ...buildFallbackDebugLocation(sourceTab.url),
   };
 
-  if (sessionTabId !== null) {
-    console.log(`${BG} Session already active in tab ${sessionTabId}`);
-    // Still notify the caller tab that there's an existing session
+  if (await hasActiveVoiceSession()) {
+    console.log(`${BG} Voice session already active; rebinding tab ${tabId}`);
+    await setActiveVoiceTarget(tabId, 'session_start_rebind');
     void chrome.tabs.sendMessage(tabId, {
-      type: 'SESSION_ALREADY_ACTIVE',
-      homeTabId: sessionTabId,
+      type: 'SESSION_EVENT',
+      kind: 'connected',
+      payload: { rebound: true },
     });
+    const context = latestContexts.get(tabId);
+    if (context) {
+      void sendLiveContextUpdate(tabId, context);
+    }
     return {};
   }
 
@@ -488,7 +711,8 @@ async function startAgentSession(
 
   const signedUrl = await fetchSignedUrl();
   await ensureOffscreen();
-  sessionTabId = tabId;
+  voiceSessionActive = true;
+  await setActiveVoiceTarget(tabId, 'session_start');
   liveContextHashes.delete(tabId);
 
   const response = (await chrome.runtime.sendMessage({
@@ -498,7 +722,7 @@ async function startAgentSession(
   })) as { ok: boolean; error?: string } | undefined;
 
   if (!response?.ok) {
-    sessionTabId = null;
+    await clearVoiceTargetState();
     if (
       !options.skipMicBootstrap &&
       shouldOpenMicPermissionBootstrap({
@@ -535,17 +759,17 @@ async function endAgentSession(): Promise<void> {
   } catch (err) {
     console.warn(`${BG} END_SESSION error:`, (err as Error).message);
   }
-  if (sessionTabId !== null) {
-    liveContextHashes.delete(sessionTabId);
+  if (activeTargetTabId !== null) {
+    liveContextHashes.delete(activeTargetTabId);
   }
-  sessionTabId = null;
+  await clearVoiceTargetState();
 }
 
 async function sendLiveContextUpdate(
   tabId: number,
   context: PageContext,
 ): Promise<void> {
-  if (sessionTabId !== tabId) return;
+  if (!voiceSessionActive || activeTargetTabId !== tabId) return;
 
   try {
     const pack = await apiFetch<LiveContextPack>(
@@ -665,8 +889,8 @@ async function handleMicPermissionResult(args: {
 // ─── Message routing ──────────────────────────────────────────────────────────
 
 // Offscreen → background: emit session events and tool calls.
-// Route events to the session's home tab; route tool calls the same way and
-// wait for TOOL_RESULT from the content script, forwarding to offscreen.
+// Route events/tools to the current active page target and wait for TOOL_RESULT
+// from the content script, forwarding to offscreen.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.target !== 'background') return false;
 
@@ -677,6 +901,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     };
 
     if (kind === 'connected' && activeDebugSession) {
+      voiceSessionActive = true;
+      void persistVoiceTargetState();
       const conversationId =
         typeof (payload as { conversationId?: unknown })?.conversationId ===
         'string'
@@ -834,18 +1060,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     }
 
-    if (sessionTabId !== null) {
+    if (activeTargetTabId !== null) {
       chrome.tabs.sendMessage(
-        sessionTabId,
+        activeTargetTabId,
         { type: 'SESSION_EVENT', kind, payload },
         () => void chrome.runtime.lastError,
       );
     }
     if (kind === 'disconnected' || kind === 'error') {
-      if (sessionTabId !== null) {
-        liveContextHashes.delete(sessionTabId);
+      if (activeTargetTabId !== null) {
+        liveContextHashes.delete(activeTargetTabId);
       }
-      sessionTabId = null;
+      void clearVoiceTargetState();
     }
     sendResponse({ ok: true });
     return false;
@@ -857,80 +1083,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       name: string;
       args: unknown;
     };
-    const turnId = activeDebugSession?.currentTurnId ?? null;
-
-    // capture_screenshot is the only tool that runs in the background
-    // (needs chrome.tabs.captureVisibleTab). Everything else runs in the tab.
-    if (name === 'capture_screenshot') {
-      if (activeDebugSession) {
-        const contextFields = getDebugContextFields(activeDebugSession.tabId);
-        const toolArgs = summarizeToolCallArgs(name, args);
-        pendingDebugToolCalls.set(callId, {
-          turnId,
-          name,
-          ...toolArgs,
-          ...contextFields,
-          tabId: activeDebugSession.tabId,
-          windowId: activeDebugSession.windowId,
-        });
-        queueDebugSessionEvent({
-          eventType: 'tool_call_started',
-          turnId,
-          toolName: name,
-          tabId: activeDebugSession.tabId,
-          windowId: activeDebugSession.windowId,
-          conversationId: activeDebugSession.conversationId,
-          ...toolArgs,
-          ...contextFields,
-        });
-      }
-      void handleScreenshot(callId);
-      sendResponse({ ok: true });
-      return false;
-    }
-
-    if (name === 'get_page_context') {
-      void handleGetPageContextTool(callId, turnId);
-      sendResponse({ ok: true });
-      return false;
-    }
-
-    if (sessionTabId === null) {
-      void replyToolResult(callId, {
-        error: 'No active session tab',
-      });
-      sendResponse({ ok: true });
-      return false;
-    }
-
-    if (activeDebugSession) {
-      const contextFields = getDebugContextFields(sessionTabId);
-      const toolArgs = summarizeToolCallArgs(name, args);
-      pendingDebugToolCalls.set(callId, {
-        turnId,
-        name,
-        ...toolArgs,
-        ...contextFields,
-        tabId: sessionTabId,
-        windowId: activeDebugSession.windowId,
-      });
-      queueDebugSessionEvent({
-        eventType: 'tool_call_started',
-        turnId,
-        toolName: name,
-        tabId: sessionTabId,
-        windowId: activeDebugSession.windowId,
-        conversationId: activeDebugSession.conversationId,
-        ...toolArgs,
-        ...contextFields,
-      });
-    }
-
-    chrome.tabs.sendMessage(
-      sessionTabId,
-      { type: 'TOOL_CALL', callId, name, args },
-      () => void chrome.runtime.lastError,
-    );
+    void routeToolCall(callId, name, args);
     sendResponse({ ok: true });
     return false;
   }
@@ -939,12 +1092,101 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
+async function routeToolCall(
+  callId: string,
+  name: string,
+  args: unknown,
+): Promise<void> {
+  const turnId = activeDebugSession?.currentTurnId ?? null;
+
+  if (name === 'capture_screenshot') {
+    await handleScreenshot(callId);
+    return;
+  }
+
+  if (name === 'get_page_context') {
+    await handleGetPageContextTool(callId, turnId);
+    return;
+  }
+
+  const targetTabId = await getActiveVoiceTargetTabId();
+  if (targetTabId === null) {
+    await replyToolResult(callId, {
+      result: buildUnavailableToolResult(name),
+    });
+    return;
+  }
+
+  if (activeDebugSession) {
+    const contextFields = getDebugContextFields(targetTabId);
+    const toolArgs = summarizeToolCallArgs(name, args);
+    pendingDebugToolCalls.set(callId, {
+      turnId,
+      name,
+      ...toolArgs,
+      ...contextFields,
+      tabId: targetTabId,
+      windowId: activeDebugSession.windowId,
+    });
+    queueDebugSessionEvent({
+      eventType: 'tool_call_started',
+      turnId,
+      toolName: name,
+      tabId: targetTabId,
+      windowId: activeDebugSession.windowId,
+      conversationId: activeDebugSession.conversationId,
+      ...toolArgs,
+      ...contextFields,
+    });
+  }
+
+  chrome.tabs.sendMessage(
+    targetTabId,
+    { type: 'TOOL_CALL', callId, name, args },
+    () => {
+      if (chrome.runtime.lastError) {
+        void clearActiveVoiceTarget(targetTabId, 'tool_send_failed').then(() =>
+          replyToolResult(callId, {
+            result: buildUnavailableToolResult(name),
+          }),
+        );
+      }
+    },
+  );
+}
+
 async function handleScreenshot(callId: string): Promise<void> {
+  let targetTabId: number | null = null;
   try {
-    if (sessionTabId === null) {
-      return replyToolResult(callId, { error: 'No active session tab' });
+    targetTabId = await getActiveVoiceTargetTabId();
+    if (targetTabId === null) {
+      return replyToolResult(callId, {
+        result: buildUnavailableToolResult('capture_screenshot'),
+      });
     }
-    const tab = await chrome.tabs.get(sessionTabId);
+    const tab = await chrome.tabs.get(targetTabId);
+    if (activeDebugSession) {
+      const contextFields = getDebugContextFields(targetTabId);
+      const toolArgs = summarizeToolCallArgs('capture_screenshot', {});
+      pendingDebugToolCalls.set(callId, {
+        turnId: activeDebugSession.currentTurnId,
+        name: 'capture_screenshot',
+        ...toolArgs,
+        ...contextFields,
+        tabId: targetTabId,
+        windowId: tab.windowId ?? activeDebugSession.windowId,
+      });
+      queueDebugSessionEvent({
+        eventType: 'tool_call_started',
+        turnId: activeDebugSession.currentTurnId,
+        toolName: 'capture_screenshot',
+        tabId: targetTabId,
+        windowId: tab.windowId ?? activeDebugSession.windowId,
+        conversationId: activeDebugSession.conversationId,
+        ...toolArgs,
+        ...contextFields,
+      });
+    }
     const windowId = tab.windowId;
     const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
       format: 'jpeg',
@@ -953,7 +1195,13 @@ async function handleScreenshot(callId: string): Promise<void> {
     const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
     await replyToolResult(callId, { result: base64 });
   } catch (err) {
-    await replyToolResult(callId, { error: (err as Error).message });
+    if (targetTabId !== null) {
+      await clearActiveVoiceTarget(targetTabId, 'screenshot_failed');
+    }
+    await replyToolResult(callId, {
+      result: buildUnavailableToolResult('capture_screenshot'),
+    });
+    console.warn(`${BG} Screenshot failed:`, (err as Error).message);
   }
 }
 
@@ -961,12 +1209,16 @@ async function handleGetPageContextTool(
   callId: string,
   turnId: string | null,
 ): Promise<void> {
+  let targetTabId: number | null = null;
   try {
-    if (sessionTabId === null) {
-      return await replyToolResult(callId, { error: 'No active session tab' });
+    targetTabId = await getActiveVoiceTargetTabId();
+    if (targetTabId === null) {
+      return await replyToolResult(callId, {
+        result: buildUnavailableToolResult('get_page_context'),
+      });
     }
 
-    const response = (await chrome.tabs.sendMessage(sessionTabId, {
+    const response = (await chrome.tabs.sendMessage(targetTabId, {
       type: 'GET_PAGE_CONTEXT',
     })) as
       | {
@@ -983,10 +1235,10 @@ async function handleGetPageContextTool(
     }
 
     const mergedContext = mergePageContextWithPrevious(
-      latestContexts.get(sessionTabId),
+      latestContexts.get(targetTabId),
       rawContext,
     );
-    latestContexts.set(sessionTabId, mergedContext);
+    latestContexts.set(targetTabId, mergedContext);
 
     const fingerprint = buildContextSemanticFingerprint(mergedContext);
     const pageContextOutcome = turnId
@@ -1019,7 +1271,13 @@ async function handleGetPageContextTool(
 
     await replyToolResult(callId, { result });
   } catch (err) {
-    await replyToolResult(callId, { error: (err as Error).message });
+    if (targetTabId !== null) {
+      await clearActiveVoiceTarget(targetTabId, 'page_context_failed');
+    }
+    await replyToolResult(callId, {
+      result: buildUnavailableToolResult('get_page_context'),
+    });
+    console.warn(`${BG} Page context failed:`, (err as Error).message);
   }
 }
 
@@ -1117,23 +1375,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === 'WHICH_SESSION_ACTIVE') {
     const tabId = sender.tab?.id;
-    sendResponse({
-      active: sessionTabId !== null,
-      isHomeTab: tabId !== undefined && tabId === sessionTabId,
-      homeTabId: sessionTabId,
-    });
-    return false;
+    void hasActiveVoiceSession()
+      .then((active) =>
+        sendResponse({
+          active,
+          isActiveTarget: tabId !== undefined && tabId === activeTargetTabId,
+          activeTargetTabId,
+        }),
+      )
+      .catch((err) =>
+        sendResponse({ ok: false, error: (err as Error).message }),
+      );
+    return true;
   }
 
   if (message?.type === 'GET_EXTENSION_STATE') {
     const tabId = sender.tab?.id;
-    void getExtensionEnabled()
-      .then((enabled) =>
+    void (async () => {
+      const [enabled, active] = await Promise.all([
+        getExtensionEnabled(),
+        hasActiveVoiceSession(),
+      ]);
+      if (enabled && active && tabId !== undefined) {
+        await maybeRegisterVoiceTarget(tabId, 'content_state_request');
+      }
+      return {
+        enabled,
+        active,
+        isActiveTarget: tabId !== undefined && tabId === activeTargetTabId,
+        activeTargetTabId,
+      };
+    })()
+      .then((state) =>
         sendResponse({
-          enabled,
-          active: sessionTabId !== null,
-          isHomeTab: tabId !== undefined && tabId === sessionTabId,
-          homeTabId: sessionTabId,
+          enabled: state.enabled,
+          active: state.active,
+          isActiveTarget: state.isActiveTarget,
+          activeTargetTabId: state.activeTargetTabId,
         }),
       )
       .catch((err) =>
@@ -1161,6 +1439,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 export default defineBackground(() => {
   console.log(`${BG} Service worker started`);
   scheduleTokenRefresh();
+  void restoreVoiceSessionState();
 
   void chrome.action.setPopup({ popup: '' });
 
@@ -1346,7 +1625,7 @@ export default defineBackground(() => {
         () => void chrome.runtime.lastError,
       );
 
-      if (sessionTabId === tabId) {
+      if (activeTargetTabId === tabId) {
         void sendLiveContextUpdate(tabId, mergedContext);
       }
     } catch (err) {
@@ -1371,7 +1650,14 @@ export default defineBackground(() => {
             return false;
           }
           contextFingerprints.set(tabId, fingerprint);
-          void enrichPageContext(tabId, context);
+          void maybeRegisterVoiceTarget(tabId, 'page_context_updated').then(
+            (registered) => {
+              void enrichPageContext(tabId, context);
+              if (registered) {
+                void sendLiveContextUpdate(tabId, context);
+              }
+            },
+          );
         }
         return false;
       }
@@ -1422,13 +1708,33 @@ export default defineBackground(() => {
     }
   });
 
-  // ── End session if the home tab closes ──────────────────────────────────────
+  chrome.tabs.onActivated.addListener(({ tabId }) => {
+    void (async () => {
+      const rebound = await maybeRegisterVoiceTarget(tabId, 'tab_activated');
+      if (!rebound && activeTargetTabId !== null) {
+        await clearActiveVoiceTarget(
+          activeTargetTabId,
+          'tab_activated_unsupported',
+        );
+      }
+    })();
+  });
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status !== 'complete' && !changeInfo.url) return;
+    if (!voiceSessionActive || activeTargetTabId !== tabId) return;
+    if (!isSupportedPageTargetUrl(tab.url)) {
+      void clearActiveVoiceTarget(tabId, 'navigation_unsupported');
+    }
+  });
+
+  // ── Target cleanup. Closing the target pauses tools; it does not end voice. ─
   chrome.tabs.onRemoved.addListener((tabId) => {
     latestContexts.delete(tabId);
     contextUpdateSeq.delete(tabId);
     contextFingerprints.delete(tabId);
     liveContextHashes.delete(tabId);
-    if (sessionTabId === tabId) {
+    if (activeTargetTabId === tabId) {
       turnGuards.clear();
     }
 
@@ -1461,9 +1767,6 @@ export default defineBackground(() => {
       }
     }
 
-    if (sessionTabId === tabId) {
-      console.log(`${BG} Home tab ${tabId} closed — ending session`);
-      void endAgentSession().then(() => closeOffscreen());
-    }
+    void clearActiveVoiceTarget(tabId, 'tab_closed');
   });
 });
