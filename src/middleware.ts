@@ -13,6 +13,7 @@ const API_KEY_CAPABLE_EXTENSION_ROUTES = new Set([
   "/api/extension/debug-events",
   "/api/extension/live-context",
   "/api/extension/query",
+  "/api/extension/telemetry/events",
 ]);
 
 function isApiKeyCapableExtensionRoute(pathname: string) {

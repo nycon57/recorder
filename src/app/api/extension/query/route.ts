@@ -501,6 +501,7 @@ export async function POST(request: NextRequest) {
   // TRIB-57: Mutable flags for knowledge layer presence (set inside the stream)
   let hadOrgKnowledge = false;
   let hadVendorKnowledge = false;
+  let resolvedSourceCount = 0;
 
   // TRIB-50: Collect org page IDs that were included in the fusion prompt
   // so after() can record interactions without blocking the SSE stream.
@@ -569,6 +570,7 @@ export async function POST(request: NextRequest) {
           screen,
           asOf,
         });
+        resolvedSourceCount = answerContext.sources.length;
         sharedVendorTelemetry =
           summarizeCompiledMemoryAnswerObservability(answerContext);
 
@@ -755,7 +757,7 @@ export async function POST(request: NextRequest) {
           customer_org_id: orgId !== authCtx.orgId ? orgId : null,
           api_key_id: authCtx.keyId,
           event_type: 'query',
-          question,
+          question: null,
           app,
           screen,
           response_latency_ms: Date.now() - requestStartTime,
@@ -771,6 +773,38 @@ export async function POST(request: NextRequest) {
       }
     });
   }
+
+  after(async () => {
+    try {
+      const supabase = createAdminClient();
+      await supabase.from('extension_product_events').insert({
+        org_id: orgId,
+        actor_id:
+          authCtx.authMethod === 'session' ? authCtx.userId : authCtx.keyId,
+        auth_method: authCtx.authMethod,
+        event_id: `query_${crypto.randomUUID()}`,
+        event_type: 'query',
+        occurred_at: new Date(requestStartTime).toISOString(),
+        app,
+        screen,
+        latency_ms: Date.now() - requestStartTime,
+        message_direction: 'user',
+        message_length: question.length,
+        source_count: resolvedSourceCount,
+        outcome: 'completed',
+        metadata: {
+          hadOrgKnowledge,
+          hadVendorKnowledge,
+          authMethod: authCtx.authMethod,
+        },
+      });
+    } catch (err) {
+      console.error(
+        '[extension/query] failed to record product telemetry event:',
+        err,
+      );
+    }
+  });
 
   after(async () => {
     if (!telemetryPayload) return;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
+  findUnsafeTelemetryField,
   sanitizePageContextLocation,
   sanitizePageContextSelector,
   sanitizePageContextText,
@@ -39,6 +40,8 @@ const ALLOWED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'tool_call_started',
   'tool_call_completed',
 ]);
+const RAW_DEBUG_EVENTS_ENABLED =
+  process.env.TRIBORA_ENABLE_EXTENSION_RAW_DEBUG_EVENTS === 'true';
 
 function isAllowedEventType(
   value: unknown,
@@ -145,6 +148,14 @@ export async function POST(request: NextRequest) {
     const events = body.events.filter(isValidEventInput);
     if (events.length !== body.events.length) {
       return errors.badRequest('One or more debug events are invalid');
+    }
+    if (!RAW_DEBUG_EVENTS_ENABLED) {
+      const unsafeField = findUnsafeTelemetryField(body.events);
+      if (unsafeField) {
+        return errors.badRequest(
+          `Raw debug field "${unsafeField}" is disabled for extension debug ingest`,
+        );
+      }
     }
 
     const supabase = createAdminClient();

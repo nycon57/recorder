@@ -2649,6 +2649,131 @@ export type Database = {
         }
         Relationships: []
       }
+      extension_product_events: {
+        Row: {
+          action: string | null
+          actor_id: string | null
+          app: string | null
+          auth_method: string
+          conversation_id: string | null
+          created_at: string
+          error_category: string | null
+          error_code: string | null
+          event_id: string
+          event_type: string
+          fingerprint: string | null
+          id: string
+          input_text_length: number | null
+          knowledge_mode: string | null
+          latency_ms: number | null
+          message_direction: string | null
+          message_length: number | null
+          metadata: Json
+          occurred_at: string
+          org_id: string
+          org_match_basis: string | null
+          org_match_category: string | null
+          outcome: string | null
+          output_text_length: number | null
+          screen: string | null
+          selector_present: boolean | null
+          seq: number | null
+          session_id: string | null
+          source_count: number | null
+          source_kinds: string[] | null
+          tool_name: string | null
+          turn_id: string | null
+          url_host: string | null
+          url_path: string | null
+          vendor_match_basis: string | null
+          vendor_match_category: string | null
+        }
+        Insert: {
+          action?: string | null
+          actor_id?: string | null
+          app?: string | null
+          auth_method: string
+          conversation_id?: string | null
+          created_at?: string
+          error_category?: string | null
+          error_code?: string | null
+          event_id: string
+          event_type: string
+          fingerprint?: string | null
+          id?: string
+          input_text_length?: number | null
+          knowledge_mode?: string | null
+          latency_ms?: number | null
+          message_direction?: string | null
+          message_length?: number | null
+          metadata?: Json
+          occurred_at: string
+          org_id: string
+          org_match_basis?: string | null
+          org_match_category?: string | null
+          outcome?: string | null
+          output_text_length?: number | null
+          screen?: string | null
+          selector_present?: boolean | null
+          seq?: number | null
+          session_id?: string | null
+          source_count?: number | null
+          source_kinds?: string[] | null
+          tool_name?: string | null
+          turn_id?: string | null
+          url_host?: string | null
+          url_path?: string | null
+          vendor_match_basis?: string | null
+          vendor_match_category?: string | null
+        }
+        Update: {
+          action?: string | null
+          actor_id?: string | null
+          app?: string | null
+          auth_method?: string
+          conversation_id?: string | null
+          created_at?: string
+          error_category?: string | null
+          error_code?: string | null
+          event_id?: string
+          event_type?: string
+          fingerprint?: string | null
+          id?: string
+          input_text_length?: number | null
+          knowledge_mode?: string | null
+          latency_ms?: number | null
+          message_direction?: string | null
+          message_length?: number | null
+          metadata?: Json
+          occurred_at?: string
+          org_id?: string
+          org_match_basis?: string | null
+          org_match_category?: string | null
+          outcome?: string | null
+          output_text_length?: number | null
+          screen?: string | null
+          selector_present?: boolean | null
+          seq?: number | null
+          session_id?: string | null
+          source_count?: number | null
+          source_kinds?: string[] | null
+          tool_name?: string | null
+          turn_id?: string | null
+          url_host?: string | null
+          url_path?: string | null
+          vendor_match_basis?: string | null
+          vendor_match_category?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extension_product_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       favorites: {
         Row: {
           content_id: string

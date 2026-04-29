@@ -37,6 +37,16 @@ import {
 } from '../utils/debug-session.js';
 import type { ActiveDebugSessionState } from '../utils/debug-session.js';
 import {
+  advanceTelemetryTurn,
+  buildPageContextTelemetryFields,
+  buildTelemetryEventInput,
+  createTelemetrySessionState,
+  enqueueExtensionTelemetryEvent,
+  flushExtensionTelemetryQueue,
+  summarizeTelemetryToolArgs,
+} from '../utils/telemetry.js';
+import type { ActiveTelemetrySessionState } from '../utils/telemetry.js';
+import {
   buildUnavailableVoiceTargetToolResult,
   isSupportedVoiceTargetUrl,
   shouldCollectPageContext,
@@ -168,7 +178,9 @@ async function fetchSignedUrl(): Promise<string> {
 let pendingSessionStartTabId: number | null = null;
 let pendingMicPermissionPageTabId: number | null = null;
 let activeDebugSession: ActiveDebugSessionState | null = null;
+let activeTelemetrySession: ActiveTelemetrySessionState | null = null;
 let debugEventQueue: Promise<void> = Promise.resolve();
+let telemetryEventQueue: Promise<void> = Promise.resolve();
 const pendingDebugToolCalls = new Map<
   string,
   {
@@ -314,6 +326,60 @@ function getDebugContextFields(tabId: number):
   };
 }
 
+function getTelemetryContextFields(tabId: number):
+  | ReturnType<typeof buildPageContextTelemetryFields>
+  | {
+      urlHost: string;
+      urlPath: string;
+      app?: null;
+      screen?: null;
+      knowledgeMode?: 'unknown';
+      vendorMatchBasis?: 'unknown';
+      orgMatchBasis?: 'unknown';
+      vendorMatchCategory?: 'unknown';
+      orgMatchCategory?: 'unknown';
+      fingerprint?: null;
+    } {
+  const context = latestContexts.get(tabId);
+  if (context) {
+    return buildPageContextTelemetryFields(context);
+  }
+
+  return {
+    ...buildFallbackDebugLocation(null),
+    app: null,
+    screen: null,
+    knowledgeMode: 'unknown',
+    vendorMatchBasis: 'unknown',
+    orgMatchBasis: 'unknown',
+    vendorMatchCategory: 'unknown',
+    orgMatchCategory: 'unknown',
+    fingerprint: null,
+  };
+}
+
+function queueProductTelemetryEvent(
+  event: Parameters<typeof buildTelemetryEventInput>[1],
+): void {
+  if (!activeTelemetrySession) return;
+
+  const payload = buildTelemetryEventInput(activeTelemetrySession, event);
+  telemetryEventQueue = telemetryEventQueue
+    .catch(() => undefined)
+    .then(async () => {
+      const queued = await enqueueExtensionTelemetryEvent(payload);
+      if (queued) {
+        await flushExtensionTelemetryQueue();
+      }
+    })
+    .catch((err) => {
+      console.warn(
+        `${BG} Product telemetry event queued for retry:`,
+        (err as Error).message,
+      );
+    });
+}
+
 function queueDebugSessionEvent(
   event: Parameters<typeof buildDebugEventInput>[1],
 ): void {
@@ -365,22 +431,40 @@ function buildWatchdogNudge(
 
 const turnGuards = createTurnGuards({
   onNoReplyWatchdog: ({ turnId, reason }) => {
-    if (!activeDebugSession || activeDebugSession.currentTurnId !== turnId) {
+    const telemetryTurnMatches =
+      activeTelemetrySession?.currentTurnId === turnId;
+    const debugTurnMatches = activeDebugSession?.currentTurnId === turnId;
+
+    if (!telemetryTurnMatches && !debugTurnMatches) {
       return;
     }
 
-    queueDebugSessionEvent({
-      eventType: 'assistant_reply_watchdog_fired',
-      turnId,
-      tabId: activeDebugSession.tabId,
-      windowId: activeDebugSession.windowId,
-      conversationId: activeDebugSession.conversationId,
-      resultText:
-        reason === 'post_tool_timeout'
-          ? 'Tool completed but no assistant reply was observed.'
-          : 'User turn timed out before any assistant reply was observed.',
-      ...getDebugContextFields(activeDebugSession.tabId),
-    });
+    if (activeTelemetrySession && telemetryTurnMatches) {
+      queueProductTelemetryEvent({
+        eventType: 'assistant_reply_watchdog_fired',
+        turnId,
+        outcome: reason,
+        metadata: {
+          reason,
+        },
+        ...getTelemetryContextFields(activeTelemetrySession.tabId),
+      });
+    }
+
+    if (activeDebugSession && debugTurnMatches) {
+      queueDebugSessionEvent({
+        eventType: 'assistant_reply_watchdog_fired',
+        turnId,
+        tabId: activeDebugSession.tabId,
+        windowId: activeDebugSession.windowId,
+        conversationId: activeDebugSession.conversationId,
+        resultText:
+          reason === 'post_tool_timeout'
+            ? 'Tool completed but no assistant reply was observed.'
+            : 'User turn timed out before any assistant reply was observed.',
+        ...getDebugContextFields(activeDebugSession.tabId),
+      });
+    }
 
     void sendOffscreenContextualUpdate({
       text: buildWatchdogNudge(reason),
@@ -884,6 +968,22 @@ async function startAgentSession(
       ...debugContextFields,
     });
   }
+  if (activeTelemetrySession === null) {
+    activeTelemetrySession = createTelemetrySessionState({
+      tabId,
+      windowId: sourceTab.windowId ?? null,
+    });
+    queueProductTelemetryEvent({
+      eventType: 'session_start_requested',
+      turnId: null,
+      metadata: {
+        tabId,
+        windowId: sourceTab.windowId ?? null,
+        route: 'agent_session',
+      },
+      ...getTelemetryContextFields(tabId),
+    });
+  }
 
   const micPermissionGranted = await getMicPermissionGranted();
   if (
@@ -928,6 +1028,18 @@ async function startAgentSession(
       error: response?.error ?? 'Offscreen failed to start session',
       ...debugContextFields,
     });
+    queueProductTelemetryEvent({
+      eventType: 'session_error',
+      turnId: null,
+      errorCategory: 'offscreen_start_failed',
+      outcome: 'failed',
+      metadata: {
+        tabId,
+        route: 'agent_session',
+        windowId: sourceTab.windowId ?? null,
+      },
+      ...getTelemetryContextFields(tabId),
+    });
     throw new Error(response?.error ?? 'Offscreen failed to start session');
   }
 
@@ -947,6 +1059,15 @@ async function endAgentSession(): Promise<void> {
   if (activeTargetTabId !== null) {
     liveContextHashes.delete(activeTargetTabId);
   }
+  if (activeTelemetrySession) {
+    queueProductTelemetryEvent({
+      eventType: 'session_ended',
+      turnId: null,
+      outcome: 'ended',
+      ...getTelemetryContextFields(activeTelemetrySession.tabId),
+    });
+  }
+  activeTelemetrySession = null;
   await clearVoiceTargetState();
 }
 
@@ -958,6 +1079,7 @@ async function sendLiveContextUpdate(
   const sanitizedContext = sanitizePageContextForNetwork(context);
 
   try {
+    const startedAtMs = Date.now();
     const pack = await apiFetch<LiveContextPack>(
       '/api/extension/live-context',
       {
@@ -967,6 +1089,19 @@ async function sendLiveContextUpdate(
     );
 
     if (!pack.text) return;
+    queueProductTelemetryEvent({
+      eventType: 'live_context_update',
+      turnId: activeTelemetrySession?.currentTurnId ?? null,
+      latencyMs: Date.now() - startedAtMs,
+      sourceCount: pack.sources.length,
+      sourceKinds: pack.sources.map((source) => source.kind),
+      outcome: 'sent',
+      metadata: {
+        knowledgeMode: pack.knowledgeMode,
+        sourceCount: pack.sources.length,
+      },
+      ...getTelemetryContextFields(tabId),
+    });
     if (liveContextHashes.get(tabId) === pack.hash) return;
 
     const response = await sendOffscreenContextualUpdate({
@@ -1086,7 +1221,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       payload: unknown;
     };
 
-    if (kind === 'connected' && activeDebugSession) {
+    if (kind === 'connected') {
       voiceSessionActive = true;
       void persistVoiceTargetState();
       const conversationId =
@@ -1094,21 +1229,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         'string'
           ? ((payload as { conversationId?: string }).conversationId ?? null)
           : null;
-      if (conversationId) {
+      if (conversationId && activeDebugSession) {
         activeDebugSession.conversationId = conversationId;
       }
-      queueDebugSessionEvent({
-        eventType: 'session_started',
-        turnId: null,
-        tabId: activeDebugSession.tabId,
-        windowId: activeDebugSession.windowId,
-        conversationId: activeDebugSession.conversationId,
-        ...getDebugContextFields(activeDebugSession.tabId),
-      });
+      if (conversationId && activeTelemetrySession) {
+        activeTelemetrySession.conversationId = conversationId;
+      }
+      if (activeDebugSession) {
+        queueDebugSessionEvent({
+          eventType: 'session_started',
+          turnId: null,
+          tabId: activeDebugSession.tabId,
+          windowId: activeDebugSession.windowId,
+          conversationId: activeDebugSession.conversationId,
+          ...getDebugContextFields(activeDebugSession.tabId),
+        });
+      }
+      if (activeTelemetrySession) {
+        queueProductTelemetryEvent({
+          eventType: 'session_started',
+          turnId: null,
+          conversationId: activeTelemetrySession.conversationId,
+          outcome: 'connected',
+          ...getTelemetryContextFields(activeTelemetrySession.tabId),
+        });
+      }
 
-      const connectedContext = latestContexts.get(activeDebugSession.tabId);
+      const connectedTabId =
+        activeTelemetrySession?.tabId ?? activeDebugSession?.tabId ?? null;
+      const connectedContext =
+        connectedTabId === null ? null : latestContexts.get(connectedTabId);
       if (connectedContext) {
-        void sendLiveContextUpdate(activeDebugSession.tabId, connectedContext);
+        void sendLiveContextUpdate(connectedTabId, connectedContext);
       }
     }
 
@@ -1136,7 +1288,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     }
 
-    if (kind === 'message' && activeDebugSession) {
+    if (kind === 'message' && (activeDebugSession || activeTelemetrySession)) {
       const transcript = (payload as { message?: Record<string, unknown> })
         ?.message as Record<string, unknown> | undefined;
       const source =
@@ -1151,11 +1303,57 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             : { lowConfidence: false, reason: null };
 
         const turnId =
-          source === 'user' && !transcriptConfidence.lowConfidence
+          activeDebugSession &&
+          source === 'user' &&
+          !transcriptConfidence.lowConfidence
             ? advanceDebugTurn(activeDebugSession)
-            : activeDebugSession.currentTurnId;
+            : activeDebugSession?.currentTurnId ?? null;
+        const telemetryTurnId =
+          activeTelemetrySession &&
+          source === 'user' &&
+          !transcriptConfidence.lowConfidence
+            ? advanceTelemetryTurn(activeTelemetrySession)
+            : activeTelemetrySession?.currentTurnId ?? null;
 
-        if (source === 'user' && transcriptConfidence.lowConfidence) {
+        if (activeTelemetrySession) {
+          if (
+            source === 'user' &&
+            telemetryTurnId &&
+            !transcriptConfidence.lowConfidence
+          ) {
+            queueProductTelemetryEvent({
+              eventType: 'turn_started',
+              turnId: telemetryTurnId,
+              messageDirection: 'user',
+              messageLength: messageText.length,
+              ...getTelemetryContextFields(activeTelemetrySession.tabId),
+            });
+          }
+
+          queueProductTelemetryEvent({
+            eventType: 'message_observed',
+            turnId: telemetryTurnId,
+            messageDirection:
+              source === 'user' || source === 'assistant' ? source : 'system',
+            messageLength: messageText.length,
+            outcome:
+              source === 'user' && transcriptConfidence.lowConfidence
+                ? 'ignored_low_confidence'
+                : 'observed',
+            metadata: {
+              lowConfidence:
+                source === 'user' ? transcriptConfidence.lowConfidence : false,
+              reason: transcriptConfidence.reason ?? null,
+            },
+            ...getTelemetryContextFields(activeTelemetrySession.tabId),
+          });
+        }
+
+        if (
+          activeDebugSession &&
+          source === 'user' &&
+          transcriptConfidence.lowConfidence
+        ) {
           queueDebugSessionEvent({
             eventType: 'low_confidence_user_message',
             turnId,
@@ -1170,26 +1368,59 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         if (
           source === 'user' &&
-          turnId &&
+          (turnId || telemetryTurnId) &&
           !transcriptConfidence.lowConfidence
         ) {
-          turnGuards.startTurn(turnId);
+          turnGuards.startTurn(turnId ?? telemetryTurnId ?? '');
         }
 
-        if (source === 'assistant' && turnId) {
-          const assistantOutcome = turnGuards.recordAssistantMessage(turnId);
-          if (assistantOutcome.duplicateWithoutMaterialChange) {
-            queueDebugSessionEvent({
-              eventType: 'duplicate_assistant_reply',
-              turnId,
-              tabId: activeDebugSession.tabId,
-              windowId: activeDebugSession.windowId,
-              conversationId: activeDebugSession.conversationId,
-              messageText,
-              resultText:
-                'Assistant replied again in the same turn without a new material page or tool change.',
-              ...getDebugContextFields(activeDebugSession.tabId),
+        if (source === 'assistant' && (turnId || telemetryTurnId)) {
+          const guardTurnId = turnId ?? telemetryTurnId ?? '';
+          const assistantOutcome = turnGuards.recordAssistantMessage(guardTurnId);
+          if (activeTelemetrySession) {
+            queueProductTelemetryEvent({
+              eventType: 'assistant_answer_outcome',
+              turnId: telemetryTurnId,
+              messageDirection: 'assistant',
+              messageLength: messageText.length,
+              outcome: assistantOutcome.duplicateWithoutMaterialChange
+                ? 'duplicate_without_material_change'
+                : 'observed',
+              ...getTelemetryContextFields(activeTelemetrySession.tabId),
             });
+            queueProductTelemetryEvent({
+              eventType: 'turn_completed',
+              turnId: telemetryTurnId,
+              outcome: assistantOutcome.duplicateWithoutMaterialChange
+                ? 'duplicate_without_material_change'
+                : 'assistant_observed',
+              ...getTelemetryContextFields(activeTelemetrySession.tabId),
+            });
+          }
+          if (assistantOutcome.duplicateWithoutMaterialChange) {
+            if (activeTelemetrySession) {
+              queueProductTelemetryEvent({
+                eventType: 'duplicate_assistant_reply_detected',
+                turnId: telemetryTurnId,
+                messageDirection: 'assistant',
+                messageLength: messageText.length,
+                outcome: 'duplicate_without_material_change',
+                ...getTelemetryContextFields(activeTelemetrySession.tabId),
+              });
+            }
+            if (activeDebugSession) {
+              queueDebugSessionEvent({
+                eventType: 'duplicate_assistant_reply',
+                turnId,
+                tabId: activeDebugSession.tabId,
+                windowId: activeDebugSession.windowId,
+                conversationId: activeDebugSession.conversationId,
+                messageText,
+                resultText:
+                  'Assistant replied again in the same turn without a new material page or tool change.',
+                ...getDebugContextFields(activeDebugSession.tabId),
+              });
+            }
 
             void sendOffscreenContextualUpdate({
               text: 'You already answered this user turn and the page state has not changed materially. Do not repeat the same answer again unless a new tool result or page change occurs.',
@@ -1204,15 +1435,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
         }
 
-        queueDebugSessionEvent({
-          eventType: source === 'user' ? 'user_message' : 'assistant_message',
-          turnId,
-          tabId: activeDebugSession.tabId,
-          windowId: activeDebugSession.windowId,
-          conversationId: activeDebugSession.conversationId,
-          messageText,
-          ...getDebugContextFields(activeDebugSession.tabId),
-        });
+        if (activeDebugSession) {
+          queueDebugSessionEvent({
+            eventType: source === 'user' ? 'user_message' : 'assistant_message',
+            turnId,
+            tabId: activeDebugSession.tabId,
+            windowId: activeDebugSession.windowId,
+            conversationId: activeDebugSession.conversationId,
+            messageText,
+            ...getDebugContextFields(activeDebugSession.tabId),
+          });
+        }
       }
     }
 
@@ -1244,6 +1477,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             : 'disconnected',
         ...getDebugContextFields(activeDebugSession.tabId),
       });
+    }
+    if (kind === 'disconnected' && activeTelemetrySession) {
+      queueProductTelemetryEvent({
+        eventType: 'session_ended',
+        turnId: null,
+        outcome: 'disconnected',
+        metadata: {
+          reason:
+            typeof (payload as { reason?: unknown })?.reason === 'string'
+              ? (payload as { reason?: string }).reason
+              : null,
+        },
+        ...getTelemetryContextFields(activeTelemetrySession.tabId),
+      });
+      activeTelemetrySession = null;
     }
 
     if (activeTargetTabId !== null) {
@@ -1379,6 +1627,25 @@ async function routeToolCall(
       ...contextFields,
     });
   }
+  if (activeTelemetrySession) {
+    const toolArgs = summarizeToolCallArgs(name, args);
+    queueProductTelemetryEvent({
+      eventType: 'tool_call_started',
+      turnId: activeTelemetrySession.currentTurnId,
+      ...summarizeTelemetryToolArgs({
+        name,
+        action: toolArgs.action,
+        selector: toolArgs.selector,
+        inputTextLength: toolArgs.inputTextLength,
+      }),
+      metadata: {
+        bindingEpoch: routeMeta.bindingEpoch,
+        pageInstancePresent: Boolean(routeMeta.pageInstanceId),
+        contentInstancePresent: Boolean(routeMeta.contentInstanceId),
+      },
+      ...getTelemetryContextFields(targetTabId),
+    });
+  }
 
   console.log(
     `${BG} Tool call start id=${callId} tool=${name} tab=${targetTabId} epoch=${routeMeta.bindingEpoch} pageInstance=${
@@ -1472,6 +1739,21 @@ async function handleScreenshot(callId: string): Promise<void> {
         contentInstanceId: routeMeta.contentInstanceId,
         ...toolArgs,
         ...contextFields,
+      });
+    }
+    if (activeTelemetrySession) {
+      queueProductTelemetryEvent({
+        eventType: 'tool_call_started',
+        turnId: activeTelemetrySession.currentTurnId,
+        toolName: 'capture_screenshot',
+        action: 'capture',
+        selectorPresent: false,
+        metadata: {
+          bindingEpoch: routeMeta.bindingEpoch,
+          pageInstancePresent: Boolean(routeMeta.pageInstanceId),
+          contentInstancePresent: Boolean(routeMeta.contentInstanceId),
+        },
+        ...getTelemetryContextFields(targetTabId),
       });
     }
     console.log(
@@ -1597,6 +1879,21 @@ async function handleGetPageContextTool(
           contentInstanceId: routeMeta.contentInstanceId,
           ...toolArgs,
           ...contextFields,
+        });
+      }
+      if (activeTelemetrySession) {
+        queueProductTelemetryEvent({
+          eventType: 'tool_call_started',
+          turnId: activeTelemetrySession.currentTurnId,
+          toolName: 'get_page_context',
+          action: 'inspect',
+          selectorPresent: false,
+          metadata: {
+            bindingEpoch: routeMeta.bindingEpoch,
+            pageInstancePresent: Boolean(routeMeta.pageInstanceId),
+            contentInstancePresent: Boolean(routeMeta.contentInstanceId),
+          },
+          ...getTelemetryContextFields(targetTabId),
         });
       }
       console.log(
@@ -1788,6 +2085,33 @@ async function replyToolResult(
 
   if (route) {
     const durationMs = Date.now() - route.startedAtMs;
+    if (activeTelemetrySession) {
+      queueProductTelemetryEvent({
+        eventType: 'tool_call_completed',
+        turnId: activeTelemetrySession.currentTurnId,
+        toolName: route.name,
+        latencyMs: durationMs,
+        outcome: stale ? 'stale' : finalBody.error ? 'error' : 'ok',
+        errorCategory: stale
+          ? 'stale_result'
+          : finalBody.error
+            ? 'tool_error'
+            : null,
+        outputTextLength: finalBody.result?.length ?? null,
+        metadata: {
+          stale: Boolean(stale),
+          bindingEpoch: route.routeMeta.bindingEpoch,
+          pageInstancePresent: Boolean(
+            options.resultMeta?.pageInstanceId ?? route.routeMeta.pageInstanceId,
+          ),
+          contentInstancePresent: Boolean(
+            options.resultMeta?.contentInstanceId ??
+              route.routeMeta.contentInstanceId,
+          ),
+        },
+        ...getTelemetryContextFields(activeTelemetrySession.tabId),
+      });
+    }
     console.log(
       `${BG} Tool call complete id=${callId} tool=${route.name} epoch=${route.routeMeta.bindingEpoch} pageInstance=${
         options.resultMeta?.pageInstanceId ??
@@ -2115,6 +2439,16 @@ export default defineBackground(() => {
           windowId: activeDebugSession.windowId,
           conversationId: activeDebugSession.conversationId,
           ...buildPageContextDebugFields(mergedContext),
+        });
+      }
+      if (activeTelemetrySession && activeTelemetrySession.tabId === tabId) {
+        queueProductTelemetryEvent({
+          eventType: 'context_lookup',
+          turnId: activeTelemetrySession.currentTurnId,
+          latencyMs: Date.now() - startedAt,
+          outcome: 'ok',
+          sourceCount: enrichment.relevantWikiPages?.length ?? 0,
+          ...buildPageContextTelemetryFields(mergedContext),
         });
       }
 

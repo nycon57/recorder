@@ -108,6 +108,7 @@ describe("middleware auth routing", () => {
     "/api/extension/debug-events",
     "/api/extension/live-context",
     "/api/extension/query",
+    "/api/extension/telemetry/events",
   ])(
     "lets API-key capable extension route %s reach route-level auth",
     async (pathname) => {
