@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   buildKnowledgeResolvedFor,
   knowledgeResolvedForContextMatches,
+  sanitizePageContextForNetwork,
   type KnowledgeAvailability,
   type KnowledgeMatch,
   type LiveContextPack,
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
       return errors.badRequest('context is required');
     }
 
-    const baseContext = body.context;
+    const baseContext = sanitizePageContextForNetwork(body.context);
     const resolvedApp = baseContext.app?.toLowerCase() || 'unknown';
     const resolvedScreen =
       baseContext.screen?.toLowerCase() || screenFromUrl(baseContext.url);
@@ -120,15 +121,12 @@ export async function POST(request: NextRequest) {
 
     if (
       !knowledgeAvailability ||
-      !knowledgeResolvedForContextMatches(
-        baseContext.knowledgeResolvedFor,
-        {
-          app: resolvedApp,
-          screen: resolvedScreen,
-          appSignature: resolvedAppSignature,
-          url: baseContext.url,
-        },
-      )
+      !knowledgeResolvedForContextMatches(baseContext.knowledgeResolvedFor, {
+        app: resolvedApp,
+        screen: resolvedScreen,
+        appSignature: resolvedAppSignature,
+        url: baseContext.url,
+      })
     ) {
       const matches = await resolveExtensionContextMatches({
         orgId: authCtx.orgId,

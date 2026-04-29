@@ -14,7 +14,11 @@
 /* global chrome, defineBackground */
 
 import type { LiveContextPack, PageContext } from '@tribora/shared';
-import { sanitizePageContextLocation } from '@tribora/shared';
+import {
+  sanitizePageContextForModel,
+  sanitizePageContextForNetwork,
+  sanitizePageContextLocation,
+} from '@tribora/shared';
 
 import { scheduleTokenRefresh } from '../utils/token-refresh.js';
 import { createTabRecorder } from '../utils/tab-recorder.js';
@@ -53,6 +57,7 @@ import {
   mergePageContextWithPreviousKnowledge,
   pageContextKnowledgeIdentityChanged,
 } from '../utils/context-knowledge.js';
+import { buildPageContextToolPayload } from '../utils/page-context-payload.js';
 import { classifyTranscriptConfidence } from '../utils/voice-agent-policy.js';
 import { validateAndPersistExtensionAuthCallback } from '../utils/auth-session.js';
 
@@ -950,13 +955,14 @@ async function sendLiveContextUpdate(
   context: PageContext,
 ): Promise<void> {
   if (!voiceSessionActive || activeTargetTabId !== tabId) return;
+  const sanitizedContext = sanitizePageContextForNetwork(context);
 
   try {
     const pack = await apiFetch<LiveContextPack>(
       '/api/extension/live-context',
       {
         method: 'POST',
-        body: JSON.stringify({ context }),
+        body: JSON.stringify({ context: sanitizedContext }),
       },
     );
 
@@ -1632,7 +1638,9 @@ async function handleGetPageContextTool(
       );
     }
 
-    const rawContext = response?.payload ?? null;
+    const rawContext = response?.payload
+      ? sanitizePageContextForNetwork(response.payload)
+      : null;
     if (!rawContext) {
       return await replyToolResult(
         callId,
@@ -1658,7 +1666,8 @@ async function handleGetPageContextTool(
       pageInstanceId: resultMeta.pageInstanceId,
     });
 
-    const fingerprint = buildContextSemanticFingerprint(mergedContext);
+    const modelContext = sanitizePageContextForModel(mergedContext);
+    const fingerprint = buildContextSemanticFingerprint(modelContext);
     const pageContextOutcome = turnId
       ? turnGuards.recordToolCompletion({
           turnId,
@@ -1670,20 +1679,11 @@ async function handleGetPageContextTool(
           unchangedPageContext: false,
         };
 
-    const result = JSON.stringify({
-      ...mergedContext,
-      appSignature:
-        mergedContext.appSignature ??
-        `${mergedContext.app}:${mergedContext.screen}`,
-      interactiveElements: mergedContext.interactiveElements,
-      contextMeta: {
-        fingerprint,
-        repeatedInTurn: pageContextOutcome.repeatedPageContext,
-        unchangedSinceLastRequest: pageContextOutcome.unchangedPageContext,
-        guidance: pageContextOutcome.unchangedPageContext
-          ? 'Page state is unchanged since your last get_page_context call in this turn. Answer once from this context or take a different action. Do not repeat the same answer.'
-          : null,
-        retrievedAt: new Date().toISOString(),
+    const { result } = buildPageContextToolPayload({
+      context: modelContext,
+      meta: {
+        repeatedPageContext: pageContextOutcome.repeatedPageContext,
+        unchangedPageContext: pageContextOutcome.unchangedPageContext,
         bindingEpoch: routeMeta.bindingEpoch,
         pageInstanceId: resultMeta.pageInstanceId,
         contentInstanceId: resultMeta.contentInstanceId,
@@ -2052,6 +2052,7 @@ export default defineBackground(() => {
     tabId: number,
     context: PageContext,
   ): Promise<void> {
+    const sanitizedContext = sanitizePageContextForNetwork(context);
     const nextSeq = (contextUpdateSeq.get(tabId) ?? 0) + 1;
     contextUpdateSeq.set(tabId, nextSeq);
     const startedAt = Date.now();
@@ -2067,28 +2068,34 @@ export default defineBackground(() => {
         knowledgeResolvedFor?: PageContext['knowledgeResolvedFor'];
       }>('/api/extension/context', {
         method: 'POST',
-        body: JSON.stringify({ context }),
+        body: JSON.stringify({ context: sanitizedContext }),
       });
 
       if (contextUpdateSeq.get(tabId) !== nextSeq) return;
 
       const mergedContext: PageContext = {
-        ...context,
-        app: enrichment.app ?? context.app,
-        screen: enrichment.screen ?? context.screen,
-        appSignature: `${enrichment.app ?? context.app}:${enrichment.screen ?? context.screen}`,
+        ...sanitizedContext,
+        app: enrichment.app ?? sanitizedContext.app,
+        screen: enrichment.screen ?? sanitizedContext.screen,
+        appSignature: `${enrichment.app ?? sanitizedContext.app}:${
+          enrichment.screen ?? sanitizedContext.screen
+        }`,
         vendorKnowledgeMatch:
           enrichment.vendorKnowledgeMatch ??
-          context.vendorKnowledgeMatch ??
+          sanitizedContext.vendorKnowledgeMatch ??
           null,
         orgKnowledgeMatch:
-          enrichment.orgKnowledgeMatch ?? context.orgKnowledgeMatch ?? null,
+          enrichment.orgKnowledgeMatch ??
+          sanitizedContext.orgKnowledgeMatch ??
+          null,
         knowledgeAvailability:
-          enrichment.knowledgeAvailability ?? context.knowledgeAvailability,
+          enrichment.knowledgeAvailability ??
+          sanitizedContext.knowledgeAvailability,
         relevantWikiPages:
-          enrichment.relevantWikiPages ?? context.relevantWikiPages,
+          enrichment.relevantWikiPages ?? sanitizedContext.relevantWikiPages,
         knowledgeResolvedFor:
-          enrichment.knowledgeResolvedFor ?? context.knowledgeResolvedFor,
+          enrichment.knowledgeResolvedFor ??
+          sanitizedContext.knowledgeResolvedFor,
       };
 
       latestContexts.set(tabId, mergedContext);
@@ -2175,7 +2182,9 @@ export default defineBackground(() => {
             });
             targetLoadingTabs.delete(tabId);
             const previous = latestContexts.get(tabId);
-            const rawContext = message.context as PageContext;
+            const rawContext = sanitizePageContextForNetwork(
+              message.context as PageContext,
+            );
             if (pageContextKnowledgeIdentityChanged(previous, rawContext)) {
               liveContextHashes.delete(tabId);
             }

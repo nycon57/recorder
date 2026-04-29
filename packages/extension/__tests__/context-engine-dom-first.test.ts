@@ -149,4 +149,46 @@ describe('DOM-first page context engine', () => {
     );
     expect(region.elements.length).toBeGreaterThan(0);
   });
+
+  it('does not use unlabeled form control values as fallback labels', () => {
+    setPage(`
+      <main>
+        <h1>Profile</h1>
+        <input id="unlabeled-email" value="secret@example.com" />
+        <select id="unlabeled-account">
+          <option selected>Acme confidential account</option>
+        </select>
+        <label>Status <select id="status"><option selected>Active</option></select></label>
+      </main>
+    `);
+
+    const context = buildPageContext(document, window);
+
+    expect(context.interactiveElements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          selector: '#unlabeled-email',
+          label: '',
+          valuePresent: true,
+        }),
+        expect.objectContaining({
+          selector: '#unlabeled-account',
+          label: '',
+          valuePresent: true,
+        }),
+        expect.objectContaining({
+          selector: '#status',
+          label: 'Status',
+        }),
+      ]),
+    );
+    expect(context.forms?.[0]?.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          selector: '#status',
+          label: 'Status',
+        }),
+      ]),
+    );
+  });
 });
