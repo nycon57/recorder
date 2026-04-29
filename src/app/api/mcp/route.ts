@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 
 import { McpAuthError, createMcpServer } from '@/lib/mcp/server';
+import { CORS_HEADERS, corsPreflightResponse, withCors } from '@/lib/utils/cors';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ function jsonRpcErrorResponse(
       },
       id: null,
     },
-    { status, headers },
+    { status, headers: withCors(headers) },
   );
 }
 
@@ -60,7 +61,11 @@ async function handleMcpRequest(request: NextRequest): Promise<Response> {
 
     await server.connect(transport);
 
-    return await transport.handleRequest(request);
+    const response = await transport.handleRequest(request);
+    for (const [key, value] of Object.entries(CORS_HEADERS)) {
+      response.headers.set(key, value);
+    }
+    return response;
   } catch (error) {
     if (error instanceof McpAuthError) {
       return jsonRpcErrorResponse(401, -32001, error.message);
@@ -81,6 +86,10 @@ export async function POST(request: NextRequest): Promise<Response> {
 
 export async function DELETE(request: NextRequest): Promise<Response> {
   return handleMcpRequest(request);
+}
+
+export async function OPTIONS(): Promise<Response> {
+  return corsPreflightResponse();
 }
 
 export async function PUT(): Promise<Response> {

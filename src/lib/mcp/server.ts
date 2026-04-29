@@ -7,6 +7,8 @@
  *
  * Tools:
  *   answerQuestion        — Grounded compiled-memory answer with citations
+ *   searchKnowledge       — Unified compiled wiki, vendor wiki, and raw evidence search
+ *   getWikiPage           — Retrieve a compiled org or vendor wiki page
  *   searchRecordings      — Raw evidence discovery across content
  *   searchConcepts        — Knowledge graph concept search
  *   exploreKnowledgeGraph — Depth-based graph traversal
@@ -27,10 +29,12 @@ import {
 import {
   handleAnswerQuestion,
   handleSearchRecordings,
+  handleSearchKnowledge,
   handleSearchConcepts,
   handleExploreKnowledgeGraph,
   handleGetDocument,
   handleGetTranscript,
+  handleGetWikiPage,
   McpToolError,
   type McpToolContext,
 } from './handlers';
@@ -140,8 +144,50 @@ function registerTools(
   );
 
   server.tool(
+    'searchKnowledge',
+    'Search Tribora knowledge in the preferred order: compiled org wiki pages, canonical vendor wiki pages, and raw recording/document evidence. Use this before raw recording search when answering external-agent questions.',
+    {
+      query: z.string().min(1).max(500).describe('Knowledge search query'),
+      app: z
+        .string()
+        .optional()
+        .describe('Optional app scope for vendor wiki ranking'),
+      screen: z
+        .string()
+        .optional()
+        .describe('Optional screen scope for vendor wiki ranking'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(20)
+        .default(5)
+        .describe('Max unified results to return'),
+      contentTypes: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Optional raw-evidence content filters (recording, video, audio, document, text)'
+        ),
+    },
+    wrapHandler('searchKnowledge', (args) => handleSearchKnowledge(args, ctx), keyId)
+  );
+
+  server.tool(
+    'getWikiPage',
+    'Retrieve a full compiled org wiki page or canonical vendor wiki page by ID. Org wiki pages are scoped to the authenticated org and must be currently active.',
+    {
+      source: z
+        .enum(['org_wiki', 'vendor_wiki'])
+        .describe('Which wiki layer to retrieve from'),
+      pageId: z.string().uuid().describe('The wiki page UUID to retrieve'),
+    },
+    wrapHandler('getWikiPage', (args) => handleGetWikiPage(args, ctx), keyId)
+  );
+
+  server.tool(
     'searchRecordings',
-    'Search raw recordings, transcripts, and documents to discover evidence. Returns matching items with snippets and similarity scores.',
+    'Search raw recordings, transcripts, and documents to discover evidence. Prefer searchKnowledge for compiled org/vendor wiki recall; this tool remains for raw evidence lookup.',
     {
       query: z.string().min(1).max(500).describe('Search query'),
       limit: z

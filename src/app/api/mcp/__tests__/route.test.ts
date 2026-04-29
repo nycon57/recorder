@@ -59,6 +59,7 @@ async function expectJsonRpcError(
 describe('/api/mcp route', () => {
   let POST: typeof import('../route').POST;
   let GET: typeof import('../route').GET;
+  let OPTIONS: typeof import('../route').OPTIONS;
   let PUT: typeof import('../route').PUT;
   let McpAuthError: typeof import('@/lib/mcp/server').McpAuthError;
 
@@ -69,12 +70,12 @@ describe('/api/mcp route', () => {
     const serverModule = await import('@/lib/mcp/server');
     McpAuthError = serverModule.McpAuthError;
 
-    ({ GET, POST, PUT } = await import('../route'));
+    ({ GET, OPTIONS, POST, PUT } = await import('../route'));
 
     connectMock.mockResolvedValue(undefined as never);
     createMcpServerMock.mockResolvedValue({ connect: connectMock } as never);
     handleRequestMock.mockResolvedValue(
-      Response.json({ jsonrpc: '2.0', result: { ok: true }, id: 1 }),
+      Response.json({ jsonrpc: '2.0', result: { ok: true }, id: 1 }) as never,
     );
     transportConstructorMock.mockImplementation(() => ({
       handleRequest: handleRequestMock,
@@ -136,6 +137,8 @@ describe('/api/mcp route', () => {
 
     expect(firstResponse.status).toBe(200);
     expect(secondResponse.status).toBe(200);
+    expect(firstResponse.headers.get('access-control-allow-origin')).toBe('*');
+    expect(secondResponse.headers.get('access-control-allow-origin')).toBe('*');
     expect(createMcpServerMock).toHaveBeenNthCalledWith(1, 'trb_mcp_first');
     expect(createMcpServerMock).toHaveBeenNthCalledWith(2, 'trb_mcp_second');
     expect(transportConstructorMock).toHaveBeenCalledTimes(2);
@@ -176,6 +179,18 @@ describe('/api/mcp route', () => {
 
     expect(response.headers.get('allow')).toBe('GET, POST, DELETE');
     await expectJsonRpcError(response, 405, -32000, 'Method not allowed.');
+    expect(createMcpServerMock).not.toHaveBeenCalled();
+  });
+
+  it('returns CORS preflight responses for MCP clients', async () => {
+    const response = await OPTIONS();
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get('access-control-allow-origin')).toBe('*');
+    expect(response.headers.get('access-control-allow-methods')).toContain('POST');
+    expect(response.headers.get('access-control-allow-headers')).toContain(
+      'Authorization',
+    );
     expect(createMcpServerMock).not.toHaveBeenCalled();
   });
 });

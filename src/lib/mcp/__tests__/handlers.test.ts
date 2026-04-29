@@ -1,12 +1,30 @@
 import { beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
+
 import type { CompiledMemoryAnswerContext } from '@/lib/services/compiled-memory-answer-context';
 
 let handleAnswerQuestion: typeof import('../handlers').handleAnswerQuestion;
+let handleSearchKnowledge: typeof import('../handlers').handleSearchKnowledge;
+let handleGetWikiPage: typeof import('../handlers').handleGetWikiPage;
 let resolveCompiledMemoryAnswerContext: jest.MockedFunction<
   typeof import('@/lib/services/compiled-memory-answer-context').resolveCompiledMemoryAnswerContext
 >;
 let generateCompiledMemoryGroundedAnswer: jest.MockedFunction<
   typeof import('@/lib/services/compiled-memory-answer').generateCompiledMemoryGroundedAnswer
+>;
+let injectRAGContext: jest.MockedFunction<
+  typeof import('@/lib/services/chat-rag-integration').injectRAGContext
+>;
+let searchCompiledOrgWikiPages: jest.MockedFunction<
+  typeof import('@/lib/services/wiki-search').searchCompiledOrgWikiPages
+>;
+let searchVendorWikiPages: jest.MockedFunction<
+  typeof import('@/lib/services/wiki-search').searchVendorWikiPages
+>;
+let getOrgWikiPage: jest.MockedFunction<
+  typeof import('@/lib/services/wiki-search').getOrgWikiPage
+>;
+let getVendorWikiPage: jest.MockedFunction<
+  typeof import('@/lib/services/wiki-search').getVendorWikiPage
 >;
 
 jest.mock('@/lib/supabase/admin', () => ({
@@ -58,9 +76,17 @@ jest.mock('@/lib/services/compiled-memory-answer', () => ({
   generateCompiledMemoryGroundedAnswer: jest.fn(),
 }));
 
+jest.mock('@/lib/services/wiki-search', () => ({
+  searchCompiledOrgWikiPages: jest.fn(),
+  searchVendorWikiPages: jest.fn(),
+  getOrgWikiPage: jest.fn(),
+  getVendorWikiPage: jest.fn(),
+}));
+
 describe('handleAnswerQuestion', () => {
   beforeAll(async () => {
-    ({ handleAnswerQuestion } = await import('../handlers'));
+    ({ handleAnswerQuestion, handleSearchKnowledge, handleGetWikiPage } =
+      await import('../handlers'));
     resolveCompiledMemoryAnswerContext = jest.mocked(
       (
         await import('@/lib/services/compiled-memory-answer-context')
@@ -70,6 +96,14 @@ describe('handleAnswerQuestion', () => {
       (await import('@/lib/services/compiled-memory-answer'))
         .generateCompiledMemoryGroundedAnswer,
     );
+    injectRAGContext = jest.mocked(
+      (await import('@/lib/services/chat-rag-integration')).injectRAGContext,
+    );
+    const wikiSearch = await import('@/lib/services/wiki-search');
+    searchCompiledOrgWikiPages = jest.mocked(wikiSearch.searchCompiledOrgWikiPages);
+    searchVendorWikiPages = jest.mocked(wikiSearch.searchVendorWikiPages);
+    getOrgWikiPage = jest.mocked(wikiSearch.getOrgWikiPage);
+    getVendorWikiPage = jest.mocked(wikiSearch.getVendorWikiPage);
   });
 
   beforeEach(() => {
@@ -164,6 +198,125 @@ describe('handleAnswerQuestion', () => {
         vendorRetrievalMode: 'none',
         hasStaleVendorContent: false,
       },
+    });
+  });
+});
+
+describe('handleSearchKnowledge', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('preserves org wiki precedence over vendor wiki and raw evidence', async () => {
+    injectRAGContext.mockResolvedValue({ sources: [] } as never);
+    searchCompiledOrgWikiPages.mockResolvedValue([
+      {
+        id: 'org-page-1',
+        source: 'org_wiki',
+        title: 'Renewal workflow',
+        app: 'hubspot',
+        screen: 'deals',
+        snippet: 'Renewals over 20 seats need approval.',
+        content: 'Renewals over 20 seats need approval.',
+        confidence: 0.9,
+        similarity: 0.82,
+        updatedAt: '2026-04-20T00:00:00.000Z',
+      },
+    ]);
+    searchVendorWikiPages.mockResolvedValue([
+      {
+        id: 'vendor-page-1',
+        source: 'vendor_wiki',
+        title: 'hubspot / deals',
+        app: 'hubspot',
+        screen: 'deals',
+        snippet: 'HubSpot deals track renewal stages.',
+        content: 'HubSpot deals track renewal stages.',
+        sourceUrl: 'https://docs.example.com/hubspot',
+        similarity: 0.91,
+        updatedAt: '2026-04-21T00:00:00.000Z',
+      },
+    ]);
+
+    const results = await handleSearchKnowledge(
+      {
+        query: 'hubspot renewal approval',
+        limit: 5,
+        app: 'hubspot',
+        screen: 'deals',
+      },
+      { orgId: 'org-123' },
+    );
+
+    expect(searchCompiledOrgWikiPages).toHaveBeenCalledWith({
+      orgId: 'org-123',
+      query: 'hubspot renewal approval',
+      limit: 5,
+    });
+    expect(searchVendorWikiPages).toHaveBeenCalledWith({
+      query: 'hubspot renewal approval',
+      limit: 5,
+      app: 'hubspot',
+      screen: 'deals',
+    });
+    expect(results.map((result) => result.id)).toEqual([
+      'org-page-1',
+      'vendor-page-1',
+    ]);
+  });
+});
+
+describe('handleGetWikiPage', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('enforces org scope for org wiki page retrieval', async () => {
+    getOrgWikiPage.mockResolvedValue({
+      id: '11111111-1111-4111-8111-111111111111',
+      source: 'org_wiki',
+      title: 'Renewal workflow',
+      app: null,
+      screen: null,
+      content: 'Renewals over 20 seats need approval.',
+      confidence: 0.9,
+      updatedAt: '2026-04-20T00:00:00.000Z',
+    });
+
+    await expect(
+      handleGetWikiPage(
+        {
+          source: 'org_wiki',
+          pageId: '11111111-1111-4111-8111-111111111111',
+        },
+        { orgId: 'org-123' },
+      ),
+    ).resolves.toMatchObject({
+      id: '11111111-1111-4111-8111-111111111111',
+      source: 'org_wiki',
+    });
+
+    expect(getOrgWikiPage).toHaveBeenCalledWith({
+      orgId: 'org-123',
+      pageId: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(getVendorWikiPage).not.toHaveBeenCalled();
+  });
+
+  it('returns not_found when the requested wiki page is inaccessible', async () => {
+    getOrgWikiPage.mockResolvedValue(null);
+
+    await expect(
+      handleGetWikiPage(
+        {
+          source: 'org_wiki',
+          pageId: '11111111-1111-4111-8111-111111111111',
+        },
+        { orgId: 'org-123' },
+      ),
+    ).rejects.toMatchObject({
+      code: 'not_found',
+      message: 'Wiki page not found or not accessible',
     });
   });
 });
