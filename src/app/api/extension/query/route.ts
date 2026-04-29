@@ -117,6 +117,15 @@ interface DoneEvent {
 
 type SseEvent = TextChunkEvent | ElementRefEvent | CitationEvent | DoneEvent;
 
+type QueryRequestBody = {
+  question?: unknown;
+  context?: unknown;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 /** Encode a single SSE event to bytes. */
 function encodeEvent(encoder: TextEncoder, data: SseEvent): Uint8Array {
   return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
@@ -431,14 +440,15 @@ export async function POST(request: NextRequest) {
 
   // Parse request body
   let question: string;
-  let context: PageContext;
+  let context: PageContext | undefined;
 
   try {
-    const body = await request.json();
-    question = body.question;
-    context = body.context
-      ? sanitizePageContextForNetwork(body.context)
-      : body.context;
+    const rawBody = await request.json();
+    const body: QueryRequestBody = isRecord(rawBody) ? rawBody : {};
+    question = typeof body.question === 'string' ? body.question : '';
+    context = isRecord(body.context)
+      ? sanitizePageContextForNetwork(body.context as unknown as PageContext)
+      : undefined;
   } catch {
     return errors.badRequest('Invalid JSON body');
   }

@@ -36,8 +36,11 @@ function isValidEventInput(
 function sanitizeDebugEvent(
   event: ExtensionDebugSessionEventInput,
 ): ExtensionDebugSessionEventInput {
+  const normalizedPath = event.urlPath?.startsWith('/')
+    ? event.urlPath
+    : `/${event.urlPath ?? ''}`;
   const location = sanitizePageContextLocation(
-    `https://${event.urlHost ?? 'unknown'}${event.urlPath ?? '/'}`,
+    `https://${event.urlHost ?? 'unknown'}${normalizedPath}`,
   );
 
   return {

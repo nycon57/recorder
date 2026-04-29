@@ -99,6 +99,14 @@ describe('POST /api/extension/debug-events', () => {
             pageSummary: 'Call +1 (415) 555-2671',
             selectedEntityTitle: 'Jane jane@example.com',
           },
+          {
+            sessionId: 'session_1',
+            seq: 2,
+            eventType: 'target_rebound',
+            occurredAt: '2026-04-29T12:00:01.000Z',
+            urlHost: 'example.com',
+            urlPath: 'settings/users?token=secret',
+          },
         ],
       }),
     );
@@ -123,5 +131,12 @@ describe('POST /api/extension/debug-events', () => {
     expect(JSON.stringify(row.payload)).not.toContain('super-secret-token');
     expect(JSON.stringify(row.payload)).not.toContain('4242');
     expect(JSON.stringify(row.payload)).not.toContain('jane@example.com');
+    const secondRow = insert.mock.calls[1]?.[0] as unknown as {
+      payload: Record<string, unknown>;
+    };
+    expect(secondRow.payload).toMatchObject({
+      urlHost: 'example.com',
+      urlPath: '/settings/users',
+    });
   });
 });
