@@ -8,6 +8,17 @@ const LEGACY_AUTH_PATHS = {
   "/signup": "/sign-up",
 } as const;
 
+const API_KEY_CAPABLE_EXTENSION_ROUTES = new Set([
+  "/api/extension/context",
+  "/api/extension/debug-events",
+  "/api/extension/live-context",
+  "/api/extension/query",
+]);
+
+function isApiKeyCapableExtensionRoute(pathname: string) {
+  return API_KEY_CAPABLE_EXTENSION_ROUTES.has(pathname);
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -28,6 +39,13 @@ export async function middleware(request: NextRequest) {
 
   // Extension health check is public — skip auth
   if (pathname === "/api/extension/health") {
+    return NextResponse.next();
+  }
+
+  // These extension surfaces intentionally support vendor API keys. Let them
+  // reach their route handlers so requireApiKeyOrSession can validate the key,
+  // while keeping session-only extension routes protected below.
+  if (isApiKeyCapableExtensionRoute(pathname)) {
     return NextResponse.next();
   }
 
@@ -59,7 +77,10 @@ export async function middleware(request: NextRequest) {
 
         // For SDK routes on custom domains, skip session auth and return
         // early — SDK auth is handled via API key in the route itself
-        if (pathname.startsWith("/api/sdk/") || pathname.startsWith("/api/extension/")) {
+        if (
+          pathname.startsWith("/api/sdk/") ||
+          isApiKeyCapableExtensionRoute(pathname)
+        ) {
           return response;
         }
       }

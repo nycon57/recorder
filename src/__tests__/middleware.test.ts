@@ -94,4 +94,47 @@ describe("middleware auth routing", () => {
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
   });
+
+  it.each([
+    "/api/extension/context",
+    "/api/extension/debug-events",
+    "/api/extension/live-context",
+    "/api/extension/query",
+  ])(
+    "lets API-key capable extension route %s reach route-level auth",
+    async (pathname) => {
+      const response = await middleware(
+        new NextRequest(`http://localhost:3000${pathname}`, {
+          method: "POST",
+          headers: { authorization: "Bearer sk_live_test" },
+        }),
+      );
+
+      expect(betterFetchMock).not.toHaveBeenCalled();
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+    },
+  );
+
+  it.each([
+    "/api/extension/agent-session",
+    "/api/extension/deepgram-token",
+    "/api/extension/user-memory",
+  ])("keeps session-only extension route %s protected", async (pathname) => {
+    const response = await middleware(
+      new NextRequest(`http://localhost:3000${pathname}`, {
+        method: "POST",
+        headers: { authorization: "Bearer sk_live_test" },
+      }),
+    );
+
+    expect(betterFetchMock).toHaveBeenCalledWith(
+      "/api/auth/get-session",
+      expect.objectContaining({
+        baseURL: "http://localhost:3000",
+      }),
+    );
+    expect(response.status).toBe(401);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
+  });
 });
