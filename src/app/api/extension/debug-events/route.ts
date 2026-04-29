@@ -32,6 +32,7 @@ const ALLOWED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'page_context_checked',
   'contextual_update_sent',
   'user_message',
+  'low_confidence_user_message',
   'assistant_message',
   'assistant_reply_watchdog_fired',
   'duplicate_assistant_reply',
@@ -139,10 +140,10 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
     const sanitizedEvents = events.map(sanitizeDebugEvent);
     const rows: Database['public']['Tables']['events']['Insert'][] =
-      sanitizedEvents.map((event) => ({
+      sanitizedEvents.map((sanitizedEvent) => ({
         type: 'extension.debug_session.event',
         payload: {
-          ...event,
+          ...sanitizedEvent,
           orgId: authCtx.orgId,
           actorId:
             authCtx.authMethod === 'session' ? authCtx.userId : authCtx.keyId,
