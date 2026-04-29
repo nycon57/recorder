@@ -19,6 +19,10 @@ function isApiKeyCapableExtensionRoute(pathname: string) {
   return API_KEY_CAPABLE_EXTENSION_ROUTES.has(pathname);
 }
 
+function isExtensionAuthCallbackRoute(pathname: string) {
+  return pathname === "/api/extension/auth/callback";
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -72,7 +76,8 @@ export async function middleware(request: NextRequest) {
         // early — SDK auth is handled via API key in the route itself
         if (
           pathname.startsWith("/api/sdk/") ||
-          isApiKeyCapableExtensionRoute(pathname)
+          isApiKeyCapableExtensionRoute(pathname) ||
+          isExtensionAuthCallbackRoute(pathname)
         ) {
           return response;
         }
@@ -87,6 +92,13 @@ export async function middleware(request: NextRequest) {
   // reach their route handlers so requireApiKeyOrSession can validate the key,
   // while keeping session-only extension routes protected below.
   if (isApiKeyCapableExtensionRoute(pathname)) {
+    return NextResponse.next();
+  }
+
+  // The extension auth callback validates a one-time state plus Better Auth
+  // session token inside the route. Do not require an ambient browser cookie
+  // here or the extension-owned callback cannot complete safely.
+  if (isExtensionAuthCallbackRoute(pathname)) {
     return NextResponse.next();
   }
 
