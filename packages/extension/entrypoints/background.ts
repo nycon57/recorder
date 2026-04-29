@@ -2325,14 +2325,15 @@ export default defineBackground(() => {
     if (message?.type === 'RECORDING_STOP') {
       void (async () => {
         try {
+          if (activeUploadPromise) {
+            const { recordingId } = await activeUploadPromise;
+            return sendResponse({ ok: true, recordingId });
+          }
+
           if (!activeRecorder) {
-            if (activeUploadPromise) {
-              const { recordingId } = await activeUploadPromise;
-              return sendResponse({ ok: true, recordingId });
-            }
             return sendResponse({ ok: false, error: 'Not recording' });
           }
-          const blob = await activeRecorder.stop();
+          const recorder = activeRecorder;
           activeRecorder = null;
 
           const UPLOAD_STATE_KEY = 'tribora_upload_state';
@@ -2342,29 +2343,33 @@ export default defineBackground(() => {
             });
           };
 
-          activeUploadPromise = uploadRecording(
-            blob,
-            {
-              filename: `extension-${Date.now()}.webm`,
-              mimeType: 'video/webm',
-              source: 'extension',
-            },
-            {
-              onProgress: (progress) => {
-                broadcastUploadState({
-                  uploadProgress: progress.percent,
-                  uploadedBytes: progress.uploaded,
-                  totalBytes: progress.total,
-                });
+          activeUploadPromise = (async () => {
+            const blob = await recorder.stop();
+
+            return uploadRecording(
+              blob,
+              {
+                filename: `extension-${Date.now()}.webm`,
+                mimeType: 'video/webm',
+                source: 'extension',
               },
-              onRetry: (info) => {
-                broadcastUploadState({
-                  retryAttempt: info.attempt,
-                  retryMax: info.maxAttempts,
-                });
+              {
+                onProgress: (progress) => {
+                  broadcastUploadState({
+                    uploadProgress: progress.percent,
+                    uploadedBytes: progress.uploaded,
+                    totalBytes: progress.total,
+                  });
+                },
+                onRetry: (info) => {
+                  broadcastUploadState({
+                    retryAttempt: info.attempt,
+                    retryMax: info.maxAttempts,
+                  });
+                },
               },
-            },
-          );
+            );
+          })();
 
           const { recordingId } = await activeUploadPromise;
 

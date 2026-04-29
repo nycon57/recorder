@@ -176,6 +176,19 @@ export const POST = withRateLimit(
         }
 
         if (existingUpload) {
+          if (existingUpload.status !== SOURCE_STATUS.UPLOADING) {
+            return successResponse(
+              {
+                recordingId: existingUpload.id,
+                recovered: true,
+                alreadyFinalized: true,
+                currentStatus: existingUpload.status,
+              },
+              requestId,
+              200,
+            );
+          }
+
           const filePath = buildContentRecordingStoragePath(
             orgId,
             existingUpload.content_type as ContentType,

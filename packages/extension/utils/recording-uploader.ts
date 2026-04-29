@@ -42,12 +42,13 @@ export type RetryCallback = (info: RetryInfo) => void;
 
 interface UploadInitResponse {
   recordingId: string;
-  uploadUrl: string;
+  uploadUrl?: string;
   uploadBucket?: 'content';
-  uploadPath: string;
+  uploadPath?: string;
   thumbnailUploadUrl: string | null;
   thumbnailPath: string | null;
-  token: string;
+  token?: string;
+  alreadyFinalized?: boolean;
 }
 
 export interface UploadResult {
@@ -188,7 +189,15 @@ export async function uploadRecording(
     onRetry,
   );
 
-  const { recordingId, uploadUrl, uploadPath } = init.data;
+  const { recordingId, uploadUrl, uploadPath, alreadyFinalized } = init.data;
+
+  if (alreadyFinalized) {
+    return { recordingId };
+  }
+
+  if (!uploadUrl || !uploadPath) {
+    throw new Error('Upload init did not return an upload URL');
+  }
 
   // Step 2: Upload the blob via XHR PUT with progress tracking.
   // Supabase signed uploads require a single atomic PUT -- no chunking.

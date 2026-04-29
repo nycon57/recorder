@@ -195,4 +195,38 @@ describe('POST /api/recordings/upload/init', () => {
       currentStatus: 'uploading',
     });
   });
+
+  it('does not return an overwrite URL when the idempotent upload already advanced', async () => {
+    existingUpload = {
+      id: 'rec_existing',
+      status: 'transcribing',
+      content_type: 'recording',
+      file_type: 'webm',
+    };
+
+    const response = await POST(
+      new Request('http://localhost/api/recordings/upload/init', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'idem_existing_1' },
+        body: JSON.stringify({
+          filename: 'screen demo.webm',
+          mimeType: 'video/webm',
+          fileSize: 1024,
+          source: 'extension',
+        }),
+      }) as unknown as NextRequest,
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockCheckAndConsumeQuota).not.toHaveBeenCalled();
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
+    const json = await response.json();
+    expect(json.data).toMatchObject({
+      recordingId: 'rec_existing',
+      recovered: true,
+      alreadyFinalized: true,
+      currentStatus: 'transcribing',
+    });
+    expect(json.data).not.toHaveProperty('uploadUrl');
+  });
 });
