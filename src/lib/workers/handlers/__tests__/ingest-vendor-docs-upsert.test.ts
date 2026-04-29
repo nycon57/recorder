@@ -67,6 +67,8 @@ const _captured = {
   updates: [] as Array<Record<string, unknown>>,
   jobResults: [] as Array<Record<string, unknown>>,
   fetchedUrls: [] as string[],
+  sourceFailures: [] as Array<Record<string, unknown>>,
+  sourceSuccesses: [] as Array<Record<string, unknown>>,
 };
 
 let registrySource = {
@@ -79,6 +81,7 @@ let registrySource = {
   terms_review_status: 'approved',
   content_hash: null,
 };
+let shouldFailCorpusSync = false;
 
 jest.mock('@/lib/supabase/admin', () => ({
   createClient: () => ({
@@ -126,15 +129,27 @@ jest.mock('@/lib/services/vendor-source-registry', () => ({
       async () => registrySource,
     ),
     recordAttempt: jest.fn(),
-    recordFailure: jest.fn(),
-    recordSuccess: jest.fn(),
+    recordFailure: jest.fn(async (_sourceId: string, payload: Record<string, unknown>) => {
+        _captured.sourceFailures.push(payload);
+      }),
+    recordSuccess: jest.fn(async (_sourceId: string, payload: Record<string, unknown>) => {
+        _captured.sourceSuccesses.push(payload);
+      }),
   }),
   hashVendorSourcePages: jest.fn().mockReturnValue('hash-combined'),
 }));
 
 jest.mock('@/lib/services/vendor-doc-corpus', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  syncVendorCorpusFromLegacyPages: (jest.fn() as jest.MockedFunction<any>).mockResolvedValue({ inserted: 0, updated: 0, skipped: 0 }),
+  syncVendorCorpusFromLegacyPages: (jest.fn() as jest.MockedFunction<any>).mockImplementation(
+    async () => {
+      if (shouldFailCorpusSync) {
+        throw new Error('corpus sync failed');
+      }
+
+      return { inserted: 0, updated: 0, skipped: 0 };
+    },
+  ),
 }));
 
 jest.mock('@/lib/utils/logger', () => ({
@@ -177,6 +192,8 @@ beforeEach(() => {
   _captured.updates.length = 0;
   _captured.jobResults.length = 0;
   _captured.fetchedUrls.length = 0;
+  _captured.sourceFailures.length = 0;
+  _captured.sourceSuccesses.length = 0;
   registrySource = {
     id: 'source-123',
     app: 'trib152-test',
@@ -187,6 +204,7 @@ beforeEach(() => {
     terms_review_status: 'approved',
     content_hash: null,
   };
+  shouldFailCorpusSync = false;
   mockHtml = DEFAULT_MOCK_HTML;
   mockFetch();
   jest.resetModules();
@@ -299,5 +317,24 @@ describe('handleIngestVendorDocs — attribution integration (TRIB-152)', () => 
       status: 'inserted',
       pageId: 'page-1',
     });
+  });
+
+  test('fails the source when downstream corpus sync fails', async () => {
+    shouldFailCorpusSync = true;
+    const { handleIngestVendorDocs } = await import('../ingest-vendor-docs');
+
+    await expect(
+      handleIngestVendorDocs(
+        makeJob('job-corpus-failure') as unknown as Parameters<
+          typeof handleIngestVendorDocs
+        >[0],
+      ),
+    ).rejects.toThrow('corpus sync failed');
+
+    expect(_captured.jobResults).toHaveLength(1);
+    expect(_captured.sourceFailures[0]?.errorMessage).toBe(
+      'corpus sync failed',
+    );
+    expect(_captured.sourceSuccesses).toHaveLength(0);
   });
 });

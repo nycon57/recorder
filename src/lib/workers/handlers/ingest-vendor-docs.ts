@@ -1037,22 +1037,15 @@ export async function handleIngestVendorDocs(
           throw new Error('Vendor source ingestion did not persist any pages');
         }
 
-        try {
-          const corpusResult = await syncVendorCorpusFromLegacyPages({ app });
-          logger.info('Vendor corpus sync after ingestion complete', {
-            context: {
-              app,
-              inserted: corpusResult.inserted,
-              updated: corpusResult.updated,
-              skipped: corpusResult.skipped,
-            },
-          });
-        } catch (corpusError) {
-          logger.error('Vendor corpus sync after ingestion failed', {
-            context: { app, sourceId: registrySource.id },
-            error: corpusError as Error,
-          });
-        }
+        const corpusResult = await syncVendorCorpusFromLegacyPages({ app });
+        logger.info('Vendor corpus sync after ingestion complete', {
+          context: {
+            app,
+            inserted: corpusResult.inserted,
+            updated: corpusResult.updated,
+            skipped: corpusResult.skipped,
+          },
+        });
 
         const combinedHashInput = hashVendorSourcePages(
           result.outcomes
