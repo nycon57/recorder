@@ -55,6 +55,7 @@ const connectorConfig = {
 };
 
 function makeRequest(fileIds: string[]): NextRequest {
+  // The route only reads standard Request fields; the cast keeps the handler signature intact.
   return new Request('http://localhost/api/integrations/google-drive/import', {
     method: 'POST',
     body: JSON.stringify({ fileIds }),
@@ -91,7 +92,15 @@ describe('POST /api/integrations/google-drive/import', () => {
     ) => Promise<{ data: unknown; error: { message: string } | null }>
   >();
   const storageRemove = jest.fn<
-    (paths: string[]) => Promise<{ data: unknown[]; error: { message: string } | null }>
+    (
+      paths: string[],
+    ) => Promise<{ data: unknown[]; error: { message: string } | null }>
+  >();
+  const syncStateDeleteEq = jest.fn<
+    (column: string, value: string) => Promise<{ error: null }>
+  >();
+  const contentDeleteEq = jest.fn<
+    (column: string, value: string) => Promise<{ error: null }>
   >();
 
   beforeAll(async () => {
@@ -134,7 +143,7 @@ describe('POST /api/integrations/google-drive/import', () => {
       eq: jest.fn(() => Promise.resolve({ error: null })),
     });
     contentDelete.mockReturnValue({
-      eq: jest.fn(() => Promise.resolve({ error: null })),
+      eq: contentDeleteEq,
     });
     transcriptInsert.mockImplementation(() =>
       selectSingleResult({ id: 'transcript_1' }),
@@ -142,13 +151,15 @@ describe('POST /api/integrations/google-drive/import', () => {
     jobsInsert.mockResolvedValue({ error: null });
     syncStateInsert.mockResolvedValue({ error: null });
     syncStateDelete.mockReturnValue({
-      eq: jest.fn(() => Promise.resolve({ error: null })),
+      eq: syncStateDeleteEq,
     });
     connectorUpdate.mockReturnValue({
       eq: jest.fn(() => Promise.resolve({ error: null })),
     });
     storageUpload.mockResolvedValue({ data: { path: 'stored' }, error: null });
     storageRemove.mockResolvedValue({ data: [], error: null });
+    syncStateDeleteEq.mockResolvedValue({ error: null });
+    contentDeleteEq.mockResolvedValue({ error: null });
 
     from.mockImplementation((table: string) => {
       if (table === 'connector_configs') {
@@ -311,7 +322,12 @@ describe('POST /api/integrations/google-drive/import', () => {
       { fileId: 'gdoc_1', error: 'duplicate job key' },
     ]);
     expect(syncStateDelete).toHaveBeenCalled();
+    expect(syncStateDeleteEq).toHaveBeenCalledWith(
+      'content_id',
+      'content_1',
+    );
     expect(contentDelete).toHaveBeenCalled();
+    expect(contentDeleteEq).toHaveBeenCalledWith('id', 'content_1');
   });
 
   it('removes uploaded binary storage if extraction job setup fails', async () => {
@@ -340,7 +356,12 @@ describe('POST /api/integrations/google-drive/import', () => {
       'org_1/documents/content_1.pdf',
     ]);
     expect(syncStateDelete).toHaveBeenCalled();
+    expect(syncStateDeleteEq).toHaveBeenCalledWith(
+      'content_id',
+      'content_1',
+    );
     expect(contentDelete).toHaveBeenCalled();
+    expect(contentDeleteEq).toHaveBeenCalledWith('id', 'content_1');
   });
 
   it.each([

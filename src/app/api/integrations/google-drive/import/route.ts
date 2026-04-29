@@ -507,14 +507,6 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
-          await supabase
-            .from('content')
-            .update({
-              storage_path_raw: storagePath,
-              status: SOURCE_STATUS.UPLOADED,
-            })
-            .eq('id', contentRecord.id);
-
           const extractionJob = getExtractionJob(
             fileContent.mimeType,
             contentRecord.id,
@@ -548,6 +540,7 @@ export async function POST(req: NextRequest) {
           await supabase
             .from('content')
             .update({
+              storage_path_raw: storagePath,
               status:
                 getQueuedSourceStatusForJob(extractionJob.type) ??
                 SOURCE_STATUS.UPLOADED,
