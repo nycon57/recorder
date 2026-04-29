@@ -252,7 +252,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     case 'QUERY_STATE':
       sendResponse({
-        active: !!activeConversation,
+        active: !!activeConversation || !!startingPromise,
         tabId: activeTabId,
       });
       return false;
