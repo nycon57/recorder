@@ -3,7 +3,7 @@
 import type { FormEvent } from 'react';
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 
@@ -29,6 +29,7 @@ import {
 export default function SignInPage() {
   const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -43,14 +44,14 @@ export default function SignInPage() {
       setError(error.message || 'Sign in failed');
       setLoading(false);
     } else {
-      router.push(getExtensionAuthPath());
+      router.push(getExtensionAuthPath(searchParams));
     }
   };
 
   const handleGoogleSignIn = async () => {
     await signIn.social({
       provider: 'google',
-      callbackURL: getExtensionAuthPath(),
+      callbackURL: getExtensionAuthPath(searchParams),
     });
   };
 
@@ -306,7 +307,10 @@ export default function SignInPage() {
             <p className="text-sm" style={{ color: 'rgb(170, 203, 196)' }}>
               Don&apos;t have an account?{' '}
               <Link
-                href={getAuthPagePathWithExtensionState('/sign-up')}
+                href={getAuthPagePathWithExtensionState(
+                  '/sign-up',
+                  searchParams,
+                )}
                 className="font-medium transition-colors duration-200"
                 style={{ color: '#00df82' }}
                 onMouseOver={(e) => (e.currentTarget.style.color = '#2cc295')}

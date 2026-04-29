@@ -15,11 +15,7 @@ function getSearchParams(
     return searchParams;
   }
 
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  return new URLSearchParams(window.location.search);
+  return null;
 }
 
 function readExtensionAuthState(
