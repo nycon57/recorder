@@ -73,6 +73,7 @@ interface RobotsRules {
 
 interface CrawlScope {
   allowedHost: string;
+  exactPath: string;
   pathPrefix: string;
 }
 
@@ -225,9 +226,10 @@ function normalizeHost(hostname: string): string {
 function isWithinCrawlScope(url: string, scope: CrawlScope): boolean {
   try {
     const parsed = new URL(url);
+    const pathname = parsed.pathname || '/';
     return (
       normalizeHost(parsed.hostname) === scope.allowedHost &&
-      parsed.pathname.startsWith(scope.pathPrefix)
+      (pathname === scope.exactPath || pathname.startsWith(scope.pathPrefix))
     );
   } catch {
     return false;
@@ -236,10 +238,9 @@ function isWithinCrawlScope(url: string, scope: CrawlScope): boolean {
 
 function buildPathPrefix(sourceUrl: string): string {
   const parsed = new URL(sourceUrl);
+  if (parsed.pathname === '/' || parsed.pathname === '') return '/';
   if (parsed.pathname.endsWith('/')) return parsed.pathname;
-  const slashIndex = parsed.pathname.lastIndexOf('/');
-  const prefix = slashIndex >= 0 ? parsed.pathname.slice(0, slashIndex + 1) : '/';
-  return prefix || '/';
+  return `${parsed.pathname}/`;
 }
 
 function buildSourceAcquisitionPlan(
@@ -278,6 +279,7 @@ function buildSourceAcquisitionPlan(
     strategy: source.fetch_strategy,
     scope: {
       allowedHost: seedHost,
+      exactPath: seed.pathname || '/',
       pathPrefix: buildPathPrefix(seed.toString()),
     },
   };
@@ -840,7 +842,7 @@ async function upsertPages(
       }
     } else {
       // Insert new page
-      const { error } = await (supabase
+      const { data: insertedRow, error } = await (supabase
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from('vendor_wiki_pages') as any)
         .insert({
@@ -853,7 +855,9 @@ async function upsertPages(
           vendor_source_id: options?.vendorSourceId ?? null,
           curated_by: options?.triggeredByUserId ?? null,
           ingest_job_id: options?.jobId ?? null,
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) {
         failed++;
@@ -876,7 +880,7 @@ async function upsertPages(
           screen: page.screen,
           contentHash: page.contentHash,
           status: 'inserted',
-          pageId: null,
+          pageId: insertedRow?.id ?? null,
         });
       }
     }
