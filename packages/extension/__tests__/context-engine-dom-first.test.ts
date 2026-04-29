@@ -128,6 +128,8 @@ describe('DOM-first page context engine', () => {
         <h1>Project settings</h1>
         <section aria-label="Secrets">
           <label>API token <input id="token" type="password" value="sk_live_secret" /></label>
+          <select id="account"><option selected>Acme confidential account</option></select>
+          <a id="profile" href="https://user:pass@example.com/customer?token=secret#billing" aria-label="Email jane@example.com" title="Contact jane@example.com">Jane jane@example.com</a>
           <button id="rotate" aria-expanded="false">Rotate token</button>
         </section>
       </main>
@@ -136,6 +138,8 @@ describe('DOM-first page context engine', () => {
     const context = buildPageContext(document, window);
     const matches = searchPageElementsFromDom('rotate', context, document);
     const token = inspectElementFromDom('#token', context, document);
+    const account = inspectElementFromDom('#account', context, document);
+    const profile = inspectElementFromDom('#profile', context, document);
     const region = inspectPageRegionFromDom(
       context.regions?.[0]?.id ?? 'region-1',
       context,
@@ -147,6 +151,18 @@ describe('DOM-first page context engine', () => {
     expect(JSON.stringify({ matches, token, region })).not.toContain(
       'sk_live_secret',
     );
+    expect(account?.text).toBeUndefined();
+    expect(profile).toMatchObject({
+      href: 'https://example.com/customer',
+      text: 'Jane [REDACTED]',
+      ariaLabel: 'Email [REDACTED]',
+      title: 'Contact [REDACTED]',
+    });
+    expect(JSON.stringify({ profile, region })).not.toContain(
+      'jane@example.com',
+    );
+    expect(JSON.stringify({ profile, region })).not.toContain('user:pass');
+    expect(JSON.stringify({ profile, region })).not.toContain('token=secret');
     expect(region.elements.length).toBeGreaterThan(0);
   });
 

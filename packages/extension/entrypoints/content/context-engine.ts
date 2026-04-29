@@ -11,6 +11,11 @@
 
 /* global Document, DOMRect, Window */
 
+import {
+  sanitizePageContextForModel,
+  sanitizePageContextText,
+  sanitizePageContextUrl,
+} from '@tribora/shared';
 import type {
   ContextRect,
   ContextHeading,
@@ -1487,14 +1492,7 @@ export function buildInteractiveElementInventory(
 
 function sanitizeHref(el: Element): string | undefined {
   if (!(el instanceof HTMLAnchorElement) || !el.href) return undefined;
-  try {
-    const url = new URL(el.href);
-    url.search = '';
-    url.hash = '';
-    return url.toString();
-  } catch {
-    return undefined;
-  }
+  return sanitizePageContextUrl(el.href);
 }
 
 export function inspectElementFromDom(
@@ -1516,21 +1514,28 @@ export function inspectElementFromDom(
   const text =
     el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
       ? ''
-      : clipText((el as HTMLElement).innerText || el.textContent, 180);
+      : sanitizePageContextText(getElementSemanticText(el), 180);
+  const label =
+    sanitizePageContextText(
+      contextMatch?.label || deriveLabel(el) || selector,
+    ) ?? selector;
+  const ariaLabel = sanitizePageContextText(el.getAttribute('aria-label'));
+  const placeholder =
+    el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+      ? sanitizePageContextText(el.placeholder, 80)
+      : undefined;
+  const title = sanitizePageContextText(el.getAttribute('title'));
 
   return {
     selector,
-    label: contextMatch?.label || deriveLabel(el) || selector,
+    label,
     type: contextMatch?.type ?? deriveType(el),
     role: el.getAttribute('role') ?? undefined,
     tagName: el.tagName.toLowerCase(),
     text: text || undefined,
-    ariaLabel: normalizeText(el.getAttribute('aria-label')) || undefined,
-    placeholder:
-      el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
-        ? clipText(el.placeholder, 80) || undefined
-        : undefined,
-    title: normalizeText(el.getAttribute('title')) || undefined,
+    ariaLabel,
+    placeholder,
+    title,
     href: sanitizeHref(el),
     rect: getElementRect(el),
     visible: isVisible(el),
@@ -1595,8 +1600,9 @@ export function inspectPageRegionFromDom(
   snippets: ContextSnippet[];
   elements: ElementInspection[];
 } {
+  const sanitizedContext = sanitizePageContextForModel(context);
   const region =
-    (context.regions ?? []).find(
+    (sanitizedContext.regions ?? []).find(
       (item) => item.id === selectorOrId || item.selector === selectorOrId,
     ) ?? null;
   const selector = region?.selector ?? selectorOrId;
@@ -1608,7 +1614,7 @@ export function inspectPageRegionFromDom(
     el = null;
   }
 
-  const snippets = (context.snippets ?? [])
+  const snippets = (sanitizedContext.snippets ?? [])
     .filter((snippet) => {
       if (region && snippet.regionId === region.id) return true;
       if (!el) return false;
@@ -1617,17 +1623,18 @@ export function inspectPageRegionFromDom(
     })
     .slice(0, 12);
 
-  const elements = context.interactiveElements
+  const elements = sanitizedContext.interactiveElements
     .filter((item) => {
       if (!el) {
         return region
-          ? findRegionIdForSelector(doc, context, item.selector) === region.id
+          ? findRegionIdForSelector(doc, sanitizedContext, item.selector) ===
+              region.id
           : false;
       }
       const node = doc.querySelector(item.selector);
       return node ? el.contains(node) : false;
     })
-    .map((item) => inspectElementFromDom(item.selector, context, doc))
+    .map((item) => inspectElementFromDom(item.selector, sanitizedContext, doc))
     .filter((item): item is ElementInspection => item !== null)
     .slice(0, 12);
 
