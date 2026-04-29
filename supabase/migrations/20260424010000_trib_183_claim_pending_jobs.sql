@@ -5,6 +5,14 @@
 -- function locks the ordered candidate set with SKIP LOCKED, marks only those
 -- rows as processing, and returns exactly the rows won by the caller.
 
+create index if not exists idx_jobs_pending_claim_order
+  on public.jobs (
+    priority asc nulls last,
+    run_at asc,
+    created_at asc
+  )
+  where status = 'pending';
+
 create or replace function public.claim_pending_jobs(
   p_batch_size integer,
   p_claimed_at timestamptz default now()

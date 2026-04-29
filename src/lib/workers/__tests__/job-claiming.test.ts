@@ -96,6 +96,25 @@ describe('job claiming', () => {
     expect(result).toEqual({ jobs: [], error: null });
   });
 
+  test('fails closed when the claim RPC errors', async () => {
+    const rpc =
+      jest.fn<() => Promise<{ data: null; error: { message: string } }>>();
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'function claim_pending_jobs does not exist' },
+    });
+
+    const result = await claimPendingJobs(
+      { rpc } as unknown as LightweightSupabaseClient,
+      2,
+    );
+
+    expect(result).toEqual({
+      jobs: [],
+      error: { message: 'function claim_pending_jobs does not exist' },
+    });
+  });
+
   test('returns no job when an id-specific claim loses the status precondition', async () => {
     const claimedAt = new Date('2026-04-24T01:00:01.000Z');
     const maybeSingle = jest.fn<() => Promise<{ data: null; error: null }>>();
