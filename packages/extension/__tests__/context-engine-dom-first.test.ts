@@ -81,6 +81,47 @@ describe('DOM-first page context engine', () => {
     expect(JSON.stringify(context)).not.toContain('secret@example.com');
   });
 
+  it('caps nested form fields and table columns while keeping redaction', () => {
+    const fields = Array.from({ length: 35 }, (_, index) => {
+      const number = index + 1;
+      return `<label>Field ${number}<input id="field-${number}" value="secret-${number}" /></label>`;
+    }).join('');
+    const columns = Array.from(
+      { length: 30 },
+      (_, index) => `<th>Column ${index + 1}</th>`,
+    ).join('');
+
+    setPage(`
+      <main>
+        <h1>Wide admin surface</h1>
+        ${fields}
+        <table aria-label="Accounts">
+          <thead><tr>${columns}</tr></thead>
+          <tbody><tr><td>Example account</td></tr></tbody>
+        </table>
+      </main>
+    `);
+
+    const context = buildPageContext(document, window);
+
+    expect(context.forms).toHaveLength(1);
+    expect(context.forms?.[0]?.selector).toBeUndefined();
+    expect(context.forms?.[0]?.fields).toHaveLength(20);
+    expect(context.forms?.[0]?.fields[19]).toMatchObject({
+      label: 'Field 20',
+      valuePresent: true,
+    });
+    expect(
+      context.forms?.[0]?.fields.map((field) => field.label),
+    ).not.toContain('Field 21');
+
+    expect(context.tables).toHaveLength(1);
+    expect(context.tables?.[0]?.columns).toHaveLength(16);
+    expect(context.tables?.[0]?.columns[15]).toBe('Column 16');
+    expect(context.tables?.[0]?.columns).not.toContain('Column 17');
+    expect(JSON.stringify(context)).not.toContain('secret-');
+  });
+
   it('searches and inspects current DOM elements without exposing raw input values', () => {
     setPage(`
       <main>

@@ -171,6 +171,13 @@ const NAVIGATION_CONTAINERS =
 
 const DIALOG_SELECTORS = '[role="dialog"], [aria-modal="true"], dialog[open]';
 
+const MAX_FORM_SURFACES = 6;
+const MAX_FORM_FIELDS_PER_SURFACE = 20;
+const MAX_TABLE_SURFACES = 6;
+const MAX_TABLE_COLUMNS = 16;
+const MAX_TABLE_ACTION_LABELS = 6;
+const MAX_TABLE_SELECTION_LABELS = 6;
+
 const REGION_SELECTORS = [
   'main',
   'header',
@@ -1016,7 +1023,7 @@ function extractForms(doc: Document): FormSurface[] {
             })
             .filter(Boolean) as FormField[],
           (field) => field.selector,
-        );
+        ).slice(0, MAX_FORM_FIELDS_PER_SURFACE);
 
         if (fields.length === 0) return null;
 
@@ -1040,7 +1047,7 @@ function extractForms(doc: Document): FormSurface[] {
       })
       .filter(Boolean) as FormSurface[],
     (form) => `${form.selector ?? 'body'}:${form.label ?? ''}`,
-  ).slice(0, 6);
+  ).slice(0, MAX_FORM_SURFACES);
 }
 
 function extractTables(doc: Document): TableSurface[] {
@@ -1057,7 +1064,7 @@ function extractTables(doc: Document): TableSurface[] {
             )
             .filter(Boolean),
           (value) => value,
-        );
+        ).slice(0, MAX_TABLE_COLUMNS);
         const rowCount = table.querySelectorAll(
           'tbody tr, [role="row"]',
         ).length;
@@ -1068,7 +1075,7 @@ function extractTables(doc: Document): TableSurface[] {
             .map((action) => deriveLabel(action))
             .filter(Boolean),
           (value) => value,
-        ).slice(0, 6);
+        ).slice(0, MAX_TABLE_ACTION_LABELS);
 
         const selectionControls = uniqueBy(
           Array.from(
@@ -1083,7 +1090,7 @@ function extractTables(doc: Document): TableSurface[] {
             })
             .filter(Boolean),
           (value) => value,
-        ).slice(0, 6);
+        ).slice(0, MAX_TABLE_SELECTION_LABELS);
 
         const bulkSelectable = Array.from(
           table.querySelectorAll('input[type="checkbox"], [role="checkbox"]'),
@@ -1103,7 +1110,7 @@ function extractTables(doc: Document): TableSurface[] {
       })
       .filter(Boolean) as TableSurface[],
     (table) => table.selector ?? table.label ?? '',
-  ).slice(0, 6);
+  ).slice(0, MAX_TABLE_SURFACES);
 }
 
 function classifyRegion(el: Element): PageRegion['kind'] {
