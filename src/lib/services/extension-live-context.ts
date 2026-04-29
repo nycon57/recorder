@@ -10,7 +10,7 @@ export interface LiveContextSourcePage {
   id: string;
   title: string;
   content: string;
-  kind: 'org' | 'vendor';
+  kind: 'org' | 'vendor_training' | 'vendor_generic';
 }
 
 function normalizeWhitespace(value: string | null | undefined): string {

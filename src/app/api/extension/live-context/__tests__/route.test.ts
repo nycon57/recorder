@@ -6,9 +6,11 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { buildKnowledgeResolvedFor, type PageContext } from '@tribora/shared';
 
 const resolveExtensionContextMatches = jest.fn<() => Promise<unknown>>();
-const buildLiveContextPack = jest.fn<
-  (input: { context: PageContext; [key: string]: unknown }) => unknown
->();
+const buildLiveContextPack =
+  jest.fn<
+    (input: { context: PageContext; [key: string]: unknown }) => unknown
+  >();
+const mockCreateAdminClient = jest.fn();
 
 jest.mock('@/lib/utils/api-key-auth', () => ({
   requireApiKeyOrSession: async () => ({
@@ -52,7 +54,7 @@ jest.mock('@/lib/utils/cors', () => ({
 }));
 
 jest.mock('@/lib/supabase/admin', () => ({
-  createClient: jest.fn(),
+  createClient: mockCreateAdminClient,
 }));
 
 jest.mock('@/lib/services/extension-context', () => ({
@@ -89,6 +91,43 @@ function getFirstPackContext(): PageContext {
   return (firstArg as { context: PageContext }).context;
 }
 
+function createSupabaseMock(args: {
+  vendorRows?: Array<{ id: string; screen: string; content: string }>;
+  orgRows?: Array<{ id: string; topic: string; content: string }>;
+}) {
+  return {
+    from: jest.fn((table: string) => {
+      if (table === 'vendor_wiki_pages') {
+        return {
+          select: jest.fn(() => ({
+            in: jest.fn(async () => ({
+              data: args.vendorRows ?? [],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      if (table === 'org_wiki_pages') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              is: jest.fn(() => ({
+                in: jest.fn(async () => ({
+                  data: args.orgRows ?? [],
+                  error: null,
+                })),
+              })),
+            })),
+          })),
+        };
+      }
+
+      throw new Error(`Unexpected table ${table}`);
+    }),
+  };
+}
+
 describe('POST /api/extension/live-context', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -116,6 +155,12 @@ describe('POST /api/extension/live-context', () => {
       knowledgeMode: 'vendor_backed',
       sources: [],
     });
+    mockCreateAdminClient.mockReturnValue(
+      createSupabaseMock({
+        vendorRows: [],
+        orgRows: [],
+      }),
+    );
   });
 
   it('re-resolves matches when supplied knowledge has no provenance', async () => {
@@ -284,5 +329,83 @@ describe('POST /api/extension/live-context', () => {
     expect(packContext).not.toHaveProperty('visibleText');
     expect(JSON.stringify(packContext)).not.toContain('super-secret-token');
     expect(JSON.stringify(packContext)).not.toContain('4242');
+  });
+
+  it('preserves ranked page-id order when loading live context source pages', async () => {
+    const { POST } = await import('../route');
+    const context = baseContext({
+      vendorKnowledgeMatch: {
+        matched: true,
+        basis: 'app_only',
+        confidence: 0.58,
+        app: 'hubspot',
+        screen: null,
+        pageIds: ['vendor-billing', 'vendor-generic'],
+      },
+      orgKnowledgeMatch: {
+        matched: true,
+        basis: 'app_only',
+        confidence: 0.63,
+        app: 'hubspot',
+        screen: null,
+        pageIds: ['org-billing', 'org-generic'],
+      },
+      knowledgeAvailability: {
+        hasVendorDocs: true,
+        hasOrgKnowledge: true,
+        mode: 'org_backed',
+        message: 'Guidance is available.',
+      },
+    });
+    context.knowledgeResolvedFor = buildKnowledgeResolvedFor(context);
+    mockCreateAdminClient.mockReturnValue(
+      createSupabaseMock({
+        vendorRows: [
+          {
+            id: 'vendor-generic',
+            screen: 'Overview',
+            content: 'Generic vendor content',
+          },
+          {
+            id: 'vendor-billing',
+            screen: 'Billing settings',
+            content: 'Billing vendor content',
+          },
+        ],
+        orgRows: [
+          {
+            id: 'org-generic',
+            topic: 'Overview',
+            content: 'Generic org content',
+          },
+          {
+            id: 'org-billing',
+            topic: 'Billing settings',
+            content: 'Billing org content',
+          },
+        ],
+      }),
+    );
+
+    const response = await POST(buildRequest({ context }));
+
+    expect(response.status).toBe(200);
+    const firstArg = buildLiveContextPack.mock.calls[0]?.[0] as unknown as {
+      orgPages: Array<{ id: string; kind: string }>;
+      vendorPages: Array<{ id: string; kind: string }>;
+    };
+    expect(firstArg.orgPages.map((page) => page.id)).toEqual([
+      'org-billing',
+      'org-generic',
+    ]);
+    expect(firstArg.vendorPages.map((page) => page.id)).toEqual([
+      'vendor-billing',
+      'vendor-generic',
+    ]);
+    expect(firstArg.orgPages.map((page) => page.kind)).toEqual(['org', 'org']);
+    expect(firstArg.vendorPages.map((page) => page.kind)).toEqual([
+      'vendor_generic',
+      'vendor_generic',
+    ]);
   });
 });

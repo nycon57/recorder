@@ -267,7 +267,7 @@ export interface KnowledgeAvailability {
 export interface LiveContextSourceRef {
   id: string;
   title: string;
-  kind: 'org' | 'vendor';
+  kind: 'org' | 'vendor_training' | 'vendor_generic';
 }
 
 export interface LiveContextPack {
