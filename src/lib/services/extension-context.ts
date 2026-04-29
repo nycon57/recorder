@@ -21,6 +21,13 @@ interface OrgRow {
   topic: string;
 }
 
+type RankableKnowledgeRow = {
+  id: string;
+  screen?: string | null;
+  topic?: string | null;
+  element_selectors?: unknown;
+};
+
 export interface KnowledgeMatchCandidate {
   pageIds: string[];
   basis: Exclude<KnowledgeMatchBasis, 'none'>;
@@ -108,6 +115,86 @@ function extractSelectorHints(value: unknown): string[] {
   return uniqueStrings(
     value.map((entry) => (typeof entry === 'string' ? entry : null)),
   );
+}
+
+function tokenizeForRanking(value: string | null | undefined): string[] {
+  return uniqueStrings(
+    (value ?? '')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/i)
+      .filter((token) => token.length >= 2),
+  );
+}
+
+function extractUrlRankingTokens(url: string): string[] {
+  try {
+    const parsed = new URL(url);
+    return tokenizeForRanking(
+      [parsed.hostname, parsed.pathname.replace(/\d+/g, '')].join(' '),
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function rankKnowledgeRowsByPageRelevance<
+  T extends RankableKnowledgeRow,
+>(
+  rows: T[],
+  args: {
+    screen: string;
+    url: string;
+  },
+): T[] {
+  const screenTokens = new Set([
+    ...tokenizeForRanking(args.screen),
+    ...buildScreenAliases(args.screen).flatMap(tokenizeForRanking),
+  ]);
+  const urlTokens = new Set(extractUrlRankingTokens(args.url));
+  const pageTokens = new Set([...screenTokens, ...urlTokens]);
+
+  const scoreRow = (row: T): number => {
+    const selectorHints = extractSelectorHints(row.element_selectors);
+    const rowTokens = tokenizeForRanking(
+      [row.screen, row.topic, selectorHints.join(' ')]
+        .filter(Boolean)
+        .join(' '),
+    );
+    const rowTokenSet = new Set(rowTokens);
+    const overlap = [...pageTokens].filter((token) =>
+      rowTokenSet.has(token),
+    ).length;
+    const screenOverlap = [...screenTokens].filter((token) =>
+      rowTokenSet.has(token),
+    ).length;
+    const urlOverlap = [...urlTokens].filter((token) =>
+      rowTokenSet.has(token),
+    ).length;
+    const normalizedScreen = row.screen?.trim().toLowerCase() ?? '';
+    const exactScreenBoost =
+      normalizedScreen && normalizedScreen === args.screen.toLowerCase()
+        ? 12
+        : 0;
+
+    return exactScreenBoost + screenOverlap * 5 + urlOverlap * 2 + overlap;
+  };
+
+  return rows
+    .map((row) => ({ row, score: scoreRow(row) }))
+    .sort((left, right) => {
+      const scoreDelta = right.score - left.score;
+      if (scoreDelta !== 0) return scoreDelta;
+
+      const leftLabel =
+        `${left.row.screen ?? ''} ${left.row.topic ?? ''}`.trim();
+      const rightLabel =
+        `${right.row.screen ?? ''} ${right.row.topic ?? ''}`.trim();
+      const labelDelta = leftLabel.localeCompare(rightLabel);
+      if (labelDelta !== 0) return labelDelta;
+
+      return left.row.id.localeCompare(right.row.id);
+    })
+    .map(({ row }) => row);
 }
 
 type KnowledgeMatchSurface = 'vendor' | 'org';
@@ -235,13 +322,7 @@ function toKnowledgeMatch(args: {
   requestedScreen: string;
   url: string;
 }): KnowledgeMatch | null {
-  const {
-    candidate,
-    surface,
-    requestedApp,
-    requestedScreen,
-    url,
-  } = args;
+  const { candidate, surface, requestedApp, requestedScreen, url } = args;
   if (!candidate) return null;
 
   const explainability = buildKnowledgeMatchExplainability({
@@ -299,7 +380,10 @@ async function fetchVendorMatchCandidates(
     return [];
   }
 
-  const rows = data ?? [];
+  const rows = rankKnowledgeRowsByPageRelevance(data ?? [], {
+    screen,
+    url,
+  });
   const exactRows = rows.filter(
     (row) => row.app === exactApp && row.screen === screen.toLowerCase(),
   );
@@ -399,7 +483,10 @@ async function fetchOrgMatchCandidates(
     return [];
   }
 
-  const rows = data ?? [];
+  const rows = rankKnowledgeRowsByPageRelevance(data ?? [], {
+    screen,
+    url,
+  });
   const exactRows = rows.filter(
     (row) => row.app === exactApp && row.screen === screen.toLowerCase(),
   );

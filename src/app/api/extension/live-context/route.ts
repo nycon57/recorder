@@ -45,25 +45,39 @@ function usableAppSignature(value: string | undefined): string | undefined {
   return value;
 }
 
+function orderPagesByRequestedIds<T extends { id: string }>(
+  pages: T[],
+  pageIds: string[],
+): T[] {
+  const rankById = new Map(pageIds.map((id, index) => [id, index]));
+  return [...pages].sort((left, right) => {
+    const leftRank = rankById.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightRank = rankById.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    return left.id.localeCompare(right.id);
+  });
+}
+
 async function loadVendorPages(
   pageIds: string[],
 ): Promise<LiveContextSourcePage[]> {
-  if (pageIds.length === 0) return [];
+  const requestedPageIds = pageIds.slice(0, 2);
+  if (requestedPageIds.length === 0) return [];
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from('vendor_wiki_pages')
     .select('id, screen, content')
-    .in('id', pageIds.slice(0, 2));
+    .in('id', requestedPageIds);
 
   if (error) {
     throw new Error(`Failed to load vendor pages: ${error.message}`);
   }
 
-  return (data ?? []).map((page) => ({
+  return orderPagesByRequestedIds(data ?? [], requestedPageIds).map((page) => ({
     id: page.id,
     title: page.screen,
     content: page.content,
-    kind: 'vendor',
+    kind: 'vendor_generic',
   }));
 }
 
@@ -71,20 +85,21 @@ async function loadOrgPages(args: {
   orgId: string;
   pageIds: string[];
 }): Promise<LiveContextSourcePage[]> {
-  if (args.pageIds.length === 0) return [];
+  const requestedPageIds = args.pageIds.slice(0, 2);
+  if (requestedPageIds.length === 0) return [];
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from('org_wiki_pages')
     .select('id, topic, content')
     .eq('org_id', args.orgId)
     .is('valid_until', null)
-    .in('id', args.pageIds.slice(0, 2));
+    .in('id', requestedPageIds);
 
   if (error) {
     throw new Error(`Failed to load org pages: ${error.message}`);
   }
 
-  return (data ?? []).map((page) => ({
+  return orderPagesByRequestedIds(data ?? [], requestedPageIds).map((page) => ({
     id: page.id,
     title: page.topic,
     content: page.content,
