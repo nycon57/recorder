@@ -16,12 +16,15 @@ const EMPTY_FRESHNESS = {
   isStale: null,
 } as const;
 
-function provenance(pageId: string, overrides: Partial<{
-  vendorPageId: string | null;
-  vendorSourceId: string | null;
-  sourceKind: string | null;
-  sourceUrl: string | null;
-}> = {}) {
+function provenance(
+  pageId: string,
+  overrides: Partial<{
+    vendorPageId: string | null;
+    vendorSourceId: string | null;
+    sourceKind: string | null;
+    sourceUrl: string | null;
+  }> = {},
+) {
   return {
     pageId,
     vendorPageId: null,
@@ -180,7 +183,10 @@ test('buildCompiledMemoryAnswerContext prioritizes org knowledge before vendor l
   assert.equal(result.sources[0]?.url, '/dashboard/recordings/recording-1');
   assert.equal(result.sources[2]?.url, 'https://docs.example.com/deals');
   assert.equal(result.sources[3]?.url, 'https://docs.example.com/pipelines');
-  assert.equal(result.citationsBySourceId['vendor-2']?.freshness.updatedAt, '2026-04-18T12:00:00.000Z');
+  assert.equal(
+    result.citationsBySourceId['vendor-2']?.freshness.updatedAt,
+    '2026-04-18T12:00:00.000Z',
+  );
   assert.deepEqual(result.priorTopics, ['Deal routing']);
 });
 
@@ -365,7 +371,59 @@ test('buildExtensionCompiledMemoryPrompt reuses the normalized answer context fo
   assert.match(prompt, /\[SOURCE:org-1:Project ownership\]/);
   assert.match(prompt, /\[SOURCE:vendor-1:Project settings\]/);
   assert.match(prompt, /\[ELEMENT:selector:label\]/);
-  assert.match(prompt, /The user has previously been shown information about: Project ownership/);
+  assert.match(
+    prompt,
+    /The user has previously been shown information about: Project ownership/,
+  );
+});
+
+test('buildExtensionCompiledMemoryPrompt includes DOM-first page context when provided', () => {
+  const prompt = buildExtensionCompiledMemoryPrompt({
+    app: 'unknown',
+    screen: 'settings',
+    question: 'Where is billing?',
+    elements: [{ selector: '#billing', label: 'Billing' }],
+    answerContext: {
+      context: '',
+      sources: [],
+      citations: [],
+      citationsBySourceId: {},
+      priorTopics: [],
+    },
+    pageContext: {
+      app: 'unknown',
+      screen: 'settings',
+      appSignature: 'unknown:settings',
+      url: 'https://example.com/settings',
+      title: 'Settings',
+      interactiveElements: [
+        { selector: '#billing', label: 'Billing', type: 'link' },
+      ],
+      regions: [
+        {
+          id: 'region-1',
+          selector: 'main',
+          kind: 'main',
+          label: 'Settings',
+          interactiveCount: 1,
+          snippetCount: 1,
+        },
+      ],
+      snippets: [
+        {
+          id: 'snippet-1',
+          selector: 'h1',
+          kind: 'heading',
+          text: 'Settings',
+          regionId: 'region-1',
+        },
+      ],
+    },
+  });
+
+  expect(prompt).toContain('DOM-FIRST PAGE UNDERSTANDING');
+  expect(prompt).toContain('region-1 main "Settings"');
+  expect(prompt).toContain('answer from the visible page only');
 });
 
 test('resolveCompiledMemoryAnswerContext passes the default chat scope into the shared compiled-memory resolver', async () => {

@@ -10,9 +10,12 @@
  */
 
 import type {
+  ContextRect,
   ContextHeading,
+  ContextSnippet,
   DetectionConfidence,
   DialogSurface,
+  ElementInspection,
   FormField,
   FormSurface,
   InteractiveElement,
@@ -20,9 +23,11 @@ import type {
   NavigationItem,
   PageAction,
   PageContext,
+  PageRegion,
   SelectedEntity,
   SurfaceKind,
   TableSurface,
+  ViewportSnapshot,
   WorkspaceContext,
   WorkspaceContextItem,
 } from '@tribora/shared';
@@ -156,37 +161,6 @@ const APP_REGISTRY: AppRegistryEntry[] = [
       return 'page';
     },
   },
-  {
-    name: 'supabase',
-    hostPatterns: [/supabase\.com$/i],
-    urlPatterns: [/\/dashboard\//i],
-    domFingerprints: [
-      {
-        selector:
-          "[href*='/dashboard/project/'], [data-testid*='sidebar'], nav a[href*='/dashboard/project/']",
-        minCount: 1,
-      },
-    ],
-    detectScreen(url, doc) {
-      if (/\/dashboard\/project\/[^/]+\/database\/settings/.test(url)) {
-        return 'database-settings';
-      }
-      if (/\/dashboard\/project\/[^/]+\/database\/tables/.test(url)) {
-        return 'table-editor';
-      }
-      if (/\/dashboard\/project\/[^/]+\/sql/.test(url)) return 'sql-editor';
-      if (/\/dashboard\/project\/[^/]+\/auth/.test(url))
-        return 'authentication';
-      if (/\/dashboard\/project\/[^/]+\/storage/.test(url)) return 'storage';
-      if (/\/dashboard\/project\/[^/]+\/functions/.test(url)) {
-        return 'edge-functions';
-      }
-      if (/\/dashboard\/project\/[^/]+\/settings/.test(url))
-        return 'project-settings';
-      if (doc.title.toLowerCase().includes('database')) return 'database';
-      return 'project-overview';
-    },
-  },
 ];
 
 const INTERACTIVE_SELECTORS =
@@ -196,6 +170,35 @@ const NAVIGATION_CONTAINERS =
   'nav, aside, [role="navigation"], [data-testid*="sidebar"], [class*="sidebar"], [class*="nav"], [role="tablist"]';
 
 const DIALOG_SELECTORS = '[role="dialog"], [aria-modal="true"], dialog[open]';
+
+const MAX_FORM_SURFACES = 6;
+const MAX_FORM_FIELDS_PER_SURFACE = 20;
+const MAX_TABLE_SURFACES = 6;
+const MAX_TABLE_COLUMNS = 16;
+const MAX_TABLE_ACTION_LABELS = 6;
+const MAX_TABLE_SELECTION_LABELS = 6;
+
+const REGION_SELECTORS = [
+  'main',
+  'header',
+  'nav',
+  'aside',
+  'article',
+  'section',
+  '[role="main"]',
+  '[role="banner"]',
+  '[role="navigation"]',
+  '[role="complementary"]',
+  '[role="dialog"]',
+  '[aria-modal="true"]',
+  'dialog[open]',
+  'form',
+  'table',
+  '[role="table"]',
+  '[role="grid"]',
+  '[data-testid*="card"]',
+  '[class*="card"]',
+].join(',');
 
 const WORKSPACE_PATTERNS: Array<{
   kind: WorkspaceContextItem['kind'];
@@ -223,6 +226,104 @@ function clamp(value: number, min: number, max: number): number {
 
 function normalizeText(value: string | null | undefined): string {
   return (value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function clipText(value: string | null | undefined, maxChars: number): string {
+  const normalized = normalizeText(value);
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function toContextRect(rect: DOMRect): ContextRect {
+  return {
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+    top: Math.round(rect.top),
+    right: Math.round(rect.right),
+    bottom: Math.round(rect.bottom),
+    left: Math.round(rect.left),
+  };
+}
+
+function getElementRect(el: Element): ContextRect | undefined {
+  const rect = el.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return undefined;
+  return toContextRect(rect);
+}
+
+function isInViewport(rect: ContextRect | undefined, win: Window): boolean {
+  if (!rect) return false;
+  return (
+    rect.bottom >= 0 &&
+    rect.right >= 0 &&
+    rect.top <= win.innerHeight &&
+    rect.left <= win.innerWidth
+  );
+}
+
+function buildViewportSnapshot(win: Window): ViewportSnapshot {
+  return {
+    width: Math.round(win.innerWidth),
+    height: Math.round(win.innerHeight),
+    scrollX: Math.round(win.scrollX),
+    scrollY: Math.round(win.scrollY),
+    devicePixelRatio: win.devicePixelRatio,
+  };
+}
+
+function getInputState(
+  el: Element,
+): Pick<
+  InteractiveElement,
+  | 'checked'
+  | 'required'
+  | 'readonly'
+  | 'invalid'
+  | 'valuePresent'
+  | 'placeholder'
+> {
+  const placeholder =
+    el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+      ? clipText(el.placeholder, 80) || undefined
+      : undefined;
+  const value =
+    el instanceof HTMLInputElement ||
+    el instanceof HTMLTextAreaElement ||
+    el instanceof HTMLSelectElement
+      ? el.value
+      : '';
+  const checked =
+    el instanceof HTMLInputElement && ['checkbox', 'radio'].includes(el.type)
+      ? el.checked
+      : el.getAttribute('aria-checked') === 'true'
+        ? true
+        : el.getAttribute('aria-checked') === 'false'
+          ? false
+          : undefined;
+
+  return {
+    checked,
+    required:
+      el.hasAttribute('required') ||
+      el.getAttribute('aria-required') === 'true',
+    readonly:
+      el.hasAttribute('readonly') ||
+      el.getAttribute('aria-readonly') === 'true',
+    invalid:
+      el.getAttribute('aria-invalid') === 'true' ||
+      (el instanceof HTMLInputElement && !el.validity.valid),
+    valuePresent: normalizeText(value).length > 0,
+    placeholder,
+  };
+}
+
+function getExpandedState(el: Element): boolean | undefined {
+  const expanded = el.getAttribute('aria-expanded');
+  if (expanded === 'true') return true;
+  if (expanded === 'false') return false;
+  return undefined;
 }
 
 function singularizeLabel(value: string): string {
@@ -305,8 +406,6 @@ function deriveLabel(el: Element): string {
     if (placeholder) return placeholder;
     const name = normalizeText(el.name);
     if (name) return name;
-    const value = normalizeText(el.value);
-    if (value) return value.slice(0, 80);
   }
 
   const text = normalizeText((el as HTMLElement).innerText || el.textContent);
@@ -918,11 +1017,13 @@ function extractForms(doc: Document): FormSurface[] {
                 required:
                   field.hasAttribute('required') ||
                   field.getAttribute('aria-required') === 'true',
+                ...getInputState(field),
+                disabled: isDisabled(field),
               } satisfies FormField;
             })
             .filter(Boolean) as FormField[],
           (field) => field.selector,
-        );
+        ).slice(0, MAX_FORM_FIELDS_PER_SURFACE);
 
         if (fields.length === 0) return null;
 
@@ -946,7 +1047,7 @@ function extractForms(doc: Document): FormSurface[] {
       })
       .filter(Boolean) as FormSurface[],
     (form) => `${form.selector ?? 'body'}:${form.label ?? ''}`,
-  ).slice(0, 6);
+  ).slice(0, MAX_FORM_SURFACES);
 }
 
 function extractTables(doc: Document): TableSurface[] {
@@ -963,7 +1064,7 @@ function extractTables(doc: Document): TableSurface[] {
             )
             .filter(Boolean),
           (value) => value,
-        );
+        ).slice(0, MAX_TABLE_COLUMNS);
         const rowCount = table.querySelectorAll(
           'tbody tr, [role="row"]',
         ).length;
@@ -974,7 +1075,7 @@ function extractTables(doc: Document): TableSurface[] {
             .map((action) => deriveLabel(action))
             .filter(Boolean),
           (value) => value,
-        ).slice(0, 6);
+        ).slice(0, MAX_TABLE_ACTION_LABELS);
 
         const selectionControls = uniqueBy(
           Array.from(
@@ -989,7 +1090,7 @@ function extractTables(doc: Document): TableSurface[] {
             })
             .filter(Boolean),
           (value) => value,
-        ).slice(0, 6);
+        ).slice(0, MAX_TABLE_SELECTION_LABELS);
 
         const bulkSelectable = Array.from(
           table.querySelectorAll('input[type="checkbox"], [role="checkbox"]'),
@@ -1009,7 +1110,166 @@ function extractTables(doc: Document): TableSurface[] {
       })
       .filter(Boolean) as TableSurface[],
     (table) => table.selector ?? table.label ?? '',
-  ).slice(0, 6);
+  ).slice(0, MAX_TABLE_SURFACES);
+}
+
+function classifyRegion(el: Element): PageRegion['kind'] {
+  const tag = el.tagName.toLowerCase();
+  const role = el.getAttribute('role');
+  if (tag === 'main' || role === 'main') return 'main';
+  if (tag === 'header' || role === 'banner') return 'header';
+  if (tag === 'nav' || role === 'navigation') return 'navigation';
+  if (tag === 'aside' || role === 'complementary') return 'aside';
+  if (tag === 'article') return 'article';
+  if (tag === 'section') return 'section';
+  if (tag === 'form' || role === 'form') return 'form';
+  if (tag === 'table' || role === 'table' || role === 'grid') return 'table';
+  if (tag === 'dialog' || role === 'dialog' || el.getAttribute('aria-modal')) {
+    return 'dialog';
+  }
+  const className = normalizeText(el.getAttribute('class')).toLowerCase();
+  const testId = normalizeText(el.getAttribute('data-testid')).toLowerCase();
+  if (className.includes('card') || testId.includes('card')) return 'card';
+  return 'content';
+}
+
+function deriveRegionLabel(el: Element): string {
+  const ariaLabel = normalizeText(el.getAttribute('aria-label'));
+  if (ariaLabel) return clipText(ariaLabel, 100);
+  const heading = el.querySelector('h1, h2, h3, legend');
+  const headingText = normalizeText(
+    (heading as HTMLElement | null)?.innerText || heading?.textContent,
+  );
+  if (headingText) return clipText(headingText, 100);
+  const role = normalizeText(el.getAttribute('role'));
+  if (role) return role;
+  return classifyRegion(el);
+}
+
+function findRegionIdForElement(
+  regions: PageRegion[],
+  el: Element,
+): string | undefined {
+  const candidates = regions
+    .map((region) => ({
+      region,
+      node: el.ownerDocument.querySelector(region.selector),
+    }))
+    .filter((entry): entry is { region: PageRegion; node: Element } =>
+      Boolean(entry.node),
+    )
+    .filter((entry) => entry.node.contains(el))
+    .sort((left, right) => {
+      const leftRect = left.node.getBoundingClientRect();
+      const rightRect = right.node.getBoundingClientRect();
+      return (
+        leftRect.width * leftRect.height - rightRect.width * rightRect.height
+      );
+    });
+  return candidates[0]?.region.id;
+}
+
+function extractRegions(doc: Document, win: Window): PageRegion[] {
+  const regions = uniqueBy(
+    Array.from(doc.querySelectorAll(REGION_SELECTORS))
+      .filter(isVisible)
+      .filter((el) => {
+        if (el === doc.body) return false;
+        const text = normalizeText(
+          (el as HTMLElement).innerText || el.textContent,
+        );
+        const interactiveCount = el.querySelectorAll(
+          INTERACTIVE_SELECTORS,
+        ).length;
+        return text.length > 0 || interactiveCount > 0;
+      })
+      .map((el, index) => {
+        const rect = getElementRect(el);
+        const snippetCount = Array.from(
+          el.querySelectorAll('h1, h2, h3, p, li, label, th, [role="status"]'),
+        ).filter(isVisible).length;
+        return {
+          id: `region-${index + 1}`,
+          selector: getStableSelector(el),
+          kind: classifyRegion(el),
+          label: deriveRegionLabel(el),
+          summary: clipText(
+            (el as HTMLElement).innerText || el.textContent,
+            240,
+          ),
+          rect,
+          inViewport: isInViewport(rect, win),
+          interactiveCount: Array.from(
+            el.querySelectorAll(INTERACTIVE_SELECTORS),
+          ).filter(isVisible).length,
+          snippetCount,
+        } satisfies PageRegion;
+      }),
+    (region) => region.selector,
+  );
+
+  return regions
+    .sort((left, right) => {
+      if (left.kind === 'dialog' && right.kind !== 'dialog') return -1;
+      if (right.kind === 'dialog' && left.kind !== 'dialog') return 1;
+      return (
+        right.interactiveCount +
+        right.snippetCount -
+        (left.interactiveCount + left.snippetCount)
+      );
+    })
+    .slice(0, 18);
+}
+
+function classifySnippet(el: Element): ContextSnippet['kind'] {
+  const tag = el.tagName.toLowerCase();
+  const role = el.getAttribute('role');
+  if (/^h[1-6]$/.test(tag)) return 'heading';
+  if (tag === 'form' || role === 'form' || tag === 'label') return 'form';
+  if (tag === 'table' || role === 'table' || role === 'grid' || tag === 'th') {
+    return 'table';
+  }
+  if (tag === 'dialog' || role === 'dialog') return 'dialog';
+  if (tag === 'li' || tag === 'ul' || tag === 'ol') return 'list';
+  if (role === 'status' || role === 'alert') return 'status';
+  if (normalizeText(el.getAttribute('class')).toLowerCase().includes('card')) {
+    return 'card';
+  }
+  if (tag === 'p') return 'paragraph';
+  return 'text';
+}
+
+function extractSnippets(
+  doc: Document,
+  regions: PageRegion[],
+): ContextSnippet[] {
+  const candidates = Array.from(
+    doc.querySelectorAll(
+      'h1, h2, h3, p, li, label, legend, th, [role="status"], [role="alert"], [class*="card"], [data-testid*="card"]',
+    ),
+  );
+
+  return uniqueBy(
+    candidates
+      .filter(isVisible)
+      .map((el, index) => {
+        const text = clipText(
+          (el as HTMLElement).innerText || el.textContent,
+          220,
+        );
+        if (!text || text.length < 3) return null;
+        return {
+          id: `snippet-${index + 1}`,
+          selector: getStableSelector(el),
+          regionId: findRegionIdForElement(regions, el),
+          kind: classifySnippet(el),
+          text,
+          rect: getElementRect(el),
+        } satisfies ContextSnippet;
+      })
+      .filter(Boolean) as ContextSnippet[],
+    (snippet) => `${snippet.kind}:${snippet.text}`,
+  ).slice(0, 30);
 }
 
 function inferSurface(
@@ -1157,6 +1417,8 @@ export function buildInteractiveElementInventory(
       const label = deriveLabel(el);
       const selector = getStableSelector(el);
       const rect = el.getBoundingClientRect();
+      const safeRect =
+        rect.width > 0 && rect.height > 0 ? toContextRect(rect) : undefined;
       const semantic = inferSurface(
         el,
         args.dialogs,
@@ -1172,14 +1434,17 @@ export function buildInteractiveElementInventory(
         type: deriveType(el),
         ariaLabel: normalizeText(el.getAttribute('aria-label')) || undefined,
         boundingRect: rect.width > 0 && rect.height > 0 ? rect : undefined,
+        rect: safeRect,
         priority: scoreInteractiveElement(el, semantic),
         group: semantic.group,
         roleHint: semantic.roleHint,
         surface: semantic.surface,
         selected:
           isCurrentNavItem(el) || el.getAttribute('aria-selected') === 'true',
+        expanded: getExpandedState(el),
         disabled: isDisabled(el),
         visible: true,
+        ...getInputState(el),
       };
 
       return descriptor;
@@ -1190,6 +1455,170 @@ export function buildInteractiveElementInventory(
     .slice(0, limit);
 
   return ranked;
+}
+
+function sanitizeHref(el: Element): string | undefined {
+  if (!(el instanceof HTMLAnchorElement) || !el.href) return undefined;
+  try {
+    const url = new URL(el.href);
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+export function inspectElementFromDom(
+  selector: string,
+  context: PageContext,
+  doc: Document = document,
+): ElementInspection | null {
+  let el: Element | null = null;
+  try {
+    el = doc.querySelector(selector);
+  } catch {
+    return null;
+  }
+  if (!el) return null;
+
+  const contextMatch = context.interactiveElements.find(
+    (item) => item.selector === selector,
+  );
+  const text =
+    el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+      ? ''
+      : clipText((el as HTMLElement).innerText || el.textContent, 180);
+
+  return {
+    selector,
+    label: contextMatch?.label || deriveLabel(el) || selector,
+    type: contextMatch?.type ?? deriveType(el),
+    role: el.getAttribute('role') ?? undefined,
+    tagName: el.tagName.toLowerCase(),
+    text: text || undefined,
+    ariaLabel: normalizeText(el.getAttribute('aria-label')) || undefined,
+    placeholder:
+      el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+        ? clipText(el.placeholder, 80) || undefined
+        : undefined,
+    title: normalizeText(el.getAttribute('title')) || undefined,
+    href: sanitizeHref(el),
+    rect: getElementRect(el),
+    visible: isVisible(el),
+    disabled: contextMatch?.disabled ?? isDisabled(el),
+    selected:
+      contextMatch?.selected ??
+      (isCurrentNavItem(el) || el.getAttribute('aria-selected') === 'true'),
+    expanded: contextMatch?.expanded ?? getExpandedState(el),
+    surface: contextMatch?.surface,
+    group: contextMatch?.group,
+    regionId: findRegionIdForElement(context.regions ?? [], el),
+    ...getInputState(el),
+  };
+}
+
+export function searchPageElementsFromDom(
+  query: string,
+  context: PageContext,
+  doc: Document = document,
+  limit = 12,
+): ElementInspection[] {
+  const normalizedQuery = normalizeText(query).toLowerCase();
+  if (!normalizedQuery) return [];
+
+  const selectors = uniqueBy(
+    [
+      ...context.interactiveElements.map((item) => item.selector),
+      ...Array.from(doc.querySelectorAll(INTERACTIVE_SELECTORS))
+        .filter(isVisible)
+        .map((el) => getStableSelector(el)),
+    ],
+    (selector) => selector,
+  );
+
+  return selectors
+    .map((selector) => inspectElementFromDom(selector, context, doc))
+    .filter((item): item is ElementInspection => item !== null)
+    .filter((item) =>
+      [
+        item.label,
+        item.text,
+        item.ariaLabel,
+        item.placeholder,
+        item.title,
+        item.type,
+        item.surface,
+        item.role,
+      ]
+        .map((value) => normalizeText(value).toLowerCase())
+        .join(' ')
+        .includes(normalizedQuery),
+    )
+    .slice(0, limit);
+}
+
+export function inspectPageRegionFromDom(
+  selectorOrId: string,
+  context: PageContext,
+  doc: Document = document,
+): {
+  region: PageRegion | null;
+  snippets: ContextSnippet[];
+  elements: ElementInspection[];
+} {
+  const region =
+    (context.regions ?? []).find(
+      (item) => item.id === selectorOrId || item.selector === selectorOrId,
+    ) ?? null;
+  const selector = region?.selector ?? selectorOrId;
+
+  let el: Element | null = null;
+  try {
+    el = doc.querySelector(selector);
+  } catch {
+    el = null;
+  }
+
+  const snippets = (context.snippets ?? [])
+    .filter((snippet) => {
+      if (region && snippet.regionId === region.id) return true;
+      if (!el) return false;
+      const node = doc.querySelector(snippet.selector);
+      return node ? el.contains(node) : false;
+    })
+    .slice(0, 12);
+
+  const elements = context.interactiveElements
+    .filter((item) => {
+      if (!el) {
+        return region
+          ? findRegionIdForSelector(doc, context, item.selector) === region.id
+          : false;
+      }
+      const node = doc.querySelector(item.selector);
+      return node ? el.contains(node) : false;
+    })
+    .map((item) => inspectElementFromDom(item.selector, context, doc))
+    .filter((item): item is ElementInspection => item !== null)
+    .slice(0, 12);
+
+  return { region, snippets, elements };
+}
+
+function findRegionIdForSelector(
+  doc: Document,
+  context: PageContext,
+  selector: string,
+): string | undefined {
+  try {
+    const node = doc.querySelector(selector);
+    return node
+      ? findRegionIdForElement(context.regions ?? [], node)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function extractPrimaryActions(
@@ -1291,6 +1720,9 @@ export function buildPageContext(
   const workspaceContext = extractWorkspaceContext(doc);
   const forms = extractForms(doc);
   const tables = extractTables(doc);
+  const viewport = buildViewportSnapshot(win);
+  const regions = extractRegions(doc, win);
+  const snippets = extractSnippets(doc, regions);
   const selectedEntity = extractSelectedEntity({
     title,
     headings,
@@ -1336,6 +1768,9 @@ export function buildPageContext(
     primaryActions,
     selectedEntity,
     workspaceContext,
+    viewport,
+    regions,
+    snippets,
     forms,
     tables,
     dialogs,

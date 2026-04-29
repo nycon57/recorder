@@ -109,6 +109,8 @@ function readSurfaceCounts(
     forms: readNumber(value, 'forms') ?? 0,
     tables: readNumber(value, 'tables') ?? 0,
     dialogs: readNumber(value, 'dialogs') ?? 0,
+    regions: readNumber(value, 'regions') ?? 0,
+    snippets: readNumber(value, 'snippets') ?? 0,
     interactiveElements: readNumber(value, 'interactiveElements') ?? 0,
   };
 }
@@ -310,6 +312,8 @@ export function matchesExtensionContextDebugFilters(
       telemetry.urlHost,
       telemetry.urlPath,
       telemetry.pageSummary,
+      String(telemetry.surfaceCounts.regions),
+      String(telemetry.surfaceCounts.snippets),
       telemetry.selectedEntityTitle,
       telemetry.vendorMatchLabel,
       telemetry.orgMatchLabel,

@@ -57,6 +57,7 @@
 
 import { NextRequest, after } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import type { PageContext } from '@tribora/shared';
 
 import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
@@ -143,23 +144,25 @@ function chunkText(text: string, chunkSize = 120): string[] {
   return chunks;
 }
 
-/** PageContext passed by the extension */
-interface PageContext {
-  url: string;
-  appSignature: string;
-  elements?: Array<{ selector: string; label: string }>;
-  interactiveElements?: Array<{ selector: string; label: string }>;
-}
-
 function normalizePromptElements(
   context: PageContext,
 ): Array<{ selector: string; label: string }> {
-  const legacyElements = context.elements ?? [];
-  if (legacyElements.length > 0) {
-    return legacyElements;
-  }
+  return (context.interactiveElements ?? []).map((element) => ({
+    selector: element.selector,
+    label: element.label,
+  }));
+}
 
-  return context.interactiveElements ?? [];
+function hasDomOnlyGuidanceContext(context: PageContext): boolean {
+  return (
+    (context.interactiveElements?.length ?? 0) > 0 ||
+    (context.regions?.length ?? 0) > 0 ||
+    (context.snippets?.length ?? 0) > 0 ||
+    (context.forms?.length ?? 0) > 0 ||
+    (context.tables?.length ?? 0) > 0 ||
+    (context.dialogs?.length ?? 0) > 0 ||
+    Boolean(context.pageSummary)
+  );
 }
 
 /** Lazy Gemini client — no import-time env var reads (Fluid Compute safe). */
@@ -272,7 +275,7 @@ class TagStreamParser {
     private readonly onCitation: (cite: {
       sourceId: string;
       title: string;
-    }) => void
+    }) => void,
   ) {}
 
   push(chunk: string): void {
@@ -353,7 +356,9 @@ class TagStreamParser {
     // so "[ELEMENT:" is the longest we match — anything longer falls into
     // case 2 (already committed to being a tag).
     const shortBuffer = this.buffer.slice(0, 9);
-    if (TagStreamParser.TAG_OPENER_PREFIXES.includes(shortBuffer.toUpperCase())) {
+    if (
+      TagStreamParser.TAG_OPENER_PREFIXES.includes(shortBuffer.toUpperCase())
+    ) {
       return true;
     }
 
@@ -437,7 +442,9 @@ export async function POST(request: NextRequest) {
     return errors.badRequest('question is required');
   }
   if (!context?.url || !context?.appSignature) {
-    return errors.badRequest('context.url and context.appSignature are required');
+    return errors.badRequest(
+      'context.url and context.appSignature are required',
+    );
   }
 
   // TRIB-40: parse optional `?as_of=<ISO>` for point-in-time retrieval.
@@ -450,7 +457,7 @@ export async function POST(request: NextRequest) {
     const parsed = new Date(asOfParam);
     if (Number.isNaN(parsed.getTime())) {
       return errors.badRequest(
-        'as_of query parameter must be a valid ISO 8601 timestamp'
+        'as_of query parameter must be a valid ISO 8601 timestamp',
       );
     }
     asOf = parsed.toISOString();
@@ -472,7 +479,8 @@ export async function POST(request: NextRequest) {
   // TRIB-57: Track request start time for latency measurement
   const requestStartTime = Date.now();
   let telemetryPayload: KnowledgeExtensionQueryTelemetryPayload | null = null;
-  let sharedVendorTelemetry = summarizeCompiledMemoryAnswerObservability(undefined);
+  let sharedVendorTelemetry =
+    summarizeCompiledMemoryAnswerObservability(undefined);
   let telemetryFailureClass: KnowledgeTelemetryFailureClass = 'none';
 
   // TRIB-57: Mutable flags for knowledge layer presence (set inside the stream)
@@ -549,8 +557,11 @@ export async function POST(request: NextRequest) {
         sharedVendorTelemetry =
           summarizeCompiledMemoryAnswerObservability(answerContext);
 
-        // ---- Step 3: early exit if all layers are empty -----------------
-        if (answerContext.sources.length === 0) {
+        // ---- Step 3: fall back only when both knowledge and DOM context are empty.
+        if (
+          answerContext.sources.length === 0 &&
+          !hasDomOnlyGuidanceContext(context)
+        ) {
           emit({
             type: 'text_chunk',
             text: `I don't have specific documentation for ${app} ${screen} yet. Please check the vendor's help center for guidance.`,
@@ -566,6 +577,7 @@ export async function POST(request: NextRequest) {
           question,
           elements: normalizePromptElements(context),
           answerContext,
+          pageContext: context,
         });
 
         // TRIB-50: capture page IDs for after() interaction recording
@@ -615,7 +627,7 @@ export async function POST(request: NextRequest) {
               layer: citation?.layer,
               freshness: citation?.freshness,
             });
-          }
+          },
         );
 
         try {
@@ -691,7 +703,7 @@ export async function POST(request: NextRequest) {
           (existing as
             | { wiki_page_id: string; interaction_type: string }[]
             | null) ?? []
-        ).map((r) => `${r.wiki_page_id}:${r.interaction_type}`)
+        ).map((r) => `${r.wiki_page_id}:${r.interaction_type}`),
       );
 
       // Build rows: 'taught' for all org pages included in the prompt
@@ -711,7 +723,7 @@ export async function POST(request: NextRequest) {
       // Best-effort — don't let interaction tracking crash anything
       console.error(
         '[extension/query] failed to record user wiki interactions:',
-        err
+        err,
       );
     }
   });
@@ -739,7 +751,7 @@ export async function POST(request: NextRequest) {
         // Best-effort — don't let analytics recording crash anything
         console.error(
           '[extension/query] failed to record vendor usage event:',
-          err
+          err,
         );
       }
     });

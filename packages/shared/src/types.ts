@@ -8,6 +8,7 @@ export interface InteractiveElement {
   type: string; // "button" | "input" | "select" | "link"
   ariaLabel?: string; // Accessibility label if present
   boundingRect?: DOMRect; // Position for cursor targeting
+  rect?: ContextRect; // Serializable position for voice/API tooling
   priority?: number; // Semantic ranking score (higher = more important)
   group?: InteractiveGroup;
   roleHint?: string; // e.g. "workspace_switcher", "primary_cta"
@@ -15,6 +16,13 @@ export interface InteractiveElement {
   selected?: boolean;
   disabled?: boolean;
   visible?: boolean;
+  expanded?: boolean;
+  checked?: boolean;
+  required?: boolean;
+  readonly?: boolean;
+  invalid?: boolean;
+  valuePresent?: boolean;
+  placeholder?: string;
 }
 
 export type SurfaceKind =
@@ -85,6 +93,11 @@ export interface FormField {
   selector: string;
   type: string;
   required?: boolean;
+  valuePresent?: boolean;
+  placeholder?: string;
+  disabled?: boolean;
+  readonly?: boolean;
+  invalid?: boolean;
 }
 
 export interface FormSurface {
@@ -110,6 +123,105 @@ export interface DialogSurface {
   actionLabels: string[];
 }
 
+export interface ContextRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface ViewportSnapshot {
+  width: number;
+  height: number;
+  scrollX: number;
+  scrollY: number;
+  devicePixelRatio?: number;
+}
+
+export interface PageRegion {
+  id: string;
+  selector: string;
+  kind:
+    | 'main'
+    | 'header'
+    | 'navigation'
+    | 'aside'
+    | 'section'
+    | 'article'
+    | 'dialog'
+    | 'form'
+    | 'table'
+    | 'card'
+    | 'content';
+  label?: string;
+  summary?: string;
+  rect?: ContextRect;
+  inViewport?: boolean;
+  interactiveCount: number;
+  snippetCount: number;
+}
+
+export interface ContextSnippet {
+  id: string;
+  selector: string;
+  regionId?: string;
+  kind:
+    | 'heading'
+    | 'paragraph'
+    | 'form'
+    | 'table'
+    | 'dialog'
+    | 'list'
+    | 'card'
+    | 'status'
+    | 'text';
+  text: string;
+  rect?: ContextRect;
+}
+
+export interface ElementInspection {
+  selector: string;
+  label: string;
+  type: string;
+  role?: string;
+  tagName: string;
+  text?: string;
+  ariaLabel?: string;
+  placeholder?: string;
+  title?: string;
+  href?: string;
+  rect?: ContextRect;
+  visible: boolean;
+  disabled?: boolean;
+  selected?: boolean;
+  expanded?: boolean;
+  checked?: boolean;
+  required?: boolean;
+  readonly?: boolean;
+  invalid?: boolean;
+  valuePresent?: boolean;
+  surface?: SurfaceKind;
+  group?: InteractiveGroup;
+  regionId?: string;
+}
+
+export interface PageElementSearchResult {
+  query: string;
+  matches: ElementInspection[];
+  matchCount: number;
+  truncated: boolean;
+}
+
+export interface PageRegionInspectionResult {
+  region: PageRegion | null;
+  snippets: ContextSnippet[];
+  elements: ElementInspection[];
+}
+
 export type KnowledgeMatchBasis =
   | 'exact'
   | 'screen_alias'
@@ -117,11 +229,7 @@ export type KnowledgeMatchBasis =
   | 'domain_alias'
   | 'none';
 
-export type KnowledgeMatchCategory =
-  | 'exact'
-  | 'alias'
-  | 'app'
-  | 'domain';
+export type KnowledgeMatchCategory = 'exact' | 'alias' | 'app' | 'domain';
 
 export interface KnowledgeMatch {
   matched: boolean;
@@ -172,6 +280,9 @@ export interface PageContext {
   primaryActions?: PageAction[];
   selectedEntity?: SelectedEntity;
   workspaceContext?: WorkspaceContext;
+  viewport?: ViewportSnapshot;
+  regions?: PageRegion[];
+  snippets?: ContextSnippet[];
   forms?: FormSurface[];
   tables?: TableSurface[];
   dialogs?: DialogSurface[];

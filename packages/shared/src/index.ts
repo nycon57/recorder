@@ -1,5 +1,12 @@
 export type {
   InteractiveElement,
+  ContextRect,
+  ViewportSnapshot,
+  PageRegion,
+  ContextSnippet,
+  ElementInspection,
+  PageElementSearchResult,
+  PageRegionInspectionResult,
   PageContext,
   SurfaceKind,
   InteractiveGroup,
