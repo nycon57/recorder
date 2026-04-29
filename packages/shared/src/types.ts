@@ -7,6 +7,7 @@ export interface InteractiveElement {
   label: string; // Visible text label
   type: string; // "button" | "input" | "select" | "link"
   ariaLabel?: string; // Accessibility label if present
+  // eslint-disable-next-line no-undef
   boundingRect?: DOMRect; // Position for cursor targeting
   rect?: ContextRect; // Serializable position for voice/API tooling
   priority?: number; // Semantic ranking score (higher = more important)
@@ -265,6 +266,14 @@ export interface LiveContextPack {
   sources: LiveContextSourceRef[];
 }
 
+export interface KnowledgeResolvedFor {
+  app: string;
+  screen: string;
+  appSignature: string;
+  host: string;
+  path: string;
+}
+
 export interface PageContext {
   app: string; // "salesforce" | "hubspot" | "jira" | "unknown"
   appVersion?: string; // If detectable
@@ -289,6 +298,8 @@ export interface PageContext {
   vendorKnowledgeMatch?: KnowledgeMatch | null;
   orgKnowledgeMatch?: KnowledgeMatch | null;
   knowledgeAvailability?: KnowledgeAvailability;
+  relevantWikiPages?: string[];
+  knowledgeResolvedFor?: KnowledgeResolvedFor;
   breadcrumbs?: string[]; // Navigation breadcrumbs if present
   visibleText?: string; // Truncated visible text for context (max 2000 chars)
 }

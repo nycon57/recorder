@@ -25,8 +25,8 @@
  */
 
 import { NextRequest, NextResponse, after } from 'next/server';
-import type { PageContext } from '@tribora/shared';
 
+import { buildKnowledgeResolvedFor, type PageContext } from '@tribora/shared';
 import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
@@ -53,6 +53,10 @@ function screenFromUrl(url: string): string {
   } catch {
     return 'unknown';
   }
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export async function POST(request: NextRequest) {
@@ -124,6 +128,15 @@ export async function POST(request: NextRequest) {
       vendorKnowledgeMatch: matches.vendorKnowledgeMatch,
       orgKnowledgeMatch: matches.orgKnowledgeMatch,
       knowledgeAvailability: matches.knowledgeAvailability,
+      relevantWikiPages: matches.relevantWikiPages,
+      knowledgeResolvedFor: buildKnowledgeResolvedFor({
+        app,
+        screen,
+        appSignature: resolvedAppSignature.includes(':')
+          ? resolvedAppSignature
+          : `${app}:${screen}`,
+        url: resolvedUrl,
+      }),
       breadcrumbs: context?.breadcrumbs ?? [],
       visibleText: context?.visibleText,
     };
@@ -171,25 +184,27 @@ export async function POST(request: NextRequest) {
         vendorKnowledgeMatch: matches.vendorKnowledgeMatch,
         orgKnowledgeMatch: matches.orgKnowledgeMatch,
         knowledgeAvailability: matches.knowledgeAvailability,
+        knowledgeResolvedFor: mergedContext.knowledgeResolvedFor,
       },
       { headers: CORS_HEADERS },
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = getErrorMessage(error);
     console.error('[extension/context] error:', error);
 
-    if (error.message === 'Unauthorized') {
+    if (errorMessage === 'Unauthorized') {
       return errors.unauthorized();
     }
-    if (error.message === 'Rate limit exceeded') {
+    if (errorMessage === 'Rate limit exceeded') {
       return errors.rateLimitExceeded();
     }
-    if (error.message === 'Insufficient scope') {
+    if (errorMessage === 'Insufficient scope') {
       return errors.forbidden();
     }
     if (
-      error.message === 'Organization context required' ||
-      error.message === 'User organization not found' ||
-      error.message?.includes('not found in database')
+      errorMessage === 'Organization context required' ||
+      errorMessage === 'User organization not found' ||
+      errorMessage.includes('not found in database')
     ) {
       return errors.forbidden();
     }

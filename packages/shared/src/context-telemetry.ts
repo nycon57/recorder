@@ -1,4 +1,4 @@
-import type { PageContext } from './types.js';
+import type { KnowledgeResolvedFor, PageContext } from './types.js';
 
 export interface SanitizedPageContextLocation {
   host: string;
@@ -7,6 +7,10 @@ export interface SanitizedPageContextLocation {
 
 function normalizeText(value: string | null | undefined): string {
   return (value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeIdentityText(value: string | null | undefined): string {
+  return normalizeText(value).toLowerCase();
 }
 
 function takeUnique(
@@ -126,4 +130,46 @@ export function buildContextSemanticFingerprint(context: PageContext): string {
     snippets.join('|'),
     headings.join('|'),
   ].join('||');
+}
+
+export function buildKnowledgeResolvedFor(
+  context: Pick<PageContext, 'app' | 'screen' | 'appSignature' | 'url'>,
+): KnowledgeResolvedFor {
+  const location = sanitizePageContextLocation(context.url);
+  const app = normalizeIdentityText(context.app) || 'unknown';
+  const screen = normalizeIdentityText(context.screen) || 'unknown';
+
+  return {
+    app,
+    screen,
+    appSignature:
+      normalizeIdentityText(context.appSignature) || `${app}:${screen}`,
+    host: location.host,
+    path: location.path,
+  };
+}
+
+export function knowledgeResolvedForEquals(
+  left: KnowledgeResolvedFor | null | undefined,
+  right: KnowledgeResolvedFor | null | undefined,
+): boolean {
+  if (!left || !right) return false;
+
+  return (
+    left.app === right.app &&
+    left.screen === right.screen &&
+    left.appSignature === right.appSignature &&
+    left.host === right.host &&
+    left.path === right.path
+  );
+}
+
+export function knowledgeResolvedForContextMatches(
+  resolvedFor: KnowledgeResolvedFor | null | undefined,
+  context: Pick<PageContext, 'app' | 'screen' | 'appSignature' | 'url'>,
+): boolean {
+  return knowledgeResolvedForEquals(
+    resolvedFor,
+    buildKnowledgeResolvedFor(context),
+  );
 }
