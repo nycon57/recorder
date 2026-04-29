@@ -2304,6 +2304,7 @@ export default defineBackground(() => {
 
   // ── Recording (tab capture) ─────────────────────────────────────────────────
   let activeRecorder: TabRecorder | null = null;
+  let activeUploadPromise: Promise<{ recordingId: string }> | null = null;
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'RECORDING_START') {
@@ -2323,11 +2324,18 @@ export default defineBackground(() => {
     }
     if (message?.type === 'RECORDING_STOP') {
       void (async () => {
+        let uploadPromiseToClear: Promise<{ recordingId: string }> | null = null;
         try {
+          if (activeUploadPromise) {
+            uploadPromiseToClear = activeUploadPromise;
+            const { recordingId } = await uploadPromiseToClear;
+            return sendResponse({ ok: true, recordingId });
+          }
+
           if (!activeRecorder) {
             return sendResponse({ ok: false, error: 'Not recording' });
           }
-          const blob = await activeRecorder.stop();
+          const recorder = activeRecorder;
           activeRecorder = null;
 
           const UPLOAD_STATE_KEY = 'tribora_upload_state';
@@ -2337,35 +2345,46 @@ export default defineBackground(() => {
             });
           };
 
-          const { recordingId } = await uploadRecording(
-            blob,
-            {
-              filename: `extension-${Date.now()}.webm`,
-              mimeType: 'video/webm',
-              source: 'extension',
-            },
-            {
-              onProgress: (progress) => {
-                broadcastUploadState({
-                  uploadProgress: progress.percent,
-                  uploadedBytes: progress.uploaded,
-                  totalBytes: progress.total,
-                });
+          uploadPromiseToClear = (async () => {
+            const blob = await recorder.stop();
+
+            return uploadRecording(
+              blob,
+              {
+                filename: `extension-${Date.now()}.webm`,
+                mimeType: 'video/webm',
+                source: 'extension',
               },
-              onRetry: (info) => {
-                broadcastUploadState({
-                  retryAttempt: info.attempt,
-                  retryMax: info.maxAttempts,
-                });
+              {
+                onProgress: (progress) => {
+                  broadcastUploadState({
+                    uploadProgress: progress.percent,
+                    uploadedBytes: progress.uploaded,
+                    totalBytes: progress.total,
+                  });
+                },
+                onRetry: (info) => {
+                  broadcastUploadState({
+                    retryAttempt: info.attempt,
+                    retryMax: info.maxAttempts,
+                  });
+                },
               },
-            },
-          );
+            );
+          })();
+          activeUploadPromise = uploadPromiseToClear;
+
+          const { recordingId } = await uploadPromiseToClear;
 
           void chrome.storage.session.remove(UPLOAD_STATE_KEY);
           sendResponse({ ok: true, recordingId });
         } catch (err) {
           void chrome.storage.session.remove('tribora_upload_state');
           sendResponse({ ok: false, error: (err as Error).message });
+        } finally {
+          if (activeUploadPromise === uploadPromiseToClear) {
+            activeUploadPromise = null;
+          }
         }
       })();
       return true;

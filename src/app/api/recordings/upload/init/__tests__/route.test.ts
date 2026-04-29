@@ -68,6 +68,7 @@ let POST: typeof import('../route').POST;
 
 describe('POST /api/recordings/upload/init', () => {
   const createSignedUploadUrl = jest.fn();
+  let existingUpload: Record<string, unknown> | null;
 
   beforeAll(async () => {
     ({ POST } = await import('../route'));
@@ -75,6 +76,7 @@ describe('POST /api/recordings/upload/init', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    existingUpload = null;
 
     mockRequireOrg.mockImplementation(() => Promise.resolve({
       orgId: 'org_1',
@@ -93,7 +95,19 @@ describe('POST /api/recordings/upload/init', () => {
         throw new Error(`Unexpected table ${String(table)}`);
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const selectChain: any = {
+        eq: jest.fn(() => selectChain),
+        order: jest.fn(() => selectChain),
+        limit: jest.fn(() => selectChain),
+        maybeSingle: jest.fn(() => Promise.resolve({
+          data: existingUpload,
+          error: null,
+        })),
+      };
+
       return {
+        select: jest.fn(() => selectChain),
         insert: jest.fn().mockReturnValue({
           select: jest.fn().mockReturnValue({
             single: jest.fn(() => Promise.resolve({
@@ -148,5 +162,100 @@ describe('POST /api/recordings/upload/init', () => {
       uploadPath: 'org_1/recordings/rec_1/raw.webm',
       thumbnailPath: 'org_org_1/recordings/rec_1/thumbnail.jpg',
     });
+  });
+
+  it('reuses an existing extension upload for the same idempotency key', async () => {
+    existingUpload = {
+      id: 'rec_existing',
+      status: 'uploading',
+      content_type: 'recording',
+      file_type: 'webm',
+    };
+
+    const response = await POST(
+      new Request('http://localhost/api/recordings/upload/init', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'idem_existing_1' },
+        body: JSON.stringify({
+          filename: 'screen demo.webm',
+          mimeType: 'video/webm',
+          fileSize: 1024,
+          source: 'extension',
+        }),
+      }) as unknown as NextRequest,
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockCheckAndConsumeQuota).not.toHaveBeenCalled();
+    const json = await response.json();
+    expect(json.data).toMatchObject({
+      recordingId: 'rec_existing',
+      uploadPath: 'org_1/recordings/rec_existing/raw.webm',
+      recovered: true,
+      currentStatus: 'uploading',
+    });
+  });
+
+  it('does not return an overwrite URL when the idempotent upload already advanced', async () => {
+    existingUpload = {
+      id: 'rec_existing',
+      status: 'transcribing',
+      content_type: 'recording',
+      file_type: 'webm',
+    };
+
+    const response = await POST(
+      new Request('http://localhost/api/recordings/upload/init', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'idem_existing_1' },
+        body: JSON.stringify({
+          filename: 'screen demo.webm',
+          mimeType: 'video/webm',
+          fileSize: 1024,
+          source: 'extension',
+        }),
+      }) as unknown as NextRequest,
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockCheckAndConsumeQuota).not.toHaveBeenCalled();
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
+    const json = await response.json();
+    expect(json.data).toMatchObject({
+      recordingId: 'rec_existing',
+      recovered: true,
+      alreadyFinalized: true,
+      currentStatus: 'transcribing',
+    });
+    expect(json.data).not.toHaveProperty('uploadUrl');
+  });
+
+  it('rejects expired idempotent upload recovery windows', async () => {
+    existingUpload = {
+      id: 'rec_existing',
+      status: 'uploading',
+      content_type: 'recording',
+      file_type: 'webm',
+      metadata: {
+        upload_expires_at: '2026-04-22T00:00:00.000Z',
+      },
+    };
+
+    const response = await POST(
+      new Request('http://localhost/api/recordings/upload/init', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'idem_existing_1' },
+        body: JSON.stringify({
+          filename: 'screen demo.webm',
+          mimeType: 'video/webm',
+          fileSize: 1024,
+          source: 'extension',
+        }),
+      }) as unknown as NextRequest,
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockCheckAndConsumeQuota).not.toHaveBeenCalled();
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
   });
 });

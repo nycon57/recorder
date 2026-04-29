@@ -64,6 +64,7 @@ describe('POST /api/recordings/[id]/metadata', () => {
   const jobsInsert = jest.fn();
   const eventsInsert = jest.fn();
   const storageList = jest.fn();
+  let contentRow: Record<string, unknown>;
 
   beforeAll(async () => {
     ({ POST } = await import('../route'));
@@ -77,25 +78,32 @@ describe('POST /api/recordings/[id]/metadata', () => {
       userId: 'user_1',
     }));
 
+    contentRow = {
+      id: 'rec_1',
+      org_id: 'org_1',
+      status: 'uploading',
+      content_type: 'recording',
+      file_type: 'webm',
+      storage_path_raw: null,
+      metadata: { source: 'upload_wizard' },
+    };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const contentSelectChain: any = {
       eq: jest.fn(() => contentSelectChain),
       single: jest.fn(() => Promise.resolve({
-        data: {
-          id: 'rec_1',
-          org_id: 'org_1',
-          status: 'uploading',
-          content_type: 'recording',
-          file_type: 'webm',
-          metadata: { source: 'upload_wizard' },
-        },
+        data: contentRow,
         error: null,
       })),
     };
 
-    contentUpdate.mockReturnValue({
-      eq: jest.fn(() => Promise.resolve({ error: null })),
-    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contentUpdateChain: any = {
+      eq: jest.fn(() => contentUpdateChain),
+      then: (resolve: (value: { error: null }) => unknown) =>
+        Promise.resolve({ error: null }).then(resolve),
+    };
+    contentUpdate.mockReturnValue(contentUpdateChain);
     jobsInsert.mockImplementation(() => Promise.resolve({ error: null }));
     eventsInsert.mockImplementation(() => Promise.resolve({ error: null }));
 
@@ -173,5 +181,48 @@ describe('POST /api/recordings/[id]/metadata', () => {
     expect(storageList).not.toHaveBeenCalled();
     expect(contentUpdate).not.toHaveBeenCalled();
     expect(jobsInsert).not.toHaveBeenCalled();
+  });
+
+  it('treats repeated metadata with the same idempotency key as success', async () => {
+    jobsInsert.mockImplementation(() =>
+      Promise.resolve({
+        error: { code: '23505', message: 'duplicate key value' },
+      }),
+    );
+
+    contentRow = {
+      id: 'rec_1',
+      org_id: 'org_1',
+      status: 'transcribing',
+      content_type: 'recording',
+      file_type: 'webm',
+      storage_path_raw: 'org_1/recordings/rec_1/raw.webm',
+      metadata: {
+        source: 'extension',
+        upload_idempotency_key: 'idem_existing_1',
+      },
+    };
+
+    const response = await POST(makeRequest({
+      title: 'Screen demo',
+      storagePath: 'org_1/recordings/rec_1/raw.webm',
+      idempotencyKey: 'idem_existing_1',
+    }), {
+      params: Promise.resolve({ id: 'rec_1' }),
+    });
+
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    expect(json.data).toMatchObject({
+      success: true,
+      recordingId: 'rec_1',
+      recovered: true,
+    });
+    expect(contentUpdate).not.toHaveBeenCalled();
+    expect(jobsInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dedupe_key: 'transcribe:rec_1',
+      }),
+    );
   });
 });

@@ -29,6 +29,7 @@ import {
   validateThumbnailStoragePath,
 } from '@/lib/recordings/storage-contract';
 import type { ContentType, FileType } from '@/lib/types/content';
+import type { Json } from '@/lib/types/database';
 
 const logger = createLogger({ service: 'upload-metadata' });
 
@@ -44,9 +45,65 @@ const metadataSchema = z.object({
   thumbnailPath: z.string().optional(), // Path to uploaded thumbnail (if custom extension)
   storagePath: z.string().min(1), // Path where file was uploaded
   storageBucket: z.literal('content').optional(),
+  idempotencyKey: z.string().min(8).max(200).optional(),
 });
 
 type MetadataRequest = z.infer<typeof metadataSchema>;
+type ProcessingJobType = ReturnType<typeof getProcessingJobs>[number];
+
+function getIdempotencyKey(
+  request: NextRequest,
+  body: MetadataRequest,
+): string | undefined {
+  return (
+    body.idempotencyKey ||
+    request.headers.get('Idempotency-Key') ||
+    undefined
+  );
+}
+
+function isDuplicateKeyError(error: { code?: string } | null | undefined) {
+  return error?.code === '23505';
+}
+
+function buildProcessingJobPayload(args: {
+  firstJobType: ProcessingJobType;
+  recordingId: string;
+  orgId: string;
+  contentType: ContentType;
+  fileType: FileType;
+  storagePath: string;
+}): Record<string, Json | undefined> {
+  const {
+    firstJobType,
+    recordingId,
+    orgId,
+    contentType,
+    fileType,
+    storagePath,
+  } = args;
+  const jobPayload: Record<string, Json | undefined> = {
+    recordingId,
+    orgId,
+    contentType,
+    fileType,
+  };
+
+  if (firstJobType === 'extract_audio') {
+    jobPayload.videoPath = storagePath;
+  } else if (firstJobType === 'transcribe') {
+    jobPayload.storagePath = storagePath;
+    jobPayload.storageBucket = CURRENT_RECORDING_STORAGE_BUCKET;
+  } else if (firstJobType === 'extract_text_pdf') {
+    jobPayload.pdfPath = storagePath;
+  } else if (firstJobType === 'extract_text_docx') {
+    jobPayload.docxPath = storagePath;
+  } else if (firstJobType === 'process_text_note') {
+    jobPayload.textPath = storagePath;
+  }
+
+  return jobPayload;
+}
 
 /**
  * POST /api/recordings/[id]/metadata
@@ -90,6 +147,7 @@ export const POST = apiHandler(
         storagePath,
         storageBucket = CURRENT_RECORDING_STORAGE_BUCKET,
       } = validationResult.data;
+      const idempotencyKey = getIdempotencyKey(request, validationResult.data);
 
       logger.info('Saving metadata and starting processing', {
         context: { requestId, orgId, userId, recordingId },
@@ -105,7 +163,9 @@ export const POST = apiHandler(
       // Verify content exists and belongs to org
       const { data: recording, error: fetchError } = await supabase
         .from('content')
-        .select('id, org_id, status, content_type, file_type, metadata')
+        .select(
+          'id, org_id, status, content_type, file_type, storage_path_raw, metadata',
+        )
         .eq('id', recordingId)
         .eq('org_id', orgId)
         .single();
@@ -119,6 +179,60 @@ export const POST = apiHandler(
 
       // Verify recording is in uploading status (ready for metadata)
       if (recording.status !== SOURCE_STATUS.UPLOADING) {
+        const existingMetadata =
+          typeof recording.metadata === 'object' &&
+          recording.metadata !== null &&
+          !Array.isArray(recording.metadata)
+            ? (recording.metadata as Record<string, unknown>)
+            : {};
+
+        if (
+          idempotencyKey &&
+          existingMetadata.upload_idempotency_key === idempotencyKey &&
+          recording.storage_path_raw === storagePath
+        ) {
+          const jobTypes = getProcessingJobs(
+            recording.content_type as ContentType,
+            recording.file_type as FileType,
+          );
+          const firstJobType = jobTypes[0];
+
+          if (firstJobType) {
+            const { error: jobError } = await supabase.from('jobs').insert({
+              type: firstJobType,
+              status: 'pending',
+              payload: buildProcessingJobPayload({
+                firstJobType,
+                recordingId,
+                orgId,
+                contentType: recording.content_type as ContentType,
+                fileType: recording.file_type as FileType,
+                storagePath,
+              }),
+              run_at: new Date().toISOString(),
+              dedupe_key: `${firstJobType}:${recordingId}`,
+            });
+
+            if (jobError && !isDuplicateKeyError(jobError)) {
+              logger.error('Failed to recover idempotent processing job', {
+                context: { requestId, recordingId, jobType: firstJobType },
+                error: jobError as Error,
+              });
+              return errors.internalError(requestId);
+            }
+          }
+
+          return successResponse(
+            {
+              success: true,
+              streamUrl: `/api/recordings/${recordingId}/upload/stream`,
+              recordingId,
+              recovered: true,
+            },
+            requestId,
+          );
+        }
+
         logger.warn('Recording not in uploading status', {
           context: { requestId, recordingId, status: recording.status },
         });
@@ -219,8 +333,18 @@ export const POST = apiHandler(
             usedProvidedPath: !!providedThumbnailPath,
           },
         });
-      } else {
       }
+
+      const recordingMetadata =
+        typeof recording.metadata === 'object' &&
+        recording.metadata !== null &&
+        !Array.isArray(recording.metadata)
+          ? (recording.metadata as Record<string, Json | undefined>)
+          : {};
+      const submittedMetadata = (metadata ?? {}) as Record<
+        string,
+        Json | undefined
+      >;
 
       // Update content with metadata
       const updatePayload = {
@@ -230,8 +354,11 @@ export const POST = apiHandler(
         storage_path_raw: storageValidation.storagePath,
         thumbnail_url: thumbnailUrl, // Set thumbnail URL if uploaded
         metadata: {
-          ...(recording.metadata as any),
-          ...metadata,
+          ...recordingMetadata,
+          ...submittedMetadata,
+          ...(idempotencyKey
+            ? { upload_idempotency_key: idempotencyKey }
+            : {}),
           metadata_submitted_at: new Date().toISOString(),
           thumbnail_uploaded: thumbnailUploaded || false,
         },
@@ -251,7 +378,8 @@ export const POST = apiHandler(
       const { error: updateError } = await supabase
         .from('content')
         .update(updatePayload)
-        .eq('id', recordingId);
+        .eq('id', recordingId)
+        .eq('status', SOURCE_STATUS.UPLOADING);
 
       if (updateError) {
         console.error('[Metadata Route] Database update error:', updateError);
@@ -353,48 +481,39 @@ export const POST = apiHandler(
 
       // Determine and enqueue first processing job
       const jobTypes = getProcessingJobs(
-        recording.content_type as any,
-        recording.file_type as any,
+        recording.content_type as ContentType,
+        recording.file_type as FileType,
       );
       const firstJobType = jobTypes[0];
 
       if (firstJobType) {
-        // Build job payload with correct path field based on job type
-        const jobPayload: any = {
-          recordingId,
-          orgId,
-          contentType: recording.content_type,
-          fileType: recording.file_type,
-        };
-
-        // Add storage path with correct field name for each job type
-        if (firstJobType === 'extract_audio') {
-          jobPayload.videoPath = storageValidation.storagePath;
-        } else if (firstJobType === 'transcribe') {
-          jobPayload.storagePath = storageValidation.storagePath;
-          jobPayload.storageBucket = CURRENT_RECORDING_STORAGE_BUCKET;
-        } else if (firstJobType === 'extract_text_pdf') {
-          jobPayload.pdfPath = storageValidation.storagePath;
-        } else if (firstJobType === 'extract_text_docx') {
-          jobPayload.docxPath = storageValidation.storagePath;
-        } else if (firstJobType === 'process_text_note') {
-          jobPayload.textPath = storageValidation.storagePath;
-        }
-
         const { error: jobError } = await supabase.from('jobs').insert({
-          type: firstJobType as any,
+          type: firstJobType,
           status: 'pending',
-          payload: jobPayload,
+          payload: buildProcessingJobPayload({
+            firstJobType,
+            recordingId,
+            orgId,
+            contentType: recording.content_type as ContentType,
+            fileType: recording.file_type as FileType,
+            storagePath: storageValidation.storagePath,
+          }),
           run_at: new Date().toISOString(),
           dedupe_key: `${firstJobType}:${recordingId}`,
         });
 
         if (jobError) {
-          logger.error('Failed to enqueue processing job', {
-            context: { requestId, recordingId, jobType: firstJobType },
-            error: jobError as Error,
-          });
-          return errors.internalError(requestId);
+          if (isDuplicateKeyError(jobError)) {
+            logger.info('Processing job already enqueued', {
+              context: { requestId, recordingId, jobType: firstJobType },
+            });
+          } else {
+            logger.error('Failed to enqueue processing job', {
+              context: { requestId, recordingId, jobType: firstJobType },
+              error: jobError as Error,
+            });
+            return errors.internalError(requestId);
+          }
         }
 
         logger.info('Processing job enqueued', {
@@ -448,7 +567,7 @@ export const POST = apiHandler(
         },
         requestId,
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Metadata submission error', {
         context: { requestId, orgId, userId, recordingId },
         error: error as Error,

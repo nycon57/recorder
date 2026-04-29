@@ -13,6 +13,8 @@
  *   - Progress + retry state callbacks for the popup UI
  */
 
+/* global XMLHttpRequest */
+
 import { apiFetch } from './api-client.js';
 
 // ---------------------------------------------------------------------------
@@ -40,12 +42,13 @@ export type RetryCallback = (info: RetryInfo) => void;
 
 interface UploadInitResponse {
   recordingId: string;
-  uploadUrl: string;
+  uploadUrl?: string;
   uploadBucket?: 'content';
-  uploadPath: string;
+  uploadPath?: string;
   thumbnailUploadUrl: string | null;
   thumbnailPath: string | null;
-  token: string;
+  token?: string;
+  alreadyFinalized?: boolean;
 }
 
 export interface UploadResult {
@@ -63,6 +66,14 @@ export interface UploadOptions {
 
 const MAX_ATTEMPTS = 3;
 const BASE_DELAY_MS = 1000; // 1s, 2s, 4s
+
+function createUploadIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `extension-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -154,6 +165,7 @@ export async function uploadRecording(
   options: UploadOptions = {},
 ): Promise<UploadResult> {
   const { onProgress, onRetry } = options;
+  const idempotencyKey = createUploadIdempotencyKey();
 
   // Step 1: Init -- create recording entry, get presigned upload URL.
   // Retry this too in case of transient network issues.
@@ -165,14 +177,27 @@ export async function uploadRecording(
           filename: metadata.filename,
           mimeType: metadata.mimeType,
           fileSize: blob.size,
+          source: metadata.source,
+          idempotencyKey,
           analysisType: 'general',
           skipAnalysis: false,
         }),
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
       }),
     onRetry,
   );
 
-  const { recordingId, uploadUrl, uploadPath } = init.data;
+  const { recordingId, uploadUrl, uploadPath, alreadyFinalized } = init.data;
+
+  if (alreadyFinalized) {
+    return { recordingId };
+  }
+
+  if (!uploadUrl || !uploadPath) {
+    throw new Error('Upload init did not return an upload URL');
+  }
 
   // Step 2: Upload the blob via XHR PUT with progress tracking.
   // Supabase signed uploads require a single atomic PUT -- no chunking.
@@ -194,7 +219,11 @@ export async function uploadRecording(
         body: JSON.stringify({
           title: metadata.filename.replace(/\.[^.]+$/, ''),
           storagePath: uploadPath,
+          idempotencyKey,
         }),
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
       }),
     onRetry,
   );

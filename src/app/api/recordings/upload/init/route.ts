@@ -48,6 +48,8 @@ const initUploadSchema = z.object({
   filename: z.string().min(1).max(255),
   mimeType: z.string().min(1),
   fileSize: z.number().positive(),
+  source: z.enum(['extension']).optional(),
+  idempotencyKey: z.string().min(8).max(200).optional(),
   durationSec: z.number().positive().optional(),
   analysisType: z
     .enum(['none', 'meeting', 'tutorial', 'sop', 'demo', 'general'])
@@ -57,6 +59,18 @@ const initUploadSchema = z.object({
 });
 
 type InitUploadRequest = z.infer<typeof initUploadSchema>;
+type UploadMetadata = Record<string, unknown>;
+
+function getIdempotencyKey(
+  request: NextRequest,
+  body: InitUploadRequest,
+): string | undefined {
+  return (
+    body.idempotencyKey ||
+    request.headers.get('Idempotency-Key') ||
+    undefined
+  );
+}
 
 /**
  * POST /api/recordings/upload/init
@@ -90,10 +104,12 @@ export const POST = withRateLimit(
         filename,
         mimeType,
         fileSize,
+        source,
         durationSec,
         analysisType,
         skipAnalysis,
       } = validationResult.data;
+      const idempotencyKey = getIdempotencyKey(request, validationResult.data);
 
       logger.info('Initializing upload', {
         context: { requestId, orgId, userId },
@@ -104,6 +120,8 @@ export const POST = withRateLimit(
           durationSec,
           analysisType,
           skipAnalysis,
+          source,
+          hasIdempotencyKey: !!idempotencyKey,
         },
       });
 
@@ -137,6 +155,108 @@ export const POST = withRateLimit(
           { maxSize: maxSizeBytes },
           requestId,
         );
+      }
+
+      if (source === 'extension' && idempotencyKey) {
+        const { data: existingUpload, error: existingError } = await supabase
+          .from('content')
+          .select('id, status, content_type, file_type, metadata')
+          .eq('org_id', orgId)
+          .eq('created_by', userId)
+          .eq('metadata->>source', 'extension')
+          .eq('metadata->>upload_idempotency_key', idempotencyKey)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingError) {
+          logger.warn('Failed to check idempotent upload init', {
+            context: { requestId, orgId, userId },
+            error: existingError as Error,
+          });
+        }
+
+        if (existingUpload) {
+          const existingMetadata =
+            typeof existingUpload.metadata === 'object' &&
+            existingUpload.metadata !== null &&
+            !Array.isArray(existingUpload.metadata)
+              ? (existingUpload.metadata as UploadMetadata)
+              : {};
+          const expiresAt =
+            typeof existingMetadata.upload_expires_at === 'string'
+              ? Date.parse(existingMetadata.upload_expires_at)
+              : Number.NaN;
+
+          if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+            return errors.badRequest(
+              'Upload retry window expired',
+              { currentStatus: existingUpload.status },
+              requestId,
+            );
+          }
+
+          if (existingUpload.status !== SOURCE_STATUS.UPLOADING) {
+            return successResponse(
+              {
+                recordingId: existingUpload.id,
+                recovered: true,
+                alreadyFinalized: true,
+                currentStatus: existingUpload.status,
+              },
+              requestId,
+              200,
+            );
+          }
+
+          const filePath = buildContentRecordingStoragePath(
+            orgId,
+            existingUpload.content_type as ContentType,
+            existingUpload.id,
+            existingUpload.file_type as FileType,
+          );
+          const thumbnailPath = buildDefaultThumbnailStoragePath(
+            orgId,
+            existingUpload.id,
+          );
+
+          const { data: fileUploadData, error: fileUploadError } =
+            await supabase.storage
+              .from('content')
+              .createSignedUploadUrl(filePath, {
+                upsert: true,
+              });
+
+          if (fileUploadError || !fileUploadData) {
+            logger.error('Failed to regenerate idempotent file upload URL', {
+              context: { requestId, recordingId: existingUpload.id },
+              error: fileUploadError as Error,
+            });
+            return errors.internalError(requestId);
+          }
+
+          const { data: thumbnailUploadData } = await supabase.storage
+            .from('thumbnails')
+            .createSignedUploadUrl(thumbnailPath, {
+              upsert: true,
+            });
+
+          return successResponse(
+            {
+              recordingId: existingUpload.id,
+              uploadUrl: fileUploadData.signedUrl,
+              uploadBucket: CURRENT_RECORDING_STORAGE_BUCKET,
+              uploadPath: filePath,
+              thumbnailUploadUrl: thumbnailUploadData?.signedUrl || null,
+              thumbnailPath: thumbnailUploadData ? thumbnailPath : null,
+              token: fileUploadData.token,
+              recovered: true,
+              currentStatus: existingUpload.status,
+            },
+            requestId,
+            200,
+          );
+        }
       }
 
       // Validate duration for content type (prevents processing failures for long videos)
@@ -186,9 +306,6 @@ export const POST = withRateLimit(
         });
       }
 
-      // Quota has been consumed - track this for potential rollback
-      let quotaConsumed = true;
-
       // Sanitize filename (prevent path traversal)
       const sanitizedFilename = filename
         .replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -211,8 +328,17 @@ export const POST = withRateLimit(
           analysis_type: analysisType,
           skip_analysis: skipAnalysis,
           metadata: {
-            source: 'upload_wizard',
+            source: source || 'upload_wizard',
             initialized_at: new Date().toISOString(),
+            ...(idempotencyKey
+              ? {
+                  upload_idempotency_key: idempotencyKey,
+                  upload_started_at: new Date().toISOString(),
+                  upload_expires_at: new Date(
+                    Date.now() + 1000 * 60 * 60,
+                  ).toISOString(),
+                }
+              : {}),
           },
         })
         .select()
@@ -320,7 +446,7 @@ export const POST = withRateLimit(
         requestId,
         201,
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Upload init request error', {
         context: { requestId, orgId, userId },
         error: error as Error,
@@ -330,7 +456,7 @@ export const POST = withRateLimit(
   }),
   {
     limiter: 'upload',
-    identifier: async (req) => {
+    identifier: async () => {
       const { orgId } = await requireOrg();
       return orgId;
     },
