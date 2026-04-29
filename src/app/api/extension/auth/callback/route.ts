@@ -7,7 +7,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { auth } from '@/lib/auth/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { errors } from '@/lib/utils/api';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
@@ -32,21 +31,30 @@ export async function POST(request: NextRequest) {
     return errors.badRequest('token is required');
   }
 
-  const authHeaders = new Headers(request.headers);
-  authHeaders.set('authorization', `Bearer ${token}`);
+  const { data: session, error: sessionError } = await supabaseAdmin
+    .from('session')
+    .select('userId, token, expiresAt, activeOrganizationId')
+    .eq('token', token)
+    .single();
 
-  const session = await auth.api.getSession({
-    headers: authHeaders,
-  });
-
-  if (!session?.user?.id || !session.session?.token) {
+  if (sessionError?.code === 'PGRST116' || !session?.userId) {
+    return errors.unauthorized();
+  }
+  if (sessionError) {
+    console.error(
+      '[extension/auth/callback] Session lookup error:',
+      sessionError,
+    );
+    return errors.internalError();
+  }
+  if (new Date(session.expiresAt).getTime() <= Date.now()) {
     return errors.unauthorized();
   }
 
   const { data: user, error } = await supabaseAdmin
     .from('users')
     .select('id, org_id, email, name, avatar_url')
-    .eq('id', session.user.id)
+    .eq('id', session.userId)
     .single();
 
   if (error?.code === 'PGRST116') {
@@ -63,41 +71,42 @@ export async function POST(request: NextRequest) {
     return errors.forbidden();
   }
 
-  const activeOrganization =
-    (session as { activeOrganization?: unknown }).activeOrganization ??
-    (session as { activeOrg?: unknown }).activeOrg;
-  const activeOrg =
-    activeOrganization &&
-    typeof activeOrganization === 'object' &&
-    typeof (activeOrganization as { id?: unknown }).id === 'string'
-      ? {
-          id: (activeOrganization as { id: string }).id,
-          name:
-            typeof (activeOrganization as { name?: unknown }).name === 'string'
-              ? (activeOrganization as { name: string }).name
-              : '',
-          slug:
-            typeof (activeOrganization as { slug?: unknown }).slug === 'string'
-              ? (activeOrganization as { slug: string }).slug
-              : '',
-        }
-      : undefined;
+  const activeOrgId = session.activeOrganizationId ?? user.org_id;
+  const { data: organization, error: organizationError } = await supabaseAdmin
+    .from('organizations')
+    .select('id, name, slug')
+    .eq('id', activeOrgId)
+    .single();
+
+  if (organizationError && organizationError.code !== 'PGRST116') {
+    console.error(
+      '[extension/auth/callback] Organization lookup error:',
+      organizationError,
+    );
+    return errors.internalError();
+  }
+
+  const activeOrg = organization
+    ? {
+        id: organization.id,
+        name: organization.name ?? '',
+        slug: organization.slug ?? '',
+      }
+    : undefined;
 
   return NextResponse.json(
     {
       session: {
         status: 'authenticated',
         user: {
-          id: session.user.id,
-          email: session.user.email,
-          name: session.user.name ?? user.name ?? null,
-          image: session.user.image ?? user.avatar_url ?? null,
+          id: user.id,
+          email: user.email,
+          name: user.name ?? null,
+          image: user.avatar_url ?? null,
         },
         activeOrg,
-        token: session.session.token,
-        expiresAt: session.session.expiresAt
-          ? new Date(session.session.expiresAt).getTime()
-          : undefined,
+        token: session.token,
+        expiresAt: new Date(session.expiresAt).getTime(),
       },
     },
     { headers: CORS_HEADERS },
