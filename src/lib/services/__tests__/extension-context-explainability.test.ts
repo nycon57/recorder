@@ -209,4 +209,29 @@ describe('extension context explainability', () => {
 
     expect(ranked.map((row) => row.id)).toEqual(['a-page', 'z-page']);
   });
+
+  it('rankKnowledgeRowsByPageRelevance uses vector relevance for broad app matches', () => {
+    const ranked = rankKnowledgeRowsByPageRelevance(
+      [
+        {
+          id: 'lexical',
+          screen: 'overview',
+          topic: 'Billing settings',
+          vectorScore: 0.1,
+        },
+        {
+          id: 'semantic',
+          screen: 'overview',
+          topic: 'Account plan and invoices',
+          vectorScore: 0.92,
+        },
+      ],
+      {
+        screen: 'billing',
+        url: 'https://app.example.com/admin/billing',
+      },
+    );
+
+    expect(ranked.map((row) => row.id)).toEqual(['semantic', 'lexical']);
+  });
 });
