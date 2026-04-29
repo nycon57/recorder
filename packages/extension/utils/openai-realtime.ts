@@ -5,6 +5,9 @@ export const DEFAULT_OPENAI_REALTIME_VOICE = 'marin';
 
 export type OpenAIRealtimeToolName =
   | 'get_page_context'
+  | 'search_page_elements'
+  | 'inspect_element'
+  | 'inspect_page_region'
   | 'capture_screenshot'
   | 'highlight_element'
   | 'highlight_elements'
@@ -61,6 +64,42 @@ export function buildOpenAIRealtimeToolDefinitions(): OpenAIRealtimeFunctionTool
       description:
         'Capture the visible browser tab when visual page evidence is required.',
       parameters: objectSchema({}),
+    },
+    {
+      type: 'function',
+      name: 'search_page_elements',
+      description:
+        'Search the current DOM-first page understanding for visible controls by label, text, role, type, or surface.',
+      parameters: objectSchema(
+        {
+          query: {
+            type: 'string',
+            description: 'User-facing text, label, role, or surface to find.',
+          },
+          limit: { type: 'number' },
+        },
+        ['query'],
+      ),
+    },
+    {
+      type: 'function',
+      name: 'inspect_element',
+      description:
+        'Inspect one current-page element by selector and return sanitized state, bounds, labels, and region metadata without raw field values.',
+      parameters: objectSchema({ selector: selectorProperty }, ['selector']),
+    },
+    {
+      type: 'function',
+      name: 'inspect_page_region',
+      description:
+        'Inspect a page region by selector or region id, including sanitized snippets and visible controls in that region.',
+      parameters: objectSchema(
+        {
+          selector: selectorProperty,
+          regionId: { type: 'string' },
+        },
+        [],
+      ),
     },
     {
       type: 'function',
@@ -158,10 +197,12 @@ export function buildOpenAIRealtimeToolDefinitions(): OpenAIRealtimeFunctionTool
   ];
 }
 
-export function buildOpenAIRealtimeSessionConfig(args: {
-  model?: string;
-  voice?: string;
-} = {}): Record<string, unknown> {
+export function buildOpenAIRealtimeSessionConfig(
+  args: {
+    model?: string;
+    voice?: string;
+  } = {},
+): Record<string, unknown> {
   const model = args.model?.trim() || DEFAULT_OPENAI_REALTIME_MODEL;
   const voice = args.voice?.trim() || DEFAULT_OPENAI_REALTIME_VOICE;
 

@@ -178,18 +178,22 @@ export function summarizeToolCallArgs(
     label:
       typeof payload.label === 'string'
         ? clipText(payload.label, 160)
-        : keyCombo
-          ? clipText(keyCombo, 160)
-          : firstTargetLabel
-            ? clipText(
-                targets.length > 1
-                  ? `${firstTargetLabel} (+${targets.length - 1} more)`
-                  : firstTargetLabel,
-                160,
-              )
-            : typeof payload.elementLabel === 'string'
-              ? clipText(payload.elementLabel, 160)
-              : null,
+        : typeof payload.query === 'string'
+          ? clipText(payload.query, 160)
+          : typeof payload.regionId === 'string'
+            ? clipText(payload.regionId, 160)
+            : keyCombo
+              ? clipText(keyCombo, 160)
+              : firstTargetLabel
+                ? clipText(
+                    targets.length > 1
+                      ? `${firstTargetLabel} (+${targets.length - 1} more)`
+                      : firstTargetLabel,
+                    160,
+                  )
+                : typeof payload.elementLabel === 'string'
+                  ? clipText(payload.elementLabel, 160)
+                  : null,
     action:
       typeof payload.action === 'string'
         ? payload.action
@@ -207,9 +211,15 @@ export function summarizeToolCallArgs(
                     ? 'highlight'
                     : name === 'highlight_elements'
                       ? 'highlight'
-                      : name === 'press_key'
-                        ? 'keyboard'
-                        : null,
+                      : name === 'search_page_elements'
+                        ? 'search'
+                        : name === 'inspect_element'
+                          ? 'inspect'
+                          : name === 'inspect_page_region'
+                            ? 'inspect_region'
+                            : name === 'press_key'
+                              ? 'keyboard'
+                              : null,
     inputTextPreview: text ? clipText(text, 200) : null,
     inputTextLength: text ? text.length : null,
   };
