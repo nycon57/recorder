@@ -25,6 +25,10 @@ import {
   scrollElementIntoView,
 } from '../../utils/dom-actions.js';
 import { runVerifiedAction } from '../../utils/action-verification.js';
+import {
+  classifyBrowserAction,
+  type ActionSafetyArgs,
+} from '../../utils/action-safety-policy.js';
 import { typeIntoElement } from '../../utils/dom-input.js';
 import { pressKey } from '../../utils/dom-keyboard.js';
 import { deriveWidgetBootstrapState } from '../../utils/session-startup.js';
@@ -36,6 +40,7 @@ import {
 } from '../../utils/voice-tool-routing.js';
 
 import { createWidget } from './widget';
+import { requestActionConfirmation } from './action-confirmation';
 import { createDomOverlay } from './dom-overlay';
 import { createDomObserver, type DomObserver } from './dom-observer';
 import {
@@ -269,6 +274,50 @@ export default defineContentScript({
     })();
 
     // ── Tool execution helpers ────────────────────────────────────────────────
+    const recentMutationAttempts = new Map<string, number[]>();
+
+    function recordMutationAttempt(args: ActionSafetyArgs): string | null {
+      const now = Date.now();
+      const windowMs = 15_000;
+      const key = [
+        args.toolName,
+        args.selector ?? '',
+        args.key ?? '',
+        args.modifiers?.join('+') ?? '',
+      ].join(':');
+      const recent = (recentMutationAttempts.get(key) ?? []).filter(
+        (timestamp) => now - timestamp < windowMs,
+      );
+      if (recent.length >= 5) {
+        recentMutationAttempts.set(key, recent);
+        return 'Action blocked: repeated action safety cap reached.';
+      }
+      recent.push(now);
+      recentMutationAttempts.set(key, recent);
+      return null;
+    }
+
+    async function enforceActionSafety(
+      args: ActionSafetyArgs,
+    ): Promise<string | null> {
+      const safety = classifyBrowserAction(args);
+      if (safety.decision === 'block') {
+        return safety.reason;
+      }
+      if (safety.decision === 'allow') {
+        return null;
+      }
+
+      const repeatedActionBlock = recordMutationAttempt(args);
+      if (repeatedActionBlock) return repeatedActionBlock;
+
+      const approved = await requestActionConfirmation({ safety });
+      if (!approved) {
+        return 'action cancelled by user';
+      }
+      return null;
+    }
+
     async function execGetPageContext(): Promise<string> {
       const context = await getFreshLatestContext();
       if (!context) return 'No page context available.';
@@ -384,6 +433,12 @@ export default defineContentScript({
       cancelOverlayClear();
       const el = document.querySelector<HTMLElement>(args.selector);
       if (!el) return 'target unavailable: element not found';
+      const safetyBlock = await enforceActionSafety({
+        toolName: 'click_element',
+        selector: args.selector,
+        target: el,
+      });
+      if (safetyBlock) return safetyBlock;
       const context = latestContext;
       if (!context) return 'target unavailable: page context unavailable';
       const previousFingerprint = buildContextSemanticFingerprint(context);
@@ -440,6 +495,14 @@ export default defineContentScript({
       cancelOverlayClear();
       const el = document.querySelector<HTMLElement>(args.selector);
       if (!el) return 'target unavailable: element not found';
+      const safetyBlock = await enforceActionSafety({
+        toolName: 'type_in_element',
+        selector: args.selector,
+        target: el,
+        text: args.text,
+        clear: args.clear,
+      });
+      if (safetyBlock) return safetyBlock;
       const context = latestContext;
       if (!context) return 'target unavailable: page context unavailable';
       const previousFingerprint = buildContextSemanticFingerprint(context);
@@ -493,6 +556,16 @@ export default defineContentScript({
       if (!(target instanceof HTMLElement)) {
         return 'target unavailable: element not found';
       }
+
+      const safetyBlock = await enforceActionSafety({
+        toolName: 'press_key',
+        selector: args.selector,
+        target,
+        key: args.key,
+        modifiers: args.modifiers,
+        repeat: args.repeat,
+      });
+      if (safetyBlock) return safetyBlock;
 
       const context = latestContext;
       if (!context) return 'target unavailable: page context unavailable';
