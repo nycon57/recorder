@@ -42,13 +42,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // These extension surfaces intentionally support vendor API keys. Let them
-  // reach their route handlers so requireApiKeyOrSession can validate the key,
-  // while keeping session-only extension routes protected below.
-  if (isApiKeyCapableExtensionRoute(pathname)) {
-    return NextResponse.next();
-  }
-
   // SDK bundle route is public — skip auth (served with cache headers)
   if (pathname === "/api/sdk/bundle") {
     return NextResponse.next();
@@ -88,6 +81,13 @@ export async function middleware(request: NextRequest) {
       // Domain resolution failure should not block the request
       console.warn("[middleware] Custom domain resolution error:", err);
     }
+  }
+
+  // These extension surfaces intentionally support vendor API keys. Let them
+  // reach their route handlers so requireApiKeyOrSession can validate the key,
+  // while keeping session-only extension routes protected below.
+  if (isApiKeyCapableExtensionRoute(pathname)) {
+    return NextResponse.next();
   }
 
   // ─── SDK routes use API key auth, not session ───────────────────────
