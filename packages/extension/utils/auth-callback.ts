@@ -41,7 +41,7 @@ export function buildExtensionSignInUrl(
   return url.toString();
 }
 
-export function isTrustedExtensionAuthCallbackUrl(
+export function isTrustedExtensionAuthCallbackUrlForBase(
   callbackUrl: string | null | undefined,
   apiBaseUrl: string,
 ): boolean {
@@ -72,7 +72,7 @@ export function readValidatedExtensionAuthCallbackToken({
   apiBaseUrl,
   now,
 }: ExtensionAuthCallbackInput): string {
-  if (!isTrustedExtensionAuthCallbackUrl(callbackUrl, apiBaseUrl)) {
+  if (!isTrustedExtensionAuthCallbackUrlForBase(callbackUrl, apiBaseUrl)) {
     throw new Error('Auth callback URL is not trusted');
   }
   if (typeof state !== 'string' || state.length === 0) {

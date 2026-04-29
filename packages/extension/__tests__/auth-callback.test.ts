@@ -1,7 +1,7 @@
 /* global describe, expect, it */
 
 import {
-  isTrustedExtensionAuthCallbackUrl,
+  isTrustedExtensionAuthCallbackUrlForBase,
   readValidatedExtensionAuthCallbackToken,
 } from '../utils/auth-callback';
 
@@ -10,19 +10,19 @@ describe('extension auth callback hardening', () => {
 
   it('trusts only the configured Tribora extension callback route', () => {
     expect(
-      isTrustedExtensionAuthCallbackUrl(
+      isTrustedExtensionAuthCallbackUrlForBase(
         'http://localhost:3000/extension/auth/callback?extension_auth_state=abc',
         apiBaseUrl,
       ),
     ).toBe(true);
     expect(
-      isTrustedExtensionAuthCallbackUrl(
+      isTrustedExtensionAuthCallbackUrlForBase(
         'http://localhost:3000/dashboard?extension_auth_state=abc',
         apiBaseUrl,
       ),
     ).toBe(false);
     expect(
-      isTrustedExtensionAuthCallbackUrl(
+      isTrustedExtensionAuthCallbackUrlForBase(
         'https://attacker.example/extension/auth/callback?extension_auth_state=abc',
         apiBaseUrl,
       ),
