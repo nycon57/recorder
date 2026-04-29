@@ -207,7 +207,7 @@ describe('handleSearchKnowledge', () => {
     jest.clearAllMocks();
   });
 
-  it('returns unified org wiki and vendor wiki results ranked by similarity', async () => {
+  it('preserves org wiki precedence over vendor wiki and raw evidence', async () => {
     injectRAGContext.mockResolvedValue({ sources: [] } as never);
     searchCompiledOrgWikiPages.mockResolvedValue([
       {
@@ -260,8 +260,8 @@ describe('handleSearchKnowledge', () => {
       screen: 'deals',
     });
     expect(results.map((result) => result.id)).toEqual([
-      'vendor-page-1',
       'org-page-1',
+      'vendor-page-1',
     ]);
   });
 });

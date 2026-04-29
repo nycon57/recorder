@@ -280,15 +280,15 @@ export async function handleSearchKnowledge(
   ]);
 
   return [
-    ...orgWiki,
-    ...vendorWiki,
-    ...recordings.map((recording) => ({
-      ...recording,
-      source: 'recording' as const,
-    })),
-  ]
-    .sort((left, right) => (right.similarity ?? 0) - (left.similarity ?? 0))
-    .slice(0, limit);
+    ...orgWiki.sort((left, right) => right.similarity - left.similarity),
+    ...vendorWiki.sort((left, right) => right.similarity - left.similarity),
+    ...recordings
+      .map((recording) => ({
+        ...recording,
+        source: 'recording' as const,
+      }))
+      .sort((left, right) => right.similarity - left.similarity),
+  ].slice(0, limit);
 }
 
 // ---------------------------------------------------------------------------
