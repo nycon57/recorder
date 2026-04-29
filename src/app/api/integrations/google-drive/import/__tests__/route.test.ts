@@ -10,23 +10,36 @@ import {
   jest,
 } from '@jest/globals';
 
-const mockRequireOrg = jest.fn();
-const mockCreateAdminClient = jest.fn();
-const mockTestConnection = jest.fn();
-const mockDownloadFile = jest.fn();
+interface MockDownloadedFile {
+  id: string;
+  title: string;
+  content: string | Buffer;
+  mimeType: string;
+  size: number;
+  metadata: Record<string, unknown>;
+}
+
+const mockRequireOrg = jest.fn<
+  () => Promise<{ orgId: string; userId: string }>
+>();
+const mockCreateAdminClient = jest.fn<() => unknown>();
+const mockTestConnection = jest.fn<() => Promise<{ success: boolean }>>();
+const mockDownloadFile = jest.fn<
+  (fileId: string) => Promise<MockDownloadedFile>
+>();
 
 jest.mock('@/lib/utils/api', () => ({
-  requireOrg: (...args: unknown[]) => mockRequireOrg(...args),
+  requireOrg: () => mockRequireOrg(),
 }));
 
 jest.mock('@/lib/supabase/admin', () => ({
-  createClient: (...args: unknown[]) => mockCreateAdminClient(...args),
+  createClient: () => mockCreateAdminClient(),
 }));
 
 jest.mock('@/lib/connectors/google-drive', () => ({
   GoogleDriveConnector: jest.fn().mockImplementation(() => ({
-    testConnection: (...args: unknown[]) => mockTestConnection(...args),
-    downloadFile: (...args: unknown[]) => mockDownloadFile(...args),
+    testConnection: () => mockTestConnection(),
+    downloadFile: (fileId: string) => mockDownloadFile(fileId),
   })),
 }));
 
@@ -57,16 +70,29 @@ function selectSingleResult(data: unknown, error: unknown = null) {
 }
 
 describe('POST /api/integrations/google-drive/import', () => {
-  const from = jest.fn();
-  const contentInsert = jest.fn();
-  const contentUpdate = jest.fn();
-  const contentDelete = jest.fn();
-  const transcriptInsert = jest.fn();
-  const jobsInsert = jest.fn();
-  const syncStateInsert = jest.fn();
-  const syncStateDelete = jest.fn();
-  const connectorUpdate = jest.fn();
-  const storageUpload = jest.fn();
+  const from = jest.fn<(table: string) => unknown>();
+  const contentInsert = jest.fn<(value: unknown) => unknown>();
+  const contentUpdate = jest.fn<(value: unknown) => unknown>();
+  const contentDelete = jest.fn<() => unknown>();
+  const transcriptInsert = jest.fn<(value: unknown) => unknown>();
+  const jobsInsert = jest.fn<
+    (value: unknown) => Promise<{ error: { message: string } | null }>
+  >();
+  const syncStateInsert = jest.fn<
+    (value: unknown) => Promise<{ error: { message: string } | null }>
+  >();
+  const syncStateDelete = jest.fn<() => unknown>();
+  const connectorUpdate = jest.fn<(value: unknown) => unknown>();
+  const storageUpload = jest.fn<
+    (
+      path: string,
+      body: Buffer,
+      options: { contentType: string; upsert: boolean },
+    ) => Promise<{ data: unknown; error: { message: string } | null }>
+  >();
+  const storageRemove = jest.fn<
+    (paths: string[]) => Promise<{ data: unknown[]; error: { message: string } | null }>
+  >();
 
   beforeAll(async () => {
     ({ POST } = await import('../route'));
@@ -83,7 +109,7 @@ describe('POST /api/integrations/google-drive/import', () => {
     mockCreateAdminClient.mockReturnValue({
       from,
       storage: {
-        from: jest.fn(() => ({ upload: storageUpload })),
+        from: jest.fn(() => ({ upload: storageUpload, remove: storageRemove })),
       },
     });
 
@@ -122,6 +148,7 @@ describe('POST /api/integrations/google-drive/import', () => {
       eq: jest.fn(() => Promise.resolve({ error: null })),
     });
     storageUpload.mockResolvedValue({ data: { path: 'stored' }, error: null });
+    storageRemove.mockResolvedValue({ data: [], error: null });
 
     from.mockImplementation((table: string) => {
       if (table === 'connector_configs') {
@@ -285,5 +312,67 @@ describe('POST /api/integrations/google-drive/import', () => {
     ]);
     expect(syncStateDelete).toHaveBeenCalled();
     expect(contentDelete).toHaveBeenCalled();
+  });
+
+  it('removes uploaded binary storage if extraction job setup fails', async () => {
+    const pdfBytes = Buffer.from('%PDF-1.7 real bytes');
+    mockDownloadFile.mockResolvedValue({
+      id: 'pdf_1',
+      title: 'Vendor Spec.pdf',
+      content: pdfBytes,
+      mimeType: 'application/pdf',
+      size: pdfBytes.length,
+      metadata: {},
+    });
+    jobsInsert.mockResolvedValue({
+      error: { message: 'job queue unavailable' },
+    });
+
+    const response = await POST(makeRequest(['pdf_1']));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.imported).toBe(0);
+    expect(body.failed).toEqual([
+      { fileId: 'pdf_1', error: 'job queue unavailable' },
+    ]);
+    expect(storageRemove).toHaveBeenCalledWith([
+      'org_1/documents/content_1.pdf',
+    ]);
+    expect(syncStateDelete).toHaveBeenCalled();
+    expect(contentDelete).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['doc_legacy', 'application/msword'],
+    [
+      'xlsx_1',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ],
+    ['xls_1', 'application/vnd.ms-excel'],
+  ])('rejects unsupported binary Drive import %s before creating content', async (
+    fileId,
+    mimeType,
+  ) => {
+    mockDownloadFile.mockResolvedValue({
+      id: fileId,
+      title: 'Unsupported binary',
+      content: Buffer.from('binary bytes'),
+      mimeType,
+      size: 12,
+      metadata: {},
+    });
+
+    const response = await POST(makeRequest([fileId]));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.imported).toBe(0);
+    expect(body.failed).toEqual([
+      { fileId, error: `Unsupported file type: ${mimeType}` },
+    ]);
+    expect(contentInsert).not.toHaveBeenCalled();
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(jobsInsert).not.toHaveBeenCalled();
   });
 });

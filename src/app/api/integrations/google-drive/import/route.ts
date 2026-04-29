@@ -54,13 +54,10 @@ const SUPPORTED_MIME_TYPES = new Set([
   // Documents
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword',
   'text/plain',
   'text/markdown',
   'text/html',
   // Spreadsheets
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
   'text/csv',
 ]);
 
@@ -83,12 +80,9 @@ function getFileType(mimeType: string): string {
     'application/pdf': 'pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
       'docx',
-    'application/msword': 'doc',
     'text/plain': 'txt',
     'text/markdown': 'md',
     'text/html': 'html',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
-    'application/vnd.ms-excel': 'xls',
     'text/csv': 'csv',
   };
   return mimeToFileType[mimeType] || 'unknown';
@@ -107,8 +101,7 @@ function isBinaryDocumentMimeType(mimeType: string): boolean {
   return (
     mimeType === 'application/pdf' ||
     mimeType ===
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-    mimeType === 'application/msword'
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   );
 }
 
@@ -147,8 +140,7 @@ function getExtractionJob(
 
   if (
     mimeType ===
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-    mimeType === 'application/msword'
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   ) {
     return {
       type: 'extract_text_docx',
@@ -166,7 +158,21 @@ function getExtractionJob(
 async function rollbackCreatedImport(
   supabase: ReturnType<typeof createAdminClient>,
   contentId: string,
+  storagePath?: string,
 ): Promise<void> {
+  if (storagePath) {
+    const { error: storageDeleteError } = await supabase.storage
+      .from('content')
+      .remove([storagePath]);
+
+    if (storageDeleteError) {
+      console.error(
+        `[Google Drive Import] Failed to delete storage object during rollback:`,
+        storageDeleteError,
+      );
+    }
+  }
+
   const { error: syncDeleteError } = await supabase
     .from('connector_sync_state')
     .delete()
@@ -321,13 +327,13 @@ export async function POST(req: NextRequest) {
         }
 
         // Generate content hash for deduplication
-        const hashInput = textLike
-          ? toText(fileContent.content)
-          : toBuffer(fileContent.content);
-        const contentHash = crypto
-          .createHash('sha256')
-          .update(hashInput)
-          .digest('hex');
+        const hash = crypto.createHash('sha256');
+        if (textLike) {
+          hash.update(toText(fileContent.content), 'utf-8');
+        } else {
+          hash.update(new Uint8Array(toBuffer(fileContent.content)));
+        }
+        const contentHash = hash.digest('hex');
 
         // Determine content_type and file_type
         const contentType = getContentType(fileContent.mimeType);
@@ -338,7 +344,7 @@ export async function POST(req: NextRequest) {
           .from('content')
           .insert({
             org_id: orgId,
-            user_id: userId,
+            created_by: userId,
             title: fileContent.title,
             content_type: contentType,
             file_type: fileType,
@@ -415,6 +421,7 @@ export async function POST(req: NextRequest) {
         }
 
         let jobError: { message: string } | null = null;
+        let uploadedStoragePath: string | undefined;
 
         if (textLike) {
           const textContent = toText(fileContent.content);
@@ -516,13 +523,18 @@ export async function POST(req: NextRequest) {
           );
 
           if (!extractionJob) {
-            await rollbackCreatedImport(supabase, contentRecord.id);
+            await rollbackCreatedImport(
+              supabase,
+              contentRecord.id,
+              storagePath,
+            );
             results.failed.push({
               fileId,
               error: `No extraction job is available for file type: ${fileContent.mimeType}`,
             });
             continue;
           }
+          uploadedStoragePath = storagePath;
 
           const { error } = await supabase.from('jobs').insert({
             type: extractionJob.type,
@@ -549,7 +561,11 @@ export async function POST(req: NextRequest) {
             jobError,
           );
           // Content is created, job failed - update status
-          await rollbackCreatedImport(supabase, contentRecord.id);
+          await rollbackCreatedImport(
+            supabase,
+            contentRecord.id,
+            uploadedStoragePath,
+          );
           results.failed.push({
             fileId,
             error: jobError.message,

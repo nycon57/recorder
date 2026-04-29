@@ -6,26 +6,17 @@
  * and bidirectional sync (publishing) capabilities.
  */
 
-import { google, drive_v3 } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
-import TurndownService from 'turndown';
 import { Readable } from 'stream';
 
-import {
-  Connector,
-  ConnectorType,
-  ConnectorCredentials,
-  AuthResult,
-  TestResult,
-  SyncOptions,
-  SyncResult,
-  SyncError,
-  ListOptions,
-  ConnectorFile,
-  FileContent,
-  WebhookEvent,
-} from './base';
+import { OAuth2Client } from 'google-auth-library';
+import { google, drive_v3 } from 'googleapis';
+import TurndownService from 'turndown';
 
+import {
+  TokenManager,
+  createGoogleRefreshFunction,
+  TokenSet,
+} from '@/lib/services/token-manager';
 import {
   PublishableConnector,
   FolderListRequest,
@@ -41,10 +32,19 @@ import {
 } from '@/lib/types/publishing';
 
 import {
-  TokenManager,
-  createGoogleRefreshFunction,
-  TokenSet,
-} from '@/lib/services/token-manager';
+  Connector,
+  ConnectorType,
+  ConnectorCredentials,
+  AuthResult,
+  TestResult,
+  SyncOptions,
+  SyncResult,
+  SyncError,
+  ListOptions,
+  ConnectorFile,
+  FileContent,
+  WebhookEvent,
+} from './base';
 
 // =====================================================
 // CONSTANTS
@@ -63,20 +63,26 @@ const EXPORT_FORMATS = {
   [GOOGLE_MIME_TYPES.PRESENTATION]: 'text/plain',
 } as const;
 
+function getErrorCode(error: unknown): unknown {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? (error as { code?: unknown }).code
+    : undefined;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 const SUPPORTED_MIME_TYPES = [
   // Google Workspace (from EXPORT_FORMATS)
   ...Object.keys(EXPORT_FORMATS),
   // Documents
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword',
   'text/plain',
   'text/markdown',
   'text/html',
   'text/csv',
-  // Spreadsheets
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
   // Images
   'image/jpeg',
   'image/png',
@@ -314,8 +320,8 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
     try {
       await this.ensureValidToken();
       return await operation();
-    } catch (error: any) {
-      if (error.code === 401 && this.credentials.refreshToken) {
+    } catch (error: unknown) {
+      if (getErrorCode(error) === 401 && this.credentials.refreshToken) {
         console.log('[GoogleDrive] Got 401, attempting token refresh...');
         await this.refreshCredentials(this.credentials);
         return await operation();
@@ -360,11 +366,11 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
         success: false,
         error: `Please visit this URL to authorize: ${authUrl}`,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[GoogleDrive] Authentication failed:', error);
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: getErrorMessage(error, 'Authentication failed'),
       };
     }
   }
@@ -392,9 +398,12 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
           grantedScopes: this.grantedScopes,
         },
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[GoogleDrive] Connection test failed:', error);
-      return { success: false, message: error.message || 'Connection test failed' };
+      return {
+        success: false,
+        message: getErrorMessage(error, 'Connection test failed'),
+      };
     }
   }
 
@@ -431,14 +440,14 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
               }
 
               filesUpdated++;
-            } catch (error: any) {
+            } catch (error: unknown) {
               console.error(`[GoogleDrive] Failed to process file ${file.id}:`, error);
               filesFailed++;
               errors.push({
                 fileId: file.id!,
                 fileName: file.name!,
-                error: error.message || 'Unknown error',
-                retryable: error.code !== 404,
+                error: getErrorMessage(error, 'Unknown error'),
+                retryable: getErrorCode(error) !== 404,
               });
             }
           })
@@ -453,7 +462,7 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
         filesDeleted: 0,
         errors,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[GoogleDrive] Sync failed:', error);
       throw error;
     }
@@ -469,7 +478,7 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       );
 
       return files.map((file) => this.mapDriveFileToConnectorFile(file));
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[GoogleDrive] List files failed:', error);
       throw error;
     }
@@ -626,7 +635,7 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       this.setCredentials(refreshedCredentials);
 
       return refreshedCredentials;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[GoogleDrive] Token refresh failed:', error);
       throw error;
     }
@@ -958,8 +967,8 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
           webUrl: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
           version: file.version || undefined,
         };
-      } catch (error: any) {
-        if (error.code === 404) {
+      } catch (error: unknown) {
+        if (getErrorCode(error) === 404) {
           return { exists: false };
         }
         throw error;
