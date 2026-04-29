@@ -25,6 +25,7 @@ import { typeIntoElement } from '../../utils/dom-input.js';
 import { pressKey } from '../../utils/dom-keyboard.js';
 import { deriveWidgetBootstrapState } from '../../utils/session-startup.js';
 import { shouldClearOverlayForSessionEvent } from '../../utils/session-visuals.js';
+import { isTrustedExtensionAuthCallbackUrl } from '../../utils/auth-session.js';
 import {
   buildPageInstanceId,
   type VoiceToolRouteMeta,
@@ -155,8 +156,14 @@ export default defineContentScript({
     window.addEventListener('message', (event) => {
       if (event.source !== window) return;
       if (event.data?.type !== 'TRIBORA_AUTH_SUCCESS') return;
+      if (!isTrustedExtensionAuthCallbackUrl(window.location.href)) return;
       chrome.runtime.sendMessage(
-        { type: 'AUTH_CALLBACK', session: event.data.session },
+        {
+          type: 'AUTH_CALLBACK',
+          state: event.data.state,
+          session: event.data.session,
+          callbackUrl: window.location.href,
+        },
         () => void chrome.runtime.lastError,
       );
     });

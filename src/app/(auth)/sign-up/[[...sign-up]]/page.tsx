@@ -1,11 +1,25 @@
 'use client';
 
+import type { FormEvent } from 'react';
 import { useState } from 'react';
-import { signIn, signUp } from '@/lib/auth/auth-client';
-import { motion, useReducedMotion } from 'motion/react';
-import { ArrowLeft, Zap, Search, Users, Brain, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { ArrowLeft, Zap, Search, Users, Brain, Loader2 } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
+
+import { signIn, signUp } from '@/lib/auth/auth-client';
+
+function getExtensionAuthPath(): string {
+  if (typeof window === 'undefined') return '/dashboard';
+  const extensionAuthState = new URLSearchParams(window.location.search).get(
+    'extension_auth_state',
+  );
+  return extensionAuthState
+    ? `/extension/auth/callback?extension_auth_state=${encodeURIComponent(
+        extensionAuthState,
+      )}`
+    : '/dashboard';
+}
 
 /**
  * Sign Up Page - "Begin Your Journey"
@@ -52,7 +66,7 @@ export default function SignUpPage() {
     },
   ];
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -61,14 +75,14 @@ export default function SignUpPage() {
       setError(error.message || 'Sign up failed');
       setLoading(false);
     } else {
-      router.push('/dashboard');
+      router.push(getExtensionAuthPath());
     }
   };
 
   const handleGoogleSignIn = async () => {
     await signIn.social({
       provider: 'google',
-      callbackURL: '/dashboard',
+      callbackURL: getExtensionAuthPath(),
     });
   };
 
@@ -107,7 +121,11 @@ export default function SignUpPage() {
 
         {/* Main Content Card */}
         <motion.div
-          initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 20, scale: 0.98 }}
+          initial={
+            shouldReduceMotion
+              ? { opacity: 1 }
+              : { opacity: 0, y: 20, scale: 0.98 }
+          }
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.5, ease: [0.6, 0.6, 0, 1] }}
           className="w-full max-w-md"
@@ -120,12 +138,15 @@ export default function SignUpPage() {
               backdropFilter: 'blur(24px)',
               WebkitBackdropFilter: 'blur(24px)',
               border: '1px solid rgba(0, 223, 130, 0.1)',
-              boxShadow: '0 0 60px rgba(0, 223, 130, 0.08), inset 0 1px 0 rgba(255,255,255,0.05)',
+              boxShadow:
+                '0 0 60px rgba(0, 223, 130, 0.08), inset 0 1px 0 rgba(255,255,255,0.05)',
             }}
           >
             {/* Logo */}
             <motion.div
-              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }}
+              initial={
+                shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }
+              }
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.1 }}
               className="flex justify-center mb-8"
@@ -135,10 +156,13 @@ export default function SignUpPage() {
                 <div
                   className="flex size-10 items-center justify-center rounded-xl transition-shadow duration-300 group-hover:shadow-[0_0_20px_rgba(0,223,130,0.3)]"
                   style={{
-                    background: 'linear-gradient(135deg, #03624c 0%, #2cc295 50%, #00df82 100%)',
+                    background:
+                      'linear-gradient(135deg, #03624c 0%, #2cc295 50%, #00df82 100%)',
                   }}
                 >
-                  <span className="text-[rgb(241,247,247)] font-bold text-lg">T</span>
+                  <span className="text-[rgb(241,247,247)] font-bold text-lg">
+                    T
+                  </span>
                 </div>
                 {/* Logo Text */}
                 <span
@@ -164,7 +188,8 @@ export default function SignUpPage() {
                 className="text-3xl md:text-4xl font-light tracking-tight mb-3"
                 style={{
                   fontFamily: 'var(--font-heading)',
-                  background: 'linear-gradient(135deg, #00df82 0%, #2cc295 50%, rgb(241,247,247) 100%)',
+                  background:
+                    'linear-gradient(135deg, #00df82 0%, #2cc295 50%, rgb(241,247,247) 100%)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
@@ -172,17 +197,16 @@ export default function SignUpPage() {
               >
                 Start your journey
               </h1>
-              <p
-                className="text-base"
-                style={{ color: 'rgb(170, 203, 196)' }}
-              >
+              <p className="text-base" style={{ color: 'rgb(170, 203, 196)' }}>
                 Create your account and illuminate your team&apos;s knowledge
               </p>
             </motion.div>
 
             {/* Sign Up Form */}
             <motion.div
-              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
+              initial={
+                shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }
+              }
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.3 }}
             >
@@ -220,9 +244,20 @@ export default function SignUpPage() {
 
               {/* Divider */}
               <div className="flex items-center gap-3 my-6">
-                <div className="flex-1 h-px" style={{ background: 'rgba(0, 223, 130, 0.1)' }} />
-                <span className="text-sm" style={{ color: 'rgb(170, 203, 196)' }}>or</span>
-                <div className="flex-1 h-px" style={{ background: 'rgba(0, 223, 130, 0.1)' }} />
+                <div
+                  className="flex-1 h-px"
+                  style={{ background: 'rgba(0, 223, 130, 0.1)' }}
+                />
+                <span
+                  className="text-sm"
+                  style={{ color: 'rgb(170, 203, 196)' }}
+                >
+                  or
+                </span>
+                <div
+                  className="flex-1 h-px"
+                  style={{ background: 'rgba(0, 223, 130, 0.1)' }}
+                />
               </div>
 
               {/* Email/Password Form */}
@@ -241,7 +276,10 @@ export default function SignUpPage() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium mb-2" style={{ color: 'rgb(170, 203, 196)' }}>
+                  <label
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: 'rgb(170, 203, 196)' }}
+                  >
                     Full name
                   </label>
                   <input
@@ -256,7 +294,10 @@ export default function SignUpPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2" style={{ color: 'rgb(170, 203, 196)' }}>
+                  <label
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: 'rgb(170, 203, 196)' }}
+                  >
                     Email address
                   </label>
                   <input
@@ -271,7 +312,10 @@ export default function SignUpPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2" style={{ color: 'rgb(170, 203, 196)' }}>
+                  <label
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: 'rgb(170, 203, 196)' }}
+                  >
                     Password
                   </label>
                   <input
@@ -290,7 +334,8 @@ export default function SignUpPage() {
                   disabled={loading}
                   className="w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"
                   style={{
-                    background: 'linear-gradient(to right, #03624c, #2cc295, #00df82)',
+                    background:
+                      'linear-gradient(to right, #03624c, #2cc295, #00df82)',
                     color: 'rgb(241, 247, 247)',
                   }}
                 >
@@ -336,11 +381,17 @@ export default function SignUpPage() {
               style={{ color: 'rgb(111, 125, 125)' }}
             >
               By signing up, you agree to our{' '}
-              <Link href="/terms" className="underline underline-offset-2 hover:text-[rgb(170,203,196)] transition-colors">
+              <Link
+                href="/terms"
+                className="underline underline-offset-2 hover:text-[rgb(170,203,196)] transition-colors"
+              >
                 Terms of Service
               </Link>{' '}
               and{' '}
-              <Link href="/privacy" className="underline underline-offset-2 hover:text-[rgb(170,203,196)] transition-colors">
+              <Link
+                href="/privacy"
+                className="underline underline-offset-2 hover:text-[rgb(170,203,196)] transition-colors"
+              >
                 Privacy Policy
               </Link>
             </motion.p>
@@ -354,7 +405,8 @@ export default function SignUpPage() {
         <div
           className="absolute inset-0"
           style={{
-            background: 'radial-gradient(circle at 30% 50%, rgba(0,223,130,0.08) 0%, transparent 50%)',
+            background:
+              'radial-gradient(circle at 30% 50%, rgba(0,223,130,0.08) 0%, transparent 50%)',
           }}
         />
 
@@ -366,7 +418,9 @@ export default function SignUpPage() {
         >
           {/* Headline */}
           <motion.div
-            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
+            initial={
+              shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }
+            }
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.4 }}
             className="mb-12"
@@ -381,7 +435,8 @@ export default function SignUpPage() {
               Transform recordings into{' '}
               <span
                 style={{
-                  background: 'linear-gradient(135deg, #00df82 0%, #2cc295 100%)',
+                  background:
+                    'linear-gradient(135deg, #00df82 0%, #2cc295 100%)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
@@ -390,11 +445,9 @@ export default function SignUpPage() {
                 searchable knowledge
               </span>
             </h2>
-            <p
-              className="text-lg"
-              style={{ color: 'rgb(170, 203, 196)' }}
-            >
-              Join thousands of teams using Tribora to capture, preserve, and share their expertise.
+            <p className="text-lg" style={{ color: 'rgb(170, 203, 196)' }}>
+              Join thousands of teams using Tribora to capture, preserve, and
+              share their expertise.
             </p>
           </motion.div>
 
@@ -403,7 +456,9 @@ export default function SignUpPage() {
             {features.map((feature, index) => (
               <motion.div
                 key={feature.title}
-                initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, x: 20 }}
+                initial={
+                  shouldReduceMotion ? { opacity: 1 } : { opacity: 0, x: 20 }
+                }
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.4, delay: 0.5 + index * 0.1 }}
                 className="flex items-start gap-4 group"
@@ -416,7 +471,10 @@ export default function SignUpPage() {
                     border: '1px solid rgba(0, 223, 130, 0.15)',
                   }}
                 >
-                  <feature.icon className="size-6" style={{ color: '#00df82' }} />
+                  <feature.icon
+                    className="size-6"
+                    style={{ color: '#00df82' }}
+                  />
                 </div>
                 {/* Text */}
                 <div>
@@ -439,7 +497,9 @@ export default function SignUpPage() {
 
           {/* Social Proof */}
           <motion.div
-            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
+            initial={
+              shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }
+            }
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.9 }}
             className="mt-12 pt-8"
@@ -457,7 +517,10 @@ export default function SignUpPage() {
                 >
                   10,000+
                 </div>
-                <div className="text-sm" style={{ color: 'rgb(111, 125, 125)' }}>
+                <div
+                  className="text-sm"
+                  style={{ color: 'rgb(111, 125, 125)' }}
+                >
                   Recordings processed
                 </div>
               </div>
@@ -475,7 +538,10 @@ export default function SignUpPage() {
                 >
                   500+
                 </div>
-                <div className="text-sm" style={{ color: 'rgb(111, 125, 125)' }}>
+                <div
+                  className="text-sm"
+                  style={{ color: 'rgb(111, 125, 125)' }}
+                >
                   Teams onboarded
                 </div>
               </div>
@@ -493,7 +559,10 @@ export default function SignUpPage() {
                 >
                   99.9%
                 </div>
-                <div className="text-sm" style={{ color: 'rgb(111, 125, 125)' }}>
+                <div
+                  className="text-sm"
+                  style={{ color: 'rgb(111, 125, 125)' }}
+                >
                   Uptime SLA
                 </div>
               </div>
