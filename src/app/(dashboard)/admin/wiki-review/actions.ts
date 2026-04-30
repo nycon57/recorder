@@ -82,7 +82,7 @@ interface LoadedRoutingApprovalTarget {
     AgentApprovalRow,
     'id' | 'org_id' | 'action_type' | 'content_id' | 'proposed_action' | 'status' | 'created_at'
   >;
-  content: Pick<ContentRow, 'id' | 'org_id' | 'metadata' | 'title'>;
+  content: Pick<ContentRow, 'id' | 'org_id' | 'metadata' | 'title' | 'updated_at'>;
 }
 
 interface ReviewAuditLogInput {
@@ -186,7 +186,7 @@ async function loadAndValidateRoutingApproval(input: {
 
   const { data: contentData, error: contentError } = await supabaseAdmin
     .from('content')
-    .select('id, org_id, metadata, title')
+    .select('id, org_id, metadata, title, updated_at')
     .eq('id', contentId)
     .eq('org_id', orgId)
     .single();
@@ -231,6 +231,30 @@ async function writeReviewAuditLog(input: ReviewAuditLogInput): Promise<void> {
       },
       error,
     });
+  }
+}
+
+async function resetClaimedRoutingApproval(input: {
+  approvalId: string;
+  orgId: string;
+  userId: string;
+  action: 'approved' | 'rejected';
+}): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('agent_approval_queue')
+    .update({
+      status: 'pending',
+      reviewed_by: null,
+      reviewed_at: null,
+      rejection_reason: null,
+    } as never)
+    .eq('id', input.approvalId)
+    .eq('org_id', input.orgId)
+    .eq('status', input.action)
+    .eq('reviewed_by', input.userId);
+
+  if (error) {
+    throw new Error(`Failed to reset routing approval claim: ${error.message}`);
   }
 }
 
@@ -299,6 +323,102 @@ function buildRoutingDecisionState(input: {
       history,
     },
   };
+}
+
+async function persistRoutingDecisionState(input: {
+  content: LoadedRoutingApprovalTarget['content'];
+  orgId: string;
+  userId: string;
+  status: 'approved' | 'rejected';
+  approvalId: string;
+  requestedAt: string | null;
+  rejectionReason: string | null;
+  routeConfidence: number | null;
+  routeReason: string | null;
+  proposedRoute: {
+    topic: string;
+    app: string | null;
+    screen: string | null;
+  };
+  approvedRoute: {
+    topic: string;
+    app: string | null;
+    screen: string | null;
+  } | null;
+  decisionHint?: RoutingReviewDecisionAction | null;
+}): Promise<{
+  content: LoadedRoutingApprovalTarget['content'];
+  previousRoutingState: RoutingReviewState | null;
+  routingState: RoutingReviewState;
+  decisionAction: RoutingReviewDecisionAction;
+}> {
+  let content = input.content;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const nowIso = new Date().toISOString();
+    const previousRoutingState = parseRoutingReviewState(content.metadata);
+    const { state: routingState, decisionAction } = buildRoutingDecisionState({
+      existingMetadata: content.metadata,
+      status: input.status,
+      approvalId: input.approvalId,
+      requestedAt: input.requestedAt,
+      reviewedAt: nowIso,
+      reviewedBy: input.userId,
+      rejectionReason: input.rejectionReason,
+      routeConfidence: input.routeConfidence,
+      routeReason: input.routeReason,
+      proposedRoute: input.proposedRoute,
+      approvedRoute: input.approvedRoute,
+      decisionHint: input.decisionHint ?? null,
+    });
+    const nextMetadata = writeRoutingReviewState(content.metadata, routingState);
+
+    const { data: updatedContent, error: contentUpdateError } = await supabaseAdmin
+      .from('content')
+      .update({
+        metadata: nextMetadata,
+        updated_at: nowIso,
+      } as never)
+      .eq('id', content.id)
+      .eq('org_id', input.orgId)
+      .eq('updated_at', content.updated_at)
+      .select('id')
+      .maybeSingle();
+
+    if (contentUpdateError) {
+      throw new Error(
+        `Failed to persist routing ${input.status === 'approved' ? 'approval' : 'rejection'}: ${contentUpdateError.message}`,
+      );
+    }
+
+    if (updatedContent) {
+      return {
+        content,
+        previousRoutingState,
+        routingState,
+        decisionAction,
+      };
+    }
+
+    if (attempt === 1) {
+      throw new Error('Failed to persist routing decision: content changed during review');
+    }
+
+    const { data: latestContent, error: latestContentError } = await supabaseAdmin
+      .from('content')
+      .select('id, org_id, metadata, title, updated_at')
+      .eq('id', content.id)
+      .eq('org_id', input.orgId)
+      .single();
+
+    if (latestContentError || !latestContent) {
+      throw new Error('Failed to reload content after routing metadata conflict');
+    }
+
+    content = latestContent as LoadedRoutingApprovalTarget['content'];
+  }
+
+  throw new Error('Failed to persist routing decision');
 }
 
 /**
@@ -588,56 +708,6 @@ export async function approveRoutingReview(input: {
     if (!topic) {
       return { ok: false, error: 'Topic is required' };
     }
-    if (!app) {
-      return { ok: false, error: 'App is required' };
-    }
-    if (!screen) {
-      return { ok: false, error: 'Screen is required' };
-    }
-
-    const nowIso = new Date().toISOString();
-    const previousRoutingState = parseRoutingReviewState(content.metadata);
-    const { state: routingState, decisionAction } = buildRoutingDecisionState({
-      existingMetadata: content.metadata,
-      status: 'approved',
-      approvalId: approval.id,
-      requestedAt: approval.created_at,
-      reviewedAt: nowIso,
-      reviewedBy: userId,
-      rejectionReason: null,
-      routeConfidence: proposedAction.routeConfidence,
-      routeReason: proposedAction.routeReason,
-      proposedRoute: proposedAction.proposedRoute,
-      approvedRoute: {
-        topic,
-        app,
-        screen,
-      },
-      decisionHint: input.decisionAction ?? null,
-    });
-    const nextMetadata = writeRoutingReviewState(content.metadata, routingState);
-
-    const { error: contentUpdateError } = await supabaseAdmin
-      .from('content')
-      .update({
-        metadata: nextMetadata,
-        updated_at: nowIso,
-      } as never)
-      .eq('id', content.id)
-      .eq('org_id', orgId);
-
-    if (contentUpdateError) {
-      throw new Error(
-        `Failed to persist approved route: ${contentUpdateError.message}`
-      );
-    }
-
-    await enqueueRoutingCompileWikiJob({
-      recordingId: content.id,
-      orgId,
-      approvalId: approval.id,
-    });
-
     const reviewed = await reviewApproval(
       approval.id,
       orgId,
@@ -649,17 +719,60 @@ export async function approveRoutingReview(input: {
       throw new Error('Routing review item is no longer pending');
     }
 
+    let persisted: Awaited<ReturnType<typeof persistRoutingDecisionState>>;
+    try {
+      persisted = await persistRoutingDecisionState({
+        content,
+        orgId,
+        userId,
+        status: 'approved',
+        approvalId: approval.id,
+        requestedAt: approval.created_at,
+        rejectionReason: null,
+        routeConfidence: proposedAction.routeConfidence,
+        routeReason: proposedAction.routeReason,
+        proposedRoute: proposedAction.proposedRoute,
+        approvedRoute: {
+          topic,
+          app,
+          screen,
+        },
+        decisionHint: input.decisionAction ?? null,
+      });
+    } catch (error) {
+      try {
+        await resetClaimedRoutingApproval({
+          approvalId: approval.id,
+          orgId,
+          userId,
+          action: 'approved',
+        });
+      } catch (resetError) {
+        logger.error('Failed to reset routing approval after admin approve failure', {
+          error: resetError instanceof Error ? resetError : undefined,
+          context: { approvalId: approval.id, orgId, userId },
+        });
+      }
+      throw error;
+    }
+
+    await enqueueRoutingCompileWikiJob({
+      recordingId: persisted.content.id,
+      orgId,
+      approvalId: approval.id,
+    });
+
     await writeReviewAuditLog({
       orgId,
       userId,
-      action: `routing_review.${decisionAction}`,
+      action: `routing_review.${persisted.decisionAction}`,
       resourceType: 'content',
-      resourceId: content.id,
-      oldValues: (previousRoutingState as unknown as Json) ?? null,
-      newValues: routingState as unknown as Json,
+      resourceId: persisted.content.id,
+      oldValues: (persisted.previousRoutingState as unknown as Json) ?? null,
+      newValues: persisted.routingState as unknown as Json,
       metadata: {
         approvalId: approval.id,
-        contentTitle: content.title ?? null,
+        contentTitle: persisted.content.title ?? null,
       },
     });
 
@@ -668,15 +781,15 @@ export async function approveRoutingReview(input: {
         orgId,
         userId,
         approvalId: approval.id,
-        contentId: content.id,
-        decisionAction,
+        contentId: persisted.content.id,
+        decisionAction: persisted.decisionAction,
         topic,
         app,
         screen,
       },
     });
 
-    revalidatePath(`/library/${content.id}`);
+    revalidatePath(`/library/${persisted.content.id}`);
     invalidate(orgId);
     return { ok: true };
   } catch (error) {
@@ -707,40 +820,8 @@ export async function rejectRoutingReview(input: {
       return { ok: false, error: 'Routing review payload is invalid' };
     }
 
-    const nowIso = new Date().toISOString();
     const rejectionReason =
       input.rejectionReason?.trim() || 'Reviewer rejected the proposed route.';
-    const previousRoutingState = parseRoutingReviewState(content.metadata);
-    const { state: routingState, decisionAction } = buildRoutingDecisionState({
-      existingMetadata: content.metadata,
-      status: 'rejected',
-      approvalId: approval.id,
-      requestedAt: approval.created_at,
-      reviewedAt: nowIso,
-      reviewedBy: userId,
-      rejectionReason,
-      routeConfidence: proposedAction.routeConfidence,
-      routeReason: proposedAction.routeReason,
-      proposedRoute: proposedAction.proposedRoute,
-      approvedRoute: null,
-      decisionHint: 'reject',
-    });
-    const nextMetadata = writeRoutingReviewState(content.metadata, routingState);
-
-    const { error: contentUpdateError } = await supabaseAdmin
-      .from('content')
-      .update({
-        metadata: nextMetadata,
-        updated_at: nowIso,
-      } as never)
-      .eq('id', content.id)
-      .eq('org_id', orgId);
-
-    if (contentUpdateError) {
-      throw new Error(
-        `Failed to persist routing rejection: ${contentUpdateError.message}`
-      );
-    }
 
     const reviewed = await reviewApproval(
       approval.id,
@@ -754,17 +835,50 @@ export async function rejectRoutingReview(input: {
       throw new Error('Routing review item is no longer pending');
     }
 
+    let persisted: Awaited<ReturnType<typeof persistRoutingDecisionState>>;
+    try {
+      persisted = await persistRoutingDecisionState({
+        content,
+        orgId,
+        userId,
+        status: 'rejected',
+        approvalId: approval.id,
+        requestedAt: approval.created_at,
+        rejectionReason,
+        routeConfidence: proposedAction.routeConfidence,
+        routeReason: proposedAction.routeReason,
+        proposedRoute: proposedAction.proposedRoute,
+        approvedRoute: null,
+        decisionHint: 'reject',
+      });
+    } catch (error) {
+      try {
+        await resetClaimedRoutingApproval({
+          approvalId: approval.id,
+          orgId,
+          userId,
+          action: 'rejected',
+        });
+      } catch (resetError) {
+        logger.error('Failed to reset routing rejection after admin reject failure', {
+          error: resetError instanceof Error ? resetError : undefined,
+          context: { approvalId: approval.id, orgId, userId },
+        });
+      }
+      throw error;
+    }
+
     await writeReviewAuditLog({
       orgId,
       userId,
-      action: `routing_review.${decisionAction}`,
+      action: `routing_review.${persisted.decisionAction}`,
       resourceType: 'content',
-      resourceId: content.id,
-      oldValues: (previousRoutingState as unknown as Json) ?? null,
-      newValues: routingState as unknown as Json,
+      resourceId: persisted.content.id,
+      oldValues: (persisted.previousRoutingState as unknown as Json) ?? null,
+      newValues: persisted.routingState as unknown as Json,
       metadata: {
         approvalId: approval.id,
-        contentTitle: content.title ?? null,
+        contentTitle: persisted.content.title ?? null,
       },
     });
 
@@ -773,12 +887,12 @@ export async function rejectRoutingReview(input: {
         orgId,
         userId,
         approvalId: approval.id,
-        contentId: content.id,
-        decisionAction,
+        contentId: persisted.content.id,
+        decisionAction: persisted.decisionAction,
       },
     });
 
-    revalidatePath(`/library/${content.id}`);
+    revalidatePath(`/library/${persisted.content.id}`);
     invalidate(orgId);
     return { ok: true };
   } catch (error) {
