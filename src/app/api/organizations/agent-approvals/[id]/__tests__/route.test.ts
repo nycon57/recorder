@@ -134,15 +134,29 @@ function mockUpdate() {
 }
 
 function setupRoutingQueries(approval = approvalRow()) {
+  const contentUpdate = mockUpdate();
+  const resetUpdate = mockUpdate();
+
   fromMock
     .mockReturnValueOnce(mockSelectMaybeSingle(approval))
     .mockReturnValueOnce(mockSelectSingle(contentRow()))
-    .mockReturnValueOnce(mockUpdate());
+    .mockReturnValueOnce(contentUpdate)
+    .mockReturnValueOnce(resetUpdate);
+
+  return { contentUpdate, resetUpdate };
 }
 
 describe('PATCH /api/organizations/agent-approvals/[id]', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    fromMock.mockReset();
+    requireAdminMock.mockReset();
+    reviewApprovalMock.mockReset();
+    logAgentActionMock.mockReset();
+    enqueueRoutingCompileWikiJobMock.mockReset();
+    writeRoutingReviewStateMock.mockReset();
+    parseRoutingReviewStateMock.mockReset();
+    determineRoutingReviewDecisionActionMock.mockReset();
     jest.resetModules();
     requireAdminMock.mockResolvedValue({ orgId: 'org_1', userId: 'user_1' } as never);
     reviewApprovalMock.mockResolvedValue({ id: 'approval_1', status: 'approved' } as never);
@@ -154,7 +168,7 @@ describe('PATCH /api/organizations/agent-approvals/[id]', () => {
     ({ PATCH } = await import('../route'));
   });
 
-  it('persists approved routing and enqueues compile_wiki before marking the approval reviewed', async () => {
+  it('claims approved routing before persisting side effects and enqueuing compile_wiki', async () => {
     setupRoutingQueries();
 
     const response = await PATCH(makeRequest({ action: 'approved' }), {
@@ -188,6 +202,41 @@ describe('PATCH /api/organizations/agent-approvals/[id]', () => {
     );
     expect(reviewApprovalMock.mock.invocationCallOrder[0]).toBeLessThan(
       enqueueRoutingCompileWikiJobMock.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('allows approved routing to keep nullable app and screen values', async () => {
+    setupRoutingQueries(
+      approvalRow({
+        proposed_action: {
+          kind: 'routing_review',
+          contentId: 'content_1',
+          contentTitle: 'Demo recording',
+          routeConfidence: 0.42,
+          routeReason: 'Ambiguous route',
+          proposedRoute: {
+            topic: 'renewals',
+            app: null,
+            screen: null,
+          },
+        },
+      }),
+    );
+
+    const response = await PATCH(makeRequest({ action: 'approved' }), {
+      params: Promise.resolve({ id: 'approval_1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(writeRoutingReviewStateMock).toHaveBeenCalledWith(
+      { existing: true },
+      expect.objectContaining({
+        approvedRoute: {
+          topic: 'renewals',
+          app: null,
+          screen: null,
+        },
+      }),
     );
   });
 
@@ -238,5 +287,33 @@ describe('PATCH /api/organizations/agent-approvals/[id]', () => {
     expect(response.status).toBe(404);
     expect(writeRoutingReviewStateMock).not.toHaveBeenCalled();
     expect(enqueueRoutingCompileWikiJobMock).not.toHaveBeenCalled();
+  });
+
+  it('resets the approval claim when routing side effects fail', async () => {
+    enqueueRoutingCompileWikiJobMock.mockRejectedValue(new Error('queue unavailable') as never);
+    const { resetUpdate } = setupRoutingQueries();
+
+    const response = await PATCH(makeRequest({ action: 'approved' }), {
+      params: Promise.resolve({ id: 'approval_1' }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(reviewApprovalMock).toHaveBeenCalledWith(
+      'approval_1',
+      'org_1',
+      'user_1',
+      'approved',
+      undefined,
+    );
+    expect(resetUpdate.update).toHaveBeenCalledWith({
+      status: 'pending',
+      reviewed_by: null,
+      reviewed_at: null,
+      rejection_reason: null,
+    });
+    expect(resetUpdate.eq).toHaveBeenCalledWith('id', 'approval_1');
+    expect(resetUpdate.eq).toHaveBeenCalledWith('org_id', 'org_1');
+    expect(resetUpdate.eq).toHaveBeenCalledWith('status', 'approved');
+    expect(resetUpdate.eq).toHaveBeenCalledWith('reviewed_by', 'user_1');
   });
 });

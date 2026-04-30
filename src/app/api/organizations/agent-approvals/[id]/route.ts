@@ -99,8 +99,8 @@ function resolveApprovedRoute(body: Record<string, unknown>, proposedRoute: {
   const screen =
     body.screen === undefined ? proposedRoute.screen : normalizeRoutingSlug(body.screen);
 
-  if (!topic || !app || !screen) {
-    throw new Error('Approved routing requires topic, app, and screen');
+  if (!topic) {
+    throw new Error('Approved routing requires topic');
   }
 
   return { topic, app, screen };
@@ -197,6 +197,30 @@ async function applyRoutingReviewDecision(input: {
   }
 }
 
+async function resetClaimedRoutingApproval(input: {
+  approvalId: string;
+  orgId: string;
+  userId: string;
+  action: 'approved' | 'rejected';
+}): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('agent_approval_queue')
+    .update({
+      status: 'pending',
+      reviewed_by: null,
+      reviewed_at: null,
+      rejection_reason: null,
+    } as never)
+    .eq('id', input.approvalId)
+    .eq('org_id', input.orgId)
+    .eq('status', input.action)
+    .eq('reviewed_by', input.userId);
+
+  if (error) {
+    throw new Error(`Failed to reset routing approval claim: ${error.message}`);
+  }
+}
+
 /**
  * PATCH /api/organizations/agent-approvals/[id]
  * Approve or reject a pending approval.
@@ -251,6 +275,23 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
         rejectionReason: typeof rejection_reason === 'string' ? rejection_reason : undefined,
       });
     } catch (error) {
+      try {
+        await resetClaimedRoutingApproval({
+          approvalId: id,
+          orgId,
+          userId,
+          action,
+        });
+      } catch (resetError) {
+        console.error('[AgentApprovals] Failed to reset routing approval after side-effect failure', {
+          approvalId: id,
+          orgId,
+          userId,
+          action,
+          error,
+          resetError,
+        });
+      }
       return errors.badRequest(
         error instanceof Error ? error.message : 'Failed to review routing approval',
       );
