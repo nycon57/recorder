@@ -60,6 +60,18 @@ function connectorCredentials(value: Json): ConnectorCredentials {
   return jsonObject(value) as ConnectorCredentials;
 }
 
+function connectorRuntimeConfig(
+  settings: Json | null,
+  orgId: string,
+  connectorId: string
+): Record<string, unknown> {
+  return {
+    ...jsonObject(settings),
+    orgId,
+    connectorId,
+  };
+}
+
 function toJson(value: unknown): Json {
   return value as Json;
 }
@@ -113,7 +125,7 @@ export class ConnectorManager {
           org_id: orgId,
           connector_type: connectorType,
           name: name || connector.name,
-          credentials,
+          credentials: toJson(credentials),
           settings: toJson(settings),
           sync_status: 'idle',
           sync_frequency: syncFrequency,
@@ -178,7 +190,7 @@ export class ConnectorManager {
           };
         }
 
-        updateData.credentials = options.credentials;
+        updateData.credentials = toJson(options.credentials);
         updateData.credentials_updated_at = new Date().toISOString();
       }
 
@@ -347,7 +359,7 @@ export class ConnectorManager {
       const connector = ConnectorRegistry.create(
         config.connector_type as ConnectorType,
         connectorCredentials(config.credentials),
-        jsonObject(config.settings)
+        connectorRuntimeConfig(config.settings, config.org_id, connectorId)
       );
 
       // Perform sync
@@ -418,7 +430,7 @@ export class ConnectorManager {
       const connector = ConnectorRegistry.create(
         config.connector_type as ConnectorType,
         connectorCredentials(config.credentials),
-        jsonObject(config.settings)
+        connectorRuntimeConfig(config.settings, config.org_id, connectorId)
       );
 
       const testResult = await connector.testConnection();
@@ -461,7 +473,7 @@ export class ConnectorManager {
       const connector = ConnectorRegistry.create(
         config.connector_type as ConnectorType,
         connectorCredentials(config.credentials),
-        jsonObject(config.settings)
+        connectorRuntimeConfig(config.settings, config.org_id, connectorId)
       );
 
       const files = await connector.listFiles(options);
@@ -546,7 +558,7 @@ export class ConnectorManager {
       const connector = ConnectorRegistry.create(
         config.connector_type as ConnectorType,
         connectorCredentials(config.credentials),
-        jsonObject(config.settings)
+        connectorRuntimeConfig(config.settings, config.org_id, connectorId)
       );
 
       if (!connector.refreshCredentials) {
@@ -560,7 +572,7 @@ export class ConnectorManager {
       await supabaseAdmin
         .from('connector_configs')
         .update({
-          credentials: newCredentials,
+          credentials: toJson(newCredentials),
           credentials_updated_at: new Date().toISOString(),
         })
         .eq('id', connectorId);

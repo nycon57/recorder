@@ -199,6 +199,7 @@ export class DocumentPublisher {
         connectorConfig.credentials,
         {
           ...connectorConfig.settings,
+          orgId: options.orgId,
           connectorId: options.connectorId,
         }
       );
@@ -893,7 +894,11 @@ export class DocumentPublisher {
           const connector = ConnectorRegistry.create(
             connectorConfig.connector_type as ConnectorType,
             connectorConfig.credentials,
-            connectorConfig.settings
+            {
+              ...connectorConfig.settings,
+              orgId,
+              connectorId: connectorConfig.id,
+            }
           ) as unknown as PublishableConnector;
 
           await connector.deleteDocument(publication.external_id);

@@ -6,9 +6,13 @@
  */
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 import { ConnectorRegistry } from '@/lib/connectors/registry';
-import { ConnectorType, type WebhookEvent as BaseWebhookEvent } from '@/lib/connectors/base';
+import {
+  ConnectorType,
+  type ConnectorCredentials,
+  type WebhookEvent as BaseWebhookEvent,
+} from '@/lib/connectors/base';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger({ service: 'process-webhook' });
@@ -19,7 +23,17 @@ interface ProcessWebhookPayload {
   webhookEventId: string;
   connectorId: string;
   orgId: string;
-  webhookEvent?: any; // Webhook event data when webhook_events table doesn't exist yet
+  webhookEvent?: unknown; // Webhook event data when webhook_events table doesn't exist yet
+}
+
+function jsonObject(value: Json | null | unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 /**
@@ -38,14 +52,17 @@ export async function processWebhook(job: Job): Promise<void> {
   try {
     // TODO: Fetch webhook event from webhook_events table (to be created in Phase 5 migration)
     // For now, extract webhook data from job payload
-    const webhookEventData = (job.payload as any).webhookEvent;
+    const webhookEventData = jsonObject(payload.webhookEvent);
 
-    if (!webhookEventData) {
+    if (Object.keys(webhookEventData).length === 0) {
       throw new Error('Webhook event data not found in job payload');
     }
 
+    const eventType = asString(webhookEventData.event_type) ?? 'unknown';
+    const eventSource = asString(webhookEventData.event_source) ?? 'webhook';
+
     logger.info('Processing webhook event', {
-      context: { webhookEventId, eventType: webhookEventData.event_type },
+      context: { webhookEventId, eventType },
     });
 
     // Fetch connector configuration
@@ -103,14 +120,18 @@ export async function processWebhook(job: Job): Promise<void> {
     logger.info('Processing webhook from source', {
       context: {
         webhookEventId,
-        eventType: webhookEventData.event_type,
-        eventSource: webhookEventData.event_source || 'unknown',
+        eventType,
+        eventSource,
       },
     });
 
     // Create connector instance
-    const credentials = connectorConfig.credentials as any;
-    const settings = connectorConfig.settings as any;
+    const credentials = jsonObject(connectorConfig.credentials) as ConnectorCredentials;
+    const settings = {
+      ...jsonObject(connectorConfig.settings),
+      orgId,
+      connectorId,
+    };
 
     const connector = ConnectorRegistry.create(connectorType, credentials, settings);
 
@@ -120,12 +141,14 @@ export async function processWebhook(job: Job): Promise<void> {
     }
 
     // Transform webhook event to connector format
+    const receivedAt = asString(webhookEventData.received_at);
+    const eventPayload = webhookEventData.payload ?? webhookEventData;
     const connectorWebhookEvent: BaseWebhookEvent = {
-      id: webhookEventData.event_id || webhookEventId,
-      type: webhookEventData.event_type,
-      source: webhookEventData.event_source || 'webhook',
-      payload: webhookEventData.payload || webhookEventData,
-      timestamp: new Date(webhookEventData.received_at || Date.now()),
+      id: asString(webhookEventData.event_id) ?? webhookEventId,
+      type: eventType,
+      source: eventSource,
+      payload: eventPayload,
+      timestamp: new Date(receivedAt ?? Date.now()),
     };
 
     // Call connector's webhook handler
@@ -140,8 +163,8 @@ export async function processWebhook(job: Job): Promise<void> {
 
     // Handle specific webhook event types
     await handleWebhookEventType(
-      webhookEventData.event_type,
-      webhookEventData.payload || webhookEventData,
+      eventType,
+      eventPayload,
       connectorId,
       orgId,
       supabase
@@ -154,8 +177,8 @@ export async function processWebhook(job: Job): Promise<void> {
         webhookEventId,
         connectorId,
         orgId,
-        eventType: webhookEventData.event_type,
-        eventSource: webhookEventData.event_source || 'webhook',
+        eventType,
+        eventSource,
       },
     });
   } catch (error) {
@@ -173,11 +196,13 @@ export async function processWebhook(job: Job): Promise<void> {
  */
 async function handleWebhookEventType(
   eventType: string,
-  payload: any,
+  payload: unknown,
   connectorId: string,
   orgId: string,
   supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
+  const payloadRecord = jsonObject(payload);
+
   // Handle file/document change events
   if (
     eventType.includes('file.created') ||
@@ -190,7 +215,10 @@ async function handleWebhookEventType(
     });
 
     // Enqueue a targeted sync job for this specific file/document
-    const fileId = payload?.fileId || payload?.documentId || payload?.id;
+    const fileId =
+      asString(payloadRecord.fileId) ??
+      asString(payloadRecord.documentId) ??
+      asString(payloadRecord.id);
 
     if (fileId) {
       // Check if imported document already exists
@@ -247,7 +275,10 @@ async function handleWebhookEventType(
       context: { eventType, connectorId },
     });
 
-    const fileId = payload?.fileId || payload?.documentId || payload?.id;
+    const fileId =
+      asString(payloadRecord.fileId) ??
+      asString(payloadRecord.documentId) ??
+      asString(payloadRecord.id);
 
     if (fileId) {
       // Mark imported document as deleted

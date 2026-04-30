@@ -29,9 +29,17 @@ import type {
 import type { Json } from '@/lib/types/database';
 
 interface ConnectorConfigRow {
+  id: string;
+  org_id: string;
   connector_type: string;
   credentials: Json;
   settings: Json | null;
+}
+
+function jsonObject(value: Json | null): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 // =====================================================
@@ -178,7 +186,11 @@ export async function GET(
       connector = ConnectorRegistry.create(
         connectorType,
         typedConnectorConfig.credentials as Record<string, unknown>,
-        (typedConnectorConfig.settings ?? {}) as Record<string, unknown>
+        {
+          ...jsonObject(typedConnectorConfig.settings),
+          orgId: typedConnectorConfig.org_id,
+          connectorId: typedConnectorConfig.id,
+        }
       );
     } catch (error) {
       return NextResponse.json(
@@ -362,7 +374,11 @@ export async function POST(
       connector = ConnectorRegistry.create(
         connectorType,
         typedConnectorConfig.credentials as Record<string, unknown>,
-        (typedConnectorConfig.settings ?? {}) as Record<string, unknown>
+        {
+          ...jsonObject(typedConnectorConfig.settings),
+          orgId: typedConnectorConfig.org_id,
+          connectorId: typedConnectorConfig.id,
+        }
       );
     } catch (error) {
       return NextResponse.json(

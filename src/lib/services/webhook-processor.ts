@@ -277,7 +277,12 @@ export class WebhookProcessor {
    */
   private static async routeWebhookToConnector(
     connectorType: ConnectorType,
-    config: { credentials: Json; settings: Json | null },
+    config: {
+      credentials: Json;
+      settings: Json | null;
+      id: string;
+      org_id: string;
+    },
     payload: unknown
   ): Promise<{ success: boolean; metadata?: Record<string, unknown> }> {
     try {
@@ -285,7 +290,11 @@ export class WebhookProcessor {
       const connector = ConnectorRegistry.create(
         connectorType,
         asRecord(config.credentials),
-        asRecord(config.settings)
+        {
+          ...asRecord(config.settings),
+          orgId: config.org_id,
+          connectorId: config.id,
+        }
       );
 
       // Check if connector has webhook handler
