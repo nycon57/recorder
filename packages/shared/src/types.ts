@@ -277,6 +277,34 @@ export interface LiveContextPack {
   sources: LiveContextSourceRef[];
 }
 
+export interface ExtensionVoiceAnswerCitation {
+  sourceId: string;
+  title: string;
+  layer?: 'vendor' | 'vendor_training' | 'org';
+  recordingUrl?: string;
+}
+
+export interface ExtensionVoiceAnswerElementRef {
+  selector: string;
+  label: string;
+  action: 'highlight' | 'point' | 'pulse';
+}
+
+export interface ExtensionVoiceAnswerRequest {
+  question: string;
+  context: PageContext;
+  conversationId?: string;
+  customerOrgId?: string;
+}
+
+export interface ExtensionVoiceAnswerResponse {
+  text: string;
+  citations: ExtensionVoiceAnswerCitation[];
+  elementRefs: ExtensionVoiceAnswerElementRef[];
+  knowledgeMode: KnowledgeAvailability['mode'];
+  sourceCount: number;
+}
+
 export interface KnowledgeResolvedFor {
   app: string;
   screen: string;

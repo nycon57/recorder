@@ -29,6 +29,10 @@ export type {
   KnowledgeResolvedFor,
   LiveContextSourceRef,
   LiveContextPack,
+  ExtensionVoiceAnswerCitation,
+  ExtensionVoiceAnswerElementRef,
+  ExtensionVoiceAnswerRequest,
+  ExtensionVoiceAnswerResponse,
   ExtensionMessageType,
   ExtensionMessage,
 } from './types.js';

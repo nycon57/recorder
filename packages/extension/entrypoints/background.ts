@@ -13,7 +13,11 @@
 
 /* global chrome, defineBackground */
 
-import type { LiveContextPack, PageContext } from '@tribora/shared';
+import type {
+  ExtensionVoiceAnswerResponse,
+  LiveContextPack,
+  PageContext,
+} from '@tribora/shared';
 import {
   sanitizePageContextForModel,
   sanitizePageContextForNetwork,
@@ -1598,6 +1602,11 @@ async function routeToolCall(
     return;
   }
 
+  if (name === 'answer_with_knowledge') {
+    await handleAnswerWithKnowledgeTool(callId, args, turnId);
+    return;
+  }
+
   const targetTabId = await getActiveVoiceTargetTabId();
   if (targetTabId === null) {
     await replyToolResult(callId, {
@@ -1714,6 +1723,222 @@ async function routeToolCall(
       }
     },
   );
+}
+
+function getVoiceAnswerQuestion(args: unknown): string {
+  if (typeof args !== 'object' || args === null) return '';
+  const question = (args as { question?: unknown }).question;
+  return typeof question === 'string' ? question.trim() : '';
+}
+
+function formatVoiceAnswerToolResult(
+  response: ExtensionVoiceAnswerResponse,
+): string {
+  const lines = [response.text.trim()].filter(Boolean);
+
+  if (response.citations.length > 0) {
+    lines.push(
+      `Sources: ${response.citations
+        .slice(0, 3)
+        .map((citation) => citation.title)
+        .join('; ')}`,
+    );
+  }
+
+  if (response.elementRefs.length > 0) {
+    lines.push(
+      `Suggested highlights: ${response.elementRefs
+        .slice(0, 3)
+        .map((element) => `${element.label} (${element.selector})`)
+        .join('; ')}`,
+    );
+  }
+
+  return lines.join('\n');
+}
+
+async function handleAnswerWithKnowledgeTool(
+  callId: string,
+  args: unknown,
+  turnId: string | null,
+): Promise<void> {
+  const question = getVoiceAnswerQuestion(args);
+  if (!question) {
+    await replyToolResult(callId, {
+      result: 'I need a specific question before I can search the knowledge base.',
+    });
+    return;
+  }
+
+  let targetTabId: number | null = null;
+  try {
+    targetTabId = await getActiveVoiceTargetTabId();
+    if (targetTabId === null) {
+      return await replyToolResult(callId, {
+        result: buildUnavailableToolResult('answer_with_knowledge'),
+      });
+    }
+
+    const readyState = await waitForTargetReady(targetTabId);
+    if (readyState === 'loading') {
+      return await replyToolResult(callId, {
+        result: buildLoadingVoiceTargetToolResult('answer_with_knowledge'),
+      });
+    }
+    if (readyState === 'unavailable') {
+      return await replyToolResult(callId, {
+        result: buildUnavailableToolResult('answer_with_knowledge'),
+      });
+    }
+
+    const routeMeta = buildToolRouteMeta(getVoiceTargetInstanceState());
+    if (!routeMeta) {
+      return await replyToolResult(callId, {
+        result: buildUnavailableToolResult('answer_with_knowledge'),
+      });
+    }
+
+    pendingToolRoutes.set(callId, {
+      name: 'answer_with_knowledge',
+      routeMeta,
+      startedAtMs: Date.now(),
+    });
+
+    if (activeDebugSession) {
+      const contextFields = getDebugContextFields(targetTabId);
+      const toolArgs = summarizeToolCallArgs('answer_with_knowledge', args);
+      pendingDebugToolCalls.set(callId, {
+        turnId,
+        name: 'answer_with_knowledge',
+        ...toolArgs,
+        ...contextFields,
+        tabId: targetTabId,
+        windowId: activeDebugSession.windowId,
+        bindingEpoch: routeMeta.bindingEpoch,
+        pageInstanceId: routeMeta.pageInstanceId,
+        contentInstanceId: routeMeta.contentInstanceId,
+        startedAtMs: Date.now(),
+        routeMeta,
+      });
+      queueDebugSessionEvent({
+        eventType: 'tool_call_started',
+        turnId,
+        toolName: 'answer_with_knowledge',
+        tabId: targetTabId,
+        windowId: activeDebugSession.windowId,
+        conversationId: activeDebugSession.conversationId,
+        bindingEpoch: routeMeta.bindingEpoch,
+        pageInstanceId: routeMeta.pageInstanceId,
+        contentInstanceId: routeMeta.contentInstanceId,
+        ...toolArgs,
+        ...contextFields,
+      });
+    }
+    if (activeTelemetrySession) {
+      const toolArgs = summarizeToolCallArgs('answer_with_knowledge', args);
+      queueProductTelemetryEvent({
+        eventType: 'tool_call_started',
+        turnId: activeTelemetrySession.currentTurnId,
+        ...summarizeTelemetryToolArgs({
+          name: 'answer_with_knowledge',
+          action: toolArgs.action,
+          selector: toolArgs.selector,
+          inputTextLength: toolArgs.inputTextLength,
+        }),
+        metadata: {
+          bindingEpoch: routeMeta.bindingEpoch,
+          pageInstancePresent: Boolean(routeMeta.pageInstanceId),
+          contentInstancePresent: Boolean(routeMeta.contentInstanceId),
+        },
+        ...getTelemetryContextFields(targetTabId),
+      });
+    }
+
+    const response = (await chrome.tabs.sendMessage(targetTabId, {
+      type: 'GET_PAGE_CONTEXT',
+      route: routeMeta,
+    })) as
+      | {
+          type?: 'PAGE_CONTEXT_RESPONSE';
+          payload?: PageContext | null;
+          bindingEpoch?: number | null;
+          pageInstanceId?: string | null;
+          contentInstanceId?: string | null;
+        }
+      | undefined;
+
+    const resultMeta = parseToolResultMeta(
+      (response ?? {}) as Record<string, unknown>,
+    );
+    if (
+      !isToolResultCurrent({
+        route: routeMeta,
+        current: getVoiceTargetInstanceState(),
+        result: resultMeta,
+      })
+    ) {
+      return await replyToolResult(
+        callId,
+        {
+          result: buildLoadingVoiceTargetToolResult('answer_with_knowledge'),
+        },
+        { resultMeta },
+      );
+    }
+
+    const rawContext = response?.payload
+      ? sanitizePageContextForNetwork(response.payload)
+      : null;
+    if (!rawContext) {
+      return await replyToolResult(
+        callId,
+        {
+          result: 'I could not read the current page context yet.',
+        },
+        { resultMeta },
+      );
+    }
+
+    const previousContext = latestContexts.get(targetTabId);
+    if (pageContextKnowledgeIdentityChanged(previousContext, rawContext)) {
+      liveContextHashes.delete(targetTabId);
+    }
+    const mergedContext = mergePageContextWithPrevious(
+      previousContext,
+      rawContext,
+    );
+    latestContexts.set(targetTabId, mergedContext);
+    updateContentInstance({
+      tabId: targetTabId,
+      contentInstanceId: resultMeta.contentInstanceId,
+      pageInstanceId: resultMeta.pageInstanceId,
+    });
+
+    const answer = await apiFetch<ExtensionVoiceAnswerResponse>(
+      '/api/extension/voice-answer',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          question,
+          context: mergedContext,
+          conversationId: activeDebugSession?.conversationId,
+        }),
+      },
+    );
+
+    await replyToolResult(
+      callId,
+      {
+        result: formatVoiceAnswerToolResult(answer),
+      },
+      { resultMeta },
+    );
+  } catch (err) {
+    await replyToolResult(callId, {
+      result: 'I had trouble retrieving the knowledge answer. Please try again.',
+    });
+    console.warn(`${BG} Voice answer failed:`, (err as Error).message);
+  }
 }
 
 async function handleScreenshot(callId: string): Promise<void> {

@@ -67,12 +67,13 @@ function callTool(name: string, args: unknown): Promise<string> {
     const callId = nextCallId();
     pendingToolCalls.set(callId, { resolve, reject });
 
-    // 15s cap so a failing tool never strands the agent's turn
+    // Knowledge answers make a backend model call, so give them a little more room.
+    const timeoutMs = name === 'answer_with_knowledge' ? 30000 : 15000;
     setTimeout(() => {
       if (pendingToolCalls.delete(callId)) {
         reject(new Error(`Tool "${name}" timed out`));
       }
-    }, 15000);
+    }, timeoutMs);
 
     send('TOOL_CALL', { callId, name, args });
   });
@@ -100,6 +101,8 @@ async function startSession(signedUrl: string, tabId: number): Promise<void> {
       ),
       clientTools: {
         get_page_context: () => callTool('get_page_context', {}),
+        answer_with_knowledge: (args: { question: string }) =>
+          callTool('answer_with_knowledge', args),
         search_page_elements: (args: { query: string; limit?: number }) =>
           callTool('search_page_elements', args),
         inspect_element: (args: { selector: string }) =>
