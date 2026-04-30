@@ -263,8 +263,8 @@ function recallFromCompiledWiki(store: ReadinessStore, question: string): Recall
     (candidate) =>
       candidate.org_id === FIXTURE.orgId &&
       candidate.status === 'active' &&
-      (candidate.content.toLowerCase().includes('prd-42') ||
-        normalizedQuestion.includes('billing')),
+      candidate.content.toLowerCase().includes('prd-42') &&
+      normalizedQuestion.includes('billing'),
   );
 
   if (!page) {

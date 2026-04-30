@@ -37,7 +37,7 @@
     "worker": "tsx scripts/worker.ts",
     "worker:once": "tsx scripts/worker.ts once",
     "worker:dev": "tsx watch scripts/worker.ts",
-    "db:verify:preprod": "tsx scripts/verify-knowledge-readiness.ts",
+    "db:verify:preprod": "tsx scripts/verify-knowledge-contracts.ts",
     "db:analyze": "tsx scripts/analyze-db-performance.ts",
     "db:explain": "tsx scripts/explain-critical-queries.ts",
     "db:optimize": "tsx scripts/optimize-database.ts",
