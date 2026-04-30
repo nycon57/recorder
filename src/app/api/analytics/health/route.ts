@@ -1,5 +1,3 @@
-import { NextRequest } from 'next/server';
-
 import { apiHandler, requireAuth, successResponse } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { checkExternalServices } from '@/lib/utils/health-checks';
@@ -124,6 +122,7 @@ async function measureJobProcessingTime(): Promise<number> {
 
     const avgTime =
       completedJobs.reduce((sum, job) => {
+        if (!job.completed_at) return sum;
         const duration =
           new Date(job.completed_at).getTime() - new Date(job.created_at).getTime();
         return sum + duration / 1000; // Convert to seconds
@@ -208,7 +207,7 @@ async function performHealthChecks() {
  * - performance: Performance metrics
  * - lastChecked: Timestamp of last health check
  */
-export const GET = apiHandler(async (request: NextRequest) => {
+export const GET = apiHandler(async () => {
   await requireAuth();
 
   // Check if we have recent health data (< 5 minutes old)

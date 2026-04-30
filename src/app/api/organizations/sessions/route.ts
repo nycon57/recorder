@@ -3,6 +3,11 @@ import { z } from 'zod';
 
 import { apiHandler, requireOrg, successResponse, parseSearchParams, errors } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Database, Json } from '@/lib/types/database';
+
+type SessionWithUser = Database['public']['Tables']['user_sessions']['Row'] & {
+  user?: { email: string | null } | null;
+};
 
 const sessionFiltersSchema = z.object({
   userId: z.string().optional(),
@@ -25,7 +30,7 @@ export type UserSession = {
   device_type: string | null;
   browser: string | null;
   os: string | null;
-  location: any | null;
+  location: Json;
   created_at: string;
   last_active_at: string;
   expires_at: string;
@@ -88,7 +93,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   // Process sessions to add isActive flag
-  const processedSessions = (sessions || []).map((session: any) => ({
+  const processedSessions = ((sessions || []) as UserSession[]).map((session) => ({
     ...session,
     isActive: !session.revoked_at && new Date(session.expires_at) > new Date(),
   }));
@@ -154,6 +159,7 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
   if (sessionError || !session) {
     throw errors.notFound('Session not found');
   }
+  const sessionWithUser = session as SessionWithUser;
 
   // Check permissions
   // Users can revoke their own sessions
@@ -183,8 +189,8 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     resource_type: 'session',
     resource_id: sessionId,
     metadata: {
-      revoked_user_id: session.user_id,
-      revoked_user_email: session.user?.email,
+      revoked_user_id: sessionWithUser.user_id,
+      revoked_user_email: sessionWithUser.user?.email,
     },
     ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
     user_agent: request.headers.get('user-agent'),

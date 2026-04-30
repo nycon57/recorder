@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 
-import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
+import { apiHandler, requireAdmin, successResponse } from '@/lib/utils/api';
 import { createSupabaseClient } from '@/lib/supabase/server';
 
 // DELETE /api/organizations/api-keys/[id] - Revoke API key
@@ -8,12 +8,7 @@ export const DELETE = apiHandler(async (
   request: NextRequest,
   { params }: { params: { id: string } }
 ) => {
-  const { orgId, userId, role } = await requireOrg();
-
-  // Only admins and owners can revoke API keys
-  if (!['admin', 'owner'].includes(role)) {
-    throw new Error('Unauthorized: Admin access required');
-  }
+  const { orgId, userId } = await requireAdmin();
 
   const supabase = await createSupabaseClient();
 

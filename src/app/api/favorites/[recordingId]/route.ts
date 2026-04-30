@@ -51,7 +51,7 @@ export const DELETE = apiHandler(
     await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
-      action: 'recording.unfavorited',
+      action_type: 'unfavorited',
       resource_type: 'recording',
       resource_id: recordingId,
       metadata: { title: recording?.title },

@@ -1,9 +1,9 @@
 import { randomBytes } from 'crypto';
 
 import { NextRequest } from 'next/server';
-import bcrypt from 'bcryptjs';
+import { hash } from 'bcryptjs';
 
-import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
+import { apiHandler, requireAdmin, successResponse, parseBody } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
 import { createApiKeySchema, CreateApiKeyInput } from '@/lib/validations/api';
 import { rateLimit, RateLimitTier, extractUserIdFromAuth } from '@/lib/middleware/rate-limit';
@@ -15,12 +15,8 @@ import { rateLimit, RateLimitTier, extractUserIdFromAuth } from '@/lib/middlewar
  */
 export const GET = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
   apiHandler(async (request: NextRequest) => {
-  const { orgId, role } = await requireOrg();
-
-  // Only admins and owners can view API keys
-  if (!['admin', 'owner'].includes(role)) {
-    throw new Error('Unauthorized: Admin access required');
-  }
+  void request;
+  const { orgId } = await requireAdmin();
 
   const supabase = await createClient();
 
@@ -59,12 +55,7 @@ export const GET = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
  */
 export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
   apiHandler(async (request: NextRequest) => {
-  const { orgId, userId, role } = await requireOrg();
-
-  // Only admins and owners can create API keys
-  if (!['admin', 'owner'].includes(role)) {
-    throw new Error('Unauthorized: Admin access required');
-  }
+  const { orgId, userId } = await requireAdmin();
 
   const bodyData = await parseBody<CreateApiKeyInput>(request, createApiKeySchema);
   const supabase = await createClient();
@@ -77,7 +68,7 @@ export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
   // SECURITY: bcrypt with cost factor 12 provides strong protection against brute force
   // Reference: OWASP Password Storage Cheat Sheet
   const saltRounds = 12;
-  const keyHash = await bcrypt.hash(apiKey, saltRounds);
+  const keyHash = await hash(apiKey, saltRounds);
 
   // Extract prefix for display (first 12 chars after sk_live_)
   const keyPrefix = apiKey.substring(0, 19); // "sk_live_" + first 11 chars

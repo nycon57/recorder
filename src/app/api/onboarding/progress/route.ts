@@ -11,6 +11,7 @@ import type {
   LearningPathItem,
   EngagementData,
   Database,
+  Json,
 } from '@/lib/types/database';
 import { analyzeOnboardingEngagement } from '@/lib/services/onboarding-engagement';
 
@@ -56,7 +57,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     return errors.notFound('Active onboarding plan');
   }
 
-  const learningPath = (plan.learning_path ?? []) as LearningPathItem[];
+  const learningPath = (plan.learning_path ?? []) as unknown as LearningPathItem[];
   const itemIndex = learningPath.findIndex((item) => item.contentId === contentId);
 
   if (itemIndex === -1) {
@@ -76,7 +77,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   const { data: updated, error: updateError } = await supabaseAdmin
     .from('agent_onboarding_plans')
     .update({
-      learning_path: learningPath,
+      learning_path: learningPath as unknown as Json,
       completed_items: completedItems,
       plan_status: newStatus,
       updated_at: new Date().toISOString(),

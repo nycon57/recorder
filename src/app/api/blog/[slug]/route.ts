@@ -60,8 +60,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       .eq('id', post.id)
       .then(() => {
         // View count updated silently
-      })
-      .catch((err) => {
+      }, (err: unknown) => {
         console.error('[Blog API] Failed to update view count:', err);
       });
 

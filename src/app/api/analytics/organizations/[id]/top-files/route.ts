@@ -8,6 +8,7 @@
  */
 
 import { NextRequest } from 'next/server';
+
 import {
   apiHandler,
   requireSystemAdmin,
@@ -16,10 +17,29 @@ import {
 } from '@/lib/utils/api';
 import { organizationTopFilesQuerySchema } from '@/lib/validations/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Database, Json } from '@/lib/types/database';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
+
+type ContentRow = Database['public']['Tables']['content']['Row'];
+type FileOwner = {
+  id: string;
+  name: string | null;
+};
+type ContentWithOwner = ContentRow & {
+  users?: FileOwner | FileOwner[] | null;
+};
+type CompressionStats = {
+  compression_ratio?: number;
+};
+
+const isJsonObject = (value: Json): value is { [key: string]: Json | undefined } =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const getCompressionStats = (value: Json): CompressionStats | null =>
+  isJsonObject(value) ? { compression_ratio: Number(value.compression_ratio) || undefined } : null;
 
 /**
  * GET /api/analytics/organizations/[id]/top-files
@@ -97,7 +117,7 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
     let savings = 0;
 
     // If uncompressed, estimate 30% file size savings
-    const compressionStats = f.compression_stats as any;
+    const compressionStats = getCompressionStats(f.compression_stats);
     if (!compressionStats) {
       const sizeGB = (f.file_size || 0) / 1e9;
       savings += sizeGB * 0.3 * tierPricing.hot; // Assume hot tier
@@ -118,8 +138,8 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
   }, 0) || 0;
 
   // Format files for response
-  const files = topFiles?.map((f) => {
-    const compressionStats = f.compression_stats as any;
+  const files = ((topFiles || []) as ContentWithOwner[]).map((f) => {
+    const compressionStats = getCompressionStats(f.compression_stats);
     const user = Array.isArray(f.users) ? f.users[0] : f.users;
 
     return {
@@ -137,7 +157,7 @@ export const GET = apiHandler(async (request: NextRequest, context: RouteContext
         name: user?.name || 'Unknown User',
       },
     };
-  }) || [];
+  });
 
   return successResponse({
     organization: {

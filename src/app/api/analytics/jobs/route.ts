@@ -8,10 +8,9 @@
 
 import { apiHandler, successResponse } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/admin';
-import type { JobType } from '@/lib/types/database';
 
 interface JobPerformance {
-  type: JobType;
+  type: string;
   total: number;
   success: number;
   failed: number;
@@ -116,7 +115,7 @@ export const GET = apiHandler(async () => {
       })) || [];
 
     // Calculate performance by job type
-    const typeMap = new Map<JobType, { total: number; success: number; failed: number; durations: number[] }>();
+    const typeMap = new Map<string, { total: number; success: number; failed: number; durations: number[] }>();
 
     allJobs.forEach((job) => {
       const existing = typeMap.get(job.type) || { total: 0, success: 0, failed: 0, durations: [] };

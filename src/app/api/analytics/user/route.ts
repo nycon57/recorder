@@ -2,6 +2,12 @@ import { NextRequest } from 'next/server';
 
 import { apiHandler, requireAuth, successResponse } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
+import type { Database } from '@/lib/types/database';
+
+type SearchAnalyticsRow = Database['public']['Tables']['search_analytics']['Row'];
+type SearchWithFeedback = SearchAnalyticsRow & {
+  user_feedback?: number | null;
+};
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const { userId } = await requireAuth();
@@ -82,7 +88,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Most active day
   const dayCount: Record<string, number> = {};
-  searches?.forEach((search) => {
+  const searchesWithFeedback = (searches || []) as SearchWithFeedback[];
+
+  searchesWithFeedback.forEach((search) => {
     const day = new Date(search.created_at).toLocaleDateString('en-US', { weekday: 'short' });
     dayCount[day] = (dayCount[day] || 0) + 1;
   });
@@ -96,7 +104,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Top query type
   const typeCount: Record<string, number> = {};
-  searches?.forEach((search) => {
+  searchesWithFeedback.forEach((search) => {
     const type = search.mode || 'standard';
     typeCount[type] = (typeCount[type] || 0) + 1;
   });
@@ -113,21 +121,22 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // Top queries
   const queryMap = new Map<string, { count: number; lastSearched: string; feedbacks: number[] }>();
 
-  searches?.forEach((search) => {
+  searchesWithFeedback.forEach((search) => {
     const query = search.query;
     const existing = queryMap.get(query);
+    const feedback = search.user_feedback;
 
     if (existing) {
       existing.count += 1;
       existing.lastSearched = search.created_at > existing.lastSearched ? search.created_at : existing.lastSearched;
-      if (search.user_feedback !== null) {
-        existing.feedbacks.push(search.user_feedback);
+      if (typeof feedback === 'number') {
+        existing.feedbacks.push(feedback);
       }
     } else {
       queryMap.set(query, {
         count: 1,
         lastSearched: search.created_at,
-        feedbacks: search.user_feedback !== null ? [search.user_feedback] : [],
+        feedbacks: typeof feedback === 'number' ? [feedback] : [],
       });
     }
   });

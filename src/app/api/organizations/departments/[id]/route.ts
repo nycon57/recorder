@@ -18,10 +18,12 @@ import { z } from 'zod';
 import { apiHandler, requireOrg, requireAdmin, successResponse, errors , parseBody } from '@/lib/utils/api';
 import {
   updateDepartmentSchema,
-  deleteDepartmentSchema,
   Department
 } from '@/lib/validations/departments';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/types/database';
+
+type DepartmentUpdate = Database['public']['Tables']['departments']['Update'];
 
 /**
  * GET /api/organizations/departments/[id]
@@ -117,7 +119,7 @@ export const PATCH = apiHandler(async (
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) => {
-  const { orgId, userId } = await requireAdmin();
+  const { orgId } = await requireAdmin();
   const { id } = await context.params;
 
   if (!id) {
@@ -174,7 +176,7 @@ export const PATCH = apiHandler(async (
   }
 
   // Update department
-  const updateData: any = {
+  const updateData: DepartmentUpdate = {
     updated_at: new Date().toISOString(),
   };
 
@@ -193,6 +195,9 @@ export const PATCH = apiHandler(async (
 
   if (updateError) {
     console.error('[PATCH /api/organizations/departments/[id]] Error updating department:', updateError);
+    throw new Error('Failed to update department');
+  }
+  if (!updatedDepartment) {
     throw new Error('Failed to update department');
   }
 

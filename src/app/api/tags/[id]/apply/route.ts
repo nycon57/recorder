@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import {
   apiHandler,
@@ -8,7 +9,6 @@ import {
   parseBody,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { z } from 'zod';
 
 interface RouteParams {
   params: {
@@ -83,8 +83,8 @@ export const POST = apiHandler(async (request: NextRequest, { params }: RoutePar
   const activityLogs = recordings.map(recording => ({
     org_id: orgId,
     user_id: userId,
-    action: 'tag.applied',
-    resource_type: 'recording',
+    action_type: 'tagged' as const,
+    resource_type: 'recording' as const,
     resource_id: recording.id,
     metadata: {
       tag_id: tagId,

@@ -34,11 +34,12 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   if (!action_type || typeof action_type !== 'string') {
     return errors.badRequest('action_type is required');
   }
-  if (!VALID_TIERS.has(permission_tier)) {
+  if (typeof permission_tier !== 'string' || !VALID_TIERS.has(permission_tier as PermissionTier)) {
     return errors.badRequest('permission_tier must be one of: auto, notify, approve');
   }
 
-  await setPermission(orgId, agent_type, action_type, permission_tier);
+  const permissionTier = permission_tier as PermissionTier;
+  await setPermission(orgId, agent_type, action_type, permissionTier);
 
-  return successResponse({ agent_type, action_type, permission_tier });
+  return successResponse({ agent_type, action_type, permission_tier: permissionTier });
 });

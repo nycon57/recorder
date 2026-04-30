@@ -94,8 +94,8 @@ export const POST = apiHandler(
       await supabase.from('activity_log').insert({
         org_id: orgId,
         user_id: userId,
-        action: body.collection_id ? 'content.moved' : 'content.removed_from_collection',
-        resource_type: 'content',
+        action_type: 'moved',
+        resource_type: 'recording',
         resource_id: contentId,
         metadata: {
           title: content.title,

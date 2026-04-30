@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 
 import { apiHandler, requireAuth, successResponse, errors } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/types/database';
+
+type AlertRow = Database['public']['Tables']['alerts']['Row'];
 
 /**
  * POST /api/analytics/alerts/[id]/resolve
@@ -45,7 +48,7 @@ export const POST = apiHandler(async (request: NextRequest, context: { params: P
       updated_at: new Date().toISOString(),
     })
     .eq('id', alertId)
-    .select()
+    .select('id, resolved, resolved_at, resolved_by, updated_at')
     .single();
 
   if (updateError || !updatedAlert) {
@@ -53,13 +56,18 @@ export const POST = apiHandler(async (request: NextRequest, context: { params: P
     throw new Error('Failed to resolve alert');
   }
 
+  const alertResult = updatedAlert as Pick<
+    AlertRow,
+    'id' | 'resolved' | 'resolved_at' | 'resolved_by' | 'updated_at'
+  >;
+
   return successResponse({
     alert: {
-      id: updatedAlert.id,
-      resolved: updatedAlert.resolved,
-      resolvedAt: updatedAlert.resolved_at,
-      resolvedBy: updatedAlert.resolved_by,
-      updatedAt: updatedAlert.updated_at,
+      id: alertResult.id,
+      resolved: alertResult.resolved,
+      resolvedAt: alertResult.resolved_at,
+      resolvedBy: alertResult.resolved_by,
+      updatedAt: alertResult.updated_at,
     },
   });
 });

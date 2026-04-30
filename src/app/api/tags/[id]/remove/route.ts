@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import {
   apiHandler,
@@ -8,7 +9,6 @@ import {
   parseBody,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { z } from 'zod';
 
 interface RouteParams {
   params: {
@@ -81,8 +81,8 @@ export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteP
     .map(recording => ({
       org_id: orgId,
       user_id: userId,
-      action: 'tag.removed',
-      resource_type: 'recording',
+      action_type: 'untagged' as const,
+      resource_type: 'recording' as const,
       resource_id: recording.id,
       metadata: {
         tag_id: tagId,

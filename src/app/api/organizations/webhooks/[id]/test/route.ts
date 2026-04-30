@@ -3,21 +3,30 @@ import { createHmac } from 'crypto';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
+import { apiHandler, requireAdmin, successResponse, parseBody } from '@/lib/utils/api';
 import { createSupabaseClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/types/database';
 import { testWebhookSchema } from '@/lib/validations/api';
+
+type JsonObject = { [key: string]: Json | undefined };
+
+const isJsonObject = (value: Json): value is JsonObject =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const toJson = (value: unknown): Json => value as Json;
+
+const toResponseBody = (value: Json): string | null => {
+  if (typeof value === 'string') return value;
+  if (value === null) return null;
+  return JSON.stringify(value);
+};
 
 // POST /api/organizations/webhooks/[id]/test - Test webhook
 export const POST = apiHandler(async (
   request: NextRequest,
   { params }: { params: { id: string } }
 ) => {
-  const { orgId, userId, role } = await requireOrg();
-
-  // Only admins and owners can test webhooks
-  if (!['admin', 'owner'].includes(role)) {
-    throw new Error('Unauthorized: Admin access required');
-  }
+  const { orgId } = await requireAdmin();
 
   const bodyData = await parseBody<z.infer<typeof testWebhookSchema>>(request, testWebhookSchema);
   const supabase = await createSupabaseClient();
@@ -52,19 +61,24 @@ export const POST = apiHandler(async (
     .digest('hex');
 
   // Prepare headers
+  const customHeaders = isJsonObject(webhook.headers) ? webhook.headers : {};
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Webhook-Signature': signature,
     'X-Webhook-Event': bodyData.event_type || 'test',
     'X-Webhook-Test': 'true',
-    ...webhook.headers,
+    ...Object.fromEntries(
+      Object.entries(customHeaders).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string'
+      )
+    ),
   };
 
   // Send the test webhook
   const startTime = Date.now();
   let responseStatus = 0;
   const responseHeaders: Record<string, string> = {};
-  let responseBody: any = null;
+  let responseBody: Json = null;
   let errorMessage: string | undefined;
 
   try {
@@ -72,7 +86,7 @@ export const POST = apiHandler(async (
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(webhook.timeout_ms),
+      signal: AbortSignal.timeout(webhook.timeout_ms ?? 5000),
     });
 
     responseStatus = response.status;
@@ -85,7 +99,7 @@ export const POST = apiHandler(async (
     // Get response body
     const contentType = response.headers.get('content-type');
     if (contentType?.includes('application/json')) {
-      responseBody = await response.json();
+      responseBody = toJson(await response.json());
     } else {
       responseBody = await response.text();
     }
@@ -96,8 +110,8 @@ export const POST = apiHandler(async (
     if (!success) {
       errorMessage = `HTTP ${response.status}: ${response.statusText}`;
     }
-  } catch (error: any) {
-    errorMessage = error.message || 'Failed to deliver webhook';
+  } catch (error: unknown) {
+    errorMessage = error instanceof Error ? error.message : 'Failed to deliver webhook';
     responseStatus = 0;
   }
 
@@ -110,14 +124,16 @@ export const POST = apiHandler(async (
     org_id: orgId,
     event_type: bodyData.event_type || 'test',
     status: success ? 'success' : 'failure',
-    status_code: responseStatus,
+    response_status_code: responseStatus,
     duration_ms: duration,
-    request_headers: headers,
-    request_body: payload,
+    payload: toJson(payload),
     response_headers: responseHeaders,
-    response_body: responseBody,
-    error: errorMessage,
-    is_test: true,
+    response_body: toResponseBody(responseBody),
+    error_message: errorMessage,
+    metadata: {
+      is_test: true,
+      request_headers: headers,
+    },
   });
 
   return successResponse({

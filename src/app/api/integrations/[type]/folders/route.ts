@@ -26,6 +26,13 @@ import type {
   FolderListResponse,
   CreateFolderResponse,
 } from '@/lib/types/publishing';
+import type { Json } from '@/lib/types/database';
+
+interface ConnectorConfigRow {
+  connector_type: string;
+  credentials: Json;
+  settings: Json | null;
+}
 
 // =====================================================
 // TYPE HELPERS
@@ -167,10 +174,11 @@ export async function GET(
     let connector;
 
     try {
+      const typedConnectorConfig = connectorConfig as ConnectorConfigRow;
       connector = ConnectorRegistry.create(
         connectorType,
-        connectorConfig.credentials as Record<string, unknown>,
-        connectorConfig.config as Record<string, unknown>
+        typedConnectorConfig.credentials as Record<string, unknown>,
+        (typedConnectorConfig.settings ?? {}) as Record<string, unknown>
       );
     } catch (error) {
       return NextResponse.json(
@@ -288,7 +296,7 @@ export async function POST(
 
     try {
       body = await req.json();
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Invalid JSON in request body' },
         { status: 400 }
@@ -350,10 +358,11 @@ export async function POST(
     let connector;
 
     try {
+      const typedConnectorConfig = connectorConfig as ConnectorConfigRow;
       connector = ConnectorRegistry.create(
         connectorType,
-        connectorConfig.credentials as Record<string, unknown>,
-        connectorConfig.config as Record<string, unknown>
+        typedConnectorConfig.credentials as Record<string, unknown>,
+        (typedConnectorConfig.settings ?? {}) as Record<string, unknown>
       );
     } catch (error) {
       return NextResponse.json(

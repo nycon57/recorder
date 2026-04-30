@@ -3,18 +3,78 @@ import { NextRequest } from 'next/server';
 import {
   apiHandler,
   requireOrg,
-  requireAdmin,
   successResponse,
   parseBody,
   parseSearchParams,
 } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
+import type { Database, Json } from '@/lib/types/database';
 import {
   logActivitySchema,
   listActivityQuerySchema,
   type LogActivityInput,
   type ListActivityQueryInput,
 } from '@/lib/validations/api';
+
+type ActivityAction = Database['public']['Enums']['activity_action'];
+type ActivityResource = Database['public']['Enums']['activity_resource'];
+type ActivityUser = {
+  name: string | null;
+  avatar_url: string | null;
+};
+type ActivityWithUser = Database['public']['Tables']['activity_log']['Row'] & {
+  users?: ActivityUser | null;
+};
+
+const ACTIVITY_ACTIONS = [
+  'created',
+  'updated',
+  'deleted',
+  'shared',
+  'favorited',
+  'unfavorited',
+  'tagged',
+  'untagged',
+  'moved',
+  'uploaded',
+  'transcribed',
+  'processed',
+  'viewed',
+] as const satisfies readonly ActivityAction[];
+
+const ACTIVITY_RESOURCES = [
+  'recording',
+  'collection',
+  'tag',
+  'note',
+  'share',
+] as const satisfies readonly ActivityResource[];
+
+const isActivityAction = (value: string): value is ActivityAction =>
+  ACTIVITY_ACTIONS.includes(value as ActivityAction);
+
+const isActivityResource = (value: string): value is ActivityResource =>
+  ACTIVITY_RESOURCES.includes(value as ActivityResource);
+
+const toActivityAction = (value: LogActivityInput['action']): ActivityAction => {
+  const action = value.split('.').pop() ?? value;
+  if (action === 'item_added' || action === 'applied') return 'tagged';
+  if (action === 'item_removed' || action === 'removed') return 'untagged';
+  if (action === 'generated') return 'processed';
+  if (action === 'login') return 'viewed';
+  return isActivityAction(action) ? action : 'updated';
+};
+
+const toActivityResource = (
+  value: LogActivityInput['resource_type']
+): ActivityResource => {
+  if (value === 'document') return 'note';
+  if (value === 'user') return 'share';
+  return isActivityResource(value) ? value : 'recording';
+};
+
+const toJson = (value: LogActivityInput['metadata']): Json =>
+  value === undefined ? {} : (value as Json);
 
 /**
  * GET /api/activity - Get activity feed
@@ -43,9 +103,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
       `
       id,
       user_id,
-      action,
+      action_type,
       resource_type,
       resource_id,
+      resource_name,
       metadata,
       created_at,
       users!inner(
@@ -64,10 +125,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   if (query.action) {
-    activityQuery = activityQuery.eq('action', query.action);
+    if (isActivityAction(query.action)) {
+      activityQuery = activityQuery.eq('action_type', query.action);
+    }
   }
 
-  if (query.resource_type) {
+  if (query.resource_type && isActivityResource(query.resource_type)) {
     activityQuery = activityQuery.eq('resource_type', query.resource_type);
   }
 
@@ -124,10 +187,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
       if (recordings) {
         for (const recording of recordings) {
-          recordingTitles.set(recording.id, recording.title);
+          recordingTitles.set(recording.id, recording.title ?? 'Untitled recording');
         }
       }
-    } catch (err) {
+    } catch {
       // Continue without titles if query fails
     }
   }
@@ -145,7 +208,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
           collectionNames.set(collection.id, collection.name);
         }
       }
-    } catch (err) {
+    } catch {
       // Continue without names if query fails
     }
   }
@@ -163,34 +226,32 @@ export const GET = apiHandler(async (request: NextRequest) => {
           tagNames.set(tag.id, tag.name);
         }
       }
-    } catch (err) {
+    } catch {
       // Continue without names if query fails
     }
   }
 
-  // Batch fetch documents with recording titles
-  if (resourcesByType['document']?.size > 0) {
+  // Batch fetch notes/documents
+  if (resourcesByType['note']?.size > 0) {
     try {
       const { data: documents } = await supabase
         .from('documents')
-        .select('id, recording_id, recordings(title)')
-        .in('id', Array.from(resourcesByType['document']));
+        .select('id, summary')
+        .in('id', Array.from(resourcesByType['note']));
 
       if (documents) {
         for (const doc of documents) {
-          const title = (doc.recordings as any)?.title;
-          if (title) {
-            documentTitles.set(doc.id, title);
-          }
+          documentTitles.set(doc.id, doc.summary ?? 'Untitled document');
         }
       }
-    } catch (err) {
+    } catch {
       // Continue without titles if query fails
     }
   }
 
   // Transform the data using lookup maps
-  const activitiesWithDetails = (activities || []).map((activity: any) => {
+  const typedActivities = (activities || []) as ActivityWithUser[];
+  const activitiesWithDetails = typedActivities.map((activity) => {
     let resourceTitle: string | null = null;
 
     // Look up resource title from the appropriate map
@@ -201,7 +262,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
         resourceTitle = collectionNames.get(activity.resource_id) || null;
       } else if (activity.resource_type === 'tag') {
         resourceTitle = tagNames.get(activity.resource_id) || null;
-      } else if (activity.resource_type === 'document') {
+      } else if (activity.resource_type === 'note') {
         resourceTitle = documentTitles.get(activity.resource_id) || null;
       }
     }
@@ -211,10 +272,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
       user_id: activity.user_id,
       user_name: activity.users?.name || null,
       user_avatar: activity.users?.avatar_url || null,
-      action: activity.action,
+      action: activity.action_type,
       resource_type: activity.resource_type,
       resource_id: activity.resource_id,
-      resource_title: resourceTitle,
+      resource_title: resourceTitle ?? activity.resource_name,
       metadata: activity.metadata,
       created_at: activity.created_at,
     };
@@ -254,10 +315,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
     .insert({
       org_id: orgId,
       user_id: userId,
-      action: body.action,
-      resource_type: body.resource_type,
-      resource_id: body.resource_id || null,
-      metadata: body.metadata || {},
+      action_type: toActivityAction(body.action),
+      resource_type: toActivityResource(body.resource_type),
+      resource_id: body.resource_id ?? '',
+      metadata: toJson(body.metadata),
     })
     .select()
     .single();

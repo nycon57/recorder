@@ -15,9 +15,20 @@ import {
   apiHandler,
   requireSystemAdmin,
   successResponse,
-  errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+
+interface IncidentWithAlertRule {
+  id: string;
+  metric_value: number | null;
+  triggered_at: string | null;
+  status: string | null;
+  alert_rules?: {
+    name?: string | null;
+    severity?: string | null;
+    metric_name?: string | null;
+  } | null;
+}
 
 /**
  * GET /api/admin/metrics
@@ -123,12 +134,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
     totalOrgs: quotas?.length || 0,
     orgsNearSearchLimit:
       quotas?.filter((q) => {
-        const usage = q.searches_used / q.searches_per_month;
+        const usage = (q.searches_used ?? 0) / q.searches_per_month;
         return usage > 0.9;
       }).length || 0,
     orgsNearStorageLimit:
       quotas?.filter((q) => {
-        const usage = q.storage_used_gb / q.storage_gb;
+        const usage = (q.storage_used_gb ?? 0) / q.storage_gb;
         return usage > 0.9;
       }).length || 0,
     totalStorageUsedGb:
@@ -173,16 +184,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
     totalOpen: incidents?.length || 0,
     critical:
       incidents?.filter(
-        (i: any) => i.alert_rules?.severity === 'critical'
+        (i: IncidentWithAlertRule) => i.alert_rules?.severity === 'critical'
       ).length || 0,
     warning:
       incidents?.filter(
-        (i: any) => i.alert_rules?.severity === 'warning'
+        (i: IncidentWithAlertRule) => i.alert_rules?.severity === 'warning'
       ).length || 0,
     info:
-      incidents?.filter((i: any) => i.alert_rules?.severity === 'info')
+      incidents?.filter((i: IncidentWithAlertRule) => i.alert_rules?.severity === 'info')
         .length || 0,
-    recentIncidents: incidents?.map((i: any) => ({
+    recentIncidents: (incidents as IncidentWithAlertRule[] | null)?.map((i) => ({
       id: i.id,
       ruleName: i.alert_rules?.name,
       severity: i.alert_rules?.severity,

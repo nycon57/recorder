@@ -160,7 +160,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
-      action: 'collection.created',
+      action_type: 'created',
       resource_type: 'collection',
       resource_id: newCollection.id,
       metadata: { name: newCollection.name },

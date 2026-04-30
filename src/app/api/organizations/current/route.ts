@@ -10,13 +10,19 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/types/database';
 import { updateOrganizationSchema } from '@/lib/validations/organizations';
+
+type JsonObject = { [key: string]: Json | undefined };
+
+const asJsonObject = (value: Json | null | undefined): JsonObject =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {};
 
 /**
  * GET /api/organizations/current
  * Fetch current organization details
  */
-export const GET = apiHandler(async (request: NextRequest) => {
+export const GET = apiHandler(async () => {
   const { orgId } = await requireOrg();
 
   // Fetch organization details
@@ -67,7 +73,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   const bodyData = await parseBody<z.infer<typeof updateOrganizationSchema>>(request, updateOrganizationSchema);
 
   // Build update object (only include provided fields)
-  const updates: Record<string, any> = {
+  const updates: Record<string, Json | string | null> = {
     updated_at: new Date().toISOString(),
   };
 
@@ -86,9 +92,9 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       .single();
 
     updates.features = {
-      ...(currentOrg?.features || {}),
+      ...asJsonObject(currentOrg?.features),
       ...bodyData.features,
-    };
+    } as Json;
   }
 
   // Handle settings - merge with existing
@@ -100,9 +106,9 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       .single();
 
     updates.settings = {
-      ...(currentOrg?.settings || {}),
+      ...asJsonObject(currentOrg?.settings),
       ...bodyData.settings,
-    };
+    } as Json;
   }
 
   // Check if domain is already taken by another org
