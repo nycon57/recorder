@@ -308,30 +308,34 @@ async function runCompilationPipeline(
     return;
   }
 
-  // ---- Step 2 — LLM classify -----------------------------------------------
-  progressCallback?.(25, 'Classifying recording into app/screen/topic...');
-
-  const baseClassification = await classifyRecording({
-    recordingTitle: recording.title,
-    recordingDescription: recording.description,
-    workflowTitle: workflow?.title ?? null,
-    workflowDescription: workflow?.description ?? null,
-    workflowSteps,
-    documentSummary: document?.summary ?? null,
-    documentMarkdown: document?.markdown ?? null,
-    transcript: transcript?.text ?? null,
-    recordingId,
-  });
-
   const approvedRoutingOverride = getApprovedRoutingOverride(recording.metadata);
-  const classification = approvedRoutingOverride
-    ? {
-        ...baseClassification,
-        ...approvedRoutingOverride,
-        routeConfidence: 1,
-        routeReason: 'Approved by a reviewer in Needs Routing.',
-      }
-    : baseClassification;
+  let classification: WikiClassification;
+
+  if (approvedRoutingOverride) {
+    progressCallback?.(25, 'Applying approved routing...');
+    classification = {
+      app: approvedRoutingOverride.app,
+      screen: approvedRoutingOverride.screen,
+      topic: approvedRoutingOverride.topic,
+      routeConfidence: 1,
+      routeReason: 'Approved by a reviewer in Needs Routing.',
+    };
+  } else {
+    // ---- Step 2 — LLM classify ---------------------------------------------
+    progressCallback?.(25, 'Classifying recording into app/screen/topic...');
+
+    classification = await classifyRecording({
+      recordingTitle: recording.title,
+      recordingDescription: recording.description,
+      workflowTitle: workflow?.title ?? null,
+      workflowDescription: workflow?.description ?? null,
+      workflowSteps,
+      documentSummary: document?.summary ?? null,
+      documentMarkdown: document?.markdown ?? null,
+      transcript: transcript?.text ?? null,
+      recordingId,
+    });
+  }
 
   console.log(
     `[compile-wiki] Classified recording ${recordingId} as app=${classification.app ?? '(none)'} screen=${classification.screen ?? '(none)'} topic="${classification.topic}" confidence=${classification.routeConfidence ?? 'n/a'}`

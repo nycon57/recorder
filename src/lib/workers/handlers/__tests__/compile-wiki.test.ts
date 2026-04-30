@@ -5,6 +5,9 @@ const generateContentMock = jest.fn();
 const runRelationshipExtractionMock = jest.fn();
 const runCrossPageContradictionDetectionMock = jest.fn();
 const generateOrgWikiPageEmbeddingBestEffortMock = jest.fn();
+const getApprovedRoutingOverrideMock = jest.fn<
+  () => { app: string | null; screen: string | null; topic: string } | null
+>(() => null);
 
 jest.mock('@google/genai', () => ({
   GoogleGenAI: jest.fn().mockImplementation(() => ({
@@ -41,7 +44,7 @@ jest.mock('@/lib/services/routing-review', () => ({
   ROUTING_REVIEW_ACTION_TYPE: 'compile_wiki_route_review',
   buildRoutingReviewDescription: jest.fn(),
   buildRoutingReviewProposedAction: jest.fn(),
-  getApprovedRoutingOverride: jest.fn(() => null),
+  getApprovedRoutingOverride: getApprovedRoutingOverrideMock,
   requiresRoutingReview: jest.fn(() => false),
   writeRoutingReviewState: jest.fn((metadata: unknown) => metadata),
 }));
@@ -94,6 +97,15 @@ function insertResponse() {
   };
 }
 
+function insertSelectSingleResponse(data: unknown) {
+  const query = {
+    insert: jest.fn(() => query),
+    select: jest.fn(() => query),
+    single: jest.fn(async () => ({ data, error: null })),
+  };
+  return query;
+}
+
 describe('compile-wiki embedding freshness', () => {
   beforeAll(async () => {
     ({ handleCompileWiki } = await import('../compile-wiki'));
@@ -105,6 +117,7 @@ describe('compile-wiki embedding freshness', () => {
     runRelationshipExtractionMock.mockResolvedValue(false as never);
     runCrossPageContradictionDetectionMock.mockResolvedValue(undefined as never);
     generateOrgWikiPageEmbeddingBestEffortMock.mockResolvedValue(true as never);
+    getApprovedRoutingOverrideMock.mockReturnValue(null);
   });
 
   it('refreshes the existing page embedding after an additive update is finalized', async () => {
@@ -194,6 +207,132 @@ describe('compile-wiki embedding freshness', () => {
       runCrossPageContradictionDetectionMock.mock.invocationCallOrder[0]
     ).toBeLessThan(
       generateOrgWikiPageEmbeddingBestEffortMock.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('creates a new page from an approved routing override without reclassifying', async () => {
+    getApprovedRoutingOverrideMock.mockReturnValue({
+      app: 'salesforce',
+      screen: 'opportunities',
+      topic: 'renewal-workflow',
+    });
+    generateContentMock.mockResolvedValueOnce({
+      text: [
+        '---',
+        'layer: org',
+        'org_id: "org-1"',
+        'app: "salesforce"',
+        'screen: "opportunities"',
+        'topic: "renewal-workflow"',
+        'confidence: 0.9',
+        'sources:',
+        '  - type: recording',
+        '    id: "rec-1"',
+        '---',
+        '# Renewal Workflow',
+        '',
+        '## Workflow Steps',
+        '1. Send the renewal reminder.',
+      ].join('\n'),
+    } as never);
+
+    const contentQuery = queryResponse({
+      id: 'rec-1',
+      title: 'Renewal walkthrough',
+      description: null,
+      content_type: 'recording',
+      metadata: {
+        knowledge_routing_review: {
+          status: 'approved',
+        },
+      },
+    });
+    const existingPageQuery = queryResponse(null);
+    const pageInsertQuery = insertSelectSingleResponse({ id: 'page-1' });
+    const sourceInsertQuery = insertResponse();
+
+    fromMock
+      .mockReturnValueOnce(contentQuery)
+      .mockReturnValueOnce(queryResponse({
+        id: 'workflow-1',
+        title: 'Renewal workflow',
+        description: null,
+        steps: [{ title: 'Send reminder', description: 'Notify the CSM' }],
+        step_count: 1,
+        confidence: 0.83,
+        status: 'completed',
+      }))
+      .mockReturnValueOnce(queryResponse(null))
+      .mockReturnValueOnce(queryResponse(null))
+      .mockReturnValueOnce(existingPageQuery)
+      .mockReturnValueOnce(pageInsertQuery)
+      .mockReturnValueOnce(sourceInsertQuery);
+
+    await handleCompileWiki({
+      id: 'job-1',
+      payload: { recordingId: 'rec-1', orgId: 'org-1' },
+    } as never);
+
+    expect(contentQuery.eq).toHaveBeenCalledWith('org_id', 'org-1');
+    expect(existingPageQuery.eq).toHaveBeenCalledWith('org_id', 'org-1');
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+    expect(pageInsertQuery.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        org_id: 'org-1',
+        app: 'salesforce',
+        screen: 'opportunities',
+        topic: 'renewal-workflow',
+        content: expect.stringContaining('# Renewal Workflow'),
+        confidence: 0.83,
+        compilation_log: [
+          expect.objectContaining({
+            action: 'created',
+            source_recording_id: 'rec-1',
+            confidence: 0.83,
+            classification: expect.objectContaining({
+              app: 'salesforce',
+              screen: 'opportunities',
+              topic: 'renewal-workflow',
+              routeConfidence: 1,
+            }),
+          }),
+        ],
+      })
+    );
+    expect(sourceInsertQuery.insert).toHaveBeenCalledWith({
+      page_id: 'page-1',
+      source_type: 'recording',
+      source_id: 'rec-1',
+      contribution_summary:
+        'Initial wiki page creation from recording Renewal walkthrough',
+    });
+    expect(runRelationshipExtractionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'org-1',
+        pageId: 'page-1',
+        topic: 'renewal-workflow',
+        content: expect.stringContaining('# Renewal Workflow'),
+        recordingId: 'rec-1',
+      })
+    );
+    expect(runCrossPageContradictionDetectionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'org-1',
+        pageId: 'page-1',
+        app: 'salesforce',
+        screen: 'opportunities',
+        topic: 'renewal-workflow',
+        content: expect.stringContaining('# Renewal Workflow'),
+        recordingId: 'rec-1',
+      })
+    );
+    expect(generateOrgWikiPageEmbeddingBestEffortMock).toHaveBeenCalledWith(
+      'page-1',
+      expect.objectContaining({
+        source: 'compile-wiki.new-page',
+        orgId: 'org-1',
+        recordingId: 'rec-1',
+      })
     );
   });
 });
