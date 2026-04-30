@@ -10,8 +10,8 @@ import { vectorSearch, type SearchResult } from '@/lib/services/vector-search-go
 import { rerankResults, isCohereConfigured } from '@/lib/services/reranking';
 import { agenticSearch } from '@/lib/services/agentic-retrieval';
 import { preprocessQuery } from '@/lib/services/query-preprocessor';
-import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/types/database';
 
 export interface ChatMessage {
   id: string;
@@ -50,6 +50,36 @@ export interface RAGContext {
     iterations: number;
     confidence: number;
   };
+}
+
+function toJson(value: unknown): Json {
+  return value as Json;
+}
+
+function isCitedSourceSource(value: string): value is CitedSource['source'] {
+  return value === 'transcript' || value === 'document';
+}
+
+function normalizeContentType(value: unknown): CitedSource['contentType'] {
+  return value === 'audio' || value === 'visual' || value === 'combined' || value === 'document'
+    ? value
+    : 'audio';
+}
+
+function parseMessageMetadata(value: Json | null): ChatMessage['metadata'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    sources: Array.isArray(record.sources) ? record.sources as CitedSource[] : undefined,
+    tokensUsed: typeof record.tokensUsed === 'number' ? record.tokensUsed : undefined,
+  };
+}
+
+function isChatRole(value: string): value is ChatMessage['role'] {
+  return value === 'user' || value === 'assistant';
 }
 
 /**
@@ -142,21 +172,27 @@ export async function retrieveContext(
   }
 
   // Format results as cited sources with visual context
-  const sources: CitedSource[] = searchResults.map((result) => ({
-    contentId: result.contentId,
-    contentTitle: result.contentTitle,
-    chunkId: result.id,
-    chunkText: result.chunkText,
-    similarity: result.similarity ?? 0, // Default to 0 if null
-    timestamp: result.metadata.startTime,
-    timestampRange: result.metadata.timestampRange,
-    source: result.metadata.source,
-    hasVisualContext: result.metadata.hasVisualContext || false,
-    visualDescription: result.metadata.visualDescription,
-    contentType: result.metadata.contentType || 'audio',
-    // Add URL for clickable citations
-    url: `/library/${result.contentId}`,
-  }));
+  const sources: CitedSource[] = searchResults.map((result) => {
+    const source = isCitedSourceSource(result.metadata.source)
+      ? result.metadata.source
+      : 'document';
+
+    return {
+      contentId: result.contentId,
+      contentTitle: result.contentTitle,
+      chunkId: result.id,
+      chunkText: result.chunkText,
+      similarity: result.similarity ?? 0, // Default to 0 if null
+      timestamp: result.metadata.startTime,
+      timestampRange: result.metadata.timestampRange,
+      source,
+      hasVisualContext: result.metadata.hasVisualContext || false,
+      visualDescription: result.metadata.visualDescription,
+      contentType: normalizeContentType(result.metadata.contentType),
+      // Add URL for clickable citations
+      url: `/library/${result.contentId}`,
+    };
+  });
 
   // Build context string from chunks with visual descriptions
   const context = sources
@@ -310,7 +346,7 @@ export async function* generateStreamingRAGResponse(
   }
 ): AsyncGenerator<{
   type: 'context' | 'token' | 'done';
-  data?: any;
+  data?: unknown;
 }> {
   const {
     conversationHistory = [],
@@ -393,7 +429,7 @@ export async function saveChatMessage(
       conversation_id: conversationId,
       role: message.role,
       content: message.content, // For legacy: plain string
-      sources: message.metadata?.sources || null,
+      sources: message.metadata?.sources ? toJson(message.metadata.sources) : null,
       metadata: {
         tokensUsed: message.metadata?.tokensUsed || null,
       },
@@ -407,12 +443,12 @@ export async function saveChatMessage(
 
   return {
     id: data.id,
-    role: data.role,
+    role: isChatRole(data.role) ? data.role : 'user',
     content: typeof data.content === 'string' ? data.content : JSON.stringify(data.content),
     createdAt: new Date(data.created_at),
     metadata: {
-      sources: data.sources,
-      tokensUsed: data.metadata?.tokensUsed || null,
+      sources: Array.isArray(data.sources) ? data.sources as unknown as CitedSource[] : undefined,
+      tokensUsed: parseMessageMetadata(data.metadata)?.tokensUsed,
     },
   };
 }
@@ -490,12 +526,12 @@ export async function getConversationHistory(
 
   return chronologicalMessages.map((msg) => ({
     id: msg.id,
-    role: msg.role,
+    role: isChatRole(msg.role) ? msg.role : 'user',
     content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
     createdAt: new Date(msg.created_at),
     metadata: {
-      sources: msg.sources,
-      tokensUsed: msg.metadata?.tokensUsed || null,
+      sources: Array.isArray(msg.sources) ? msg.sources as unknown as CitedSource[] : undefined,
+      tokensUsed: parseMessageMetadata(msg.metadata)?.tokensUsed,
     },
   }));
 }
@@ -531,12 +567,18 @@ export async function listConversations(
     throw new Error(`Failed to list conversations: ${error.message}`);
   }
 
-  return conversations.map((conv: any) => ({
-    id: conv.id,
-    title: conv.title,
+  return conversations.map((conv) => {
+    const conversation = conv as typeof conv & {
+      chat_messages?: Array<{ count?: number }>;
+    };
+
+    return {
+    id: conversation.id,
+    title: conversation.title ?? 'New Conversation',
     lastMessageAt: new Date(conv.updated_at),
-    messageCount: conv.chat_messages?.[0]?.count || 0,
-  }));
+    messageCount: conversation.chat_messages?.[0]?.count ?? 0,
+  };
+  });
 }
 
 /**
@@ -558,8 +600,8 @@ export function extractQuestionIntent(query: string): {
 } {
   const lowerQuery = query.toLowerCase();
 
-  const questionWords = ['what', 'how', 'why', 'when', 'where', 'who'];
-  const questionType = questionWords.find((word) => lowerQuery.startsWith(word)) as any;
+  const questionWords = ['what', 'how', 'why', 'when', 'where', 'who'] as const;
+  const questionType = questionWords.find((word) => lowerQuery.startsWith(word));
 
   const isQuestion =
     lowerQuery.includes('?') ||

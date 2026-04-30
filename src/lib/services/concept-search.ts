@@ -5,6 +5,8 @@
  * to enable concept-aware search boosting.
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { ConceptType } from '@/lib/validations/knowledge';
 
@@ -111,7 +113,7 @@ export async function findMatchingConcepts(
     else {
       const conceptWords = conceptName.split(/[\s_-]+/);
       const matchingWords = queryWords.filter(qw =>
-        conceptWords.some(cw => cw.includes(qw) || qw.includes(cw))
+        conceptWords.some((cw: string) => cw.includes(qw) || qw.includes(cw))
       );
       if (matchingWords.length > 0) {
         score = 0.5 + (matchingWords.length / Math.max(queryWords.length, conceptWords.length)) * 0.3;

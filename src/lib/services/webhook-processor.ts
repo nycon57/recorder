@@ -10,13 +10,14 @@ import { createHmac, randomBytes } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { ConnectorRegistry } from '@/lib/connectors/registry';
 import { ConnectorType, WebhookEvent } from '@/lib/connectors/base';
+import type { Json } from '@/lib/types/database';
 
 export interface WebhookPayload {
   connectorId: string;
   eventType: string;
   eventSource: string;
   eventId?: string;
-  payload: any;
+  payload: unknown;
   headers?: Record<string, string>;
   signature?: string;
 }
@@ -31,7 +32,21 @@ export interface WebhookProcessingResult {
   eventId?: string;
   processed: boolean;
   error?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
+}
+
+function toJson(value: unknown): Json {
+  return value as Json;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 /**
@@ -124,7 +139,7 @@ export class WebhookProcessor {
    * Verify webhook signature
    */
   static verifySignature(
-    payload: any,
+    payload: unknown,
     signature: string,
     secret: string
   ): WebhookVerificationResult {
@@ -197,13 +212,14 @@ export class WebhookProcessor {
    * Verify Zoom webhook
    */
   static verifyZoomWebhook(
-    payload: any,
+    payload: unknown,
     signature: string,
     secret: string
   ): WebhookVerificationResult {
     try {
       // Zoom uses SHA256 HMAC
-      const message = `v0:${payload.event_ts}:${JSON.stringify(payload)}`;
+      const payloadRecord = asRecord(payload);
+      const message = `v0:${asString(payloadRecord.event_ts) ?? ''}:${JSON.stringify(payload)}`;
       const expectedSignature = createHmac('sha256', secret)
         .update(message)
         .digest('hex');
@@ -230,7 +246,7 @@ export class WebhookProcessor {
    * Verify Microsoft Teams webhook
    */
   static verifyTeamsWebhook(
-    payload: any,
+    payload: unknown,
     signature: string,
     secret: string
   ): WebhookVerificationResult {
@@ -261,15 +277,15 @@ export class WebhookProcessor {
    */
   private static async routeWebhookToConnector(
     connectorType: ConnectorType,
-    config: any,
-    payload: any
-  ): Promise<{ success: boolean; metadata?: Record<string, any> }> {
+    config: { credentials: Json; settings: Json | null },
+    payload: unknown
+  ): Promise<{ success: boolean; metadata?: Record<string, unknown> }> {
     try {
       // Create connector instance
       const connector = ConnectorRegistry.create(
         connectorType,
-        config.credentials,
-        config.settings
+        asRecord(config.credentials),
+        asRecord(config.settings)
       );
 
       // Check if connector has webhook handler
@@ -281,9 +297,13 @@ export class WebhookProcessor {
       }
 
       // Create webhook event object
+      const payloadRecord = asRecord(payload);
       const webhookEvent: WebhookEvent = {
         id: randomBytes(16).toString('hex'),
-        type: payload.event_type || payload.type || 'unknown',
+        type:
+          asString(payloadRecord.event_type) ??
+          asString(payloadRecord.type) ??
+          'unknown',
         source: connectorType,
         payload,
         timestamp: new Date(),
@@ -312,7 +332,7 @@ export class WebhookProcessor {
     eventType: string;
     eventSource: string;
     eventId?: string;
-    payload: any;
+    payload: unknown;
     headers?: Record<string, string>;
   }): Promise<string> {
     const { data, error } = await supabaseAdmin
@@ -322,12 +342,18 @@ export class WebhookProcessor {
         org_id: event.orgId,
         event_type: event.eventType,
         event_source: event.eventSource,
-        event_id: event.eventId,
-        payload: event.payload,
-        headers: event.headers,
-        processed: false,
-        retry_count: 0,
-        received_at: new Date().toISOString(),
+        event_id: event.eventId ?? randomBytes(16).toString('hex'),
+        source: event.eventSource,
+        metadata: toJson({
+          connector_id: event.connectorId,
+          org_id: event.orgId,
+          event_type: event.eventType,
+          event_source: event.eventSource,
+          payload: event.payload,
+          headers: event.headers ?? {},
+          retry_count: 0,
+          processed: false,
+        }),
       })
       .select('id')
       .single();
@@ -347,12 +373,22 @@ export class WebhookProcessor {
     success: boolean,
     error?: string
   ): Promise<void> {
+    const { data: existing } = await supabaseAdmin
+      .from('webhook_events')
+      .select('metadata')
+      .eq('id', eventId)
+      .maybeSingle();
+    const metadata = asRecord(existing?.metadata);
+
     await supabaseAdmin
       .from('webhook_events')
       .update({
-        processed: success,
         processed_at: new Date().toISOString(),
-        processing_error: error,
+        metadata: toJson({
+          ...metadata,
+          processed: success,
+          processing_error: error ?? null,
+        }),
       })
       .eq('id', eventId);
   }
@@ -423,9 +459,8 @@ export class WebhookProcessor {
       const { data: events, error } = await supabaseAdmin
         .from('webhook_events')
         .select('*')
-        .eq('processed', false)
-        .lt('retry_count', maxRetries)
-        .order('received_at', { ascending: true })
+        .is('processed_at', null)
+        .order('created_at', { ascending: true })
         .limit(batchSize);
 
       if (error || !events || events.length === 0) {
@@ -437,13 +472,21 @@ export class WebhookProcessor {
 
       for (const event of events) {
         try {
+          const metadata = asRecord(event.metadata);
+          const retryCount =
+            typeof metadata.retry_count === 'number' ? metadata.retry_count : 0;
+
+          if (retryCount >= maxRetries) {
+            continue;
+          }
+
           const result = await this.processWebhook({
-            connectorId: event.connector_id,
-            eventType: event.event_type,
-            eventSource: event.event_source,
+            connectorId: asString(metadata.connector_id) ?? '',
+            eventType: asString(metadata.event_type) ?? 'unknown',
+            eventSource: asString(metadata.event_source) ?? event.source,
             eventId: event.event_id,
-            payload: event.payload,
-            headers: event.headers,
+            payload: metadata.payload,
+            headers: asRecord(metadata.headers) as Record<string, string>,
           });
 
           if (result.success) {
@@ -453,8 +496,11 @@ export class WebhookProcessor {
             await supabaseAdmin
               .from('webhook_events')
               .update({
-                retry_count: event.retry_count + 1,
-                processing_error: result.error,
+                metadata: toJson({
+                  ...metadata,
+                  retry_count: retryCount + 1,
+                  processing_error: result.error ?? null,
+                }),
               })
               .eq('id', event.id);
             failed++;
@@ -487,27 +533,25 @@ export class WebhookProcessor {
       const { data: allEvents } = await supabaseAdmin
         .from('webhook_events')
         .select('id', { count: 'exact', head: true })
-        .eq('connector_id', connectorId);
+        .contains('metadata', { connector_id: connectorId });
 
       const { data: processedEvents } = await supabaseAdmin
         .from('webhook_events')
         .select('id', { count: 'exact', head: true })
-        .eq('connector_id', connectorId)
-        .eq('processed', true);
+        .contains('metadata', { connector_id: connectorId, processed: true });
 
       const { data: failedEvents } = await supabaseAdmin
         .from('webhook_events')
         .select('id', { count: 'exact', head: true })
-        .eq('connector_id', connectorId)
-        .eq('processed', false);
+        .contains('metadata', { connector_id: connectorId, processed: false });
 
       // Get events from last 24 hours
       const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data: recentEvents } = await supabaseAdmin
         .from('webhook_events')
         .select('id', { count: 'exact', head: true })
-        .eq('connector_id', connectorId)
-        .gte('received_at', yesterday);
+        .contains('metadata', { connector_id: connectorId })
+        .gte('created_at', yesterday);
 
       return {
         totalEvents: allEvents?.length || 0,
@@ -536,8 +580,7 @@ export class WebhookProcessor {
       const { data, error } = await supabaseAdmin
         .from('webhook_events')
         .delete()
-        .eq('processed', true)
-        .lt('received_at', cutoffDate)
+        .lt('processed_at', cutoffDate)
         .select('id');
 
       if (error) {

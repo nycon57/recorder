@@ -5,10 +5,8 @@
  * Extracts text content and metadata from various document formats.
  */
 
-import { Readable } from 'stream';
-
 import mammoth from 'mammoth';
-import pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 
 export interface ParsedDocument {
   content: string;
@@ -21,12 +19,13 @@ export interface DocumentMetadata {
   pageCount?: number;
   wordCount?: number;
   characterCount?: number;
+  title?: string;
   author?: string;
   createdAt?: Date;
   modifiedAt?: Date;
   language?: string;
   encoding?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export type DocumentFormat =
@@ -132,11 +131,15 @@ export class DocumentParser {
     buffer: Buffer,
     options: ParserOptions
   ): Promise<ParsedDocument> {
-    try {
-      // @ts-ignore - pdf-parse has incorrect type definitions
-      const data = await pdfParse(buffer);
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
 
-      let content = data.text;
+    try {
+      const [textResult, infoResult] = await Promise.all([
+        parser.getText(),
+        parser.getInfo(),
+      ]);
+
+      let content = textResult.text;
 
       // Clean text if requested
       if (options.cleanText) {
@@ -149,20 +152,21 @@ export class DocumentParser {
       }
 
       const metadata: DocumentMetadata = {
-        pageCount: data.numpages,
+        pageCount: textResult.total,
         wordCount: this.countWords(content),
         characterCount: content.length,
       };
 
       // Extract metadata if requested
-      if (options.extractMetadata && data.info) {
-        if (data.info.Title) metadata.title = data.info.Title;
-        if (data.info.Author) metadata.author = data.info.Author;
-        if (data.info.CreationDate) {
-          metadata.createdAt = this.parsePDFDate(data.info.CreationDate);
+      if (options.extractMetadata && infoResult.info) {
+        const info = infoResult.info as Record<string, unknown>;
+        if (typeof info.Title === 'string') metadata.title = info.Title;
+        if (typeof info.Author === 'string') metadata.author = info.Author;
+        if (typeof info.CreationDate === 'string') {
+          metadata.createdAt = this.parsePDFDate(info.CreationDate);
         }
-        if (data.info.ModDate) {
-          metadata.modifiedAt = this.parsePDFDate(data.info.ModDate);
+        if (typeof info.ModDate === 'string') {
+          metadata.modifiedAt = this.parsePDFDate(info.ModDate);
         }
       }
 
@@ -176,6 +180,8 @@ export class DocumentParser {
       throw new Error(
         `Failed to parse PDF: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
+    } finally {
+      await parser.destroy();
     }
   }
 
@@ -467,7 +473,12 @@ export class DocumentParser {
         // Remove extra whitespace
         .replace(/\s+/g, ' ')
         // Remove control characters
-        .replace(/[\x00-\x1F\x7F]/g, '')
+        .split('')
+        .filter((char) => {
+          const code = char.charCodeAt(0);
+          return code > 31 && code !== 127;
+        })
+        .join('')
         // Trim
         .trim()
     );

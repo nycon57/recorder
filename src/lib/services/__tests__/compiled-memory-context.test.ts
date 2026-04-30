@@ -90,6 +90,10 @@ function createSupabaseMock(args: {
     freshness_target: string | null;
     last_success_at: string | null;
     updated_at: string | null;
+    lifecycle?: string | null;
+    retired_at?: string | null;
+    terms_review_status?: string | null;
+    official_source?: boolean | null;
   }>;
 }) {
   return {
@@ -780,6 +784,15 @@ describe('resolveCompiledMemoryContext', () => {
       },
     ]);
 
+    const getVendorForOrgMock: any = jest.fn();
+    getVendorForOrgMock.mockResolvedValue(null);
+    const resolveVendorCorpusPagesMock: any = jest.fn();
+    resolveVendorCorpusPagesMock.mockResolvedValue([]);
+    const resolveVendorWikiPageMock: any = jest.fn();
+    resolveVendorWikiPageMock.mockResolvedValue(null);
+    const resolveClusterContextMock: any = jest.fn();
+    resolveClusterContextMock.mockResolvedValue([]);
+
     const result = await resolveCompiledMemoryContext(
       {
         orgId: 'customer-org',
@@ -795,11 +808,11 @@ describe('resolveCompiledMemoryContext', () => {
       },
       {
         createAdminClient,
-        getVendorForOrg: jest.fn().mockResolvedValue(null),
+        getVendorForOrg: getVendorForOrgMock,
         resolveOrgWikiPagesByVector,
-        resolveVendorCorpusPages: jest.fn().mockResolvedValue([]),
-        resolveVendorWikiPage: jest.fn().mockResolvedValue(null),
-        resolveClusterContext: jest.fn().mockResolvedValue([]),
+        resolveVendorCorpusPages: resolveVendorCorpusPagesMock,
+        resolveVendorWikiPage: resolveVendorWikiPageMock,
+        resolveClusterContext: resolveClusterContextMock,
       } as any,
     );
 

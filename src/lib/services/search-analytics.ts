@@ -98,7 +98,7 @@ export async function getSearchMetricsSummary(
   }
 
   const successful = data.filter((m) => m.success);
-  const withRetries = data.filter((m) => m.retrieval_attempts > 1);
+  const withRetries = data.filter((m) => (m.retrieval_attempts ?? 0) > 1);
   const timesMs = data.map((m) => m.total_time_ms).sort((a, b) => a - b);
 
   const avgSimilarity =
@@ -166,7 +166,7 @@ export async function getSearchTrends(
   const trends: SearchTrend[] = [];
   for (const [date, metrics] of byDate) {
     const successful = metrics.filter((m) => m.success);
-    const withRetries = metrics.filter((m) => m.retrieval_attempts > 1);
+    const withRetries = metrics.filter((m) => (m.retrieval_attempts ?? 0) > 1);
     const avgSimilarity =
       successful.reduce((sum, m) => sum + (m.avg_similarity || 0), 0) / (successful.length || 1);
     const avgTimeMs = metrics.reduce((sum, m) => sum + m.total_time_ms, 0) / metrics.length;
@@ -222,7 +222,7 @@ export async function getSlowSearches(
     totalTimeMs: s.total_time_ms,
     sourcesFound: s.sources_found,
     avgSimilarity: s.avg_similarity,
-    retrievalAttempts: s.retrieval_attempts,
+    retrievalAttempts: s.retrieval_attempts ?? 0,
     searchTimestamp: new Date(s.search_timestamp),
   }));
 }
@@ -262,10 +262,10 @@ export async function getFailedSearches(
     queryId: s.query_id,
     queryText: s.query_text,
     totalTimeMs: s.total_time_ms,
-    retrievalAttempts: s.retrieval_attempts,
-    retriedWithLowerThreshold: s.retried_with_lower_threshold,
-    retriedWithHybrid: s.retried_with_hybrid,
-    retriedWithKeyword: s.retried_with_keyword,
+    retrievalAttempts: s.retrieval_attempts ?? 0,
+    retriedWithLowerThreshold: s.retried_with_lower_threshold ?? false,
+    retriedWithHybrid: s.retried_with_hybrid ?? false,
+    retriedWithKeyword: s.retried_with_keyword ?? false,
     searchTimestamp: new Date(s.search_timestamp),
   }));
 }

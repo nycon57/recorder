@@ -12,6 +12,7 @@ import type {
   WhiteLabelConfig,
   WhiteLabelBranding,
   WhiteLabelVoiceConfig,
+  Json,
 } from '@/lib/types/database';
 
 // ---------------------------------------------------------------------------
@@ -41,8 +42,12 @@ export interface UpdateWhiteLabelInput {
 // ---------------------------------------------------------------------------
 
 /** Cast a raw DB row to the typed WhiteLabelConfig interface. */
-function toTyped(row: Record<string, unknown>): WhiteLabelConfig {
+function toTyped(row: unknown): WhiteLabelConfig {
   return row as unknown as WhiteLabelConfig;
+}
+
+function toJson(value: unknown): Json {
+  return value as Json;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,8 +88,8 @@ export async function createWhiteLabelConfig(
     .from('white_label_configs')
     .insert({
       vendor_org_id: orgId,
-      branding: (input.branding ?? {}) as Record<string, unknown>,
-      voice_config: (input.voice_config ?? {}) as Record<string, unknown>,
+      branding: toJson(input.branding ?? {}),
+      voice_config: toJson(input.voice_config ?? {}),
       knowledge_scope: input.knowledge_scope ?? null,
       custom_domain: input.custom_domain ?? null,
     })
@@ -116,10 +121,10 @@ export async function updateWhiteLabelConfig(
   const updates: Record<string, unknown> = {};
 
   if (input.branding !== undefined) {
-    updates.branding = input.branding as Record<string, unknown>;
+    updates.branding = toJson(input.branding);
   }
   if (input.voice_config !== undefined) {
-    updates.voice_config = input.voice_config as Record<string, unknown>;
+    updates.voice_config = toJson(input.voice_config);
   }
   if (input.knowledge_scope !== undefined) {
     updates.knowledge_scope = input.knowledge_scope;

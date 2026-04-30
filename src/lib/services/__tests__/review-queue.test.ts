@@ -1,14 +1,29 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { TextDecoder, TextEncoder } from 'node:util';
 
-import {
-  buildReviewQueueItems,
-  splitReviewQueueItemsByKind,
-  type ApprovalRoutingReviewCandidate,
-  type LegacyRoutingReviewCandidate,
-  type ManualPublicationReviewCandidate,
+import { expect, jest, test } from '@jest/globals';
+
+import type {
+  ApprovalRoutingReviewCandidate,
+  LegacyRoutingReviewCandidate,
+  ManualPublicationReviewCandidate,
 } from '../review-queue';
 import type { PendingReviewPage } from '../wiki-review';
+
+Object.assign(globalThis, {
+  TextDecoder,
+  TextEncoder,
+});
+
+jest.mock('next/cache', () => ({
+  unstable_cache: <T extends (...args: never[]) => unknown>(fn: T) => fn,
+}));
+
+/* eslint-disable @typescript-eslint/no-require-imports */
+const {
+  buildReviewQueueItems,
+  splitReviewQueueItemsByKind,
+} = require('../review-queue') as typeof import('../review-queue');
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 const contradictionPages: PendingReviewPage[] = [
   {
@@ -20,6 +35,8 @@ const contradictionPages: PendingReviewPage[] = [
       topic: 'Update deal stage',
       content: 'Current page body',
       confidence: 0.82,
+      cluster_id: null,
+      embedding: null,
       valid_from: '2026-04-18T10:00:00.000Z',
       valid_until: null,
       supersedes_id: null,
@@ -100,46 +117,46 @@ test('buildReviewQueueItems maps contradiction, routing approvals, legacy routin
     manualPublications: manualPublicationCandidates,
   });
 
-  assert.equal(items.length, 4);
+  expect(items.length).toBe(4);
 
-  assert.equal(items[0]?.kind, 'manual-publication');
+  expect(items[0]?.kind).toBe('manual-publication');
   if (items[0]?.kind === 'manual-publication') {
-    assert.equal(items[0].title, 'Untitled document');
-    assert.equal(items[0].primaryAction.label, 'Open publish flow');
-    assert.equal(items[0].primaryAction.href, '/library/content-3');
-    assert.match(items[0].summary, /2 connected destinations/i);
+    expect(items[0].title).toBe('Untitled document');
+    expect(items[0].primaryAction.label).toBe('Open publish flow');
+    expect(items[0].primaryAction.href).toBe('/library/content-3');
+    expect(items[0].summary).toMatch(/2 connected destinations/i);
   }
 
-  assert.equal(items[1]?.kind, 'routing');
+  expect(items[1]?.kind).toBe('routing');
   if (items[1]?.kind === 'routing') {
-    assert.equal(items[1].routingKind, 'approval');
+    expect(items[1].routingKind).toBe('approval');
     if (items[1].routingKind === 'approval') {
-      assert.equal(items[1].approvalId, 'approval-1');
-      assert.equal(items[1].contentId, 'content-approval-1');
-      assert.equal(items[1].topic, 'assign-owner');
-      assert.equal(items[1].primaryAction.href, '/library/content-approval-1');
-      assert.match(items[1].summary, /42% confidence/i);
+      expect(items[1].approvalId).toBe('approval-1');
+      expect(items[1].contentId).toBe('content-approval-1');
+      expect(items[1].topic).toBe('assign-owner');
+      expect(items[1].primaryAction.href).toBe('/library/content-approval-1');
+      expect(items[1].summary).toMatch(/42% confidence/i);
     }
   }
 
-  assert.equal(items[2]?.kind, 'routing');
+  expect(items[2]?.kind).toBe('routing');
   if (items[2]?.kind === 'routing') {
-    assert.equal(items[2].routingKind, 'legacy');
+    expect(items[2].routingKind).toBe('legacy');
     if (items[2].routingKind === 'legacy') {
-      assert.equal(items[2].pageId, 'page-2');
-      assert.equal(items[2].primaryAction.label, 'Open source detail');
-      assert.equal(items[2].primaryAction.href, '/library/content-2');
-      assert.equal(items[2].secondaryAction?.href, '/knowledge/health');
-      assert.match(items[2].summary, /missing an app or screen assignment/i);
+      expect(items[2].pageId).toBe('page-2');
+      expect(items[2].primaryAction.label).toBe('Open source detail');
+      expect(items[2].primaryAction.href).toBe('/library/content-2');
+      expect(items[2].secondaryAction?.href).toBe('/knowledge/health');
+      expect(items[2].summary).toMatch(/missing an app or screen assignment/i);
     }
   }
 
-  assert.equal(items[3]?.kind, 'contradiction');
+  expect(items[3]?.kind).toBe('contradiction');
   if (items[3]?.kind === 'contradiction') {
-    assert.equal(items[3].pageId, 'page-1');
-    assert.equal(items[3].logEntryIndex, 2);
-    assert.equal(items[3].sourceRecordingId, 'content-1');
-    assert.equal(items[3].contradictions.length, 1);
+    expect(items[3].pageId).toBe('page-1');
+    expect(items[3].logEntryIndex).toBe(2);
+    expect(items[3].sourceRecordingId).toBe('content-1');
+    expect(items[3].contradictions.length).toBe(1);
   }
 });
 
@@ -160,13 +177,13 @@ test('buildReviewQueueItems keeps legacy routing fallback when a routing item ha
     manualPublications: [],
   });
 
-  assert.equal(items.length, 1);
-  assert.equal(items[0]?.kind, 'routing');
+  expect(items.length).toBe(1);
+  expect(items[0]?.kind).toBe('routing');
   if (items[0]?.kind === 'routing') {
-    assert.equal(items[0].routingKind, 'legacy');
+    expect(items[0].routingKind).toBe('legacy');
     if (items[0].routingKind === 'legacy') {
-      assert.equal(items[0].primaryAction.href, '/knowledge/health');
-      assert.equal(items[0].secondaryAction, undefined);
+      expect(items[0].primaryAction.href).toBe('/knowledge/health');
+      expect(items[0].secondaryAction).toBe(undefined);
     }
   }
 });
@@ -180,7 +197,7 @@ test('splitReviewQueueItemsByKind groups every item under its review kind', () =
     })
   );
 
-  assert.equal(grouped.contradiction.length, 1);
-  assert.equal(grouped.routing.length, 2);
-  assert.equal(grouped['manual-publication'].length, 1);
+  expect(grouped.contradiction.length).toBe(1);
+  expect(grouped.routing.length).toBe(2);
+  expect(grouped['manual-publication'].length).toBe(1);
 });

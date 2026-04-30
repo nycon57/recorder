@@ -231,14 +231,14 @@ export async function reviewApproval(
     .eq('id', approvalId)
     .eq('org_id', orgId)
     .eq('status', 'pending')
-    .select()
+    .select('*')
     .maybeSingle();
 
   if (error) {
     throw new Error(`Failed to review approval: ${error.message}`);
   }
 
-  return data ?? null;
+  return (data as AgentApproval | null) ?? null;
 }
 
 /**

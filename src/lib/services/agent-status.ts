@@ -41,7 +41,11 @@ function todayUTCStart(): string {
   return new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z';
 }
 
-const VALID_OUTCOMES = new Set(['success', 'failure'] as const);
+type ValidOutcome = EnabledAgent['lastOutcome'];
+
+function isValidOutcome(outcome: string | null | undefined): outcome is Exclude<ValidOutcome, null> {
+  return outcome === 'success' || outcome === 'failure';
+}
 
 /** Log Supabase query errors with a consistent prefix. */
 function logQueryError(label: string, error: { message: string } | null): void {
@@ -150,7 +154,7 @@ export async function fetchAgentStatusSummary(
     return {
       type,
       name: AGENT_DISPLAY_NAMES[type] ?? type,
-      lastOutcome: VALID_OUTCOMES.has(outcome) ? (outcome as EnabledAgent['lastOutcome']) : null,
+      lastOutcome: isValidOutcome(outcome) ? outcome : null,
     };
   });
 

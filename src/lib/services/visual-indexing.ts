@@ -206,7 +206,7 @@ export async function indexRecordingFrames(
             .from('video_frames')
             .update({
               visual_description: description.description,
-              visual_embedding: embedding,
+              visual_embedding: JSON.stringify(embedding),
               metadata: {
                 ...getMetadataObject(frame.metadata),
                 confidence: description.confidence,

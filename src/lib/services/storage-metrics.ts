@@ -10,8 +10,26 @@
  */
 
 import { createClient } from '@/lib/supabase/admin';
-import type { StorageTier, StorageProvider } from '@/lib/types/database';
+import type { Json, StorageTier, StorageProvider } from '@/lib/types/database';
 import { getStatusDisplayState } from '@/lib/utils/status-helpers';
+
+function isJsonRecord(value: Json | null | undefined): value is Record<string, Json | undefined> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readNumber(value: Json | undefined): number {
+  return typeof value === 'number' ? value : 0;
+}
+
+function readTierBreakdown(value: Json | null | undefined): Record<StorageTier, number> {
+  const record = isJsonRecord(value) ? value : {};
+  return {
+    hot: readNumber(record.hot),
+    warm: readNumber(record.warm),
+    cold: readNumber(record.cold),
+    glacier: readNumber(record.glacier),
+  };
+}
 
 /**
  * Storage metrics for a single organization
@@ -239,10 +257,10 @@ export async function getStorageMetrics(
   // Compression metrics
   const compressedFiles = recordings.filter(
     (r) =>
-      r.compression_status === 'completed' && r.original_size && r.file_size,
+      r.compression_rate !== null && readNumber(isJsonRecord(r.compression_stats) ? r.compression_stats.original_size : undefined) > 0 && r.file_size,
   );
   const totalOriginalSize = compressedFiles.reduce(
-    (sum, r) => sum + (r.original_size || 0),
+    (sum, r) => sum + readNumber(isJsonRecord(r.compression_stats) ? r.compression_stats.original_size : undefined),
     0,
   );
   const totalCompressedSize = compressedFiles.reduce(
@@ -395,7 +413,7 @@ export async function getStorageTrends(
   return (history || []).map((h) => ({
     date: h.date,
     totalStorageGB: h.total_storage_bytes / (1024 * 1024 * 1024),
-    tierBreakdown: h.tier_breakdown || {},
+    tierBreakdown: readTierBreakdown(h.tier_breakdown),
     costEstimate: h.cost_estimate || 0,
     filesAdded: h.files_added || 0,
     filesDeleted: h.files_deleted || 0,
@@ -410,8 +428,6 @@ export async function detectAnomalies(
   orgId: string,
 ): Promise<StorageAnomaly[]> {
   const anomalies: StorageAnomaly[] = [];
-
-  const supabase = createClient();
 
   // Get recent trends
   const trends = await getStorageTrends(orgId, 30);

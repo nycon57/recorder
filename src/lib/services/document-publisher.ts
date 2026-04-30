@@ -11,7 +11,6 @@ import { createHash } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { ConnectorRegistry } from '@/lib/connectors/registry';
 import { ConnectorType } from '@/lib/connectors/base';
-
 import {
   PublishOptions,
   PublishResult,
@@ -22,12 +21,12 @@ import {
   DEFAULT_BRANDING_CONFIG,
   PublishedDocument,
   PublishedDocumentRow,
-  PublishLogRow,
   mapPublishedDocumentRow,
   PublishDestination,
   PublishFormat,
   ConnectorPublishOptions,
 } from '@/lib/types/publishing';
+import type { Database, Json } from '@/lib/types/database';
 
 // =====================================================
 // TYPES
@@ -38,7 +37,6 @@ interface DocumentRow {
   id: string;
   content_id: string;
   content: string;
-  format: string;
   created_at: string;
   updated_at: string;
 }
@@ -50,10 +48,22 @@ interface ConnectorConfigRow {
   connector_type: string;
   name: string;
   credentials: Record<string, unknown>;
-  config: Record<string, unknown>;
   settings?: Record<string, unknown>;
   is_active: boolean;
   supports_publish?: boolean;
+}
+
+type PublishLogUpdate = Database['public']['Tables']['publish_logs']['Update'];
+type PublishedDocumentInsert = Database['public']['Tables']['published_documents']['Insert'];
+
+function toJson(value: unknown): Json {
+  return value as Json;
+}
+
+function jsonObject(value: Json | null): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 /** Content row from the content table */
@@ -188,7 +198,6 @@ export class DocumentPublisher {
         connectorType,
         connectorConfig.credentials,
         {
-          ...connectorConfig.config,
           ...connectorConfig.settings,
           connectorId: options.connectorId,
         }
@@ -458,12 +467,12 @@ export class DocumentPublisher {
       content_id: options.contentId,
       org_id: options.orgId,
       user_id: options.userId || null,
-      action: 'publish',
+      action: 'publish' as const,
       destination: options.destination,
       status: 'pending',
-      trigger_type: options.triggerType || 'manual',
+      trigger_type: options.triggerType || 'manual' as const,
       api_calls_made: 0,
-      request_metadata: {
+      request_metadata: toJson({
         documentId: options.documentId,
         connectorId: options.connectorId,
         folderId: options.folderId,
@@ -471,8 +480,8 @@ export class DocumentPublisher {
         format: options.format,
         customTitle: options.customTitle,
         branding: options.branding,
-      },
-      result_metadata: {},
+      }),
+      result_metadata: toJson({}),
       created_at: new Date().toISOString(),
     };
 
@@ -511,7 +520,7 @@ export class DocumentPublisher {
       resultMetadata?: Record<string, unknown>;
     }
   ): Promise<void> {
-    const updateData: Partial<PublishLogRow> = {
+    const updateData: PublishLogUpdate = {
       status: updates.status,
       completed_at: new Date().toISOString(),
     };
@@ -535,7 +544,7 @@ export class DocumentPublisher {
       updateData.api_calls_made = updates.apiCallsMade;
     }
     if (updates.resultMetadata) {
-      updateData.result_metadata = updates.resultMetadata;
+      updateData.result_metadata = toJson(updates.resultMetadata);
     }
 
     const { error } = await supabaseAdmin
@@ -558,7 +567,7 @@ export class DocumentPublisher {
   private async getDocument(documentId: string): Promise<DocumentRow | null> {
     const { data, error } = await supabaseAdmin
       .from('documents')
-      .select('id, content_id, content, format, created_at, updated_at')
+      .select('id, content_id, markdown, created_at, updated_at')
       .eq('id', documentId)
       .single();
 
@@ -569,7 +578,13 @@ export class DocumentPublisher {
       throw new Error(`Failed to fetch document: ${error.message}`);
     }
 
-    return data as DocumentRow;
+    return {
+      id: data.id,
+      content_id: data.content_id,
+      content: data.markdown,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    };
   }
 
   /**
@@ -606,7 +621,7 @@ export class DocumentPublisher {
   ): Promise<ConnectorConfigRow | null> {
     const { data, error } = await supabaseAdmin
       .from('connector_configs')
-      .select('id, org_id, connector_type, name, credentials, config, settings, is_active, supports_publish')
+      .select('id, org_id, connector_type, name, credentials, settings, is_active, supports_publish')
       .eq('id', connectorId)
       .single();
 
@@ -617,7 +632,16 @@ export class DocumentPublisher {
       throw new Error(`Failed to fetch connector config: ${error.message}`);
     }
 
-    return data as ConnectorConfigRow;
+    return {
+      id: data.id,
+      org_id: data.org_id,
+      connector_type: data.connector_type,
+      name: data.name ?? 'Untitled connector',
+      credentials: jsonObject(data.credentials),
+      settings: jsonObject(data.settings),
+      is_active: data.is_active ?? false,
+      supports_publish: data.supports_publish ?? false,
+    };
   }
 
   /**
@@ -667,7 +691,7 @@ export class DocumentPublisher {
       folder_path: params.folderPath || null,
       format: params.format,
       custom_title: params.customTitle || null,
-      branding_config: params.brandingConfig as unknown as Record<string, unknown>,
+      branding_config: toJson(params.brandingConfig),
       status: 'published' as const,
       last_published_at: now,
       last_synced_at: now,
@@ -741,7 +765,7 @@ export class DocumentPublisher {
       connectorId: string;
       destination: PublishDestination;
     },
-    insertData: Record<string, unknown>,
+    insertData: PublishedDocumentInsert,
     now: string
   ): Promise<PublishedDocument> {
     // Supabase upsert with onConflict - requires the conflict target columns
@@ -776,7 +800,8 @@ export class DocumentPublisher {
         }
 
         // Update with incremented version (exclude created_at)
-        const { created_at: _createdAt, ...insertDataWithoutCreatedAt } = insertData;
+        const insertDataWithoutCreatedAt = { ...insertData };
+        delete insertDataWithoutCreatedAt.created_at;
         const updateData = {
           ...insertDataWithoutCreatedAt,
           document_version: (existing.document_version || 0) + 1,

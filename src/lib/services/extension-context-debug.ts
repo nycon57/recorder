@@ -67,7 +67,7 @@ function normalizeText(value: string | null | undefined): string {
   return (value ?? '').replace(/\s+/g, ' ').trim();
 }
 
-function isRecord(value: Json): value is Record<string, Json | undefined> {
+function isRecord(value: Json | undefined): value is Record<string, Json | undefined> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 

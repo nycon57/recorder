@@ -5,6 +5,12 @@ import type {
   KnowledgeGraphEdge,
   KnowledgeGraphPayload,
   KnowledgeGraphQueryInput,
+  WikiRelationshipSourceType,
+  WikiRelationshipType,
+} from '@/lib/types/knowledge-graph';
+import {
+  WIKI_RELATIONSHIP_SOURCE_TYPES,
+  WIKI_RELATIONSHIP_TYPES,
 } from '@/lib/types/knowledge-graph';
 
 type AdminClient = LightweightSupabaseClient;
@@ -76,6 +82,18 @@ function toMatchKey(
 ) {
   if (!app || !screen) return null;
   return `${normalizeSegment(app)}::${normalizeSegment(screen)}`;
+}
+
+function toWikiRelationshipType(value: string): WikiRelationshipType {
+  return WIKI_RELATIONSHIP_TYPES.includes(value as WikiRelationshipType)
+    ? (value as WikiRelationshipType)
+    : 'related';
+}
+
+function toWikiRelationshipSourceType(value: string): WikiRelationshipSourceType {
+  return WIKI_RELATIONSHIP_SOURCE_TYPES.includes(value as WikiRelationshipSourceType)
+    ? (value as WikiRelationshipSourceType)
+    : 'inferred';
 }
 
 async function fetchOrgPages(args: {
@@ -280,8 +298,8 @@ export function assembleKnowledgeGraph(
       kind: 'org_relationship',
       source: sourceNodeId,
       target: targetNodeId,
-      relationshipType: relationship.relationship_type,
-      sourceType: relationship.source_type,
+      relationshipType: toWikiRelationshipType(relationship.relationship_type),
+      sourceType: toWikiRelationshipSourceType(relationship.source_type),
       confidence: relationship.confidence,
       evidence: relationship.evidence,
     });

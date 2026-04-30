@@ -194,8 +194,9 @@ export class RankingML {
       const bookmarks = resultFeedback.filter((f) => f.feedback_type === 'bookmark').length;
 
       const dwellTimes = resultFeedback
-        .filter((f) => f.dwell_time_ms)
-        .map((f) => f.dwell_time_ms / 1000); // convert to seconds
+        .map((f) => f.dwell_time_ms)
+        .filter((value): value is number => value !== null)
+        .map((value) => value / 1000); // convert to seconds
 
       stats.set(resultId, {
         clickRate: clicks / totalFeedback,

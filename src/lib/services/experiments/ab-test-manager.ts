@@ -1,6 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { createHash } from 'crypto';
 
 import { createClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/types/database';
 
 export interface Experiment {
   id: string;
@@ -21,6 +24,13 @@ export interface ExperimentAssignment {
   experimentId: string;
   variant: string;
   config: Record<string, any>;
+}
+
+function toNumberRecord(value: Json | null): Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === 'number')
+  );
 }
 
 export class ABTestManager {
@@ -52,20 +62,21 @@ export class ABTestManager {
       .select('*')
       .eq('experiment_id', experiment.id)
       .eq('org_id', orgId)
-      .eq('user_id', userId || null)
+      .filter('user_id', userId ? 'eq' : 'is', userId ?? null)
       .single();
 
     if (existing) {
+      const variant = existing.variant ?? '';
       return {
         experimentId: experiment.id,
-        variant: existing.variant,
-        config: this.getVariantConfig(experiment, existing.variant),
+        variant,
+        config: this.getVariantConfig(experiment, variant),
       };
     }
 
     // Assign new variant
     const variant = this.selectVariant(
-      experiment.traffic_allocation,
+      toNumberRecord(experiment.traffic_allocation),
       `${orgId}:${userId || 'org'}`
     );
 
@@ -210,7 +221,7 @@ export class ABTestManager {
     }
 
     // Fallback to first variant
-    return Object.keys(allocation)[0];
+    return Object.keys(allocation)[0] ?? 'control';
   }
 
   /**

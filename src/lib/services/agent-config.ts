@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS: Omit<OrgAgentSettings, 'id' | 'org_id' | 'created_at' | 
   workflow_extraction_enabled: false,
   global_agent_enabled: true,
   wiki_auto_publish: false,
+  wiki_cluster_context_enabled: false,
   wiki_stale_threshold_days: 90,
   metadata: {},
 };

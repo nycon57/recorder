@@ -6,6 +6,7 @@
  */
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/types/database';
 
 // =====================================================
 // TYPES
@@ -172,7 +173,7 @@ export class TokenManager {
     const { error: updateError } = await supabase
       .from('connector_configs')
       .update({
-        credentials: mergedCredentials,
+        credentials: mergedCredentials as unknown as Json,
         credentials_updated_at: new Date().toISOString(),
       })
       .eq('id', connectorId);
@@ -339,6 +340,9 @@ export function createNotionRefreshFunction(
   clientSecret: string
 ): RefreshFunction {
   return async (refreshToken: string): Promise<TokenSet> => {
+    void clientId;
+    void clientSecret;
+    void refreshToken;
     // Notion doesn't support refresh tokens in the standard way
     // Their tokens are long-lived. This is a placeholder for consistency.
     throw new Error('Notion tokens do not support refresh. User must re-authorize.');

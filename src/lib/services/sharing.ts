@@ -71,7 +71,7 @@ function toShareLink(share: ShareRow): ShareLink {
     resourceId: share.target_id,
     shareType: share.password_hash ? 'password' : 'public',
     expiresAt: share.expires_at ? new Date(share.expires_at) : undefined,
-    viewCount: share.access_count,
+    viewCount: share.access_count ?? 0,
     maxViews: undefined,
     createdBy: share.created_by,
     createdAt: new Date(share.created_at),

@@ -10,6 +10,8 @@
  * - Rate limiting support
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
+
 import { pipeline, env } from '@xenova/transformers';
 import { z } from 'zod';
 
@@ -43,7 +45,7 @@ env.allowLocalModels = false; // Force remote models
 // Input validation schemas
 const ChunkingInputSchema = z.object({
   text: z.string().min(1).max(SECURITY_CONFIG.MAX_INPUT_SIZE),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const ConfigSchema = z.object({
@@ -114,7 +116,7 @@ class SecureModelManager {
   private model: FeatureExtractionPipeline | null = null;
   private modelName: string;
   private lastUsed: number = Date.now();
-  private cleanupTimer: NodeJS.Timeout | null = null;
+  private cleanupTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly CLEANUP_DELAY = 5 * 60 * 1000; // 5 minutes
 
   private constructor() {

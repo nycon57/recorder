@@ -130,7 +130,7 @@ export class CacheService {
       }
 
       // Redis returns string, parse JSON
-      return typeof cached === 'string' ? JSON.parse(cached) : cached;
+      return (typeof cached === 'string' ? JSON.parse(cached) : cached) as T;
     } catch (error) {
       console.error('[Cache] Error getting cached value:', error);
       return null;
@@ -271,6 +271,7 @@ export class UserCache {
    * Invalidate all users in an org (e.g., when org settings change)
    */
   static async invalidateOrg(orgId: string): Promise<void> {
+    void orgId;
     // This is expensive - use sparingly
     await CacheService.deletePattern(`${CACHE_PREFIXES.USER}:*`);
   }
@@ -864,7 +865,7 @@ export const CacheInvalidation = {
 /**
  * Generate ETag for cache validation
  */
-export function generateETag(data: any): string {
+export function generateETag(data: unknown): string {
   // Simple hash based on stringified data
   const str = JSON.stringify(data);
   let hash = 0;

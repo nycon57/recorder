@@ -17,11 +17,10 @@ import { createHash } from 'crypto';
 
 import { Redis } from '@upstash/redis';
 
-import { hierarchicalSearch, type HierarchicalSearchResult } from '@/lib/services/hierarchical-search';
+import { hierarchicalSearch } from '@/lib/services/hierarchical-search';
 import { vectorSearch, type SearchResult } from '@/lib/services/vector-search-google';
 import { rerankResults, isCohereConfigured } from '@/lib/services/reranking';
 import { agenticSearch } from '@/lib/services/agentic-retrieval';
-import { createClient } from '@/lib/supabase/server';
 
 /**
  * Configuration options for RAG context retrieval
@@ -253,9 +252,13 @@ export async function injectRAGContext(
           id: r.id,
           contentId: r.contentId,
           contentTitle: r.contentTitle,
+          contentType: r.metadata.source === 'document' ? 'document' : 'recording',
           chunkText: r.chunkText,
           similarity: r.similarity,
-          metadata: r.metadata,
+          metadata: {
+            ...r.metadata,
+            contentType: r.metadata.source === 'document' ? 'document' : 'recording',
+          },
           createdAt: r.createdAt,
         }));
 
@@ -580,8 +583,6 @@ export async function clearCacheForOrg(orgId: string): Promise<number> {
   try {
     // Note: Upstash doesn't support pattern-based deletion
     // In production, consider tracking keys in a set
-    const pattern = `rag:context:${orgId}:*`;
-
     // For now, just clear the query index
     const cleared = await redis.del(`rag:queries:${orgId}`);
 

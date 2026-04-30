@@ -15,21 +15,42 @@
 
 import crypto from 'crypto';
 
-// Note: ioredis is not installed - this file is kept for reference but not used
-// If Redis caching is needed, install ioredis: npm install ioredis @types/ioredis
+// Note: ioredis is not installed - this file is kept for reference but not used.
+// If Redis caching is needed, install ioredis: npm install ioredis @types/ioredis.
 
-type RedisClient = any; // Placeholder type since ioredis isn't installed
+interface RedisPipeline {
+  setex(key: string, seconds: number, value: string): RedisPipeline;
+  exec(): Promise<unknown>;
+}
 
-// Redis client configuration
-const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  maxRetriesPerRequest: 3,
-  retryStrategy: (times: number) => Math.min(times * 50, 2000),
-  enableReadyCheck: true,
-  lazyConnect: true,
-};
+interface RedisClient {
+  get(key: string): Promise<string | null>;
+  setex(key: string, seconds: number, value: string): Promise<unknown>;
+  mget(...keys: string[]): Promise<Array<string | null>>;
+  pipeline(): RedisPipeline;
+  keys(pattern: string): Promise<string[]>;
+  del(...keys: string[]): Promise<unknown>;
+  info(section?: string): Promise<string>;
+  dbsize(): Promise<number>;
+  zadd(key: string, score: number, member: number): Promise<unknown>;
+  expire(key: string, seconds: number): Promise<unknown>;
+  zrange(key: string, start: number, stop: number): Promise<string[]>;
+  ping(): Promise<unknown>;
+  quit(): Promise<unknown>;
+}
+
+interface CachedFrameDescription {
+  id: string;
+  visual_description?: string | null;
+  scene_type?: string | null;
+  detected_elements?: unknown;
+  metadata?: {
+    confidence?: number;
+  } | null;
+  ocr_text?: string | null;
+  ocr_confidence?: number | null;
+  ocr_blocks?: unknown;
+}
 
 // Create Redis client
 let redis: RedisClient | null = null;
@@ -64,9 +85,15 @@ export class FrameCache {
    * Generate hash for frame content
    */
   private hashFrame(frameBuffer: Buffer): string {
+    const frameBytes = new Uint8Array(
+      frameBuffer.buffer,
+      frameBuffer.byteOffset,
+      frameBuffer.byteLength
+    );
+
     return crypto
       .createHash('sha256')
-      .update(frameBuffer)
+      .update(frameBytes)
       .digest('hex')
       .substring(0, 16);
   }
@@ -74,11 +101,11 @@ export class FrameCache {
   /**
    * Get cached frame description
    */
-  async getCachedDescription(frameBuffer: Buffer): Promise<any | null> {
+  async getCachedDescription<T = unknown>(frameBuffer: Buffer): Promise<T | null> {
     try {
       const key = `frame:desc:${this.hashFrame(frameBuffer)}`;
       const cached = await this.redis.get(key);
-      return cached ? JSON.parse(cached) : null;
+      return cached ? (JSON.parse(cached) as T) : null;
     } catch (error) {
       console.error('[Cache] Error getting description:', error);
       return null;
@@ -88,7 +115,7 @@ export class FrameCache {
   /**
    * Set cached frame description
    */
-  async setCachedDescription(frameBuffer: Buffer, description: any): Promise<void> {
+  async setCachedDescription(frameBuffer: Buffer, description: unknown): Promise<void> {
     try {
       const key = `frame:desc:${this.hashFrame(frameBuffer)}`;
       await this.redis.setex(key, this.TTL_DESCRIPTION, JSON.stringify(description));
@@ -151,14 +178,14 @@ export class FrameCache {
   /**
    * Batch get descriptions
    */
-  async batchGetDescriptions(frameBuffers: Buffer[]): Promise<(any | null)[]> {
+  async batchGetDescriptions<T = unknown>(frameBuffers: Buffer[]): Promise<Array<T | null>> {
     try {
       if (frameBuffers.length === 0) return [];
 
       const keys = frameBuffers.map((b: Buffer) => `frame:desc:${this.hashFrame(b)}`);
       const values = await this.redis.mget(...keys);
 
-      return values.map((v: string | null) => (v ? JSON.parse(v) : null));
+      return values.map((v: string | null) => (v ? (JSON.parse(v) as T) : null));
     } catch (error) {
       console.error('[Cache] Error batch getting descriptions:', error);
       return frameBuffers.map(() => null);
@@ -169,7 +196,7 @@ export class FrameCache {
    * Batch set descriptions
    */
   async batchSetDescriptions(
-    items: Array<{ buffer: Buffer; description: any }>
+    items: Array<{ buffer: Buffer; description: unknown }>
   ): Promise<void> {
     try {
       if (items.length === 0) return;
@@ -190,7 +217,7 @@ export class FrameCache {
   /**
    * Cache query result
    */
-  async cacheQueryResult(query: string, orgId: string, result: any): Promise<void> {
+  async cacheQueryResult(query: string, orgId: string, result: unknown): Promise<void> {
     try {
       // SECURITY: Use SHA-256 instead of MD5 for cache key generation
       const key = `query:${orgId}:${crypto.createHash('sha256').update(query).digest('hex')}`;
@@ -203,12 +230,12 @@ export class FrameCache {
   /**
    * Get cached query result
    */
-  async getCachedQueryResult(query: string, orgId: string): Promise<any | null> {
+  async getCachedQueryResult<T = unknown>(query: string, orgId: string): Promise<T | null> {
     try {
       // SECURITY: Use SHA-256 instead of MD5 for cache key generation
       const key = `query:${orgId}:${crypto.createHash('sha256').update(query).digest('hex')}`;
       const cached = await this.redis.get(key);
-      return cached ? JSON.parse(cached) : null;
+      return cached ? (JSON.parse(cached) as T) : null;
     } catch (error) {
       console.error('[Cache] Error getting cached query:', error);
       return null;
@@ -276,7 +303,7 @@ export class FrameCache {
   /**
    * Warm up cache for a recording
    */
-  async warmupCache(recordingId: string, frames: any[]): Promise<void> {
+  async warmupCache(recordingId: string, frames: CachedFrameDescription[]): Promise<void> {
     try {
       console.log(`[Cache] Warming up cache for ${frames.length} frames`);
 
@@ -430,13 +457,3 @@ export class PerformanceCache {
 }
 
 export const performanceCache = new PerformanceCache();
-
-// Cleanup on process exit
-if (typeof process !== 'undefined') {
-  process.on('beforeExit', async () => {
-    if (redis) {
-      console.log('[Cache] Closing Redis connection...');
-      await redis.quit();
-    }
-  });
-}

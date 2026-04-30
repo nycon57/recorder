@@ -121,7 +121,7 @@ export async function expandShortQuery(
 
     recordings.forEach(r => {
       // Extract meaningful words from titles (skip common words)
-      const words = r.title
+      const words = (r.title ?? '')
         .split(/[\s\-_]+/)
         .filter((w: string) => w.length > 3)
         .filter((w: string) => !stopWords.has(w.toLowerCase()));

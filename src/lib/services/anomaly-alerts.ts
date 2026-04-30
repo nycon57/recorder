@@ -6,7 +6,8 @@
  */
 
 import { createClient } from '@/lib/supabase/admin';
-import { getStorageMetrics, getStorageTrends, detectAnomalies, type StorageAnomaly } from './storage-metrics';
+
+import { getStorageMetrics, detectAnomalies, type StorageAnomaly, type StorageMetrics } from './storage-metrics';
 
 // TODO: These types should match the storage_alerts table schema once it's created
 type AlertType =
@@ -26,6 +27,58 @@ type AlertType =
   | 'optimization_needed';
 type AlertSeverity = 'info' | 'warning' | 'error' | 'critical' | 'low' | 'medium' | 'high';
 type AlertStatus = 'active' | 'acknowledged' | 'resolved' | 'dismissed';
+
+const ALERT_TYPES = new Set<AlertType>([
+  'storage_growth',
+  'cost_increase',
+  'failed_jobs',
+  'processing_delay',
+  'deduplication',
+  'compression',
+  'anomaly_detected',
+  'spike',
+  'drop',
+  'unusual_growth',
+  'unusual_shrinkage',
+  'cost_spike',
+  'processing_failure',
+  'optimization_needed',
+]);
+
+const ALERT_SEVERITIES = new Set<AlertSeverity>([
+  'info',
+  'warning',
+  'error',
+  'critical',
+  'low',
+  'medium',
+  'high',
+]);
+
+const ALERT_STATUSES = new Set<AlertStatus>([
+  'active',
+  'acknowledged',
+  'resolved',
+  'dismissed',
+]);
+
+function toAlertType(value: string | null | undefined): AlertType {
+  return value && ALERT_TYPES.has(value as AlertType)
+    ? (value as AlertType)
+    : 'anomaly_detected';
+}
+
+function toAlertSeverity(value: string | null | undefined): AlertSeverity {
+  return value && ALERT_SEVERITIES.has(value as AlertSeverity)
+    ? (value as AlertSeverity)
+    : 'warning';
+}
+
+function toAlertStatus(value: string | null | undefined): AlertStatus {
+  return value && ALERT_STATUSES.has(value as AlertStatus)
+    ? (value as AlertStatus)
+    : 'active';
+}
 
 /**
  * Alert configuration
@@ -158,18 +211,18 @@ export async function detectAndAlert(orgId: string, config: AlertConfig = DEFAUL
         createdAlerts.push({
           id: data.id,
           orgId: data.org_id,
-          type: data.alert_type,
-          severity: data.severity,
-          title: data.title,
-          description: data.description,
+          type: toAlertType(data.alert_type),
+          severity: toAlertSeverity(data.severity),
+          title: data.title ?? 'Storage alert',
+          description: data.description ?? '',
           recommendation: data.recommendation || undefined,
           metricName: data.metric_name,
           currentValue: Number(data.current_value),
           expectedValue: data.expected_value ? Number(data.expected_value) : undefined,
           thresholdValue: data.threshold_value ? Number(data.threshold_value) : undefined,
           deviationPercentage: data.deviation_percentage ? Number(data.deviation_percentage) : undefined,
-          status: data.status,
-          createdAt: data.created_at,
+          status: toAlertStatus(data.status),
+          createdAt: data.created_at ?? new Date().toISOString(),
           acknowledgedAt: data.acknowledged_at || undefined,
           acknowledgedBy: data.acknowledged_by || undefined,
           resolvedAt: data.resolved_at || undefined,
@@ -231,7 +284,7 @@ function convertAnomalyToAlert(
  */
 async function checkThresholds(
   orgId: string,
-  metrics: any,
+  metrics: StorageMetrics,
   config: AlertConfig
 ): Promise<Omit<Alert, 'id' | 'createdAt'>[]> {
   const alerts: Omit<Alert, 'id' | 'createdAt'>[] = [];
@@ -297,7 +350,14 @@ async function checkThresholds(
  * Send alert notifications
  */
 async function sendAlertNotifications(
-  alert: any,
+  alert: {
+    alert_type: string | null;
+    severity: string | null;
+    title: string | null;
+    description: string | null;
+    recommendation: string | null;
+    created_at: string | null;
+  },
   notifications: AlertConfig['notifications']
 ): Promise<void> {
   try {
@@ -359,21 +419,21 @@ export async function getActiveAlerts(orgId: string): Promise<Alert[]> {
     throw new Error(`Failed to fetch alerts: ${error.message}`);
   }
 
-  return (data || []).map((d) => ({
+  return (data || []).map((d): Alert => ({
     id: d.id,
     orgId: d.org_id,
-    type: d.alert_type,
-    severity: d.severity,
-    title: d.title,
-    description: d.description,
+    type: toAlertType(d.alert_type),
+    severity: toAlertSeverity(d.severity),
+    title: d.title ?? 'Storage alert',
+    description: d.description ?? '',
     recommendation: d.recommendation || undefined,
     metricName: d.metric_name,
     currentValue: Number(d.current_value),
     expectedValue: d.expected_value ? Number(d.expected_value) : undefined,
     thresholdValue: d.threshold_value ? Number(d.threshold_value) : undefined,
     deviationPercentage: d.deviation_percentage ? Number(d.deviation_percentage) : undefined,
-    status: d.status,
-    createdAt: d.created_at,
+    status: toAlertStatus(d.status),
+    createdAt: d.created_at ?? new Date().toISOString(),
     acknowledgedAt: d.acknowledged_at || undefined,
     acknowledgedBy: d.acknowledged_by || undefined,
     resolvedAt: d.resolved_at || undefined,
