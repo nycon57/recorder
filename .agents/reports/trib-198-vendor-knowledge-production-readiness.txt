@@ -1,0 +1,396 @@
+# TRIB-198 Vendor Knowledge Production Readiness Report
+
+Generated: 2026-04-30
+Worktree: `.worktrees/trib-198`
+Branch: `codex/trib-198`
+
+## Recommendation
+
+SHIP WITH KNOWN ADVISORIES.
+
+The vendor knowledge remediation batch is production-ready from the focused
+intake, worker, vendor-source, extension, SDK, MCP, and compiled-memory
+verification covered by this report. The focused suites and deterministic
+knowledge-readiness checks are green. The remaining release risk is repository
+baseline debt outside this report artifact: docs prebuild/frontmatter failures,
+repo-wide TypeScript failures, and repo-wide lint failures. Those failures block
+a strict full-gate release until the coordinator decides whether to waive them
+as known baseline debt or route them to separate cleanup.
+
+## Verification Summary
+
+| Area | Status | Evidence |
+| --- | --- | --- |
+| Recording/extension upload to transcript/document/embedding output | PASS | `src/app/api/recordings/upload/init/route.ts`, `src/app/api/recordings/[id]/metadata/route.ts`, `src/app/api/recordings/[id]/finalize/route.ts`, `src/lib/workers/job-processor.ts`, `src/lib/workers/handlers/transcribe-gemini-video.ts`, `src/lib/workers/handlers/docify-google.ts`, `src/lib/workers/handlers/embeddings-google.ts`; focused recording tests pass; `npm run verify:knowledge-readiness` passes 36/36. |
+| Legacy finalize path or documented removal/migration | PASS | `src/app/api/recordings/[id]/finalize/route.ts` still supports the legacy recordings bucket fallback with storage-contract validation. `npm run verify:legacy-recall-quarantine` confirms production answer recall is not using legacy recall paths. |
+| Library audio/text/document/WebM upload processing | PASS | `src/app/api/library/upload/route.ts`, `src/app/api/library/text/route.ts`, `src/lib/workers/handlers/extract-audio.ts`, `src/lib/workers/handlers/process-text-note.ts`, document extraction handlers; focused library tests pass. |
+| Google Drive import to generated document/chunks/embeddings/recall | PASS | `src/app/api/integrations/google-drive/import/route.ts` creates content, connector sync state, transcript/doc/extraction jobs; `src/lib/workers/handlers/process-imported-doc.ts` chunks and embeds imported documents; focused Google Drive tests pass. |
+| Vendor source sync, crawl scope, robots/legal, page identity | PASS | `src/lib/services/vendor-source-registry.ts`, `src/lib/services/vendor-source-sync.ts`, `src/lib/workers/handlers/ingest-vendor-docs.ts`, `src/lib/services/vendor-doc-corpus.ts`; vendor-source focused suites pass. |
+| Extension context/live-context/query matches and citations | PASS | `src/app/api/extension/context/route.ts`, `src/app/api/extension/live-context/route.ts`, `src/app/api/extension/query/route.ts`, `src/lib/services/extension-context.ts`; focused extension route tests pass. |
+| SDK/API-key customer/install scoping | PASS | `packages/sdk/src/index.ts`, `packages/sdk/src/query-client.ts`, `src/lib/services/vendor-api-keys.ts`, `src/lib/services/vendor-customers.ts`; SDK route suite passes. |
+| MCP endpoint connectivity and compiled/vendor wiki search | PASS | `src/app/api/mcp/route.ts`, `src/lib/mcp/auth.ts`, `src/lib/mcp/handlers.ts`, `src/lib/services/wiki-search.ts`; MCP tests pass. |
+| Vendor Source Ops provenance | PASS | `src/lib/services/vendor-source-ops.ts`, admin vendor-source routes/components, vendor-source ops tests pass. |
+| Worker concurrency atomic claim | PASS | `src/lib/workers/job-claiming.ts`, `supabase/migrations/*claim*`, `scripts/verify-knowledge-readiness.ts`; worker tests and readiness contract checks pass. |
+| Full repo gates | ADVISORY | `npm run prebuild`, `npm run type:check`, `npm run lint`, and `npm run build` are baseline-red. Details below. |
+
+## Command Results
+
+| Command | Result |
+| --- | --- |
+| `npm test -- --runTestsByPath src/app/api/recordings/[id]/metadata/__tests__/route.test.ts src/app/api/recordings/[id]/finalize/__tests__/route.test.ts` | PASS - 2 suites, 12 tests. |
+| `npm test -- --runTestsByPath src/app/api/library/upload/__tests__/route.test.ts src/app/api/library/text/__tests__/route.test.ts` | PASS - 2 suites, 12 tests. Tests intentionally log rollback/error scenarios. |
+| `npm test -- --runTestsByPath src/app/api/integrations/google-drive/import/__tests__/route.test.ts` | PASS - 1 suite, 7 tests. Tests intentionally log job failure rollback scenarios. |
+| `npm test -- --runTestsByPath src/lib/workers/__tests__/job-processor.test.ts src/lib/workers/handlers/__tests__/ingest-vendor-docs-upsert.test.ts` | PASS - 2 suites, 17 tests. |
+| `npm test -- --runTestsByPath src/lib/services/__tests__/vendor-source-registry.test.ts src/lib/services/__tests__/vendor-source-sync.test.ts src/lib/services/__tests__/vendor-source-ops.test.ts src/lib/services/__tests__/vendor-doc-corpus.test.ts` | PASS - 4 suites, 20 tests. |
+| `npm test -- --runTestsByPath src/app/api/extension/context/__tests__/route.test.ts src/app/api/extension/live-context/__tests__/route.test.ts src/app/api/extension/query/__tests__/route.test.ts packages/sdk/src/query-client.test.ts` | PASS - 4 suites, 26 tests. |
+| `npm test -- --runTestsByPath src/lib/mcp/__tests__/handlers.test.ts src/app/api/mcp/__tests__/route.test.ts` | PASS - 2 suites, 10 tests. |
+| `npm run verify:knowledge-readiness` | PASS - 36/36 first-party knowledge readiness checks; wrote `tmp/knowledge-readiness-report.json`. |
+| `npm run verify:legacy-recall-quarantine` | PASS - 13/13 checks; production answer recall files use compiled/canonical recall and legacy imports are quarantined. |
+| `npm run prebuild` | FAIL - 38 docs compiled, 7 frontmatter/schema errors in existing `content/docs` files. |
+| `npm run type:check` | FAIL - broad baseline TypeScript failures across packages/shared tests, scripts, dashboard/library pages, analytics routes, API utilities, validation files, and worker handlers. |
+| `npm run lint` | FAIL - broad baseline lint failures, including Jest globals/config rule issues, extension/browser globals, script import/order/no-explicit-any issues, and worker lint debt. |
+| `npm run build` | FAIL - stops during npm lifecycle `prebuild` on the same docs schema errors before Next build starts. |
+
+## Flow Evidence
+
+### Recording and Extension Upload
+
+Status: PASS.
+
+The upload-init route validates writer permission, file type, file size, duration,
+source metadata, and extension idempotency before creating content in
+`SOURCE_STATUS.UPLOADING` and returning current content-bucket storage paths.
+Metadata submission validates ownership/admin access, checks the uploaded object,
+persists user metadata, and enqueues the first processing job with a per-content
+dedupe key. Finalize also validates org ownership and storage path contracts,
+including the legacy recordings bucket fallback, then enqueues `transcribe`.
+
+Worker dispatch covers `transcribe`, `extract_audio`, `doc_generate`,
+`generate_embeddings`, `compile_wiki`, and vendor ingestion. The current
+production worker imports Gemini transcription, Google document generation, and
+Google embeddings handlers. `docify-google` is idempotent when a document already
+exists, enqueues missing embeddings, and enqueues compile-wiki unless workflow
+extraction owns the compile step. `embeddings-google` checks for complete or
+partial chunks before generating embeddings and writes `transcript_chunks`.
+
+Focused evidence:
+
+- Recording metadata/finalize tests passed.
+- Worker processor tests passed.
+- `npm run verify:knowledge-readiness` passed all first-party content,
+  transcript, document, wiki, source-link, relationship, recall-citation, and
+  atomic-contract checks.
+
+Residual risk:
+
+- Provider-backed transcription, document generation, embeddings, FFmpeg, and
+  storage operations were verified through code path and mocked/focused suites,
+  not through a live provider E2E run in this worktree.
+- `type:check` remains baseline-red in worker files, including some active
+  transcription/embedding handlers. The focused suites prove behavior but do not
+  remove the repo-wide typing advisory.
+
+### Legacy Finalize Path
+
+Status: PASS.
+
+The legacy finalize route is not removed; it is explicitly retained as a
+compatibility path. If no storage path is supplied, finalize builds the legacy
+recordings-bucket path and validates it with `allowLegacyRecordingsBucket: true`.
+If a caller supplies a path, the route infers and validates the storage bucket
+against the content/recording contract before writing `storage_path_raw`.
+
+The legacy recall question is separate from upload finalize. `npm run
+verify:legacy-recall-quarantine` passed 13/13, proving production answer
+surfaces such as extension query and MCP use canonical compiled-memory recall
+rather than legacy RAG/vector modules.
+
+Residual risk:
+
+- The compatibility finalize path should remain documented until clients no
+  longer submit legacy bucket paths.
+
+### Library Upload
+
+Status: PASS.
+
+The library upload route requires writer permission, enforces `Content-Length`
+before multipart parsing, applies aggregate upload limits, rejects recording
+content that belongs in the recording endpoint, stores accepted content in the
+content bucket, and enqueues the first processing job based on content/file type.
+
+Text uploads create a transcript immediately and enqueue `process_text_note`.
+Direct text creation writes content plus a user-input transcript and enqueues
+`doc_generate`. WebM/video uploads enqueue `extract_audio`, which writes MP3
+derived audio as `audio/mpeg` and enqueues `transcribe`. Document uploads route
+through PDF/DOCX extraction handlers before document generation and embeddings.
+
+Focused evidence:
+
+- Library upload/text tests passed 12/12.
+- Test output includes expected negative-path logging for reader denial,
+  content-length rejection, aggregate-size rejection, transcript rollback, and
+  storage/signed-url failure handling.
+
+Residual risk:
+
+- Full live WebM/FFmpeg extraction was not executed in this verification pass.
+  The code path and tests cover routing and payload shape.
+
+### Google Drive Import
+
+Status: PASS.
+
+The Google Drive import route resolves the connector, tests connection, avoids
+duplicate imports via `source_external_id`, stores source tracking on `content`,
+writes `connector_sync_state`, and then branches:
+
+- Text-like Drive files create transcripts with `provider:
+  google_drive_import` and enqueue `doc_generate`.
+- Binary PDFs/DOCX files upload raw bytes to storage and enqueue the matching
+  extraction job.
+- Unsupported types fail before content creation or are rolled back.
+
+`process-imported-doc` covers the older imported-documents path by chunking
+connector content semantically, embedding chunks, and storing them in
+`transcript_chunks` with connector/import metadata for recall.
+
+Focused evidence:
+
+- Google Drive import tests passed 7/7, including text import, PDF import,
+  duplicate/job failure rollback, and unsupported binary rejection.
+
+Residual risk:
+
+- The current Google Drive route writes through unified content jobs, while
+  `process-imported-doc` still references `imported_documents`. That is not a
+  blocking defect for the tested route, but it is an architectural advisory to
+  keep the older connector path either migrated or quarantined.
+
+### Vendor Source Sync and Corpus
+
+Status: PASS.
+
+Vendor source registration normalizes HTTPS URLs, requires official vendor host
+ownership, stores fetch strategy, freshness, lifecycle, terms/legal review, and
+official-source status. Queryability requires active lifecycle, approved terms,
+and official source. Sync scheduling creates `ingest_vendor_docs` jobs with
+source-scoped dedupe keys, freshness/backoff checks, adapter support checks, and
+optional `triggered_by_user_id` provenance.
+
+The ingestion handler builds a source acquisition plan from the registered
+source, rejects unsupported fetch strategies, enforces publisher-host scope,
+fetches and respects robots.txt, limits crawling to the same host and source
+path prefix, hashes page content, upserts page rows, retires stale rows, and
+syncs normalized `vendor_corpus_pages` with embeddings. Corpus retrieval syncs
+from legacy pages, filters queryable source rows, ranks by semantic similarity,
+keyword score, and exact screen match, then returns page/source identities.
+
+Focused evidence:
+
+- Vendor registry/sync/ops/corpus tests passed 20/20.
+- Worker vendor-doc upsert tests passed.
+
+Residual risk:
+
+- This verification does not make a live crawl against third-party vendor
+  sites. Legal/robots readiness is verified by code path and tests, not by
+  external crawl execution.
+
+### Extension Context, Live Context, and Query
+
+Status: PASS.
+
+`/api/extension/context` accepts session auth or API-key auth, sanitizes page
+context, resolves app/screen, requires `customerOrgId` for API-key recall,
+verifies that the requested customer org belongs to the vendor org, and resolves
+extension context matches. It returns vendor/org knowledge matches,
+availability, relevant wiki pages, and telemetry.
+
+`/api/extension/live-context` refreshes stale context matches when the page
+signature changes, loads the matched org and vendor pages, filters vendor pages
+through queryability, and builds a live context pack.
+
+`/api/extension/query` uses canonical compiled-memory answer context. It accepts
+context-match page ids, resolves customer org scope for API-key calls, streams
+answer chunks, element references, citations, and done events, and records
+telemetry.
+
+Focused evidence:
+
+- Extension context/live-context/query and SDK query-client tests passed 26/26.
+- Legacy recall quarantine confirms extension query uses canonical recall.
+
+Residual risk:
+
+- Live browser extension behavior was not exercised here. The endpoint and SDK
+  contract are covered by focused tests.
+
+### SDK, API Keys, and Customer Scoping
+
+Status: PASS.
+
+The SDK requires both `apiKey` and `customerOrgId`. SDK init sends the API key in
+Authorization and the customer selector in `X-Tribora-Customer-Org-Id`; query
+sends `customerOrgId` in the request body. Server routes require API-key callers
+to provide a customer org and call `resolveCustomerOrgForVendor`, which rejects
+self-targeting, deleted orgs, and orgs not linked to the vendor.
+
+Vendor API keys are generated as one-time plaintext keys, stored hashed, scoped
+to a white-label config, and rejected if inactive or revoked.
+
+Focused evidence:
+
+- SDK query-client tests passed.
+- Extension route tests passed API-key customer scoping scenarios.
+
+Residual risk:
+
+- `src/lib/utils/api-key-validation.ts` has baseline TypeScript advisories in
+  the full typecheck. Focused SDK/extension tests pass.
+
+### MCP
+
+Status: PASS.
+
+`/api/mcp` accepts GET/POST/DELETE with Bearer API keys, returns JSON-RPC
+errors for missing/invalid auth, and serves MCP over the web-standard streamable
+HTTP transport. MCP auth validates dedicated `trb_mcp_` keys or legacy
+`sk_live_` keys, scopes all handlers by `orgId`, rate-limits per key when Redis
+is available, and updates request counts.
+
+MCP handlers answer questions through compiled-memory context, return citations,
+search compiled org wiki pages, search vendor wiki pages, and fetch org/vendor
+wiki pages. Vendor search stays separated from org-scoped compiled memory while
+still returning through the same tool surface.
+
+Focused evidence:
+
+- MCP route and handler tests passed 10/10.
+- Legacy recall quarantine confirms MCP handlers use canonical compiled/wiki
+  recall and registered legacy allowlists only where documented.
+
+Residual risk:
+
+- No external MCP client smoke was run in this worktree; connectivity is covered
+  at route/handler level.
+
+### Vendor Source Ops
+
+Status: PASS.
+
+Vendor Source Ops builds a dashboard snapshot from vendor sources, corpus page
+counts, legacy page counts, and recent ingest jobs. It normalizes source URLs for
+the ops ledger, reports terms/legal/provenance fields, latest job id/status,
+active job status, content hash, corpus/legacy page counts, freshness, and sync
+block reasons.
+
+Focused evidence:
+
+- Vendor Source Ops unit tests passed as part of the vendor-source services
+  suite.
+
+Residual risk:
+
+- Ops values are only as fresh as the source/job rows. Production monitoring
+  should watch failing/stale/blocked counts after rollout.
+
+### Worker Concurrency
+
+Status: PASS.
+
+Workers claim pending jobs through `claim_pending_jobs` via `claimPendingJobs`.
+The readiness verifier confirms the RPC exists, uses `FOR UPDATE SKIP LOCKED`,
+is service-role restricted, and that normal worker completion/retry/failure
+writes are guarded by `processing` status. Focused worker tests cover processor
+dispatch and vendor ingestion.
+
+Focused evidence:
+
+- Worker processor tests passed 17/17 across job processor and vendor upsert.
+- `npm run verify:knowledge-readiness` passed atomic job-claim and dedupe
+  migration contract checks.
+
+Residual risk:
+
+- Production worker concurrency was not load-tested here. The database contract
+  and processor tests support ship readiness for this remediation batch.
+
+## Baseline Advisories Requiring Coordinator Action
+
+### Docs Prebuild
+
+Status: FAIL, baseline advisory.
+
+`npm run prebuild` and `npm run build` fail in `scripts/docs/build.ts` before
+application build. Existing docs issues:
+
+- `content/docs/platform-runbooks/extension-release-gate.md` is missing required
+  frontmatter fields: `title`, `description`, `audience`, `section`.
+- These files still author `slug`, which the docs build requires to be derived
+  from file path: `content/docs/platform-runbooks/incident-response.md`,
+  `content/docs/vendor-sources/cost-and-quotas.md`,
+  `content/docs/vendor-sources/failure-handling.md`,
+  `content/docs/vendor-sources/governance.md`,
+  `content/docs/vendor-sources/preview-and-health.md`,
+  `content/docs/vendor-sources/sync-lifecycle.md`.
+
+This TRIB-198 report intentionally lives under `.agents/reports/` as a text
+artifact and does not add to the generated `content/docs` schema surface.
+
+### Typecheck
+
+Status: FAIL, baseline advisory.
+
+`npm run type:check` fails with broad existing debt. Representative failures:
+
+- `packages/shared/src/__tests__/page-context-sanitizer.test.ts` has a
+  `KnowledgeMatchBasis` mismatch.
+- `scripts/analyze-search-quality.ts` treats JSON metadata as numeric values.
+- legacy scripts reference removed `recordings` generated-table types.
+- dashboard library detail page passes loosely typed content/status/tag shapes.
+- analytics routes have generated-type mismatches.
+- `src/lib/supabase/types.ts` has incompatible builder interface extensions.
+- validation files use one-argument Zod APIs incompatible with the installed
+  Zod version.
+- worker handlers contain JSON/Buffer/generated-type mismatches.
+
+No TRIB-198 report file participates in TypeScript.
+
+### Lint
+
+Status: FAIL, baseline advisory.
+
+`npm run lint` fails with broad repo baseline issues. Representative failures:
+
+- Jest globals and no-undef in tests/setup/config.
+- missing rule definition for `@typescript-eslint/no-require-imports` in JS
+  config files.
+- browser/extension globals such as `Document`, `HTMLElement`, `chrome`,
+  `MediaRecorder`, `AudioWorkletProcessor`, and `CSS`.
+- repo-level script/import/order/no-explicit-any debt.
+- worker handler require/import/no-unused/no-explicit-any issues.
+
+The new report is a text artifact and does not introduce lintable code.
+
+## Blockers
+
+No matrix blocker was found in the vendor knowledge remediation batch itself.
+
+Coordinator action is required if the release process requires full green repo
+gates before merge or deploy:
+
+1. Fix or waive the existing docs prebuild/frontmatter failures.
+2. Decide whether the broad TypeScript baseline debt blocks this release.
+3. Decide whether the broad lint baseline debt blocks this release.
+4. If external proof is required, run a live provider-backed smoke for WebM to
+   extracted audio to transcription and a live MCP client connection.
+
+## Final Sign-Off
+
+Focused remediation readiness: PASS.
+
+Full-repo gate readiness: FAIL due to existing baseline advisories.
+
+Release recommendation: SHIP WITH KNOWN ADVISORIES, assuming coordinator accepts
+the documented baseline gate debt as outside TRIB-198.
