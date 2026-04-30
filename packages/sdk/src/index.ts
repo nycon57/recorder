@@ -23,6 +23,8 @@ import { Widget } from './widget';
 export interface TriboraOptions {
   /** Vendor API key (sk_live_...) */
   apiKey: string;
+  /** Customer organization to target for customer-specific recall. */
+  customerOrgId?: string;
   /** Container element or CSS selector for the widget. Default: floating FAB. */
   container?: string | HTMLElement;
   /** Tribora API base URL. Default: https://app.tribora.ai */
@@ -57,6 +59,7 @@ export class Tribora {
     this.queryClient = new QueryClient({
       apiKey: this.options.apiKey,
       apiUrl: this.options.apiUrl,
+      customerOrgId: this.options.customerOrgId,
     });
   }
 

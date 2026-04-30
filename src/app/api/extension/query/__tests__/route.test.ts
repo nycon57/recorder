@@ -13,8 +13,12 @@ const generateContentStream =
   jest.fn<() => Promise<AsyncGenerator<StreamChunk>>>();
 const buildExtensionCompiledMemoryPrompt =
   jest.fn<(args: PromptArgs) => string>();
-const resolveCompiledMemoryAnswerContext = jest.fn<() => Promise<unknown>>();
-const mockRequireApiKeyOrSession = jest.fn();
+const resolveCompiledMemoryAnswerContext =
+  jest.fn<() => Promise<unknown>>();
+const mockRequireApiKeyOrSession =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const resolveCustomerOrgForVendor =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
 jest.mock('@google/genai', () => ({
   GoogleGenAI: jest.fn().mockImplementation(() => ({
@@ -32,6 +36,11 @@ jest.mock('next/server', () => ({
 jest.mock('@/lib/utils/api-key-auth', () => ({
   requireApiKeyOrSession: (...args: unknown[]) =>
     mockRequireApiKeyOrSession(...args),
+}));
+
+jest.mock('@/lib/services/vendor-customers', () => ({
+  resolveCustomerOrgForVendor: (...args: unknown[]) =>
+    resolveCustomerOrgForVendor(...args),
 }));
 
 jest.mock('@/lib/utils/api', () => ({
@@ -125,6 +134,13 @@ describe('POST /api/extension/query', () => {
       role: 'admin',
       authMethod: 'session',
     });
+    resolveCustomerOrgForVendor.mockResolvedValue({
+      id: 'customer_org',
+      name: 'Customer Org',
+      slug: 'customer-org',
+      plan: 'pro',
+      created_at: '2026-04-29T00:00:00.000Z',
+    });
   });
 
   it('passes SDK interactiveElements selector and label refs into the prompt and stream path', async () => {
@@ -169,19 +185,19 @@ describe('POST /api/extension/query', () => {
     expect(streamBody).toContain('"label":"Save deal"');
   });
 
-  it('accepts API-key auth for SDK queries without a browser session', async () => {
+  it('uses verified customer org scope for API-key SDK queries', async () => {
     mockRequireApiKeyOrSession.mockResolvedValueOnce({
       orgId: 'vendor_org',
-      userId: 'api_key_user',
-      role: 'admin',
       authMethod: 'api_key',
       keyId: 'key_1',
-      customerOrgId: 'customer_org',
+      configId: 'config_1',
+      scopes: ['query'],
     });
     const { POST } = await import('../route');
 
     const request = buildRequest({
       question: 'What should I do on this account page?',
+      customerOrgId: 'customer_org',
       context: {
         url: 'https://example.com/accounts/123',
         appSignature: 'salesforce:account-detail',
@@ -203,12 +219,77 @@ describe('POST /api/extension/query', () => {
       request,
       'query',
     );
+    expect(resolveCustomerOrgForVendor).toHaveBeenCalledWith(
+      'vendor_org',
+      'customer_org',
+    );
+    expect(resolveCompiledMemoryAnswerContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'customer_org',
+        userId: 'key_1',
+      }),
+    );
     expect(buildExtensionCompiledMemoryPrompt).toHaveBeenCalledWith(
       expect.objectContaining({
         elements: [{ selector: '#next-step', label: 'Next step' }],
       }),
     );
     expect(await response.text()).toContain('"type":"element_ref"');
+  });
+
+  it('rejects API-key SDK queries without a customer org target', async () => {
+    mockRequireApiKeyOrSession.mockResolvedValueOnce({
+      orgId: 'vendor_org',
+      authMethod: 'api_key',
+      keyId: 'key_1',
+      configId: 'config_1',
+      scopes: ['query'],
+    });
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        question: 'What should I do on this account page?',
+        context: {
+          url: 'https://example.com/accounts/123',
+          appSignature: 'salesforce:account-detail',
+        },
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(resolveCustomerOrgForVendor).not.toHaveBeenCalled();
+    expect(resolveCompiledMemoryAnswerContext).not.toHaveBeenCalled();
+  });
+
+  it('rejects forged API-key customer org targets', async () => {
+    mockRequireApiKeyOrSession.mockResolvedValueOnce({
+      orgId: 'vendor_org',
+      authMethod: 'api_key',
+      keyId: 'key_1',
+      configId: 'config_1',
+      scopes: ['query'],
+    });
+    resolveCustomerOrgForVendor.mockResolvedValueOnce(null);
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        question: 'What should I do on this account page?',
+        customerOrgId: 'other_customer_org',
+        context: {
+          url: 'https://example.com/accounts/123',
+          appSignature: 'salesforce:account-detail',
+        },
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(resolveCustomerOrgForVendor).toHaveBeenCalledWith(
+      'vendor_org',
+      'other_customer_org',
+    );
+    expect(resolveCompiledMemoryAnswerContext).not.toHaveBeenCalled();
   });
 
   it('uses DOM-grounded generation when compiled memory has no sources but page context exists', async () => {

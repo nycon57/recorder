@@ -15,6 +15,7 @@ import {
   buildLiveContextPack,
   type LiveContextSourcePage,
 } from '@/lib/services/extension-live-context';
+import { resolveCustomerOrgForVendor } from '@/lib/services/vendor-customers';
 import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
     const authCtx = await requireApiKeyOrSession(request, 'query');
     const body = (await request.json()) as {
       context?: PageContext;
+      customerOrgId?: string;
     };
 
     if (!body.context) {
@@ -136,6 +138,30 @@ export async function POST(request: NextRequest) {
       appSignature: resolvedAppSignature,
       url: baseContext.url,
     });
+    const customerOrgId =
+      typeof body.customerOrgId === 'string' && body.customerOrgId.trim()
+        ? body.customerOrgId.trim()
+        : null;
+    let effectiveOrgId = authCtx.orgId;
+
+    if (authCtx.authMethod === 'api_key') {
+      if (!customerOrgId) {
+        return errors.badRequest(
+          'customerOrgId is required for API-key recall',
+        );
+      }
+
+      const customerOrg = await resolveCustomerOrgForVendor(
+        authCtx.orgId,
+        customerOrgId,
+      );
+
+      if (!customerOrg) {
+        return errors.forbidden();
+      }
+
+      effectiveOrgId = customerOrg.id;
+    }
 
     let vendorKnowledgeMatch: KnowledgeMatch | null =
       baseContext.vendorKnowledgeMatch ?? null;
@@ -155,7 +181,7 @@ export async function POST(request: NextRequest) {
       })
     ) {
       const matches = await resolveExtensionContextMatches({
-        orgId: authCtx.orgId,
+        orgId: effectiveOrgId,
         app: resolvedApp,
         screen: resolvedScreen,
         url: baseContext.url,
@@ -180,7 +206,7 @@ export async function POST(request: NextRequest) {
 
     const [orgPages, vendorPages] = await Promise.all([
       loadOrgPages({
-        orgId: authCtx.orgId,
+        orgId: effectiveOrgId,
         pageIds: orgKnowledgeMatch?.pageIds ?? [],
       }),
       loadVendorPages(vendorKnowledgeMatch?.pageIds ?? []),

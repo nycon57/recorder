@@ -53,6 +53,55 @@ export async function getCustomerOrgs(
 }
 
 /**
+ * Resolve a caller-supplied customer org for SDK/API-key recall.
+ *
+ * This is the tenant boundary for external callers: a vendor API key may only
+ * target a customer org that is explicitly linked back to the key owner's
+ * vendor org. Callers must treat a null result as forbidden.
+ */
+export async function resolveCustomerOrgForVendor(
+  vendorOrgId: string,
+  customerOrgId: string
+): Promise<CustomerOrg | null> {
+  if (!customerOrgId || customerOrgId === vendorOrgId) {
+    return null;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('organizations')
+    .select('id, name, slug, plan, created_at, vendor_org_id, deleted_at')
+    .eq('id', customerOrgId)
+    .maybeSingle();
+
+  if (error) {
+    console.error(
+      '[vendor-customers] resolveCustomerOrgForVendor error:',
+      error
+    );
+    throw new Error('Failed to verify customer organization');
+  }
+
+  if (!data) return null;
+
+  const row = data as CustomerOrg & {
+    vendor_org_id: string | null;
+    deleted_at: string | null;
+  };
+
+  if (row.deleted_at || row.vendor_org_id !== vendorOrgId) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    plan: row.plan,
+    created_at: row.created_at,
+  };
+}
+
+/**
  * Link an existing org as a customer of a vendor org.
  *
  * Validates:

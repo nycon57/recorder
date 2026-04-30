@@ -10,6 +10,10 @@ const buildExtensionContextTelemetry = jest.fn<
   (input: { context: PageContext; [key: string]: unknown }) => unknown
 >();
 const recordKnowledgeTelemetryEvent = jest.fn<() => Promise<void>>();
+const mockRequireApiKeyOrSession =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const resolveCustomerOrgForVendor =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
 jest.mock('next/server', () => ({
   NextRequest: class {},
@@ -25,12 +29,13 @@ jest.mock('next/server', () => ({
 }));
 
 jest.mock('@/lib/utils/api-key-auth', () => ({
-  requireApiKeyOrSession: async () => ({
-    orgId: 'org_test',
-    userId: 'user_test',
-    role: 'admin',
-    authMethod: 'session',
-  }),
+  requireApiKeyOrSession: (...args: unknown[]) =>
+    mockRequireApiKeyOrSession(...args),
+}));
+
+jest.mock('@/lib/services/vendor-customers', () => ({
+  resolveCustomerOrgForVendor: (...args: unknown[]) =>
+    resolveCustomerOrgForVendor(...args),
 }));
 
 jest.mock('@/lib/utils/api', () => ({
@@ -128,6 +133,19 @@ describe('POST /api/extension/context', () => {
       orgMatchBasis: 'unknown',
       latencyMs: 1,
       fingerprint: 'fingerprint',
+    });
+    mockRequireApiKeyOrSession.mockResolvedValue({
+      orgId: 'org_test',
+      userId: 'user_test',
+      role: 'admin',
+      authMethod: 'session',
+    });
+    resolveCustomerOrgForVendor.mockResolvedValue({
+      id: 'customer_org',
+      name: 'Customer Org',
+      slug: 'customer-org',
+      plan: 'pro',
+      created_at: '2026-04-29T00:00:00.000Z',
     });
   });
 
@@ -250,5 +268,58 @@ describe('POST /api/extension/context', () => {
       screen: 'dashboard',
       url: 'https://app.hubspot.com/contacts/123',
     });
+  });
+
+  it('uses verified customer org scope for API-key context checks', async () => {
+    mockRequireApiKeyOrSession.mockResolvedValueOnce({
+      orgId: 'vendor_org',
+      authMethod: 'api_key',
+      keyId: 'key_1',
+      configId: 'config_1',
+      scopes: ['query'],
+    });
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        customerOrgId: 'customer_org',
+        context: baseContext(),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(resolveCustomerOrgForVendor).toHaveBeenCalledWith(
+      'vendor_org',
+      'customer_org',
+    );
+    expect(resolveExtensionContextMatches).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'customer_org',
+      }),
+    );
+    expect(buildExtensionContextTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'customer_org',
+        authMethod: 'api_key',
+        actorId: 'key_1',
+      }),
+    );
+  });
+
+  it('rejects API-key context checks without a customer org target', async () => {
+    mockRequireApiKeyOrSession.mockResolvedValueOnce({
+      orgId: 'vendor_org',
+      authMethod: 'api_key',
+      keyId: 'key_1',
+      configId: 'config_1',
+      scopes: ['query'],
+    });
+    const { POST } = await import('../route');
+
+    const response = await POST(buildRequest({ context: baseContext() }));
+
+    expect(response.status).toBe(400);
+    expect(resolveCustomerOrgForVendor).not.toHaveBeenCalled();
+    expect(resolveExtensionContextMatches).not.toHaveBeenCalled();
   });
 });
