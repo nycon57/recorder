@@ -3,6 +3,7 @@ import { unstable_cache } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
 import type { Json } from '@/lib/types/database';
+import type { KnowledgeSourceType } from '@/lib/types/knowledge-docs';
 
 import {
   extractPendingContradictions,
@@ -26,7 +27,7 @@ export interface ReviewQueueAction {
 
 export interface RoutingReviewSourceLink {
   sourceId: string;
-  sourceType: 'recording' | 'document' | 'manual';
+  sourceType: KnowledgeSourceType;
   contributedAt: string;
   sourceTitle?: string | null;
 }
@@ -147,7 +148,7 @@ interface RoutingPageRow {
 interface RoutingSourceRow {
   page_id: string;
   source_id: string;
-  source_type: 'recording' | 'document' | 'manual';
+  source_type: KnowledgeSourceType;
   contributed_at: string;
 }
 

@@ -338,7 +338,7 @@ async function resolveOrgCitationLinks(
       .from('wiki_page_sources')
       .select('page_id, source_id, source_type')
       .in('page_id', pageIds)
-      .eq('source_type', 'recording')
+      .in('source_type', ['recording', 'video', 'audio', 'document', 'text'])
       .order('contributed_at', { ascending: true });
 
     const rows =

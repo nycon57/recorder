@@ -7,13 +7,27 @@ import {
 
 export const KNOWLEDGE_DOC_TYPES = [
   'recording',
+  'video',
+  'audio',
   'document',
+  'text',
   'manual',
   'mixed',
   'unknown',
 ] as const;
 
 export type KnowledgeDocType = (typeof KNOWLEDGE_DOC_TYPES)[number];
+
+export const KNOWLEDGE_SOURCE_TYPES = [
+  'recording',
+  'video',
+  'audio',
+  'document',
+  'text',
+  'manual',
+] as const;
+
+export type KnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number];
 
 export const KNOWLEDGE_VENDOR_COVERAGE = ['covered', 'gap', 'unrouted'] as const;
 
@@ -49,7 +63,7 @@ export interface KnowledgeDocsListItem {
   status: KnowledgeStatus;
   type: KnowledgeDocType;
   vendorCoverage: KnowledgeVendorCoverage;
-  sourceTypes: Array<'recording' | 'document' | 'manual'>;
+  sourceTypes: KnowledgeSourceType[];
   clusterId: string | null;
   clusterName: string | null;
   updatedAt: string;
