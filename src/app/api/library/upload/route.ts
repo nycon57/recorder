@@ -10,11 +10,13 @@ import {
 import { withRateLimit } from '@/lib/rate-limit/middleware';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { QuotaManager } from '@/lib/services/quotas/quota-manager';
+import { hasPermission, type OrganizationRole } from '@/lib/security/rbac';
 import {
   validateFileForUpload,
   getProcessingJobs,
   formatFileSize,
   FILE_SIZE_LIMIT_LABELS,
+  FILE_SIZE_LIMITS,
 } from '@/lib/types/content';
 import { generateStoragePath } from '@/lib/validations/library';
 import { createLogger } from '@/lib/utils/logger';
@@ -26,6 +28,7 @@ import type { ContentType, FileType, JobType } from '@/lib/types/database';
 
 const logger = createLogger({ service: 'library-upload' });
 const MAX_BATCH_FILES = 10;
+const MAX_LIBRARY_UPLOAD_BYTES = FILE_SIZE_LIMITS.video;
 
 interface UploadFormOptions {
   analysisType: string;
@@ -67,6 +70,17 @@ type JobPayload = {
   pdfPath?: string;
   docxPath?: string;
 };
+
+function payloadTooLargeResponse(requestId: string, details: unknown) {
+  return Response.json(
+    {
+      error: 'Payload too large',
+      details,
+      requestId,
+    },
+    { status: 413 },
+  );
+}
 
 function parseUploadOptions(formData: FormData): UploadFormOptions {
   const rawAnalysisType = formData.get('analysisType');
@@ -160,10 +174,40 @@ async function rollbackContent(
 export const POST = withRateLimit(
   apiHandler(async (request: NextRequest) => {
     const requestId = generateRequestId();
-    const { orgId, userId } = await requireOrg();
+    const { orgId, userId, role } = await requireOrg();
     let reservedQuota = 0;
 
     try {
+      if (!hasPermission(role as OrganizationRole, 'recording:create')) {
+        logger.warn('Library upload denied for non-writer role', {
+          context: { requestId, orgId, userId },
+          data: { role },
+        });
+        return errors.forbidden(requestId);
+      }
+
+      const contentLength = request.headers.get('content-length');
+      const declaredContentLength = contentLength
+        ? Number.parseInt(contentLength, 10)
+        : Number.NaN;
+
+      if (
+        Number.isFinite(declaredContentLength) &&
+        declaredContentLength > MAX_LIBRARY_UPLOAD_BYTES
+      ) {
+        logger.warn('Library upload rejected by content-length cap', {
+          context: { requestId, orgId, userId },
+          data: {
+            declaredContentLength,
+            maxBytes: MAX_LIBRARY_UPLOAD_BYTES,
+          },
+        });
+        return payloadTooLargeResponse(requestId, {
+          maxBytes: MAX_LIBRARY_UPLOAD_BYTES,
+          declaredBytes: declaredContentLength,
+        });
+      }
+
       // Parse multipart form data
       const formData = await request.formData();
       const files = formData.getAll('files') as File[];
@@ -186,6 +230,22 @@ export const POST = withRateLimit(
           { maxFiles: MAX_BATCH_FILES },
           requestId,
         );
+      }
+
+      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+      if (totalSize > MAX_LIBRARY_UPLOAD_BYTES) {
+        logger.warn('Library upload rejected by aggregate file-size cap', {
+          context: { requestId, orgId, userId },
+          data: {
+            fileCount: files.length,
+            totalSizeBytes: totalSize,
+            maxBytes: MAX_LIBRARY_UPLOAD_BYTES,
+          },
+        });
+        return payloadTooLargeResponse(requestId, {
+          maxBytes: MAX_LIBRARY_UPLOAD_BYTES,
+          totalBytes: totalSize,
+        });
       }
 
       const validatedFiles: ValidatedUploadFile[] = [];
@@ -259,7 +319,6 @@ export const POST = withRateLimit(
       reservedQuota = validatedFiles.length;
 
       // Log request start
-      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
       logger.info('Starting file upload request', {
         context: { requestId, orgId, userId },
         data: {

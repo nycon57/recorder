@@ -8,6 +8,7 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { hasPermission, type OrganizationRole } from '@/lib/security/rbac';
 import {
   SOURCE_STATUS,
   getQueuedSourceStatusForJob,
@@ -55,10 +56,14 @@ export const POST = apiHandler(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const { orgId } = await requireOrg();
+    const { orgId, userId, role } = await requireOrg();
     // Use admin client to bypass RLS - auth already validated via requireOrg()
     const supabase = supabaseAdmin;
     const { id } = await params;
+
+    if (!hasPermission(role as OrganizationRole, 'recording:create')) {
+      return errors.forbidden();
+    }
 
     // Parse optional body parameters
     let body: unknown = {};
@@ -85,13 +90,22 @@ export const POST = apiHandler(
     // Verify content exists and belongs to org before accepting any storage path.
     const { data: existingRecording, error: fetchError } = await supabase
       .from('content')
-      .select('id, org_id, status, metadata, storage_path_raw, content_type, file_type')
+      .select('id, org_id, created_by, status, metadata, storage_path_raw, content_type, file_type')
       .eq('id', id)
       .eq('org_id', orgId)
       .single();
 
     if (fetchError || !existingRecording) {
       return errors.notFound('Recording');
+    }
+
+    const canFinalize =
+      existingRecording.created_by === userId ||
+      role === 'owner' ||
+      role === 'admin';
+
+    if (!canFinalize) {
+      return errors.forbidden();
     }
 
     const storagePath =

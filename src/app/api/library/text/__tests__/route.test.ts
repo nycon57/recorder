@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 import { beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 const mockRequireOrg = jest.fn<
-  () => Promise<{ orgId: string; userId: string }>
+  () => Promise<{ orgId: string; userId: string; role: string }>
 >();
 const mockFrom = jest.fn<(table: string) => unknown>();
 
@@ -29,6 +29,11 @@ jest.mock('@/lib/utils/api', () => ({
       Response.json(
         { code: 'INTERNAL_ERROR', message: 'Internal error', requestId },
         { status: 500 },
+      ),
+    forbidden: (requestId?: string) =>
+      Response.json(
+        { code: 'FORBIDDEN', message: 'Forbidden', requestId },
+        { status: 403 },
       ),
     validationError: (details: unknown, requestId?: string) =>
       Response.json(
@@ -86,7 +91,11 @@ describe('POST /api/library/text', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockRequireOrg.mockResolvedValue({ orgId: 'org_1', userId: 'user_1' });
+    mockRequireOrg.mockResolvedValue({
+      orgId: 'org_1',
+      userId: 'user_1',
+      role: 'contributor',
+    });
     contentInsert.mockReturnValue(
       selectSingleResult({
         id: 'content_1',
@@ -162,6 +171,26 @@ describe('POST /api/library/text', () => {
       run_at: expect.any(String),
       dedupe_key: 'doc_generate:content_1',
     });
+  });
+
+  it('rejects reader users before parsing or creating text content', async () => {
+    mockRequireOrg.mockResolvedValue({
+      orgId: 'org_1',
+      userId: 'reader_1',
+      role: 'reader',
+    });
+    const json = jest.fn<() => Promise<unknown>>();
+    const request = {
+      json,
+    } as unknown as NextRequest;
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(403);
+    expect(json).not.toHaveBeenCalled();
+    expect(contentInsert).not.toHaveBeenCalled();
+    expect(transcriptInsert).not.toHaveBeenCalled();
+    expect(jobsInsert).not.toHaveBeenCalled();
   });
 
   it('rolls back text note rows when doc generation cannot be queued', async () => {
