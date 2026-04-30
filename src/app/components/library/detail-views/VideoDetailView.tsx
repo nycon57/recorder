@@ -22,8 +22,10 @@ import RecordingPlayer from '@/app/components/RecordingPlayer';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
 import ProcessingPipeline from '@/app/components/ProcessingPipeline';
 import ReprocessStreamModal from '@/app/components/ReprocessStreamModal';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import type { ContentType, FileType, RecordingStatus, Tag } from '@/lib/types/database';
+import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
-// New unified sidebar component
 import ContentSidebar from '../viewers/ContentSidebar';
 import TranscriptPanel from '../shared/TranscriptPanel';
 import ShareControls from '../shared/ShareControls';
@@ -31,12 +33,6 @@ import KeyboardShortcutsDialog from '../shared/KeyboardShortcutsDialog';
 import InlineEditableField from '../shared/InlineEditableField';
 import InlineTagsEditor from '../shared/InlineTagsEditor';
 import PublishModal from '../PublishModal';
-
-import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-
-import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
-import type { Tag } from '@/lib/types/database';
-import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
 interface Word {
   word: string;
@@ -77,7 +73,7 @@ interface Recording {
   thumbnail_url: string | null;
   videoUrl: string | null;
   downloadUrl: string | null;
-  metadata: any;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -125,7 +121,7 @@ export default function VideoDetailView({
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = React.useState(false);
-  const videoPlayerRef = React.useRef<HTMLVideoElement | null>(null);
+  const videoPlayerRef = React.useRef<React.ElementRef<'video'> | null>(null);
 
   const isTrashed = !!recording.deleted_at;
 
@@ -269,11 +265,6 @@ export default function VideoDetailView({
     if (wasSuccessful) {
       router.refresh();
     }
-  };
-
-  const handleRegenerateDocument = async () => {
-    setReprocessStep('document');
-    setIsReprocessModalOpen(true);
   };
 
   const handleRestore = async () => {
@@ -586,7 +577,7 @@ export default function VideoDetailView({
                       Transcription in progress
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      We're transcribing your video using AI. This usually takes 1-2 minutes.
+                      We&apos;re transcribing your video using AI. This usually takes 1-2 minutes.
                     </p>
                   </div>
                 </CardContent>
@@ -716,7 +707,7 @@ export default function VideoDetailView({
         contentTitle={recording.title || 'Untitled'}
         isOpen={isPublishModalOpen}
         onClose={() => setIsPublishModalOpen(false)}
-        onPublishComplete={(publication) => {
+        onPublishComplete={() => {
           toast({ description: 'Document published successfully!' });
           router.refresh();
         }}

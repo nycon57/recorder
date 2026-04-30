@@ -1,5 +1,45 @@
 "use client";
 
+/* global DragEvent, FileList, HTMLHeadingElement */
+
+import type { ChatStatus, FileUIPart } from "ai";
+import {
+  ImageIcon,
+  Loader2Icon,
+  MicIcon,
+  PaperclipIcon,
+  PlusIcon,
+  SendIcon,
+  SquareIcon,
+  XIcon,
+} from "lucide-react";
+import { nanoid } from "nanoid";
+import {
+  type ChangeEvent,
+  type ChangeEventHandler,
+  Children,
+  cloneElement,
+  type ClipboardEventHandler,
+  type ComponentProps,
+  createContext,
+  type FormEvent,
+  type FormEventHandler,
+  Fragment,
+  type HTMLAttributes,
+  type KeyboardEventHandler,
+  type MouseEvent,
+  type PropsWithChildren,
+  type ReactNode,
+  type RefObject,
+  isValidElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import { Button } from "@/app/components/ui/button";
 import {
   Command,
@@ -35,40 +75,6 @@ import {
   SelectValue,
 } from "@/app/components/ui/select";
 import { cn } from "@/lib/utils";
-import type { ChatStatus, FileUIPart } from "ai";
-import {
-  ImageIcon,
-  Loader2Icon,
-  MicIcon,
-  PaperclipIcon,
-  PlusIcon,
-  SendIcon,
-  SquareIcon,
-  XIcon,
-} from "lucide-react";
-import { nanoid } from "nanoid";
-import React, {
-  type ChangeEvent,
-  type ChangeEventHandler,
-  Children,
-  type ClipboardEventHandler,
-  type ComponentProps,
-  createContext,
-  type FormEvent,
-  type FormEventHandler,
-  Fragment,
-  type HTMLAttributes,
-  type KeyboardEventHandler,
-  type PropsWithChildren,
-  type ReactNode,
-  type RefObject,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 // ============================================================================
 // Provider Context & Types
 // ============================================================================
@@ -542,10 +548,12 @@ export const PromptInput = ({
     [matchesAccept, maxFiles, maxFileSize, onError]
   );
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const add = usingProvider
     ? (files: File[] | FileList) => controller.attachments.add(files)
     : addLocal;
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const remove = usingProvider
     ? (id: string) => controller.attachments.remove(id)
     : (id: string) =>
@@ -557,6 +565,7 @@ export const PromptInput = ({
           return prev.filter((file) => file.id !== id);
         });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const clear = usingProvider
     ? () => controller.attachments.clear()
     : () =>
@@ -569,6 +578,7 @@ export const PromptInput = ({
           return [];
         });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const openFileDialog = usingProvider
     ? () => controller.attachments.openFileDialog()
     : openFileDialogLocal;
@@ -706,6 +716,7 @@ export const PromptInput = ({
     // Convert blob URLs to data URLs asynchronously
     Promise.all(
       files.map(async ({ id, ...item }) => {
+        void id;
         if (item.url && item.url.startsWith("blob:")) {
           return {
             ...item,
@@ -752,7 +763,7 @@ export const PromptInput = ({
           }
           setIsSubmitting(false);
         }
-      } catch (error) {
+      } catch {
         // Don't clear on error - user may want to retry
         setIsSubmitting(false);
       }
@@ -1042,13 +1053,13 @@ interface SpeechRecognition extends EventTarget {
   lang: string;
   start(): void;
   stop(): void;
-  onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onend: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
   onresult:
-    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any)
+    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void)
     | null;
   onerror:
-    | ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any)
+    | ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void)
     | null;
 }
 
@@ -1158,6 +1169,7 @@ export const PromptInputSpeechButton = ({
       };
 
       recognitionRef.current = speechRecognition;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRecognition(speechRecognition);
     }
 
@@ -1414,7 +1426,7 @@ export const PromptInputAttachFiles = ({
   const attachments = usePromptInputAttachments();
 
   const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>) => {
+    (e: MouseEvent<HTMLButtonElement>) => {
       attachments.openFileDialog();
       onClick?.(e);
     },
@@ -1424,16 +1436,19 @@ export const PromptInputAttachFiles = ({
   // When using asChild, need to clone the child element with the click handler
   if (asChild && children) {
     const child = Children.only(children);
-    if (!React.isValidElement(child)) {
+    if (
+      !isValidElement<{
+        onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+      }>(child)
+    ) {
       return <>{children}</>;
     }
-    return React.cloneElement(child, {
-      onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
+    return cloneElement(child, {
+      onClick: (e: MouseEvent<HTMLButtonElement>) => {
         handleClick(e);
-        // @ts-ignore - child props might have onClick
         child.props?.onClick?.(e);
       },
-    } as any);
+    });
   }
 
   return (

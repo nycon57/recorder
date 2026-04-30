@@ -1,11 +1,12 @@
 "use client";
 
-import { Button } from "@/app/components/ui/button";
-import { cn } from "@/lib/utils";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+
+import { cn } from "@/lib/utils";
+import { Button } from "@/app/components/ui/button";
 
 type BranchContextType = {
   currentBranch: number;
@@ -55,6 +56,7 @@ export const Branch = ({
     if (clampedIndex !== currentBranch) {
       setCurrentBranch(clampedIndex);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branches.length, defaultBranch]);
 
   const handleBranchChange = (newBranch: number) => {
@@ -118,6 +120,7 @@ export const BranchMessages = ({ children, ...props }: BranchMessagesProps) => {
     if (needsUpdate) {
       setBranches(childrenArray);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [childrenArray, setBranches]);
 
   return (

@@ -1,8 +1,9 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import { memo } from "react";
 import ReactMarkdown from "react-markdown";
+
+import { cn } from "@/lib/utils";
 
 interface ResponseProps {
   children: string;
@@ -20,7 +21,7 @@ export const Response = memo(({ children, className }: ResponseProps) => (
       // Disable URL sanitization - allow all URLs including relative paths
       urlTransform={(url) => url}
       components={{
-        a: ({ node, href, ...props }) => {
+        a: ({ href, ...props }) => {
           // Render all links with href, open in new tab
           return <a {...props} href={href} target="_blank" rel="noopener noreferrer" />;
         },

@@ -2,8 +2,8 @@
 
 import * as React from 'react';
 import { X, Plus, Loader2 } from 'lucide-react';
+
 import { Button } from '@/app/components/ui/button';
-import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';
 import { cn } from '@/lib/utils';
 import TagBadge from '@/app/components/TagBadge';

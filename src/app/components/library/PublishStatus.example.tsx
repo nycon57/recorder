@@ -6,8 +6,11 @@
 
 'use client';
 
-import { PublishStatus } from './PublishStatus';
+import * as React from 'react';
+
 import type { PublishedDocument } from '@/lib/types/publishing';
+
+import { PublishStatus } from './PublishStatus';
 
 // =====================================================
 // EXAMPLE 1: Compact View in Content Card

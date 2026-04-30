@@ -1,13 +1,6 @@
 "use client";
 
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
-import { Badge } from "@/app/components/ui/badge";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/app/components/ui/collapsible";
-import { cn } from "@/lib/utils";
 import {
   BrainIcon,
   ChevronDownIcon,
@@ -16,6 +9,14 @@ import {
 } from "lucide-react";
 import type { ComponentProps } from "react";
 import { createContext, memo, useContext, useMemo } from "react";
+
+import { Badge } from "@/app/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/app/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
 type ChainOfThoughtContextValue = {
   isOpen: boolean;
@@ -83,7 +84,7 @@ export type ChainOfThoughtHeaderProps = ComponentProps<
 
 export const ChainOfThoughtHeader = memo(
   ({ className, children, ...props }: ChainOfThoughtHeaderProps) => {
-    const { isOpen, setIsOpen } = useChainOfThought();
+    const { isOpen } = useChainOfThought();
 
     return (
       <CollapsibleTrigger

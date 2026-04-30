@@ -1,7 +1,8 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { Tag, X, Loader2 } from 'lucide-react';
+import { Tag, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Button } from '@/app/components/ui/button';
 import {
@@ -14,13 +15,19 @@ import {
 } from '@/app/components/ui/dialog';
 import { Label } from '@/app/components/ui/label';
 import { TagInput } from '@/app/components/tags/TagInput';
-import { toast } from 'sonner';
 
 interface TagData {
   id: string;
   name: string;
   color: string;
 }
+
+type TagResponse = {
+  data?: {
+    tags?: TagData[];
+  };
+  message?: string;
+};
 
 interface BulkTagModalProps {
   open: boolean;
@@ -75,8 +82,8 @@ export function BulkTagModal({
       const response = await fetch('/api/tags?limit=100');
       if (!response.ok) throw new Error('Failed to load tags');
 
-      const data = await response.json();
-      setAvailableTags(data.data.tags || []);
+      const data = (await response.json()) as TagResponse;
+      setAvailableTags(data.data?.tags || []);
     } catch (error) {
       console.error('Error loading tags:', error);
       toast.error('Failed to load tags');
@@ -94,19 +101,19 @@ export function BulkTagModal({
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = (await response.json()) as TagResponse;
         throw new Error(error.message || 'Failed to create tag');
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as { data: TagData };
       const newTag = data.data;
 
       // Add to available tags
       setAvailableTags(prev => [...prev, newTag]);
 
       return newTag;
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create tag');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create tag');
       return null;
     }
   };

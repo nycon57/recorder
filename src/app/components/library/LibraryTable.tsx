@@ -4,10 +4,9 @@ import * as React from 'react';
 import { RowSelectionState } from '@tanstack/react-table';
 
 import { DataTable } from '@/app/components/ui/data-table';
-import { createLibraryColumns } from './library-columns';
-import { cn } from '@/lib/utils';
-
 import type { ContentItem } from '@/app/components/content/ContentCard';
+
+import { createLibraryColumns } from './library-columns';
 
 interface LibraryTableProps {
   items: ContentItem[];
@@ -76,9 +75,6 @@ export function LibraryTable({
       // Find which IDs changed
       const currentSelectedIds = new Set(selectedIds);
       const newSelectedIds = new Set(Object.keys(newSelection).filter((id) => newSelection[id]));
-
-      // Handle select all / deselect all
-      const allIds = new Set(items.map((item) => item.id));
 
       if (newSelectedIds.size === 0 && currentSelectedIds.size > 0) {
         // Deselect all

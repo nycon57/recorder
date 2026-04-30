@@ -1,8 +1,5 @@
 "use client";
 
-import { Alert, AlertDescription } from "@/app/components/ui/alert";
-import { Button } from "@/app/components/ui/button";
-import { cn } from "@/lib/utils";
 import type { ToolUIPart } from "ai";
 import {
   type ComponentProps,
@@ -10,6 +7,10 @@ import {
   type ReactNode,
   useContext,
 } from "react";
+
+import { Alert, AlertDescription } from "@/app/components/ui/alert";
+import { Button } from "@/app/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // Extended state type to include approval workflow states
 type ExtendedToolState = ToolUIPart["state"] | "approval-requested" | "approval-responded" | "output-denied";

@@ -1,13 +1,14 @@
+import type { UIMessage } from "ai";
+import { cva, type VariantProps } from "class-variance-authority";
+import type { ComponentProps, HTMLAttributes } from "react";
+import React from "react";
+
+import { cn } from "@/lib/utils";
 import {
   Avatar,
   AvatarFallback,
   AvatarImage,
 } from "@/app/components/ui/avatar";
-import { cn } from "@/lib/utils";
-import type { UIMessage } from "ai";
-import { cva, type VariantProps } from "class-variance-authority";
-import type { ComponentProps, HTMLAttributes } from "react";
-import React from "react";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];

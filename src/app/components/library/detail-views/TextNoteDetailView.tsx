@@ -18,9 +18,10 @@ import {
 } from '@/app/components/ui/alert-dialog';
 import { toast } from '@/app/components/ui/use-toast';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
-import TextNoteViewer from './TextNoteViewer';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import type { ContentType, FileType, RecordingStatus, Tag } from '@/lib/types/database';
+import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
-// New unified sidebar component
 import ContentSidebar from '../viewers/ContentSidebar';
 import ThumbnailHero from '../viewers/ThumbnailHero';
 import ShareControls from '../shared/ShareControls';
@@ -29,17 +30,13 @@ import InlineEditableField from '../shared/InlineEditableField';
 import InlineTagsEditor from '../shared/InlineTagsEditor';
 import AIDocumentPanel from '../shared/AIDocumentPanel';
 
-import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-
-import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
-import type { Tag } from '@/lib/types/database';
-import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
+import TextNoteViewer from './TextNoteViewer';
 
 interface Transcript {
   id: string;
   content_id: string;
   text: string;
-  words_json?: any;
+  words_json?: unknown;
   language?: string | null;
   confidence?: number | null;
   provider?: string | null;
@@ -67,7 +64,7 @@ interface Recording {
   thumbnail_url: string | null;
   videoUrl: string | null;
   downloadUrl: string | null;
-  metadata: any;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -106,7 +103,7 @@ export default function TextNoteDetailView({
 
   const isTrashed = !!recording.deleted_at;
 
-  const handleContentUpdate = (newContent: string) => {
+  const handleContentUpdate = () => {
     // This will be handled by the TextNoteViewer component
     // which will update via API and trigger a page refresh
   };

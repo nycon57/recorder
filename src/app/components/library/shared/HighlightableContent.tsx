@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+
 import { cn } from '@/lib/utils';
 
 export interface Highlight {
@@ -74,7 +75,6 @@ export function HighlightableContent({
   highlightsEnabled,
   onHighlightRefs,
   className,
-  contentType = 'text',
 }: HighlightableContentProps) {
   const highlightRefsMap = React.useRef<Map<string, HTMLElement>>(new Map());
 

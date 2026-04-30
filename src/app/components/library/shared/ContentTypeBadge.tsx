@@ -9,6 +9,7 @@ import {
   Monitor,
   LucideIcon
 } from 'lucide-react';
+
 import { Badge } from '@/app/components/ui/badge';
 import type { ContentType } from '@/lib/types/database';
 

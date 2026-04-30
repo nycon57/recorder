@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { Info, X } from 'lucide-react';
+import { Info } from 'lucide-react';
+
 import { Button } from '@/app/components/ui/button';
 import {
   Sheet,
@@ -10,8 +11,9 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/app/components/ui/sheet';
-import MetadataSidebar from './MetadataSidebar';
 import type { ContentType, FileType, RecordingStatus, Tag } from '@/lib/types/database';
+
+import MetadataSidebar from './MetadataSidebar';
 
 interface ResponsiveMetadataSidebarProps {
   recordingId: string;
