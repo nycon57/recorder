@@ -83,10 +83,10 @@ These fields are visible in the page detail view at `/admin/vendor-sources/pages
 
 ## Observability during a sync
 
-1. Open the dashboard (`/admin/vendor-sources`). The source card's status changes to `syncing`.
+1. Open the ledger (`/admin/vendor-sources`). The source row's status changes to `syncing`, and the detail pane links to the latest sync job.
 2. Open `/admin/jobs` and filter by `type=ingest_vendor_docs` to watch the job row transition from `pending → processing → completed`.
 3. The Recent jobs strip on the dashboard auto-refreshes every 5 s.
-4. After completion, the source card updates `Last success` and `Content hash`.
+4. After completion, the source row updates `Last success`, `Content/corpus hash`, and latest job status.
 5. If the job fails, the source status moves to `failing` and the failure log gains a new row.
 
 ---

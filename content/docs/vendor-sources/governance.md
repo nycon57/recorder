@@ -31,10 +31,11 @@ Before adding a new source:
 ### Procedure
 
 1. Open `/admin/vendor-sources/new`.
-2. Fill in: App name, Source URL, Publisher hostname, Fetch strategy (default: `web`), Max pages.
+2. Fill in: App name, Source URL, terms evidence, and any source metadata requested by the form.
 3. Submit — this creates the `vendor_doc_sources` row and queues the first sync immediately.
-4. Monitor the sync on the dashboard. Inspect pages via `/admin/vendor-sources/pages?app=<name>`.
-5. If the sync produces low-quality pages, delete them individually and adjust the seed URL or `maxPages`.
+4. Monitor the source on `/admin/vendor-sources`. The ledger shows the official-source assertion, publisher hostname, normalized source URL, content/corpus hash, latest sync job link, last successful sync, and legal review evidence from the source row.
+5. Inspect pages via `/admin/vendor-sources/pages?app=<name>`.
+6. If the sync produces low-quality pages, delete them individually and adjust the seed URL.
 
 ## Removing a source
 
@@ -82,6 +83,10 @@ When a source's drift indicator shows amber or red on the health page:
 2. **Re-sync** via the health table Re-sync button.
 3. **If re-sync fails** — consult `vendor-sources/failure-handling.md`.
 4. **If content quality is the issue** — use Preview on individual pages to inspect, then decide whether to retract or wait for improved extraction.
+
+## Ledger triage
+
+The `/admin/vendor-sources` page is the operator provenance ledger. Use the filter bar to narrow by status, terms review status, source kind, publisher hostname, freshness state, or free-text search across app, URL, hash, latest job ID, and review evidence. The `Needs attention` freshness filter combines failing, stale, blocked, and never-synced sources for triage.
 
 ## Applicability bands
 
