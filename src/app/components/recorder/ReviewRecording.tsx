@@ -54,10 +54,11 @@ export function ReviewRecording() {
 
   // Warn user about unsaved recording
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    const handleBeforeUnload = (e: Event) => {
       e.preventDefault();
-      e.returnValue = 'You have an unsaved recording. Leaving will discard it.';
-      return e.returnValue;
+      const message = 'You have an unsaved recording. Leaving will discard it.';
+      (e as unknown as { returnValue: string }).returnValue = message;
+      return message;
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
