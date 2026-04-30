@@ -68,7 +68,7 @@ export async function validateApiKey(
     }
 
     // Find matching key using bcrypt.compare() - constant time comparison
-    let matchedKey: typeof apiKeys[0] | null = null;
+    let matchedKey: (typeof apiKeys)[number] | null = null;
 
     for (const key of apiKeys) {
       const isMatch = await bcrypt.compare(apiKey, key.key_hash);
@@ -100,7 +100,11 @@ export async function validateApiKey(
     }
 
     // Check IP whitelist if configured
-    if (matchedKey.ip_whitelist && matchedKey.ip_whitelist.length > 0) {
+    const ipWhitelist = Array.isArray(matchedKey.ip_whitelist)
+      ? matchedKey.ip_whitelist.filter((value): value is string => typeof value === 'string')
+      : [];
+
+    if (ipWhitelist.length > 0) {
       if (!ipAddress) {
         return {
           valid: false,
@@ -109,7 +113,7 @@ export async function validateApiKey(
       }
 
       // Check if IP is in whitelist
-      const isWhitelisted = matchedKey.ip_whitelist.some((whitelistedIp: string) => {
+      const isWhitelisted = ipWhitelist.some((whitelistedIp) => {
         // Support CIDR notation in the future - for now, exact match
         return whitelistedIp === ipAddress;
       });
@@ -123,10 +127,14 @@ export async function validateApiKey(
     }
 
     // Check scope if required
+    const scopes = Array.isArray(matchedKey.scopes)
+      ? matchedKey.scopes.filter((value): value is string => typeof value === 'string')
+      : [];
+
     if (requiredScope) {
       const hasScope =
-        matchedKey.scopes.includes('*') || // Wildcard scope
-        matchedKey.scopes.includes(requiredScope);
+        scopes.includes('*') || // Wildcard scope
+        scopes.includes(requiredScope);
 
       if (!hasScope) {
         return {
@@ -142,7 +150,7 @@ export async function validateApiKey(
       .from('api_keys')
       .update({
         last_used_at: new Date().toISOString(),
-        usage_count: ((matchedKey as any).usage_count || 0) + 1,
+        usage_count: ((matchedKey as { usage_count?: number }).usage_count ?? 0) + 1,
       })
       .eq('id', matchedKey.id)
       .then(({ error }) => {
@@ -154,8 +162,8 @@ export async function validateApiKey(
     return {
       valid: true,
       orgId: matchedKey.org_id,
-      scopes: matchedKey.scopes,
-      rateLimit: matchedKey.rate_limit,
+      scopes,
+      rateLimit: matchedKey.rate_limit ?? undefined,
     };
   } catch (error) {
     console.error('[API Key Validation] Unexpected error:', error);

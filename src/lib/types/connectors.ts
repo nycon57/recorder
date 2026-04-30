@@ -10,9 +10,9 @@ export interface ConnectorConfig {
   connectorType: ConnectorType;
   name: string;
   description?: string;
-  credentials: any;
-  settings: any;
-  filters?: any;
+  credentials: Record<string, unknown>;
+  settings: Record<string, unknown>;
+  filters?: Record<string, unknown>;
   lastSyncAt?: Date;
   nextSyncAt?: Date;
   syncFrequency: 'manual' | 'hourly' | 'daily' | 'weekly';
@@ -47,12 +47,12 @@ export interface ImportedDocument {
   processingError?: string;
   chunksGenerated: boolean;
   embeddingsGenerated: boolean;
-  sourceMetadata: any;
+  sourceMetadata: Record<string, unknown>;
   firstSyncedAt: Date;
   lastSyncedAt: Date;
   syncCount: number;
   isDeleted: boolean;
-  metadata: any;
+  metadata: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -71,8 +71,8 @@ export interface ConnectorSyncLog {
   documentsFailed: number;
   documentsDeleted: number;
   errorMessage?: string;
-  errorDetails?: any;
-  metadata: any;
+  errorDetails?: unknown;
+  metadata: Record<string, unknown>;
   apiCallsMade: number;
   bytesTransferred: number;
 }
@@ -84,8 +84,8 @@ export interface WebhookEvent {
   eventType: string;
   eventSource: string;
   eventId?: string;
-  payload: any;
-  headers?: any;
+  payload: unknown;
+  headers?: Record<string, string>;
   processed: boolean;
   processedAt?: Date;
   processingError?: string;
@@ -103,7 +103,7 @@ export interface FileUploadBatch {
   failedFiles: number;
   status: 'uploading' | 'processing' | 'completed' | 'failed';
   progressPercent: number;
-  metadata: any;
+  metadata: Record<string, unknown>;
   createdAt: Date;
   completedAt?: Date;
 }

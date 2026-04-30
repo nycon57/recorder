@@ -21,7 +21,7 @@ import { SOURCE_STATUS_VALUES } from '@/lib/utils/status-helpers';
 export const uploadFileSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type UploadFileInput = z.infer<typeof uploadFileSchema>;
@@ -36,7 +36,7 @@ export const uploadMultipleFilesSchema = z.object({
       z.object({
         title: z.string().min(1).max(200).optional(),
         description: z.string().max(2000).optional(),
-        metadata: z.record(z.any()).optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
       }),
     )
     .min(1)
@@ -60,7 +60,7 @@ export const createTextNoteSchema = z.object({
   content: z.string().min(1, 'Content is required').max(500000), // 500KB max
   format: z.enum(['plain', 'markdown']).default('plain'),
   description: z.string().max(2000).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type CreateTextNoteInput = z.infer<typeof createTextNoteSchema>;
@@ -73,7 +73,7 @@ export const updateTextNoteSchema = z.object({
   content: z.string().min(1).max(500000).optional(),
   format: z.enum(['plain', 'markdown']).optional(),
   description: z.string().max(2000).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type UpdateTextNoteInput = z.infer<typeof updateTextNoteSchema>;
@@ -126,7 +126,7 @@ export function validateContentType(type: string): type is ContentType {
 export const updateLibraryItemSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type UpdateLibraryItemInput = z.infer<typeof updateLibraryItemSchema>;
@@ -191,7 +191,7 @@ export type BatchDeleteInput = z.infer<typeof batchDeleteSchema>;
 export const batchUpdateSchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(100),
   updates: z.object({
-    metadata: z.record(z.any()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   }),
 });
 

@@ -10,6 +10,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/types/database';
 
 /**
  * Maximum age for webhook timestamps (5 minutes)
@@ -113,7 +114,10 @@ export function verifyWebhookSignature(
       return { valid: false, error: 'Invalid signature' };
     }
 
-    const isValid = timingSafeEqual(expectedBuffer, actualBuffer);
+    const isValid = timingSafeEqual(
+      new Uint8Array(expectedBuffer),
+      new Uint8Array(actualBuffer)
+    );
     return { valid: isValid, error: isValid ? undefined : 'Invalid signature' };
   } catch {
     return { valid: false, error: 'Signature verification failed' };
@@ -163,7 +167,7 @@ export async function markWebhookEventProcessed(
       event_id: eventId,
       source,
       processed_at: new Date().toISOString(),
-      metadata,
+      metadata: metadata as Json,
     });
   } catch (error) {
     // Log but don't throw - idempotency tracking is a best-effort feature
