@@ -20,7 +20,8 @@ export interface ConnectorCredentials {
   accessToken?: string;
   refreshToken?: string;
   expiresAt?: Date | string;
-  [key: string]: any;
+  scopes?: string[];
+  [key: string]: unknown;
 }
 
 export interface AuthResult {
@@ -33,7 +34,7 @@ export interface AuthResult {
 export interface TestResult {
   success: boolean;
   message?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SyncOptions {
@@ -53,7 +54,7 @@ export interface SyncOptions {
   paths?: string[];
 
   /** Custom filters */
-  filters?: Record<string, any>;
+  filters?: Record<string, unknown>;
 }
 
 export interface SyncResult {
@@ -63,7 +64,7 @@ export interface SyncResult {
   filesFailed: number;
   filesDeleted: number;
   errors: SyncError[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SyncError {
@@ -77,7 +78,7 @@ export interface ListOptions {
   limit?: number;
   offset?: number;
   orderBy?: string;
-  filters?: Record<string, any>;
+  filters?: Record<string, unknown>;
 }
 
 export interface ConnectorFile {
@@ -91,7 +92,7 @@ export interface ConnectorFile {
   url?: string;
   path?: string;
   parentId?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface FileContent {
@@ -100,14 +101,14 @@ export interface FileContent {
   content: string | Buffer;
   mimeType: string;
   size: number;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface WebhookEvent {
   id: string;
   type: string;
   source: string;
-  payload: any;
+  payload: unknown;
   timestamp: Date;
 }
 

@@ -18,6 +18,7 @@ import { createHash } from 'crypto';
 import axios, { AxiosError } from 'axios';
 
 import { createClient } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/types/database';
 
 import {
   Connector,
@@ -27,13 +28,11 @@ import {
   TestResult,
   SyncOptions,
   SyncResult,
-  SyncError,
   ListOptions,
   ConnectorFile,
   FileContent,
   WebhookEvent,
 } from './base';
-
 
 interface ZoomCredentials extends ConnectorCredentials {
   accessToken: string;
@@ -127,9 +126,9 @@ export class ZoomConnector implements Connector {
         userId: response.data.id,
         userName: `${response.data.first_name} ${response.data.last_name}`,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Try to refresh token if expired
-      if (error.response?.status === 401) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
         const refreshed = await this.refreshAccessToken();
 
         if (refreshed) {
@@ -207,7 +206,7 @@ export class ZoomConnector implements Connector {
         try {
           await this.processMeeting(meeting);
           results.filesProcessed++;
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(`[Zoom Sync] Failed to process meeting ${meeting.uuid}:`, error);
           results.filesFailed++;
           results.errors.push({
@@ -220,7 +219,7 @@ export class ZoomConnector implements Connector {
       }
 
       results.success = results.filesFailed === 0;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Zoom Sync] Sync failed:', error);
       results.success = false;
       results.errors.push({
@@ -300,7 +299,7 @@ export class ZoomConnector implements Connector {
     });
 
     const buffer = Buffer.from(response.data);
-    const contentType = response.headers['content-type'] || 'application/octet-stream';
+    const contentType = String(response.headers['content-type'] || 'application/octet-stream');
 
     return {
       id: fileId,
@@ -554,7 +553,7 @@ export class ZoomConnector implements Connector {
     content: string | Buffer;
     fileType: string;
     fileSize: number;
-    sourceMetadata: any;
+    sourceMetadata: Json;
   }): Promise<void> {
     const supabase = createClient();
 
@@ -568,8 +567,8 @@ export class ZoomConnector implements Connector {
     // Check if document already exists
     const { data: existing } = await supabase
       .from('imported_documents')
-      .select('id, content_hash')
-      .eq('connector_id', this.connectorId || null)
+      .select('id, content_hash, sync_count')
+      .eq('connector_id', (this.connectorId || null) as unknown as string)
       .eq('external_id', doc.externalId)
       .single();
 
@@ -579,7 +578,7 @@ export class ZoomConnector implements Connector {
         .from('imported_documents')
         .update({
           last_synced_at: new Date().toISOString(),
-          sync_count: supabase.rpc('increment', { row_id: existing.id }),
+          sync_count: (existing.sync_count || 0) + 1,
         })
         .eq('id', existing.id);
 
@@ -590,7 +589,7 @@ export class ZoomConnector implements Connector {
     // Insert or update document
     const { error } = await supabase.from('imported_documents').upsert(
       {
-        connector_id: this.connectorId || null,
+        connector_id: (this.connectorId || null) as unknown as string,
         org_id: this.orgId,
         external_id: doc.externalId,
         title: doc.title,
@@ -645,20 +644,39 @@ export class ZoomConnector implements Connector {
   /**
    * Handle recording completed webhook
    */
-  private async handleRecordingCompleted(payload: any): Promise<void> {
+  private async handleRecordingCompleted(payload: unknown): Promise<void> {
     console.log('[Zoom Webhook] Processing recording.completed event');
 
-    const meeting = payload.object;
+    if (!this.isRecord(payload) || !this.isRecord(payload.object)) {
+      console.error('[Zoom Webhook] Invalid recording payload');
+      return;
+    }
+
+    const meeting = payload.object as unknown as ZoomMeeting;
     await this.processMeeting(meeting);
   }
 
   /**
    * Handle transcript completed webhook
    */
-  private async handleTranscriptCompleted(payload: any): Promise<void> {
+  private async handleTranscriptCompleted(payload: unknown): Promise<void> {
     console.log('[Zoom Webhook] Processing recording.transcript_completed event');
 
+    if (!this.isRecord(payload) || !this.isRecord(payload.object)) {
+      console.error('[Zoom Webhook] Invalid transcript payload');
+      return;
+    }
+
     const { uuid, topic, transcript_url } = payload.object;
+
+    if (
+      typeof uuid !== 'string' ||
+      typeof topic !== 'string' ||
+      typeof transcript_url !== 'string'
+    ) {
+      console.error('[Zoom Webhook] Missing required transcript fields');
+      return;
+    }
 
     const transcript = await this.downloadTranscript(transcript_url);
 
@@ -678,9 +696,12 @@ export class ZoomConnector implements Connector {
   /**
    * Handle meeting ended webhook
    */
-  private async handleMeetingEnded(payload: any): Promise<void> {
+  private async handleMeetingEnded(payload: unknown): Promise<void> {
     // Optional: Track meeting metadata for future recording
-    console.log('[Zoom] Meeting ended:', payload.object.topic);
+    const topic = this.isRecord(payload) && this.isRecord(payload.object)
+      ? payload.object.topic
+      : undefined;
+    console.log('[Zoom] Meeting ended:', typeof topic === 'string' ? topic : 'Unknown meeting');
     // Could queue a delayed sync job to check for recordings
   }
 
@@ -733,12 +754,14 @@ export class ZoomConnector implements Connector {
   /**
    * Extract error message from axios error
    */
-  private extractErrorMessage(error: any): string {
+  private extractErrorMessage(error: unknown): string {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
       if (axiosError.response?.data) {
-        const data = axiosError.response.data as any;
-        return data.message || data.error || axiosError.message;
+        const data = axiosError.response.data as Record<string, unknown>;
+        if (typeof data.message === 'string') return data.message;
+        if (typeof data.error === 'string') return data.error;
+        return axiosError.message;
       }
       return axiosError.message;
     }
@@ -748,5 +771,9 @@ export class ZoomConnector implements Connector {
     }
 
     return String(error);
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
   }
 }
