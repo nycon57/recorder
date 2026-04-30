@@ -1,40 +1,40 @@
 'use client';
 
-import React from 'react';
-import {
-  Calendar,
-  ExternalLink,
-  AlertCircle,
-  Loader2,
-  Clock,
-  TrendingUp,
-  Link2,
-  FileText,
-  Sparkles,
-  ArrowRight,
-  Eye,
-} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
-import Link from 'next/link';
+import {
+  AlertCircle,
+  ArrowRight,
+  Clock,
+  ExternalLink,
+  Eye,
+  FileText,
+  Link2,
+  Loader2,
+  Sparkles,
+  TrendingUp,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import Link from 'next/link';
+import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 
+import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
   Sheet,
   SheetContent,
   SheetTitle,
 } from '@/app/components/ui/sheet';
-import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { cn } from '@/lib/utils/cn';
-import {
-  type Concept,
-  type RelatedConcept,
-  type ConceptMention,
-  type ConceptType,
-  CONCEPT_TYPE_COLORS,
+import { CONCEPT_TYPE_COLORS } from '@/lib/validations/knowledge';
+import type {
+  Concept,
+  RelatedConcept,
+  ConceptMention,
+  ConceptType,
 } from '@/lib/validations/knowledge';
+
 import { ConceptCorrection } from './ConceptCorrection';
 
 // Edge relationship colors - MUST match KnowledgeGraph.tsx getEdgeColor()
@@ -152,14 +152,14 @@ export function ConceptPanel({
   onClose,
   onConceptClick,
 }: ConceptPanelProps) {
-  const [data, setData] = React.useState<ConceptData | null>(null);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [data, setData] = useState<ConceptData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Ref for scrolling to mentions section
-  const mentionsSectionRef = React.useRef<HTMLDivElement>(null);
+  const mentionsSectionRef = useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!conceptId) {
       setData(null);
       setError(null);
@@ -624,7 +624,7 @@ export function ConceptPanel({
                                 {mention.context && (
                                   <div className="mt-3 pl-3 border-l-2 border-primary/30">
                                     <p className="text-xs text-muted-foreground line-clamp-2 italic">
-                                      "{mention.context}"
+                                      &ldquo;{mention.context}&rdquo;
                                     </p>
                                   </div>
                                 )}

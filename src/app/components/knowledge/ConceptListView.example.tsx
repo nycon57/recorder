@@ -9,12 +9,13 @@
 
 import { useState } from 'react';
 
+import type { ConceptType } from '@/lib/validations/knowledge';
+
 import {
   ConceptListView,
   ConceptListViewSkeleton,
   ConceptListViewHeader,
 } from './ConceptListView';
-import type { ConceptType } from '@/lib/validations/knowledge';
 
 // Example: Basic usage with list view
 export function BasicListExample() {

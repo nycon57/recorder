@@ -7,8 +7,9 @@
  * - Device capabilities
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
+
 import type { LODLevel, LODConfig, DeviceCapabilities } from '../types';
 import { LOD_CONFIGS } from '../types';
 
@@ -142,7 +143,6 @@ export function useAdaptiveLOD(options: UseAdaptiveLODOptions): UseAdaptiveLODRe
   const {
     nodeCount,
     targetFPS = 30,
-    adaptationSpeed = 0.1,
     manualOverride,
   } = options;
 
@@ -151,7 +151,7 @@ export function useAdaptiveLOD(options: UseAdaptiveLODOptions): UseAdaptiveLODRe
   const [isAdapting, setIsAdapting] = useState(false);
 
   const frameCount = useRef(0);
-  const lastTime = useRef(performance.now());
+  const lastTime = useRef<number | null>(null);
   const lowFPSStreak = useRef(0);
   const deviceCapabilities = useRef<DeviceCapabilities | null>(null);
 
@@ -164,13 +164,20 @@ export function useAdaptiveLOD(options: UseAdaptiveLODOptions): UseAdaptiveLODRe
     const countLOD = getLODFromNodeCount(nodeCount);
     const initialLOD = minLOD(deviceLOD, countLOD);
 
-    setLodLevel(manualOverride ?? initialLOD);
+    queueMicrotask(() => {
+      setLodLevel(manualOverride ?? initialLOD);
+    });
   }, [manualOverride, nodeCount]);
 
   // FPS measurement and adaptive LOD (using useFrame for R3F integration)
   useFrame(() => {
     frameCount.current++;
     const now = performance.now();
+    if (lastTime.current === null) {
+      lastTime.current = now;
+      return;
+    }
+
     const elapsed = now - lastTime.current;
 
     // Update FPS every second
@@ -229,17 +236,7 @@ export function useAdaptiveLOD(options: UseAdaptiveLODOptions): UseAdaptiveLODRe
  * Standalone hook for device capability detection (use outside R3F)
  */
 export function useDeviceCapabilities(): DeviceCapabilities {
-  const [capabilities, setCapabilities] = useState<DeviceCapabilities>({
-    webgl2: false,
-    webgl1: false,
-    maxTextureSize: 0,
-    gpuTier: 'unknown',
-    recommendedLOD: 'medium',
-  });
-
-  useEffect(() => {
-    setCapabilities(detectDeviceCapabilities());
-  }, []);
+  const [capabilities] = useState<DeviceCapabilities>(() => detectDeviceCapabilities());
 
   return capabilities;
 }

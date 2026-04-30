@@ -8,8 +8,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { KnowledgeGraph, ConceptPanel } from '@/app/components/knowledge';
+
 import type { GraphNode, GraphEdge } from '@/lib/validations/knowledge';
+import { KnowledgeGraph, ConceptPanel } from '@/app/components/knowledge';
 
 // ============================================================================
 // Example 1: Basic Static Graph
@@ -153,6 +154,10 @@ export function PositionedGraphExample() {
   const edges: GraphEdge[] = [];
   const gridSize = 5;
   const spacing = 200;
+  const seededValue = (seed: number) => {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  };
 
   // Create grid of nodes
   for (let i = 0; i < gridSize; i++) {
@@ -164,7 +169,7 @@ export function PositionedGraphExample() {
         type: ['tool', 'process', 'person', 'organization', 'technical_term'][
           (i + j) % 5
         ] as GraphNode['type'],
-        mentionCount: Math.floor(Math.random() * 20) + 1,
+        mentionCount: Math.floor(seededValue(i * gridSize + j + 1) * 20) + 1,
         x: j * spacing,
         y: i * spacing,
       });
@@ -176,7 +181,7 @@ export function PositionedGraphExample() {
           source: `${i}-${j - 1}`,
           target: id,
           type: 'related',
-          strength: Math.random() * 0.5 + 0.5,
+          strength: seededValue(i * gridSize + j + 101) * 0.5 + 0.5,
         });
       }
       if (i > 0) {
@@ -185,7 +190,7 @@ export function PositionedGraphExample() {
           source: `${i - 1}-${j}`,
           target: id,
           type: 'related',
-          strength: Math.random() * 0.5 + 0.5,
+          strength: seededValue(i * gridSize + j + 201) * 0.5 + 0.5,
         });
       }
     }
