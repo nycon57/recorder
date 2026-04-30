@@ -24,8 +24,18 @@ jest.mock('@/lib/supabase/admin', () => ({
 }));
 
 jest.mock('@/lib/utils/cors', () => ({
-  CORS_HEADERS: {},
-  corsPreflightResponse: () => new Response(null, { status: 204 }),
+  CORS_HEADERS: {
+    'Access-Control-Allow-Headers':
+      'Authorization, Content-Type, X-Tribora-Customer-Org-Id',
+  },
+  corsPreflightResponse: () =>
+    new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Headers':
+          'Authorization, Content-Type, X-Tribora-Customer-Org-Id',
+      },
+    }),
 }));
 
 function buildRequest(headers: Record<string, string> = {}): NextRequest {
@@ -121,5 +131,16 @@ describe('GET /api/sdk/init', () => {
     });
     expect(resolveCustomerOrgForVendor).not.toHaveBeenCalled();
     expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('allows the customer org selector during SDK init preflight', async () => {
+    const { OPTIONS } = await import('../route');
+
+    const response = OPTIONS();
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get('Access-Control-Allow-Headers')).toContain(
+      'X-Tribora-Customer-Org-Id',
+    );
   });
 });
