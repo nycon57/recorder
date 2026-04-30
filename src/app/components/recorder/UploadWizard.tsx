@@ -1,16 +1,17 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { X, Check } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/app/components/ui/dialog';
+import { Check } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { Button } from '@/app/components/ui/button';
+
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/app/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import type { ContentType } from '@/lib/types/content';
+import type { AnalysisType } from '@/lib/services/analysis-templates';
+
 import FileUploadStep from './steps/FileUploadStep';
 import MetadataCollectionStep from './steps/MetadataCollectionStep';
 import UploadProgressStep from './steps/UploadProgressStep';
-import type { ContentType } from '@/lib/types/content';
-import type { AnalysisType } from '@/lib/services/analysis-templates';
 
 interface UploadWizardProps {
   open: boolean;
@@ -345,7 +346,7 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
       setIsUploading(true);
 
       try {
-        const { recordingId, uploadPath, thumbnailUploadUrl } = uploadState;
+        const { recordingId, uploadPath } = uploadState;
 
         if (!recordingId || !uploadPath) {
           throw new Error('Invalid upload state');

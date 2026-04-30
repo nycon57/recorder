@@ -9,8 +9,6 @@
 
 'use client';
 
-import { useState } from 'react';
-
 import {
   VideoStreams,
   LayoutSwitcher,
@@ -28,19 +26,6 @@ import { Separator } from '@/app/components/ui/separator';
 
 export function RecordingPageExample() {
   const { showTeleprompter, setShowTeleprompter } = useRecording();
-  const [uploadedRecordingId, setUploadedRecordingId] = useState<string | null>(null);
-
-  const handleUploadComplete = (recordingId: string) => {
-    console.log('Recording uploaded successfully:', recordingId);
-    setUploadedRecordingId(recordingId);
-
-    // Optional: Navigate to the recording page
-    // router.push(`/recordings/${recordingId}`);
-
-    // Optional: Show success toast
-    // toast.success('Recording uploaded and processing started!');
-  };
-
   return (
     <div className="container mx-auto py-8 px-4 max-w-6xl">
       <div className="flex flex-col gap-8">
@@ -103,20 +88,6 @@ export function RecordingPageExample() {
         <div className="flex justify-center py-8">
           <MainRecordButton />
         </div>
-
-        {/* Upload Status */}
-        {uploadedRecordingId && (
-          <Card className="border-green-500 bg-green-50 dark:bg-green-950">
-            <CardContent className="pt-6">
-              <p className="text-center text-sm">
-                Recording uploaded successfully! Processing ID:{' '}
-                <code className="font-mono bg-white dark:bg-black px-2 py-1 rounded">
-                  {uploadedRecordingId}
-                </code>
-              </p>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Keyboard Shortcuts Help */}
         <Card>

@@ -1,9 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { useForm, type UseFormReturn, type FieldValues } from "react-hook-form"
+import {
+  useForm,
+  type DefaultValues,
+  type FieldValues,
+  type UseFormReturn,
+} from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+// eslint-disable-next-line import/no-named-as-default -- react-hot-toast documents the default toast export.
 import toast from "react-hot-toast"
 import type { z } from "zod"
 
@@ -65,7 +71,7 @@ export interface FormDialogProps<TSchema extends FieldValues = FieldValues> {
 
   // Mutation props
   /** Function to execute when form is submitted */
-  mutationFn: (data: TSchema) => Promise<any>
+  mutationFn: (data: TSchema) => Promise<unknown>
   /** Optional query key(s) to invalidate on success */
   queryKey?: string | string[]
   /** Success message to display in toast (default: "Success") */
@@ -92,11 +98,11 @@ export interface FormDialogProps<TSchema extends FieldValues = FieldValues> {
    * Render function that receives the form instance
    * Use this to render FormField components
    */
-  children: (form: UseFormReturn<TSchema, any, TSchema>) => React.ReactNode
+  children: (form: UseFormReturn<TSchema>) => React.ReactNode
 
   // Optional callbacks
   /** Callback executed on successful mutation, before standard success handling */
-  onSuccess?: (data: any) => void
+  onSuccess?: (data: unknown) => void
   /** Callback executed on mutation error, before standard error handling */
   onError?: (error: Error) => void
   /** Custom cleanup function called when dialog closes */
@@ -178,10 +184,9 @@ export function FormDialog<TSchema extends FieldValues = FieldValues>({
   const queryClient = useQueryClient()
 
   // Initialize form with schema validation
-  // @ts-ignore - zodResolver type incompatibility with generic schema
-  const form = useForm({
-    resolver: zodResolver(schema as any),
-    defaultValues: defaultValues as any,
+  const form = useForm<TSchema>({
+    resolver: zodResolver(schema),
+    defaultValues: defaultValues as DefaultValues<TSchema>,
     mode,
   })
 
@@ -304,4 +309,5 @@ export function FormDialog<TSchema extends FieldValues = FieldValues>({
  * type SchemaType = InferSchema<typeof schema> // { name: string }
  * ```
  */
-export type InferSchema<T extends z.ZodType<any, any, any>> = z.infer<T>
+export type InferSchema<T extends z.ZodType<unknown, z.ZodTypeDef, unknown>> =
+  z.infer<T>

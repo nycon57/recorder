@@ -1,5 +1,7 @@
 "use client"
 
+/* eslint-disable react/no-unknown-property -- React Three Fiber maps these JSX props onto Three.js objects. */
+
 /**
  * PERF-FE-002: Three.js Orb Visualization Component
  *
@@ -151,7 +153,7 @@ function Scene({
   }, [manualOutput, outputVolumeRef, getOutputVolume])
 
   const random = useMemo(
-    () => splitmix32(seed ?? Math.floor(Math.random() * 2 ** 32)),
+    () => splitmix32(seed ?? 0xdecafbad),
     [seed]
   )
   const offsets = useMemo(
@@ -191,6 +193,7 @@ function Scene({
       if (live[1]) targetColor2Ref.current.set(live[1])
     }
     const u = mat.uniforms
+    // eslint-disable-next-line react-hooks/immutability -- R3F frame callbacks update Three.js uniforms imperatively.
     u.uTime.value += delta * 0.5
 
     if (u.uOpacity.value < 1) {
@@ -251,9 +254,14 @@ function Scene({
       canvas.removeEventListener("webglcontextlost", onContextLost, false)
   }, [gl])
 
-  const uniforms = useMemo(() => {
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- Three.js textures require mutable wrapping configuration.
     perlinNoiseTexture.wrapS = THREE.RepeatWrapping
+    // eslint-disable-next-line react-hooks/immutability -- Three.js textures require mutable wrapping configuration.
     perlinNoiseTexture.wrapT = THREE.RepeatWrapping
+  }, [perlinNoiseTexture])
+
+  const uniforms = useMemo(() => {
     const isDark =
       typeof document !== "undefined" &&
       document.documentElement.classList.contains("dark")

@@ -181,7 +181,7 @@ export const ScrollingWaveform = ({
   const barsRef = useRef<Array<{ x: number; height: number }>>([])
   const animationRef = useRef<number>(0)
   const lastTimeRef = useRef<number>(0)
-  const seedRef = useRef(Math.random())
+  const seedRef = useRef(0.5)
   const dataIndexRef = useRef(0)
   const heightStyle = typeof height === "number" ? `${height}px` : height
 
@@ -385,16 +385,19 @@ export const AudioScrubber = ({
   const [localProgress, setLocalProgress] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const waveformData =
-    data.length > 0
-      ? data
-      : Array.from({ length: 100 }, () => 0.2 + Math.random() * 0.6)
+  const waveformData = useMemo(
+    () =>
+      data.length > 0
+        ? data
+        : Array.from(
+            { length: 100 },
+            (_, index) => 0.5 + Math.sin(index * 1.618) * 0.3
+          ),
+    [data]
+  )
 
-  useEffect(() => {
-    if (!isDragging && duration > 0) {
-      setLocalProgress(currentTime / duration)
-    }
-  }, [currentTime, duration, isDragging])
+  const syncedProgress = duration > 0 ? currentTime / duration : 0
+  const displayProgress = isDragging ? localProgress : syncedProgress
 
   const handleScrub = useCallback(
     (clientX: number) => {
@@ -508,18 +511,18 @@ export const AudioScrubber = ({
 
       <div
         className="bg-primary/20 pointer-events-none absolute inset-y-0 left-0"
-        style={{ width: `${localProgress * 100}%` }}
+        style={{ width: `${displayProgress * 100}%` }}
       />
 
       <div
         className="bg-primary pointer-events-none absolute top-0 bottom-0 w-0.5"
-        style={{ left: `${localProgress * 100}%` }}
+        style={{ left: `${displayProgress * 100}%` }}
       />
 
       {showHandle && (
         <div
           className="border-background bg-primary pointer-events-none absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-lg transition-transform hover:scale-110"
-          style={{ left: `${localProgress * 100}%` }}
+          style={{ left: `${displayProgress * 100}%` }}
         />
       )}
     </div>
@@ -624,6 +627,7 @@ export const MicrophoneWaveform = ({
       }
       return
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- Including animated data restarts the fade loop on every frame.
   }, [processing, active])
 
   useEffect(() => {
@@ -812,6 +816,19 @@ export const LiveMicrophoneWaveform = ({
 
   const heightStyle = typeof height === "number" ? `${height}px` : height
 
+  const processAudioBlob = useCallback(async (blob: Blob) => {
+    try {
+      const arrayBuffer = await blob.arrayBuffer()
+      if (audioContextRef.current) {
+        const audioBuffer =
+          await audioContextRef.current.decodeAudioData(arrayBuffer)
+        audioBufferRef.current = audioBuffer
+      }
+    } catch (error) {
+      console.error("Error processing audio:", error)
+    }
+  }, [])
+
   useEffect(() => {
     const canvas = canvasRef.current
     const container = containerRef.current
@@ -927,20 +944,8 @@ export const LiveMicrophoneWaveform = ({
     setDragOffset,
     enableAudioPlayback,
     historyRef,
+    processAudioBlob,
   ])
-
-  const processAudioBlob = async (blob: Blob) => {
-    try {
-      const arrayBuffer = await blob.arrayBuffer()
-      if (audioContextRef.current) {
-        const audioBuffer =
-          await audioContextRef.current.decodeAudioData(arrayBuffer)
-        audioBufferRef.current = audioBuffer
-      }
-    } catch (error) {
-      console.error("Error processing audio:", error)
-    }
-  }
 
   const playScrubSound = useCallback(
     (position: number, direction: number) => {
@@ -1394,6 +1399,7 @@ export const LiveMicrophoneWaveform = ({
     historyRef,
   ])
 
+  /* eslint-disable react-hooks/refs -- historyRef stores the retained waveform buffer for scrubber ARIA affordances. */
   return (
     <div
       className={cn(
@@ -1428,6 +1434,7 @@ export const LiveMicrophoneWaveform = ({
       <canvas className="block h-full w-full" ref={canvasRef} />
     </div>
   )
+  /* eslint-enable react-hooks/refs */
 }
 
 export type RecordingWaveformProps = Omit<

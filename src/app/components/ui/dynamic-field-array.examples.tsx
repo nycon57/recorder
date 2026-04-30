@@ -6,12 +6,12 @@
  */
 
 import { useState } from 'react';
+
 import {
   DynamicFieldArray,
   KeyValuePair,
   SingleValue,
   keyValuePairsToObject,
-  singleValuesToArray,
   objectToKeyValuePairs,
   arrayToSingleValues,
 } from './dynamic-field-array';
@@ -68,11 +68,6 @@ export function EnvironmentVariablesExample() {
     objectToKeyValuePairs(initialEnvVars)
   );
 
-  const handleSubmit = () => {
-    const variables = keyValuePairsToObject(envVars);
-    console.log('Environment variables:', variables);
-  };
-
   return (
     <DynamicFieldArray
       value={envVars}
@@ -94,12 +89,6 @@ export function EnvironmentVariablesExample() {
  */
 export function TagsExample() {
   const [tags, setTags] = useState<SingleValue[]>([]);
-
-  const handleSubmit = () => {
-    // Convert to array of strings
-    const tagArray = singleValuesToArray(tags);
-    console.log('Tags:', tagArray);
-  };
 
   return (
     <DynamicFieldArray
@@ -126,11 +115,6 @@ export function EmailListExample() {
   const [emails, setEmails] = useState<SingleValue[]>(
     arrayToSingleValues(initialEmails)
   );
-
-  const handleSubmit = () => {
-    const emailArray = singleValuesToArray(emails);
-    console.log('Emails:', emailArray);
-  };
 
   return (
     <DynamicFieldArray
@@ -204,16 +188,6 @@ export function ReactHookFormExample() {
   const [customHeaders, setCustomHeaders] = useState<KeyValuePair[]>([
     { key: '', value: '' },
   ]);
-
-  const onSubmit = (data: any) => {
-    // Convert headers to object before submitting
-    const headers = keyValuePairsToObject(customHeaders);
-    const payload = {
-      ...data,
-      headers,
-    };
-    console.log('Form payload:', payload);
-  };
 
   return (
     <form>

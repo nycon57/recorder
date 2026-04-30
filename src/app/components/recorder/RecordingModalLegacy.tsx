@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from '@/lib/auth/auth-client';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL, fetchFile } from '@ffmpeg/util';
 import { toast } from 'sonner';
 
+import { useSession } from '@/lib/auth/auth-client';
 import ReprocessStreamModal from '@/app/components/ReprocessStreamModal';
 
 interface RecordingModalProps {

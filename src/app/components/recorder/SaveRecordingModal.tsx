@@ -77,7 +77,7 @@ export function SaveRecordingModal({
     if (isOpen && !title) {
       setTitle(`Recording ${new Date().toLocaleString()}`);
     }
-  }, [isOpen]);
+  }, [isOpen, title]);
 
   // Handle thumbnail file selection
   const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {

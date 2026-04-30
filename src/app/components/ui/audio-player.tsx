@@ -15,6 +15,7 @@ import {
 } from "react"
 import * as SliderPrimitive from "@radix-ui/react-slider"
 import { PauseIcon, PlayIcon } from "lucide-react"
+import { CheckIcon, GearIcon } from "@radix-ui/react-icons"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/app/components/ui/button"
@@ -24,7 +25,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/app/components/ui/dropdown-menu"
-import { CheckIcon, GearIcon } from "@radix-ui/react-icons"
 
 enum ReadyState {
   HAVE_NOTHING = 0,

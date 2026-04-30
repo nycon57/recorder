@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface UploadModalProps {
@@ -52,7 +52,7 @@ export default function UploadModal({ blob, onClose }: UploadModalProps) {
       }
 
       const { data } = await createResponse.json();
-      const { recording, uploadUrl, token } = data;
+      const { recording, uploadUrl } = data;
       setRecordingId(recording.id);
 
       console.log('[UploadModal] Recording created', {
@@ -140,14 +140,15 @@ export default function UploadModal({ blob, onClose }: UploadModalProps) {
       setTimeout(() => {
         router.push(`/library/${recording.id}`);
       }, 1500);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const uploadError = err instanceof Error ? err : new Error(String(err));
       console.error('[UploadModal] Upload error', {
-        error: err,
-        message: err.message,
-        stack: err.stack,
+        error: uploadError,
+        message: uploadError.message,
+        stack: uploadError.stack,
         recordingId: recordingId || 'unknown',
       });
-      setError(err.message || 'An error occurred during upload');
+      setError(uploadError.message || 'An error occurred during upload');
       setUploadStatus('error');
     }
   };
