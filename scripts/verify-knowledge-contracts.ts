@@ -206,7 +206,7 @@ function checkNoProhibitedRpcGrant(
   grant: (typeof PROHIBITED_RPC_GRANTS)[number],
 ): ContractCheck {
   const prohibitedGrant = new RegExp(
-    `grant\\s+execute\\s+on\\s+function\\s+public\\.${grant.rpcName}\\s*\\([^;]*\\)\\s+to\\s+(public|anon|authenticated)\\b`,
+    `grant\\s+execute\\s+on\\s+function\\s+public\\.${grant.rpcName}\\s*\\([^;]*\\)\\s+to\\s+[^;]*\\b(public|anon|authenticated)\\b[^;]*;`,
     'i',
   );
   const found = prohibitedGrant.test(migrationsText);
