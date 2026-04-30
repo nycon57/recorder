@@ -1,7 +1,7 @@
 /** @jest-environment node */
 
 import type { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 type GenerateContentResult = { text?: string };
 type PromptArgs = {
@@ -19,6 +19,7 @@ const resolveCompiledMemoryAnswerContext =
   jest.fn<() => Promise<unknown>>();
 const mockRequireApiKeyOrSession =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+let previousGoogleAiApiKey: string | undefined;
 
 jest.mock('@google/genai', () => ({
   GoogleGenAI: jest.fn().mockImplementation(() => ({
@@ -104,6 +105,7 @@ describe('POST /api/extension/voice-answer', () => {
   beforeEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
+    previousGoogleAiApiKey = process.env.GOOGLE_AI_API_KEY;
     process.env.GOOGLE_AI_API_KEY = 'test-key';
 
     mockRequireApiKeyOrSession.mockResolvedValue({
@@ -123,6 +125,15 @@ describe('POST /api/extension/voice-answer', () => {
     generateContent.mockResolvedValue({
       text: 'Use the visible page summary.',
     });
+  });
+
+  afterEach(() => {
+    if (previousGoogleAiApiKey === undefined) {
+      delete process.env.GOOGLE_AI_API_KEY;
+      return;
+    }
+
+    process.env.GOOGLE_AI_API_KEY = previousGoogleAiApiKey;
   });
 
   it('accepts context.url without appSignature and falls back to app/screen', async () => {
