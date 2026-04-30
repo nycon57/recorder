@@ -4,6 +4,8 @@
  * Tests performance characteristics of Phase 2 implementation
  */
 
+/* eslint-disable @typescript-eslint/no-require-imports -- Legacy Node benchmark script uses CommonJS. */
+
 const { performance } = require('perf_hooks');
 
 // Mock the Xenova transformers for benchmarking

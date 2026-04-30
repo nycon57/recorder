@@ -5,6 +5,8 @@
  * It uses the service role key to bypass RLS policies.
  */
 
+/* eslint-disable @typescript-eslint/no-require-imports -- Legacy Node migration runner uses CommonJS. */
+
 const fs = require('fs');
 const path = require('path');
 

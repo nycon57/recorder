@@ -182,12 +182,14 @@ export async function requireOrg() {
     throw new Error('Organization context required');
   }
 
+  const role = userData!.role ?? 'reader';
+
   // Cache the user data for 5 minutes (best effort - don't fail request on cache errors)
   try {
     await UserCache.set(cacheKey, {
       id: userData!.id,
       orgId: userData!.org_id,
-      role: userData!.role,
+      role,
       email: userData!.email ?? undefined,
       name: userData!.name ?? undefined,
     });
@@ -199,7 +201,7 @@ export async function requireOrg() {
   return {
     userId: userData!.id,
     orgId: userData!.org_id,
-    role: userData!.role,
+    role,
   };
 }
 

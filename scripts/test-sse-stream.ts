@@ -204,7 +204,7 @@ async function testJobProcessingWithStreaming(recordingId: string) {
 
   const startTime = Date.now();
   const duration = 30000; // 30 seconds
-  let lastStatuses = existingJobs.reduce((acc, job) => {
+  const lastStatuses = existingJobs.reduce((acc, job) => {
     acc[job.id] = job.status;
     return acc;
   }, {} as Record<string, string>);

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports -- Legacy Node benchmark script uses CommonJS. */
 
 /**
  * Performance Benchmark Script for Phase 4 Optimizations

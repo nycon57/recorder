@@ -11,7 +11,7 @@
 
 'use client';
 
-import React, { useCallback, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { Paperclip } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
