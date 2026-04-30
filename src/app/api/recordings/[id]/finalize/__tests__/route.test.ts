@@ -26,6 +26,8 @@ jest.mock('@/lib/utils/api', () => ({
       Response.json({ message, details, requestId }, { status: 400 }),
     notFound: (resource: string, requestId?: string) =>
       Response.json({ message: `${resource} not found`, requestId }, { status: 404 }),
+    forbidden: (requestId?: string) =>
+      Response.json({ message: 'Forbidden', requestId }, { status: 403 }),
     internalError: (requestId?: string) =>
       Response.json({ message: 'Internal error', requestId }, { status: 500 }),
   },
@@ -65,11 +67,13 @@ describe('POST /api/recordings/[id]/finalize', () => {
     mockRequireOrg.mockImplementation(() => Promise.resolve({
       orgId: 'org_1',
       userId: 'user_1',
+      role: 'contributor',
     }));
 
     contentRow = {
       id: 'rec_1',
       org_id: 'org_1',
+      created_by: 'user_1',
       status: 'uploading',
       metadata: { existing: true },
       storage_path_raw: null,
@@ -154,6 +158,37 @@ describe('POST /api/recordings/[id]/finalize', () => {
     );
   });
 
+  it('rejects reader users before loading or mutating the recording', async () => {
+    mockRequireOrg.mockImplementation(() => Promise.resolve({
+      orgId: 'org_1',
+      userId: 'reader_1',
+      role: 'reader',
+    }));
+
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ id: 'rec_1' }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(mockDbFrom).not.toHaveBeenCalled();
+    expect(storageList).not.toHaveBeenCalled();
+    expect(contentUpdate).not.toHaveBeenCalled();
+    expect(jobsInsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects contributors finalizing another user recording', async () => {
+    contentRow.created_by = 'other_user';
+
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ id: 'rec_1' }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(storageList).not.toHaveBeenCalled();
+    expect(contentUpdate).not.toHaveBeenCalled();
+    expect(jobsInsert).not.toHaveBeenCalled();
+  });
+
   it('accepts content storage paths and respects startProcessing false', async () => {
     const response = await POST(makeRequest({
       storagePath: 'org_1/recordings/rec_1/raw.webm',
@@ -210,6 +245,7 @@ describe('POST /api/recordings/[id]/finalize', () => {
     contentRow = {
       id: 'rec_1',
       org_id: 'org_1',
+      created_by: 'user_1',
       status: 'transcribed',
       metadata: {
         existing: true,

@@ -11,7 +11,7 @@ import {
 } from '@jest/globals';
 
 const mockRequireOrg =
-  jest.fn<() => Promise<{ orgId: string; userId: string }>>();
+  jest.fn<() => Promise<{ orgId: string; userId: string; role: string }>>();
 const mockQuotaCheck = jest.fn<
   () => Promise<{
     allowed: boolean;
@@ -44,6 +44,8 @@ jest.mock('@/lib/utils/api', () => ({
         { error: 'Internal server error', requestId },
         { status: 500 },
       ),
+    forbidden: (requestId?: string) =>
+      Response.json({ error: 'Forbidden', requestId }, { status: 403 }),
     quotaExceeded: (details: unknown) =>
       Response.json({ error: 'Quota exceeded', details }, { status: 402 }),
   },
@@ -86,6 +88,11 @@ function makeUploadRequest(
 
   return new Request('http://localhost/api/library/upload', {
     method: 'POST',
+    headers: {
+      'content-length': String(
+        files.reduce((sum, file) => sum + file.size, 0),
+      ),
+    },
     body: formData,
   }) as unknown as NextRequest;
 }
@@ -126,7 +133,11 @@ describe('POST /api/library/upload', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockRequireOrg.mockResolvedValue({ orgId: 'org_1', userId: 'user_1' });
+    mockRequireOrg.mockResolvedValue({
+      orgId: 'org_1',
+      userId: 'user_1',
+      role: 'contributor',
+    });
     mockQuotaCheck.mockResolvedValue({
       allowed: true,
       remaining: 10,
@@ -215,6 +226,90 @@ describe('POST /api/library/upload', () => {
         }),
       }),
     );
+  });
+
+  it('rejects reader users before parsing multipart data or consuming quota', async () => {
+    mockRequireOrg.mockResolvedValue({
+      orgId: 'org_1',
+      userId: 'reader_1',
+      role: 'reader',
+    });
+    const formData = jest.fn<() => Promise<FormData>>();
+    const request = {
+      headers: new Headers(),
+      formData,
+    } as unknown as NextRequest;
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(403);
+    expect(formData).not.toHaveBeenCalled();
+    expect(mockQuotaCheck).not.toHaveBeenCalled();
+    expect(contentInsert).not.toHaveBeenCalled();
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it('rejects declared payloads over the library cap before multipart parsing', async () => {
+    const formData = jest.fn<() => Promise<FormData>>();
+    const request = {
+      headers: new Headers({
+        'content-length': String(100 * 1024 * 1024 + 1),
+      }),
+      formData,
+    } as unknown as NextRequest;
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(413);
+    expect(formData).not.toHaveBeenCalled();
+    expect(mockQuotaCheck).not.toHaveBeenCalled();
+    expect(contentInsert).not.toHaveBeenCalled();
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it('rejects requests without content-length before multipart parsing', async () => {
+    const formData = jest.fn<() => Promise<FormData>>();
+    const request = {
+      headers: new Headers(),
+      formData,
+    } as unknown as NextRequest;
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(411);
+    expect(formData).not.toHaveBeenCalled();
+    expect(mockQuotaCheck).not.toHaveBeenCalled();
+    expect(contentInsert).not.toHaveBeenCalled();
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it('rejects aggregate parsed files over the library cap before quota or storage', async () => {
+    const files = [
+      {
+        name: 'a.mp4',
+        type: 'video/mp4',
+        size: 1024 * 1024 * 1024 + 1,
+      },
+      {
+        name: 'b.mp4',
+        type: 'video/mp4',
+        size: 1024 * 1024 * 1024,
+      },
+    ] as File[];
+    const formData = new FormData();
+    const getAll = jest.spyOn(formData, 'getAll').mockReturnValue(files);
+    const request = {
+      headers: new Headers({ 'content-length': '1' }),
+      formData: jest.fn(() => Promise.resolve(formData)),
+    } as unknown as NextRequest;
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(413);
+    expect(getAll).toHaveBeenCalledWith('files');
+    expect(mockQuotaCheck).not.toHaveBeenCalled();
+    expect(contentInsert).not.toHaveBeenCalled();
+    expect(storageUpload).not.toHaveBeenCalled();
   });
 
   it('accepts WebM as a library video upload', async () => {

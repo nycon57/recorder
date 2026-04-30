@@ -8,11 +8,16 @@ import {
   parseBody,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { hasPermission, type OrganizationRole } from '@/lib/security/rbac';
 import { reprocessRecordingSchema } from '@/lib/validations/api';
-import {
-  SOURCE_STATUS,
-  getQueuedSourceStatusForReprocessStep,
-} from '@/lib/utils/status-helpers';
+import { getQueuedSourceStatusForReprocessStep } from '@/lib/utils/status-helpers';
+import type { Json } from '@/lib/types/database';
+
+type ReprocessJob = {
+  type: string;
+  payload: Json;
+  dedupe_key: string;
+};
 
 /**
  * POST /api/recordings/[id]/reprocess
@@ -24,9 +29,13 @@ export const POST = apiHandler(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const { orgId, userId } = await requireOrg();
+    const { orgId, userId, role } = await requireOrg();
     const supabase = supabaseAdmin;
     const { id } = await params;
+
+    if (!hasPermission(role as OrganizationRole, 'recording:create')) {
+      return errors.forbidden();
+    }
 
     // Validate request body
     const body = await parseBody(request, reprocessRecordingSchema);
@@ -36,7 +45,7 @@ export const POST = apiHandler(
     // Verify recording belongs to org
     const { data: recording, error: recordingError } = await supabase
       .from('content')
-      .select('id, org_id, status, storage_path_raw')
+      .select('id, org_id, created_by, status, storage_path_raw')
       .eq('id', id)
       .eq('org_id', orgId)
       .single();
@@ -46,12 +55,19 @@ export const POST = apiHandler(
       return errors.notFound('Recording');
     }
 
+    const canReprocess =
+      recording.created_by === userId || role === 'owner' || role === 'admin';
+
+    if (!canReprocess) {
+      return errors.forbidden();
+    }
+
     // Verify recording has been uploaded
     if (!recording.storage_path_raw) {
       return errors.badRequest('Recording has not been uploaded yet');
     }
 
-    const jobs: { type: string; payload: any; dedupe_key: string }[] = [];
+    const jobs: ReprocessJob[] = [];
     const timestamp = Date.now();
 
     // Determine which jobs to enqueue based on step
@@ -209,7 +225,8 @@ export const POST = apiHandler(
           error_message: null,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('org_id', orgId);
     } else {
       await supabase
         .from('content')
@@ -217,7 +234,8 @@ export const POST = apiHandler(
           error_message: null,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('org_id', orgId);
     }
 
     console.log(

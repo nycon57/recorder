@@ -17,6 +17,7 @@ import {
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createLogger } from '@/lib/utils/logger';
+import { hasPermission, type OrganizationRole } from '@/lib/security/rbac';
 import { getProcessingJobs } from '@/lib/types/content';
 import {
   SOURCE_STATUS,
@@ -116,11 +117,19 @@ export const POST = apiHandler(
     { params }: { params: Promise<{ id: string }> },
   ) => {
     const requestId = generateRequestId();
-    const { orgId, userId } = await requireOrg();
+    const { orgId, userId, role } = await requireOrg();
     const supabase = supabaseAdmin;
     const { id: recordingId } = await params;
 
     try {
+      if (!hasPermission(role as OrganizationRole, 'recording:create')) {
+        logger.warn('Metadata submission denied for non-writer role', {
+          context: { requestId, orgId, userId, recordingId },
+          data: { role },
+        });
+        return errors.forbidden(requestId);
+      }
+
       // Parse and validate request body
       const body = await request.json();
       const validationResult = metadataSchema.safeParse(body);
@@ -164,7 +173,7 @@ export const POST = apiHandler(
       const { data: recording, error: fetchError } = await supabase
         .from('content')
         .select(
-          'id, org_id, status, content_type, file_type, storage_path_raw, metadata',
+          'id, org_id, created_by, status, content_type, file_type, storage_path_raw, metadata',
         )
         .eq('id', recordingId)
         .eq('org_id', orgId)
@@ -175,6 +184,17 @@ export const POST = apiHandler(
           context: { requestId, recordingId, orgId },
         });
         return errors.notFound('Recording not found', requestId);
+      }
+
+      const canSubmitMetadata =
+        recording.created_by === userId || role === 'owner' || role === 'admin';
+
+      if (!canSubmitMetadata) {
+        logger.warn('Metadata submission denied for non-owner recording', {
+          context: { requestId, recordingId, orgId, userId },
+          data: { role, createdBy: recording.created_by },
+        });
+        return errors.forbidden(requestId);
       }
 
       // Verify recording is in uploading status (ready for metadata)
@@ -379,6 +399,7 @@ export const POST = apiHandler(
         .from('content')
         .update(updatePayload)
         .eq('id', recordingId)
+        .eq('org_id', orgId)
         .eq('status', SOURCE_STATUS.UPLOADING);
 
       if (updateError) {
@@ -518,7 +539,8 @@ export const POST = apiHandler(
                 status: SOURCE_STATUS.UPLOADING,
                 updated_at: new Date().toISOString(),
               })
-              .eq('id', recordingId);
+              .eq('id', recordingId)
+              .eq('org_id', orgId);
             return errors.internalError(requestId);
           }
         }
@@ -535,7 +557,8 @@ export const POST = apiHandler(
         const { error: statusUpdateError } = await supabase
           .from('content')
           .update({ status: newStatus })
-          .eq('id', recordingId);
+          .eq('id', recordingId)
+          .eq('org_id', orgId);
 
         if (statusUpdateError) {
           console.error('[Metadata Route] Failed to update recording status:', {
