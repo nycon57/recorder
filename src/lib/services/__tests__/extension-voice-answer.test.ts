@@ -111,6 +111,20 @@ describe('parseExtensionVoiceAnswer', () => {
     ]);
   });
 
+  it('strips malformed tags from spoken text without emitting refs', () => {
+    const answer = parseExtensionVoiceAnswer({
+      rawText:
+        'Ignore malformed [SOURCE:no-title] and [ELEMENT:#button:] tags in speech.',
+      answerContext: buildContext([source('org-1', 'Team Billing', 'org')]),
+    });
+
+    expect(answer.text).toBe('Ignore malformed and tags in speech.');
+    expect(answer.elementRefs).toEqual([]);
+    expect(answer.citations.map((citation) => citation.sourceId)).toEqual([
+      'org-1',
+    ]);
+  });
+
   it('falls back to the first sources when the model omits explicit source tags', () => {
     const answer = parseExtensionVoiceAnswer({
       rawText: 'The visible workflow can be answered from docs.',

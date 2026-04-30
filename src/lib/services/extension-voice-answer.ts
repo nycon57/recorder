@@ -8,6 +8,13 @@ import type { CompiledMemoryAnswerContext } from '@/lib/services/compiled-memory
 const ELEMENT_TAG_REGEX = /\[ELEMENT:([^\]]+)\]/gi;
 const SOURCE_TAG_REGEX = /\[SOURCE:([^\]]+)\]/gi;
 
+function isSafeTagValue(value: string): boolean {
+  return Array.from(value).every((char) => {
+    const code = char.charCodeAt(0);
+    return code >= 32 && code !== 127 && char !== '[' && char !== ']';
+  });
+}
+
 function splitElementTagPayload(
   payload: string,
 ): { selector: string; label: string } | null {
@@ -16,11 +23,12 @@ function splitElementTagPayload(
 
   const selector = payload.slice(0, separatorIndex).trim();
   const label = payload.slice(separatorIndex + 1).trim();
-  if (!selector) return null;
+  if (!selector || !label) return null;
+  if (!isSafeTagValue(selector) || !isSafeTagValue(label)) return null;
 
   return {
     selector,
-    label: label || selector,
+    label,
   };
 }
 
@@ -32,7 +40,8 @@ function splitSourceTagPayload(
 
   const sourceId = payload.slice(0, separatorIndex).trim();
   const title = payload.slice(separatorIndex + 1).trim();
-  if (!sourceId) return null;
+  if (!sourceId || !title) return null;
+  if (!isSafeTagValue(sourceId) || !isSafeTagValue(title)) return null;
 
   return {
     sourceId,
@@ -55,7 +64,7 @@ export function parseExtensionVoiceAnswer(args: {
     ELEMENT_TAG_REGEX,
     (match, payload: string) => {
       const parsed = splitElementTagPayload(payload);
-      if (!parsed) return match;
+      if (!parsed) return '';
       elementRefs.push({
         selector: parsed.selector,
         label: parsed.label,
@@ -69,7 +78,7 @@ export function parseExtensionVoiceAnswer(args: {
     SOURCE_TAG_REGEX,
     (match, payload: string) => {
       const parsed = splitSourceTagPayload(payload);
-      if (!parsed) return match;
+      if (!parsed) return '';
 
       const citation = args.answerContext.citationsBySourceId[parsed.sourceId];
       if (!citation) return '';

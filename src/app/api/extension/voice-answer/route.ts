@@ -123,10 +123,8 @@ export async function POST(request: NextRequest) {
   const context = isRecord(body.context)
     ? sanitizePageContextForNetwork(body.context)
     : null;
-  if (!context?.url || !context.appSignature) {
-    return errors.badRequest(
-      'context.url and context.appSignature are required',
-    );
+  if (!context?.url) {
+    return errors.badRequest('context.url is required');
   }
 
   let orgId = authCtx.orgId;
