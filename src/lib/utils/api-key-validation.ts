@@ -100,9 +100,27 @@ export async function validateApiKey(
     }
 
     // Check IP whitelist if configured
+    if (matchedKey.ip_whitelist != null && !Array.isArray(matchedKey.ip_whitelist)) {
+      return {
+        valid: false,
+        error: 'API key whitelist configuration is invalid',
+      };
+    }
+
     const ipWhitelist = Array.isArray(matchedKey.ip_whitelist)
       ? matchedKey.ip_whitelist.filter((value): value is string => typeof value === 'string')
       : [];
+
+    if (
+      Array.isArray(matchedKey.ip_whitelist) &&
+      matchedKey.ip_whitelist.length > 0 &&
+      ipWhitelist.length === 0
+    ) {
+      return {
+        valid: false,
+        error: 'API key whitelist configuration is invalid',
+      };
+    }
 
     if (ipWhitelist.length > 0) {
       if (!ipAddress) {
@@ -145,12 +163,19 @@ export async function validateApiKey(
     }
 
     // Update last used timestamp and usage count atomically.
-    supabaseAdmin
-      .rpc('increment_api_key_usage_count' as never, { p_key_id: matchedKey.id } as never)
+    void Promise.resolve(
+      supabaseAdmin.rpc(
+        'increment_api_key_usage_count' as never,
+        { p_key_id: matchedKey.id } as never
+      )
+    )
       .then(({ error }: { error: unknown }) => {
         if (error) {
-          console.error('[API Key Validation] Failed to update last_used_at:', error);
+          console.error('[API Key Validation] Failed to update usage stats:', error);
         }
+      })
+      .catch((error: unknown) => {
+        console.error('[API Key Validation] Failed to update usage stats:', error);
       });
 
     return {

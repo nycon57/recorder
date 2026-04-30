@@ -1010,12 +1010,16 @@ export class NotionConnector implements Connector {
       const contentHash = await this.hashContent(doc.content);
 
       // Check if document already exists
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('imported_documents')
         .select('id, content_hash, sync_count')
         .eq('connector_id', this.connectorId)
         .eq('external_id', doc.externalId)
-        .single();
+        .maybeSingle();
+
+      if (existingError) {
+        throw existingError;
+      }
 
       const now = new Date().toISOString();
 
@@ -1042,10 +1046,15 @@ export class NotionConnector implements Connector {
 
           console.log(`[Notion] Updated document: ${doc.title}`);
         } else {
-          // Just update sync timestamp
+          // Keep metadata fresh even when the body hash did not change.
           await supabase
             .from('imported_documents')
             .update({
+              title: doc.title,
+              external_url: doc.externalUrl,
+              file_type: doc.fileType,
+              file_size: Buffer.byteLength(doc.content, 'utf8'),
+              source_metadata: doc.sourceMetadata,
               last_synced_at: now,
               sync_count: ((existing as ImportedDocumentRow).sync_count || 0) + 1,
             })
