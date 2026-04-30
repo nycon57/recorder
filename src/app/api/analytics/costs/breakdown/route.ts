@@ -5,24 +5,42 @@
  * Returns cost breakdown by organization, tier, and provider.
  */
 
-import { NextRequest } from 'next/server';
 import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { TIER_PRICING, calculateTrend } from '@/lib/analytics/cost-calculations';
+import type { Database } from '@/lib/types/database';
+
+type StorageTier = Database['public']['Enums']['storage_tier'];
+type StorageProvider = Database['public']['Enums']['storage_provider'];
+
+const STORAGE_TIERS = ['hot', 'warm', 'cold', 'glacier'] as const satisfies readonly StorageTier[];
+const STORAGE_PROVIDERS = ['supabase', 'r2', 'cloudflare'] as const satisfies readonly StorageProvider[];
+
+const isStorageTier = (value: string | null): value is StorageTier =>
+  value !== null && STORAGE_TIERS.includes(value as StorageTier);
+
+const isStorageProvider = (value: string | null): value is StorageProvider =>
+  value !== null && STORAGE_PROVIDERS.includes(value as StorageProvider);
+
+const normalizeStorageTier = (value: string | null): StorageTier =>
+  isStorageTier(value) ? value : 'hot';
+
+const normalizeStorageProvider = (value: string | null): StorageProvider =>
+  isStorageProvider(value) ? value : 'supabase';
 
 /**
  * GET /api/analytics/costs/breakdown
  *
  * Returns cost breakdown by organization, storage tier, and provider
  */
-export const GET = apiHandler(async (request: NextRequest) => {
+export const GET = apiHandler(async () => {
   const { orgId } = await requireOrg();
   const supabase = supabaseAdmin;
 
   // Get recordings for this organization only
   const { data: recordings, error: recordingsError } = await supabase
     .from('content')
-    .select('storage_tier, storage_provider, file_size, org_id, organizations!inner(name)')
+    .select('storage_tier, storage_provider, file_size, org_id')
     .eq('org_id', orgId)
     .is('deleted_at', null);
 
@@ -41,19 +59,18 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Calculate costs by organization
   const orgCosts = recordings.reduce((acc, r) => {
-    const orgId = r.org_id;
-    const orgName = (r.organizations as any)?.name || 'Unknown';
-    const tier = r.storage_tier || 'hot';
+    const recordingOrgId = r.org_id;
+    const tier = normalizeStorageTier(r.storage_tier);
     const sizeGB = (r.file_size || 0) / 1e9;
-    const cost = sizeGB * TIER_PRICING[tier as keyof typeof TIER_PRICING];
+    const cost = sizeGB * TIER_PRICING[tier];
 
-    if (!acc[orgId]) {
-      acc[orgId] = {
-        name: orgName,
+    if (!acc[recordingOrgId]) {
+      acc[recordingOrgId] = {
+        name: recordingOrgId === orgId ? 'Current organization' : 'Unknown',
         cost: 0,
       };
     }
-    acc[orgId].cost += cost;
+    acc[recordingOrgId].cost += cost;
     return acc;
   }, {} as Record<string, { name: string; cost: number }>);
 
@@ -61,9 +78,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Calculate costs by tier
   const tierCosts = recordings.reduce((acc, r) => {
-    const tier = r.storage_tier || 'hot';
+    const tier = normalizeStorageTier(r.storage_tier);
     const sizeGB = (r.file_size || 0) / 1e9;
-    const cost = sizeGB * TIER_PRICING[tier as keyof typeof TIER_PRICING];
+    const cost = sizeGB * TIER_PRICING[tier];
 
     acc[tier] = (acc[tier] || 0) + cost;
     return acc;
@@ -71,10 +88,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Calculate costs by provider
   const providerCosts = recordings.reduce((acc, r) => {
-    const provider = r.storage_provider || 'supabase';
-    const tier = r.storage_tier || 'hot';
+    const provider = normalizeStorageProvider(r.storage_provider);
+    const tier = normalizeStorageTier(r.storage_tier);
     const sizeGB = (r.file_size || 0) / 1e9;
-    const cost = sizeGB * TIER_PRICING[tier as keyof typeof TIER_PRICING];
+    const cost = sizeGB * TIER_PRICING[tier];
 
     acc[provider] = (acc[provider] || 0) + cost;
     return acc;
@@ -106,7 +123,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const tierBreakdown = await Promise.all(
     Object.entries(tierCosts).map(async ([tier, cost]) => {
       // Calculate tier-specific trend
-      const trend = await calculateTierTrend(tier as keyof typeof TIER_PRICING);
+      const trend = await calculateTierTrend(normalizeStorageTier(tier));
       return {
         name: tierNames[tier] || tier,
         cost: parseFloat(cost.toFixed(2)),
@@ -127,9 +144,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   const providerBreakdown = await Promise.all(
     Object.entries(providerCosts).map(async ([provider, cost]) => {
-      const trend = await calculateProviderTrend(provider);
+      const normalizedProvider = normalizeStorageProvider(provider);
+      const trend = await calculateProviderTrend(normalizedProvider);
       return {
-        name: providerNames[provider] || provider,
+        name: providerNames[normalizedProvider] || normalizedProvider,
         cost: parseFloat(cost.toFixed(2)),
         percentage: totalProviderCost > 0 ? parseFloat(((cost / totalProviderCost) * 100).toFixed(2)) : 0,
         trend: parseFloat(trend.toFixed(2)),
@@ -152,7 +170,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 /**
  * Calculate trend for specific tier
  */
-async function calculateTierTrend(tier: string): Promise<number> {
+async function calculateTierTrend(tier: StorageTier): Promise<number> {
   const supabase = supabaseAdmin;
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -177,12 +195,12 @@ async function calculateTierTrend(tier: string): Promise<number> {
 
   const currentCost = (currentData || []).reduce((sum, r) => {
     const sizeGB = (r.file_size || 0) / 1e9;
-    return sum + sizeGB * TIER_PRICING[tier as keyof typeof TIER_PRICING];
+    return sum + sizeGB * TIER_PRICING[tier];
   }, 0);
 
   const previousCost = (previousData || []).reduce((sum, r) => {
     const sizeGB = (r.file_size || 0) / 1e9;
-    return sum + sizeGB * TIER_PRICING[tier as keyof typeof TIER_PRICING];
+    return sum + sizeGB * TIER_PRICING[tier];
   }, 0);
 
   if (previousCost === 0) return 0;
@@ -193,7 +211,7 @@ async function calculateTierTrend(tier: string): Promise<number> {
 /**
  * Calculate trend for specific provider
  */
-async function calculateProviderTrend(provider: string): Promise<number> {
+async function calculateProviderTrend(provider: StorageProvider): Promise<number> {
   const supabase = supabaseAdmin;
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -217,15 +235,15 @@ async function calculateProviderTrend(provider: string): Promise<number> {
     .is('deleted_at', null);
 
   const currentCost = (currentData || []).reduce((sum, r) => {
-    const tier = r.storage_tier || 'hot';
+    const tier = normalizeStorageTier(r.storage_tier);
     const sizeGB = (r.file_size || 0) / 1e9;
-    return sum + sizeGB * TIER_PRICING[tier as keyof typeof TIER_PRICING];
+    return sum + sizeGB * TIER_PRICING[tier];
   }, 0);
 
   const previousCost = (previousData || []).reduce((sum, r) => {
-    const tier = r.storage_tier || 'hot';
+    const tier = normalizeStorageTier(r.storage_tier);
     const sizeGB = (r.file_size || 0) / 1e9;
-    return sum + sizeGB * TIER_PRICING[tier as keyof typeof TIER_PRICING];
+    return sum + sizeGB * TIER_PRICING[tier];
   }, 0);
 
   if (previousCost === 0) return 0;

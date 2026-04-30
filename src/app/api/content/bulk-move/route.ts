@@ -87,8 +87,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
     await supabase.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
-      action: body.collection_id ? 'content.bulk_moved' : 'content.bulk_removed_from_collection',
-      resource_type: 'content',
+      action_type: 'moved',
+      resource_type: 'recording',
       resource_id: body.content_ids[0], // Primary reference
       metadata: {
         content_ids: body.content_ids,
@@ -102,7 +102,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   return successResponse({
     moved_count: updated?.length || 0,
-    content_ids: updated?.map(c => c.id) || [],
+    content_ids:
+      (updated as Array<{ id: string }> | null)?.map((content) => content.id) ||
+      [],
     to_collection_id: body.collection_id,
   });
 });

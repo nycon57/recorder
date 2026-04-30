@@ -3,18 +3,18 @@ import { randomBytes } from 'crypto';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
+import { apiHandler, requireAdmin, successResponse, parseBody } from '@/lib/utils/api';
 import { createSupabaseClient } from '@/lib/supabase/server';
 import { createWebhookSchema } from '@/lib/validations/api';
 
-// GET /api/organizations/webhooks - List webhooks
-export const GET = apiHandler(async (request: NextRequest) => {
-  const { orgId, role } = await requireOrg();
+type WebhookDeliverySummary = {
+  status: string;
+  created_at: string;
+};
 
-  // Only admins and owners can view webhooks
-  if (!['admin', 'owner'].includes(role)) {
-    throw new Error('Unauthorized: Admin access required');
-  }
+// GET /api/organizations/webhooks - List webhooks
+export const GET = apiHandler(async () => {
+  const { orgId } = await requireAdmin();
 
   const supabase = await createSupabaseClient();
 
@@ -35,10 +35,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Calculate statistics for each webhook
   const formattedWebhooks = webhooks.map((webhook) => {
-    const deliveries = webhook.webhook_deliveries || [];
+    const deliveries =
+      'webhook_deliveries' in webhook
+        ? (webhook.webhook_deliveries as WebhookDeliverySummary[] | null) ?? []
+        : [];
     const totalDeliveries = deliveries.length;
     const successfulDeliveries = deliveries.filter(
-      (d: any) => d.status === 'success'
+      (delivery) => delivery.status === 'success'
     ).length;
     const failedDeliveries = totalDeliveries - successfulDeliveries;
     const successRate = totalDeliveries > 0
@@ -85,12 +88,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
 // POST /api/organizations/webhooks - Create webhook
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId, userId, role } = await requireOrg();
-
-  // Only admins and owners can create webhooks
-  if (!['admin', 'owner'].includes(role)) {
-    throw new Error('Unauthorized: Admin access required');
-  }
+  const { orgId, userId } = await requireAdmin();
 
   const bodyData = await parseBody<z.infer<typeof createWebhookSchema>>(request, createWebhookSchema);
   const supabase = await createSupabaseClient();

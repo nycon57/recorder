@@ -99,13 +99,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
       // Don't fail if departments table doesn't exist - it's optional
     }
 
+    const maxUsers = organization.max_users ?? 0;
+    const maxStorageGb = organization.max_storage_gb ?? 0;
+
     // Build response
-    const stats: any = {
+    const stats: Record<string, unknown> = {
       members: {
         total: totalMembers || 0,
-        quota: includeQuotas ? organization.max_users : undefined,
+        quota: includeQuotas ? maxUsers : undefined,
         percentage: includeQuotas
-          ? Math.round(((totalMembers || 0) / organization.max_users) * 100)
+          ? Math.round(((totalMembers || 0) / Math.max(maxUsers, 1)) * 100)
           : undefined,
       },
       recordings: {
@@ -113,9 +116,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
       },
       storage: {
         used_gb: storageUsedGb,
-        quota_gb: includeQuotas ? organization.max_storage_gb : undefined,
+        quota_gb: includeQuotas ? maxStorageGb : undefined,
         percentage: includeQuotas
-          ? Math.round((storageUsedGb / organization.max_storage_gb) * 100)
+          ? Math.round((storageUsedGb / Math.max(maxStorageGb, 1)) * 100)
           : undefined,
       },
       departments: {

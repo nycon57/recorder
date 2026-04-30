@@ -14,6 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { createLogger } from '@/lib/utils/logger';
 import { requireOrg } from '@/lib/utils/api';
@@ -94,8 +95,11 @@ export async function GET(
     // Get segment details if segmented processing
     let segments: SegmentProgress[] = [];
     let totalKeyMoments = 0;
+    const totalSegments = content.total_segments || 1;
+    const processingStrategy =
+      content.processing_strategy === 'segmented' ? 'segmented' : 'single';
 
-    if (content.processing_strategy === 'segmented' && content.total_segments > 0) {
+    if (processingStrategy === 'segmented' && totalSegments > 0) {
       const { data: segmentData } = await supabase
         .from('segment_transcripts')
         .select(`
@@ -145,14 +149,13 @@ export async function GET(
     }
 
     // Calculate progress
-    const totalSegments = content.total_segments || 1;
     const completedSegments = content.completed_segments || 0;
     const progressPercent = Math.round((completedSegments / totalSegments) * 100);
 
     // Generate user-friendly messages
     const messages = generateProgressMessages(
       content.status,
-      content.processing_strategy,
+      processingStrategy,
       completedSegments,
       totalSegments,
       totalKeyMoments,
@@ -163,7 +166,7 @@ export async function GET(
       contentId: content.id,
       title: content.title || 'Untitled',
       status: content.status,
-      processingStrategy: content.processing_strategy || 'single',
+      processingStrategy,
       progress: {
         percent: progressPercent,
         completedSegments,
@@ -243,7 +246,6 @@ function generateProgressMessages(
   }
 
   if (completed < total) {
-    const remaining = total - completed;
     const searchableNote = searchableChunks > 0
       ? ` • ${searchableChunks} chunks already searchable`
       : '';

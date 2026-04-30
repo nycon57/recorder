@@ -10,6 +10,22 @@ import {
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { updateTranscriptSchema } from '@/lib/validations/api';
 
+interface TranscriptUpdateBody {
+  text: string;
+}
+
+interface TranscriptResponseRow {
+  id: string;
+  content_id: string;
+  text: string;
+  language: string | null;
+  words_json: unknown;
+  confidence: number | null;
+  provider: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /**
  * GET /api/recordings/[id]/transcript
  * Retrieves the transcript for a recording
@@ -55,7 +71,7 @@ export const GET = apiHandler(
     return successResponse({
       transcript: {
         id: transcript.id,
-        recordingId: transcript.recording_id,
+        recordingId: transcript.content_id,
         text: transcript.text,
         language: transcript.language,
         wordsJson: transcript.words_json,
@@ -80,7 +96,10 @@ export const PUT = apiHandler(
     const { id } = await params;
 
     // Validate request body
-    const body = await parseBody(request, updateTranscriptSchema);
+    const body = (await parseBody(
+      request,
+      updateTranscriptSchema,
+    )) as TranscriptUpdateBody;
 
     // Verify recording belongs to org
     const { data: recording, error: recordingError } = await supabase
@@ -111,7 +130,7 @@ export const PUT = apiHandler(
     const { data: transcript, error: updateError } = await supabase
       .from('transcripts')
       .update({
-        text: (body as { text: string }).text,
+        text: body.text,
         updated_at: new Date().toISOString(),
       })
       .eq('content_id', id)
@@ -123,19 +142,21 @@ export const PUT = apiHandler(
       return errors.internalError();
     }
 
+    const updatedTranscript = transcript as TranscriptResponseRow;
+
     console.log(`[PUT /transcript] Transcript updated for recording ${id} by user ${userId}`);
 
     return successResponse({
       transcript: {
-        id: transcript.id,
-        recordingId: transcript.recording_id,
-        text: transcript.text,
-        language: transcript.language,
-        wordsJson: transcript.words_json,
-        confidence: transcript.confidence,
-        provider: transcript.provider,
-        createdAt: transcript.created_at,
-        updatedAt: transcript.updated_at,
+        id: updatedTranscript.id,
+        recordingId: updatedTranscript.content_id,
+        text: updatedTranscript.text,
+        language: updatedTranscript.language,
+        wordsJson: updatedTranscript.words_json,
+        confidence: updatedTranscript.confidence,
+        provider: updatedTranscript.provider,
+        createdAt: updatedTranscript.created_at,
+        updatedAt: updatedTranscript.updated_at,
       },
       message: 'Transcript updated successfully',
     });

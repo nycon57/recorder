@@ -177,7 +177,8 @@ async function buildBreadcrumb(
       .is('deleted_at', null)
       .single();
 
-    current = parent;
+    current =
+      parent as { id: string; name: string; parent_id: string | null } | null;
   }
 
   return path;

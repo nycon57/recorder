@@ -42,6 +42,7 @@
 
 import type { NextRequest } from 'next/server';
 
+import type { Json } from '@/lib/types/database';
 import { requireOrg, errors, successResponse } from '@/lib/utils/api';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { createLogger } from '@/lib/utils/logger';
@@ -149,7 +150,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         app: row.app,
         screen: row.screen,
         hasPendingReview:
-          extractPendingContradictions(readCompilationLog(row.compilation_log)).length > 0,
+          extractPendingContradictions(
+            readCompilationLog(row.compilation_log as Json),
+          ).length > 0,
       }),
     })),
   });

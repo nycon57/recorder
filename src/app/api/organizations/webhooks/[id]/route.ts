@@ -1,21 +1,19 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
+import { apiHandler, requireAdmin, successResponse, parseBody } from '@/lib/utils/api';
 import { createSupabaseClient } from '@/lib/supabase/server';
+import type { Database } from '@/lib/types/database';
 import { updateWebhookSchema } from '@/lib/validations/api';
+
+type WebhookRow = Database['public']['Tables']['org_webhooks']['Row'];
 
 // PATCH /api/organizations/webhooks/[id] - Update webhook
 export const PATCH = apiHandler(async (
   request: NextRequest,
   { params }: { params: { id: string } }
 ) => {
-  const { orgId, userId, role } = await requireOrg();
-
-  // Only admins and owners can update webhooks
-  if (!['admin', 'owner'].includes(role)) {
-    throw new Error('Unauthorized: Admin access required');
-  }
+  const { orgId, userId } = await requireAdmin();
 
   const bodyData = await parseBody<z.infer<typeof updateWebhookSchema>>(request, updateWebhookSchema);
   const supabase = await createSupabaseClient();
@@ -58,6 +56,9 @@ export const PATCH = apiHandler(async (
     .single();
 
   if (updateError) throw updateError;
+  if (!updatedWebhook) throw new Error('Failed to update webhook');
+
+  const webhookResult = updatedWebhook as WebhookRow;
 
   // Log webhook update
   await supabase.from('audit_logs').insert({
@@ -74,7 +75,7 @@ export const PATCH = apiHandler(async (
 
   return successResponse({
     data: {
-      ...updatedWebhook,
+      ...webhookResult,
       secret: undefined, // Never return the secret
     },
   });
@@ -85,12 +86,7 @@ export const DELETE = apiHandler(async (
   request: NextRequest,
   { params }: { params: { id: string } }
 ) => {
-  const { orgId, userId, role } = await requireOrg();
-
-  // Only admins and owners can delete webhooks
-  if (!['admin', 'owner'].includes(role)) {
-    throw new Error('Unauthorized: Admin access required');
-  }
+  const { orgId, userId } = await requireAdmin();
 
   const supabase = await createSupabaseClient();
 

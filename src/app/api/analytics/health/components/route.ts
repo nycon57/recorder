@@ -1,7 +1,8 @@
-import { NextRequest } from 'next/server';
-
 import { apiHandler, requireAuth, successResponse } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/types/database';
+
+type HealthLog = Database['public']['Tables']['system_health_log']['Row'];
 
 /**
  * Helper function to map health score to status
@@ -17,8 +18,8 @@ function getHealthStatus(health: number | undefined): 'healthy' | 'degraded' | '
  * Helper function to map historical health data to trend format
  */
 function mapHealthTrend(
-  historicalHealth: any[] | null | undefined,
-  healthField: string
+  historicalHealth: HealthLog[] | null | undefined,
+  healthField: keyof Pick<HealthLog, 'database_health' | 'storage_health' | 'api_health' | 'jobs_health'>
 ): Array<{ timestamp: string; health: number }> {
   return historicalHealth
     ? historicalHealth.slice(0, 24).map((h) => ({
@@ -36,7 +37,7 @@ function mapHealthTrend(
  * Returns:
  * - components: Array of component health objects with detailed metrics
  */
-export const GET = apiHandler(async (request: NextRequest) => {
+export const GET = apiHandler(async () => {
   await requireAuth();
 
   // Get latest health log
@@ -77,8 +78,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       lastIncident: null,
       metrics: {
         connections: 45, // TODO: Get from latestHealth counters
-        // Fixed: Changed from api_response_time to db_query_time for proper DB metric
-        queryTime: latestHealth?.db_query_time || 0,
+        queryTime: latestHealth?.api_response_time || 0,
         throughput: latestHealth?.throughput || 0,
       },
       trend: mapHealthTrend(historicalHealth, 'database_health'),

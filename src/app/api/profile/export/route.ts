@@ -1,5 +1,3 @@
-import { NextRequest } from 'next/server';
-
 import {
   apiHandler,
   requireAuth,
@@ -7,6 +5,18 @@ import {
   errors,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/types/database';
+
+interface ExportJobResult {
+  download_url?: string;
+  expires_at?: string;
+}
+
+function readExportResult(result: Json | null): ExportJobResult {
+  return result && typeof result === 'object' && !Array.isArray(result)
+    ? (result as ExportJobResult)
+    : {};
+}
 
 /**
  * POST /api/profile/export
@@ -16,7 +26,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
  *
  * @returns Job ID and status message
  */
-export const POST = apiHandler(async (request: NextRequest) => {
+export const POST = apiHandler(async () => {
   const { userId } = await requireAuth();
 
   const supabase = supabaseAdmin;
@@ -73,7 +83,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
  *
  * @returns List of export jobs and their statuses
  */
-export const GET = apiHandler(async (request: NextRequest) => {
+export const GET = apiHandler(async () => {
   const { userId } = await requireAuth();
 
   const supabase = supabaseAdmin;
@@ -105,20 +115,24 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   // Format the response
-  const exports = (jobs || []).map((job) => ({
+  const exports = (jobs || []).map((job) => {
+    const result = readExportResult(job.result);
+
+    return {
     id: job.id,
     status: job.status,
     createdAt: job.created_at,
     startedAt: job.started_at,
     completedAt: job.completed_at,
-    downloadUrl: job.status === 'completed' && job.result?.download_url
-      ? job.result.download_url
+    downloadUrl: job.status === 'completed' && result.download_url
+      ? result.download_url
       : null,
-    expiresAt: job.status === 'completed' && job.result?.expires_at
-      ? job.result.expires_at
+    expiresAt: job.status === 'completed' && result.expires_at
+      ? result.expires_at
       : null,
-    errorMessage: job.error_message,
-  }));
+    errorMessage: job.error,
+    };
+  });
 
   return successResponse({
     exports,

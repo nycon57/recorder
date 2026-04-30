@@ -3,7 +3,9 @@
 import type { NextRequest } from 'next/server';
 import { beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-const rpcMock = jest.fn();
+const rpcMock = jest.fn<
+  () => Promise<{ data: unknown[]; error: unknown | null }>
+>();
 
 jest.mock('@/lib/utils/api', () => ({
   requireOrg: jest.fn(),
@@ -55,7 +57,9 @@ jest.mock('@/lib/services/wiki-review', () => ({
 }));
 
 const { requireOrg } = jest.requireMock('@/lib/utils/api') as {
-  requireOrg: jest.Mock;
+  requireOrg: jest.MockedFunction<
+    () => Promise<{ orgId: string; userId: string }>
+  >;
 };
 
 let GET: typeof import('../route').GET;
@@ -71,7 +75,7 @@ describe('GET /api/knowledge/wiki-pages/[id]/history', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     rpcMock.mockReset();
-    (requireOrg as jest.Mock).mockResolvedValue({
+    requireOrg.mockResolvedValue({
       orgId: 'org-1',
       userId: 'user-1',
     });

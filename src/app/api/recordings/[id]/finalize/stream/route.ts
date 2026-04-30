@@ -350,7 +350,7 @@ export const GET = apiHandler(
       .select('id, type, status, payload')
       .single();
 
-    let createdJobs = createdJob ? [createdJob] : null;
+    let createdJobs = createdJob ? [createdJob] : [];
 
     if (jobError) {
       const { data: existingJob, error: existingJobError } = await supabaseAdmin

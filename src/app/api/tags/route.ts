@@ -17,6 +17,19 @@ import {
   type ListTagsQueryInput,
 } from '@/lib/validations/tags';
 
+interface TagWithUsageCount {
+  color: string | null;
+  created_at: string;
+  created_by: string | null;
+  deleted_at: string | null;
+  description: string | null;
+  id: string;
+  name: string;
+  org_id: string;
+  updated_at: string;
+  usage_count?: number;
+}
+
 /**
  * GET /api/tags - List all organization tags
  *
@@ -105,7 +118,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   // If includeUsageCount is requested, fetch counts
-  let tagsWithCounts = tags || [];
+  let tagsWithCounts: TagWithUsageCount[] = tags || [];
   if (query.includeUsageCount && tags && tags.length > 0) {
     const tagIds = tags.map(t => t.id);
 
@@ -138,7 +151,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // PERFORMANCE OPTIMIZATION: Cache simple tag list responses
   if (isCacheable && tagsWithCounts.length > 0) {
     const { TagsCache } = await import('@/lib/services/cache');
-    await TagsCache.set(orgId, tagsWithCounts);
+    await TagsCache.set(
+      orgId,
+      tagsWithCounts.map((tag) => ({
+        id: tag.id,
+        name: tag.name,
+        color: tag.color ?? '#3b82f6',
+        usage_count: tag.usage_count,
+      })),
+    );
   }
 
   const { CacheControlHeaders, generateETag } = await import('@/lib/services/cache');

@@ -13,6 +13,26 @@ import {
   type UpdateCollectionInput,
 } from '@/lib/validations/api';
 
+type CollectionUpdateData = Partial<{
+  name: string;
+  description: string | null;
+  parent_id: string | null;
+  color: string | null;
+  icon: string | null;
+  visibility: string;
+}> & {
+  updated_at: string;
+};
+
+interface CollectionParentRow {
+  parent_id: string | null;
+}
+
+interface CollectionRow {
+  id: string;
+  name: string;
+}
+
 /**
  * GET /api/collections/[id] - Get a single collection
  */
@@ -112,13 +132,16 @@ export const PATCH = apiHandler(
           }
           visited.add(currentId);
 
-          const { data: parentCollection } = await supabaseAdmin
+          const parentResult = await supabaseAdmin
             .from('collections')
             .select('parent_id')
             .eq('id', currentId)
             .eq('org_id', orgId)
             .is('deleted_at', null)
             .single();
+
+          const parentCollection =
+            parentResult.data as CollectionParentRow | null;
 
           currentId = parentCollection?.parent_id || null;
         }
@@ -135,7 +158,7 @@ export const PATCH = apiHandler(
     }
 
     // Update the collection
-    const updateData: any = {
+    const updateData: CollectionUpdateData = {
       updated_at: new Date().toISOString(),
     };
 
@@ -158,14 +181,16 @@ export const PATCH = apiHandler(
       throw new Error('Failed to update collection');
     }
 
+    const updatedCollection = updated as CollectionRow;
+
     // Log activity
     await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
-      action: 'collection.updated',
+      action_type: 'updated',
       resource_type: 'collection',
       resource_id: collectionId,
-      metadata: { name: updated.name },
+      metadata: { name: updatedCollection.name },
     });
 
     return successResponse(updated);
@@ -233,7 +258,7 @@ export const DELETE = apiHandler(
     await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
-      action: 'collection.deleted',
+      action_type: 'deleted',
       resource_type: 'collection',
       resource_id: collectionId,
       metadata: { name: existing.name },

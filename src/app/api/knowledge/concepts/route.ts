@@ -9,8 +9,10 @@ import {
 import { createClient } from '@/lib/supabase/admin';
 import {
   listConceptsQuerySchema,
+  CONCEPT_TYPES,
   type ListConceptsQueryInput,
   type Concept,
+  type ConceptType,
 } from '@/lib/validations/knowledge';
 
 /**
@@ -22,6 +24,12 @@ function escapeLike(input: string): string {
     .replace(/\\/g, '\\\\')
     .replace(/%/g, '\\%')
     .replace(/_/g, '\\_');
+}
+
+function toConceptType(value: string | null | undefined): ConceptType {
+  return CONCEPT_TYPES.includes(value as ConceptType)
+    ? (value as ConceptType)
+    : 'general';
 }
 
 /**
@@ -96,12 +104,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
     name: c.name,
     normalizedName: c.normalized_name,
     description: c.description,
-    conceptType: c.concept_type,
-    mentionCount: c.mention_count,
-    firstSeenAt: c.first_seen_at,
-    lastSeenAt: c.last_seen_at,
-    createdAt: c.created_at,
-    updatedAt: c.updated_at,
+    conceptType: toConceptType(c.concept_type),
+    mentionCount: c.mention_count ?? 0,
+    firstSeenAt: c.first_seen_at ?? c.created_at ?? '',
+    lastSeenAt: c.last_seen_at ?? c.updated_at ?? c.created_at ?? '',
+    createdAt: c.created_at ?? '',
+    updatedAt: c.updated_at ?? c.created_at ?? '',
   }));
 
   const { CacheControlHeaders, generateETag } = await import('@/lib/services/cache');

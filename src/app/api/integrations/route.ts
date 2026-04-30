@@ -8,8 +8,28 @@
  */
 
 import { NextResponse } from 'next/server';
+
+import type { Json } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { requireOrg } from '@/lib/utils/api';
+
+interface ConnectorCredentials {
+  externalUserName?: string;
+}
+
+interface ConnectorSettings {
+  publish?: {
+    autoPublish?: boolean;
+    defaultFolderId?: string | null;
+    defaultFormat?: string;
+  };
+}
+
+function asObjectJson<T>(value: Json | null): T {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as T)
+    : ({} as T);
+}
 
 /**
  * GET /api/integrations
@@ -42,7 +62,11 @@ export async function GET() {
     }
 
     // Map to frontend-friendly format
-    const integrations = (connectors || []).map((connector) => ({
+    const integrations = (connectors || []).map((connector) => {
+      const credentials = asObjectJson<ConnectorCredentials>(connector.credentials);
+      const settings = asObjectJson<ConnectorSettings>(connector.settings);
+
+      return {
       id: connector.id,
       type: connector.connector_type,
       name: connector.name || getDefaultName(connector.connector_type),
@@ -52,15 +76,16 @@ export async function GET() {
       supportsImport: true, // All connectors support import
       lastSync: connector.last_sync_at,
       lastPublish: connector.last_publish_at,
-      externalUserName: connector.credentials?.externalUserName,
-      publishSettings: connector.settings?.publish || {
+      externalUserName: credentials.externalUserName,
+      publishSettings: settings.publish || {
         autoPublish: false,
         defaultFolderId: null,
         defaultFormat: 'markdown',
       },
       createdAt: connector.created_at,
       updatedAt: connector.updated_at,
-    }));
+      };
+    });
 
     return NextResponse.json({ integrations }, { status: 200 });
   } catch (error) {

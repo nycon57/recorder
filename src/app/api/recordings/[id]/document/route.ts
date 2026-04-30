@@ -14,6 +14,27 @@ import {
   getQueuedSourceStatusForJob,
 } from '@/lib/utils/status-helpers';
 
+interface DocumentUpdateBody {
+  markdown: string;
+  refreshEmbeddings?: boolean;
+}
+
+interface DocumentResponseRow {
+  id: string;
+  content_id: string;
+  org_id: string;
+  markdown: string;
+  html: string | null;
+  summary: string | null;
+  version: string | null;
+  model: string | null;
+  is_published: boolean | null;
+  status: string;
+  needs_embeddings_refresh: boolean | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /**
  * GET /api/recordings/[id]/document
  * Retrieves the document for a recording
@@ -63,7 +84,7 @@ export const GET = apiHandler(
     return successResponse({
       document: {
         id: document.id,
-        recordingId: document.recording_id,
+        recordingId: document.content_id,
         orgId: document.org_id,
         markdown: document.markdown,
         html: document.html,
@@ -96,10 +117,11 @@ export const PUT = apiHandler(
     const { id } = await params;
 
     // Validate request body
-    const body = await parseBody(request, updateDocumentMarkdownSchema);
-    // Type assertion for parsed body
-    const typedBody = body as { refreshEmbeddings?: boolean };
-    const refreshEmbeddings = typedBody.refreshEmbeddings ?? false;
+    const body = (await parseBody(
+      request,
+      updateDocumentMarkdownSchema,
+    )) as DocumentUpdateBody;
+    const refreshEmbeddings = body.refreshEmbeddings ?? false;
 
     // Verify recording belongs to org
     const { data: recording, error: recordingError } = await supabase
@@ -136,7 +158,7 @@ export const PUT = apiHandler(
     const { data: document, error: updateError } = await supabase
       .from('documents')
       .update({
-        markdown: (body as { markdown: string }).markdown,
+        markdown: body.markdown,
         html: null, // Clear HTML cache - can be regenerated if needed
         version: newVersion,
         status: 'edited',
@@ -152,6 +174,8 @@ export const PUT = apiHandler(
       console.error('[PUT /document] Error updating document:', updateError);
       return errors.internalError();
     }
+
+    const updatedDocument = document as DocumentResponseRow;
 
     console.log(
       `[PUT /document] Document updated for recording ${id} by user ${userId} (${newVersion})`,
@@ -198,19 +222,19 @@ export const PUT = apiHandler(
 
     return successResponse({
       document: {
-        id: document.id,
-        recordingId: document.recording_id,
-        orgId: document.org_id,
-        markdown: document.markdown,
-        html: document.html,
-        summary: document.summary,
-        version: document.version,
-        model: document.model,
-        isPublished: document.is_published,
-        status: document.status,
-        needsEmbeddingsRefresh: document.needs_embeddings_refresh,
-        createdAt: document.created_at,
-        updatedAt: document.updated_at,
+        id: updatedDocument.id,
+        recordingId: updatedDocument.content_id,
+        orgId: updatedDocument.org_id,
+        markdown: updatedDocument.markdown,
+        html: updatedDocument.html,
+        summary: updatedDocument.summary,
+        version: updatedDocument.version,
+        model: updatedDocument.model,
+        isPublished: updatedDocument.is_published,
+        status: updatedDocument.status,
+        needsEmbeddingsRefresh: updatedDocument.needs_embeddings_refresh,
+        createdAt: updatedDocument.created_at,
+        updatedAt: updatedDocument.updated_at,
       },
       message: refreshEmbeddings
         ? 'Document updated and embeddings refresh queued'

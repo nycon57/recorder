@@ -65,7 +65,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   }
 
   if (contentView) {
-    const learningPath = (plan.learning_path ?? []) as LearningPathItem[];
+    const learningPath = (plan.learning_path ?? []) as unknown as LearningPathItem[];
     const validIds = new Set(learningPath.map((item) => item.contentId));
     if (!validIds.has(contentView.contentId)) {
       return errors.badRequest('contentId is not in the learning path');

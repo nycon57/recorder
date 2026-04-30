@@ -3,6 +3,18 @@ import { NextRequest } from 'next/server';
 import { apiHandler, requireOrg, successResponse, parseSearchParams } from '@/lib/utils/api';
 import { alertsQuerySchema } from '@/lib/validations/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/types/database';
+
+type AlertRow = Database['public']['Tables']['alerts']['Row'];
+type AlertUser = {
+  id: string;
+  name: string | null;
+  email: string | null;
+};
+type AlertWithUsers = AlertRow & {
+  acknowledged_by_user?: AlertUser | null;
+  resolved_by_user?: AlertUser | null;
+};
 
 /**
  * GET /api/analytics/alerts
@@ -77,7 +89,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   };
 
   // Transform alerts to match response format
-  const transformedAlerts = (alerts || []).map((alert) => ({
+  const transformedAlerts = ((alerts || []) as AlertWithUsers[]).map((alert) => ({
     id: alert.id,
     organizationId: alert.organization_id,
     severity: alert.severity as 'critical' | 'warning' | 'info',

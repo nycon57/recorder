@@ -18,6 +18,16 @@ import {
   type ListCollectionItemsQueryInput,
 } from '@/lib/validations/api';
 
+interface CollectionItemContentRow {
+  added_at: string;
+  content: {
+    id: string;
+    title: string;
+    content_type: string;
+    created_at: string;
+  };
+}
+
 /**
  * GET /api/collections/[id]/items - List items in a collection
  *
@@ -104,7 +114,9 @@ export const GET = apiHandler(
     }
 
     // Transform the data
-    const formattedItems = (items || []).map((item: any) => ({
+    const formattedItems = (
+      (items as unknown as CollectionItemContentRow[] | null) || []
+    ).map((item) => ({
       id: item.content.id,
       title: item.content.title,
       content_type: item.content.content_type,
@@ -190,7 +202,7 @@ export const POST = apiHandler(
     await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
-      action: 'collection.item_added',
+      action_type: 'updated',
       resource_type: 'collection',
       resource_id: collectionId,
       metadata: {
@@ -247,7 +259,7 @@ export const DELETE = apiHandler(
     await supabaseAdmin.from('activity_log').insert({
       org_id: orgId,
       user_id: userId,
-      action: 'collection.item_removed',
+      action_type: 'updated',
       resource_type: 'collection',
       resource_id: collectionId,
       metadata: {

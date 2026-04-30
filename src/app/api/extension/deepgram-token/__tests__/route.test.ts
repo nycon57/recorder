@@ -1,6 +1,5 @@
 /** @jest-environment node */
 
-import type { NextRequest } from 'next/server';
 import {
   afterEach,
   beforeAll,
@@ -39,7 +38,9 @@ jest.mock('@/lib/utils/api', () => ({
 }));
 
 const { requireOrg } = jest.requireMock('@/lib/utils/api') as {
-  requireOrg: jest.Mock;
+  requireOrg: jest.MockedFunction<
+    () => Promise<{ orgId: string; userId: string }>
+  >;
 };
 
 let POST: typeof import('../route').POST;
@@ -61,7 +62,7 @@ describe('POST /api/extension/deepgram-token', () => {
     process.env.DEEPGRAM_API_KEY = 'dg_server_key';
     global.fetch = jest.fn() as typeof fetch;
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    (requireOrg as jest.Mock).mockResolvedValue({
+    requireOrg.mockResolvedValue({
       orgId: 'org_test',
       userId: 'user_test',
     });
@@ -75,19 +76,15 @@ describe('POST /api/extension/deepgram-token', () => {
   });
 
   it('mints a temporary token instead of returning the raw API key', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: jest.fn().mockResolvedValue({
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockResolvedValue(
+      Response.json({
         access_token: 'dg_temp_token',
         expires_in: 60,
       }),
-    });
-
-    const response = await POST(
-      new Request('http://localhost:3000/api/extension/deepgram-token', {
-        method: 'POST',
-      }) as unknown as NextRequest,
     );
+
+    const response = await POST();
 
     expect(response.status).toBe(200);
     expect(global.fetch).toHaveBeenCalledWith(
@@ -114,48 +111,35 @@ describe('POST /api/extension/deepgram-token', () => {
   });
 
   it('returns unauthorized when the caller is not signed in', async () => {
-    (requireOrg as jest.Mock).mockRejectedValue(new Error('Unauthorized'));
+    requireOrg.mockRejectedValue(new Error('Unauthorized'));
 
-    const response = await POST(
-      new Request('http://localhost:3000/api/extension/deepgram-token', {
-        method: 'POST',
-      }) as unknown as NextRequest,
-    );
+    const response = await POST();
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('returns internal error when Deepgram token minting fails', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: false,
-      status: 500,
-      text: jest.fn().mockResolvedValue('upstream failure'),
-    });
-
-    const response = await POST(
-      new Request('http://localhost:3000/api/extension/deepgram-token', {
-        method: 'POST',
-      }) as unknown as NextRequest,
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockResolvedValue(
+      new Response('upstream failure', { status: 500 }),
     );
+
+    const response = await POST();
 
     expect(response.status).toBe(500);
   });
 
   it('refuses to serialize the raw account API key if Deepgram echoes it', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: jest.fn().mockResolvedValue({
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockResolvedValue(
+      Response.json({
         access_token: 'dg_server_key',
         expires_in: 60,
       }),
-    });
-
-    const response = await POST(
-      new Request('http://localhost:3000/api/extension/deepgram-token', {
-        method: 'POST',
-      }) as unknown as NextRequest,
     );
+
+    const response = await POST();
 
     const payload = await response.json();
 

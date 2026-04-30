@@ -16,6 +16,16 @@ import {
   type ListFavoritesQueryInput,
 } from '@/lib/validations/api';
 
+interface FavoriteContentRow {
+  favorited_at: string;
+  content: {
+    id: string;
+    title: string;
+    content_type: string;
+    created_at: string;
+  };
+}
+
 /**
  * GET /api/favorites - List user's favorited items
  *
@@ -87,7 +97,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   // Transform the data
-  const formattedFavorites = (favorites || []).map((item: any) => ({
+  const formattedFavorites = (
+    (favorites as unknown as FavoriteContentRow[] | null) || []
+  ).map((item) => ({
     recording_id: item.content.id,
     title: item.content.title,
     content_type: item.content.content_type,
@@ -134,6 +146,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     .from('favorites')
     .upsert(
       {
+        org_id: orgId,
         user_id: userId,
         content_id: body.recording_id,
       },
@@ -154,7 +167,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   await supabaseAdmin.from('activity_log').insert({
     org_id: orgId,
     user_id: userId,
-    action: 'recording.favorited',
+    action_type: 'favorited',
     resource_type: 'recording',
     resource_id: body.recording_id,
     metadata: { title: recording.title },
