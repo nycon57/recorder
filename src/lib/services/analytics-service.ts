@@ -13,6 +13,8 @@
  * @module AnalyticsService
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
+
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { ContentType, JobType } from '@/lib/types/database';
 

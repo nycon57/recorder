@@ -418,12 +418,26 @@ export async function cleanupOrphanedReferences(
   orgId: string
 ): Promise<{ cleaned: number; errors: string[] }> {
   const supabase = createClient();
-  void orgId;
+
+  const { data: orgContentRows, error: contentError } = await supabase
+    .from('content')
+    .select('id')
+    .eq('org_id', orgId);
+
+  if (contentError) {
+    return { cleaned: 0, errors: [contentError.message] };
+  }
+
+  const orgContentIds = (orgContentRows ?? []).map((row) => row.id);
+  if (orgContentIds.length === 0) {
+    return { cleaned: 0, errors: [] };
+  }
 
   // Find references where original recording is deleted
   const { data: orphaned } = await supabase
     .from('file_references')
-    .select('id, content_id, original_content_id');
+    .select('id, content_id, original_content_id')
+    .in('content_id', orgContentIds);
 
   if (!orphaned || orphaned.length === 0) {
     return { cleaned: 0, errors: [] };

@@ -375,6 +375,48 @@ export class BatchUploader {
   /**
    * Create imported document record
    */
+  private async getDirectUploadConnectorId(): Promise<string> {
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from('connector_configs')
+      .select('id')
+      .eq('org_id', this.orgId)
+      .eq('connector_type', 'direct_upload')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingError) {
+      throw new Error(`Failed to load direct upload connector: ${existingError.message}`);
+    }
+
+    if (existing?.id) {
+      return existing.id;
+    }
+
+    const { data: created, error: createError } = await supabaseAdmin
+      .from('connector_configs')
+      .insert({
+        org_id: this.orgId,
+        created_by: this.userId,
+        connector_type: 'direct_upload',
+        name: 'Direct uploads',
+        description: 'Internal connector record for files uploaded directly into Tribora.',
+        credentials: toJson({ kind: 'direct_upload' }),
+        settings: toJson({ managedBy: 'batch-uploader' }),
+        is_active: true,
+        supports_publish: false,
+        sync_status: 'completed',
+      })
+      .select('id')
+      .single();
+
+    if (createError || !created) {
+      throw new Error(`Failed to create direct upload connector: ${createError?.message ?? 'missing row'}`);
+    }
+
+    return created.id;
+  }
+
   private async createDocumentRecord(
     file: UploadedFile,
     storagePath: string
@@ -402,8 +444,10 @@ export class BatchUploader {
         .update(new Uint8Array(file.buffer))
         .digest('hex');
 
+      const connectorId = await this.getDirectUploadConnectorId();
+
       await supabaseAdmin.from('imported_documents').insert({
-        connector_id: this.batchId,
+        connector_id: connectorId,
         org_id: this.orgId,
         external_id: file.id,
         title: file.filename,
