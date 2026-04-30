@@ -47,6 +47,19 @@ describe('QueryClient', () => {
         body: expect.stringContaining('"customerOrgId":"customer_org"'),
       }),
     );
+    const [, requestInit] = (global.fetch as jest.Mock).mock.calls[0] as [
+      string,
+      { body?: unknown },
+    ];
+    expect(JSON.parse(requestInit.body as string)).toMatchObject({
+      customerOrgId: 'customer_org',
+      context: {
+        app: 'salesforce',
+        screen: 'lead-detail',
+        appSignature: 'salesforce:lead-detail',
+        interactiveElements: [],
+      },
+    });
     expect(onError).toHaveBeenCalledWith('Query failed (401): Unauthorized');
   });
 

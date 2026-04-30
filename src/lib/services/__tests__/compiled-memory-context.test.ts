@@ -66,6 +66,23 @@ function createSupabaseMock(args: {
   priorInteractionIds?: string[];
   citationRows?: Array<{ page_id: string; source_id: string; source_type: string }>;
   orgFreshnessRows?: Array<{ id: string; updated_at: string | null }>;
+  contextOrgRows?: Array<{
+    id: string;
+    app: string | null;
+    screen: string | null;
+    topic: string;
+    content: string;
+    confidence: number;
+  }>;
+  contextVendorRows?: Array<{
+    id: string;
+    app: string;
+    screen: string;
+    content: string;
+    source_url: string | null;
+    vendor_source_id: string | null;
+    updated_at: string | null;
+  }>;
   vendorSourceRows?: Array<{
     id: string;
     source_kind: string | null;
@@ -117,10 +134,39 @@ function createSupabaseMock(args: {
       }
 
       if (table === 'org_wiki_pages') {
+        let selectedColumns = '';
         const query = {
-          select: jest.fn().mockReturnThis(),
+          select: jest.fn((columns: string) => {
+            selectedColumns = columns;
+            return query;
+          }),
+          eq: jest.fn(() => query),
+          in: jest.fn(() => {
+            if (selectedColumns.includes('valid_from')) {
+              return query;
+            }
+            return Promise.resolve({
+              data: args.orgFreshnessRows ?? [],
+              error: null,
+            });
+          }),
+          lte: jest.fn(() => query),
+          or: jest.fn(() => query),
+          is: jest.fn(() => query),
+          then: (resolve: (value: unknown) => unknown) =>
+            resolve({
+              data: args.contextOrgRows ?? [],
+              error: null,
+            }),
+        };
+        return query;
+      }
+
+      if (table === 'vendor_wiki_pages') {
+        const query = {
+          select: jest.fn(() => query),
           in: jest.fn(async () => ({
-            data: args.orgFreshnessRows ?? [],
+            data: args.contextVendorRows ?? [],
             error: null,
           })),
         };
@@ -640,6 +686,151 @@ describe('resolveCompiledMemoryContext', () => {
         vendorSourceId: null,
         sourceKind: null,
         sourceUrl: null,
+      },
+    });
+  });
+
+  it('unions context-matched pages ahead of vector recall and wraps vendor metadata for citations', async () => {
+    const createAdminClient: any = jest.fn();
+    createAdminClient.mockReturnValue(
+      createSupabaseMock({
+        clusterEnabled: false,
+        contextVendorRows: [
+          {
+            id: 'vendor-context',
+            app: 'salesforce',
+            screen: 'account-detail',
+            content: 'Matched vendor account detail guidance.',
+            source_url: 'https://docs.example.com/account-detail',
+            vendor_source_id: 'vendor-source-1',
+            updated_at: '2026-04-25T10:00:00.000Z',
+          },
+          {
+            id: 'vendor-retired',
+            app: 'salesforce',
+            screen: 'account-detail',
+            content: 'Retired vendor guidance should not be recalled.',
+            source_url: 'https://docs.example.com/retired',
+            vendor_source_id: 'vendor-source-retired',
+            updated_at: '2026-04-25T10:00:00.000Z',
+          },
+        ],
+        contextOrgRows: [
+          {
+            id: 'org-context',
+            app: 'salesforce',
+            screen: 'account-detail',
+            topic: 'Account handoff',
+            content: 'Context-matched account handoff instructions.',
+            confidence: 0.7,
+          },
+        ],
+        orgFreshnessRows: [
+          { id: 'org-context', updated_at: '2026-04-25T11:00:00.000Z' },
+          { id: 'org-vector', updated_at: '2026-04-24T11:00:00.000Z' },
+        ],
+        vendorSourceRows: [
+          {
+            id: 'vendor-source-1',
+            source_kind: 'documentation',
+            source_url: 'https://docs.example.com',
+            freshness_target: '7 days',
+            last_success_at: '2026-04-25T09:00:00.000Z',
+            updated_at: '2026-04-25T09:00:00.000Z',
+            lifecycle: 'active',
+            retired_at: null,
+            terms_review_status: 'approved',
+            official_source: true,
+          },
+          {
+            id: 'vendor-source-retired',
+            source_kind: 'documentation',
+            source_url: 'https://docs.example.com/retired',
+            freshness_target: '7 days',
+            last_success_at: '2026-04-25T09:00:00.000Z',
+            updated_at: '2026-04-25T09:00:00.000Z',
+            lifecycle: 'retired',
+            retired_at: '2026-04-26T09:00:00.000Z',
+            terms_review_status: 'approved',
+            official_source: true,
+          },
+        ],
+      }),
+    );
+
+    const resolveOrgWikiPagesByVector: any = jest.fn();
+    resolveOrgWikiPagesByVector.mockResolvedValue([
+      {
+        id: 'org-vector',
+        app: 'salesforce',
+        screen: 'account-detail',
+        topic: 'Vector account guidance',
+        content: 'Semantically matched account guidance.',
+        confidence: 0.91,
+        distance: 0.09,
+      },
+      {
+        id: 'org-context',
+        app: 'salesforce',
+        screen: 'account-detail',
+        topic: 'Account handoff',
+        content: 'Duplicate vector result.',
+        confidence: 0.88,
+        distance: 0.12,
+      },
+    ]);
+
+    const result = await resolveCompiledMemoryContext(
+      {
+        orgId: 'customer-org',
+        userId: 'user-1',
+        app: 'salesforce',
+        screen: 'account-detail',
+        question: 'What happens next?',
+        questionEmbedding: [0.1, 0.2, 0.3],
+        contextMatches: {
+          vendorPageIds: ['vendor-context', 'vendor-retired'],
+          orgPageIds: ['org-context'],
+        },
+      },
+      {
+        createAdminClient,
+        getVendorForOrg: jest.fn().mockResolvedValue(null),
+        resolveOrgWikiPagesByVector,
+        resolveVendorCorpusPages: jest.fn().mockResolvedValue([]),
+        resolveVendorWikiPage: jest.fn().mockResolvedValue(null),
+        resolveClusterContext: jest.fn().mockResolvedValue([]),
+      } as any,
+    );
+
+    expect(result.vendorKnowledge.pages.map((page) => page.id)).toEqual([
+      'vendor-context',
+    ]);
+    expect(result.vendorKnowledge.pages[0]).toMatchObject({
+      vendorPageId: 'vendor-context',
+      vendorSourceId: 'vendor-source-1',
+      confidence: 0.98,
+      matchType: 'exact',
+    });
+    expect(result.orgKnowledge.pages.map((page) => page.id)).toEqual([
+      'org-context',
+      'org-vector',
+    ]);
+    expect(result.orgKnowledge.pages[0]).toMatchObject({
+      id: 'org-context',
+      confidence: 0.98,
+      distance: 0.02,
+    });
+    expect(result.citationsBySourceId['vendor-context']).toMatchObject({
+      sourceId: 'vendor-context',
+      layer: 'vendor',
+      linkUrl: 'https://docs.example.com/account-detail',
+      provenance: {
+        pageId: 'vendor-context',
+        vendorPageId: 'vendor-context',
+        vendorSourceId: 'vendor-source-1',
+        sourceKind: 'documentation',
+        sourceUrl: 'https://docs.example.com/account-detail',
       },
     });
   });

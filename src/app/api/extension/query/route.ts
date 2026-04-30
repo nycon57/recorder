@@ -73,6 +73,7 @@ import {
   summarizeCompiledMemoryAnswerObservability,
   type CompiledMemoryAnswerCitation,
 } from '@/lib/services/compiled-memory-answer-context';
+import { resolveExtensionContextMatches } from '@/lib/services/extension-context';
 import { resolveCustomerOrgForVendor } from '@/lib/services/vendor-customers';
 import {
   buildKnowledgeExtensionQueryTelemetry,
@@ -125,8 +126,44 @@ type QueryRequestBody = {
   customerOrgId?: unknown;
 };
 
+type LegacyInteractiveElement = {
+  selector?: unknown;
+  label?: unknown;
+  type?: unknown;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function normalizeIncomingPageContext(value: unknown): PageContext | undefined {
+  if (!isRecord(value)) return undefined;
+
+  const rawContext = { ...value } as Record<string, unknown>;
+  if (
+    !Array.isArray(rawContext.interactiveElements) &&
+    Array.isArray(rawContext.elements)
+  ) {
+    rawContext.interactiveElements = rawContext.elements
+      .filter(isRecord)
+      .map((element: LegacyInteractiveElement) => ({
+        selector: element.selector,
+        label: element.label,
+        type: typeof element.type === 'string' ? element.type : 'unknown',
+      }));
+  }
+
+  return sanitizePageContextForNetwork(rawContext as unknown as PageContext);
+}
+
+function extractContextMatchPageIds(
+  match: { pageIds?: string[] } | null | undefined,
+): string[] {
+  return Array.from(
+    new Set(
+      (match?.pageIds ?? []).map((pageId) => pageId.trim()).filter(Boolean),
+    ),
+  );
 }
 
 /** Encode a single SSE event to bytes. */
@@ -455,9 +492,7 @@ export async function POST(request: NextRequest) {
       typeof body.customerOrgId === 'string' && body.customerOrgId.trim()
         ? body.customerOrgId.trim()
         : null;
-    context = isRecord(body.context)
-      ? sanitizePageContextForNetwork(body.context as unknown as PageContext)
-      : undefined;
+    context = normalizeIncomingPageContext(body.context);
   } catch {
     return errors.badRequest('Invalid JSON body');
   }
@@ -595,6 +630,19 @@ export async function POST(request: NextRequest) {
       };
 
       try {
+        const contextMatches = await resolveExtensionContextMatches({
+          orgId,
+          app,
+          screen,
+          url: context.url,
+        });
+        const vendorPageIds = extractContextMatchPageIds(
+          contextMatches.vendorKnowledgeMatch,
+        );
+        const orgPageIds = extractContextMatchPageIds(
+          contextMatches.orgKnowledgeMatch,
+        );
+
         // ---- Step 1: resolve compiled-memory answer context ------------
         // Shared service owns three-layer retrieval plus normalized
         // source/citation metadata so routes stop rebuilding it inline.
@@ -605,6 +653,10 @@ export async function POST(request: NextRequest) {
           app,
           screen,
           asOf,
+          contextMatches: {
+            vendorPageIds,
+            orgPageIds,
+          },
         });
         resolvedSourceCount = answerContext.sources.length;
         sharedVendorTelemetry =

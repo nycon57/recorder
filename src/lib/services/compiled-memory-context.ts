@@ -13,6 +13,7 @@ import {
   formatVendorKnowledgeTitle,
   type VendorCorpusPageMatch,
 } from '@/lib/services/vendor-doc-corpus';
+import { filterQueryableVendorSourceRows } from '@/lib/services/vendor-source-queryability';
 import { resolveClusterContext } from '@/lib/services/wiki-clusters';
 
 const DEFAULT_MATCH_LIMIT = 3;
@@ -54,6 +55,10 @@ export interface ResolveCompiledMemoryContextArgs {
   questionEmbedding: number[];
   asOf?: string | null;
   limit?: number;
+  contextMatches?: {
+    vendorPageIds?: string[];
+    orgPageIds?: string[];
+  };
 }
 
 interface ResolveCompiledMemoryContextDeps {
@@ -147,6 +152,137 @@ function computeFreshnessState(args: {
     freshnessTarget,
     isStale: Date.now() - lastSuccessMs > freshnessWindowMs,
   };
+}
+
+function uniqueIds(values: Array<string | null | undefined>): string[] {
+  return Array.from(
+    new Set(values.map((value) => value?.trim()).filter(Boolean)),
+  ) as string[];
+}
+
+async function resolveContextMatchedVendorPages(
+  pageIds: string[],
+  deps: ResolveCompiledMemoryContextDeps = {},
+): Promise<VendorCorpusPageMatch[]> {
+  const ids = uniqueIds(pageIds);
+  if (ids.length === 0) return [];
+
+  try {
+    const createAdminClientFn = deps.createAdminClient ?? createAdminClient;
+    const supabase = createAdminClientFn();
+    const { data, error } = await supabase
+      .from('vendor_wiki_pages')
+      .select(
+        'id, app, screen, content, source_url, vendor_source_id, updated_at',
+      )
+      .in('id', ids);
+
+    if (error) {
+      throw error;
+    }
+
+    const rows = await filterQueryableVendorSourceRows(
+      ((data as VendorWikiPage[] | null) ?? []).filter((row) =>
+        ids.includes(row.id),
+      ),
+      supabase,
+    );
+    const byId = new Map(rows.map((row) => [row.id, row]));
+
+    return ids
+      .map((id) => byId.get(id))
+      .filter((page): page is VendorWikiPage => page != null)
+      .map((page) => ({
+        id: page.id,
+        vendorPageId: page.id,
+        vendorSourceId: page.vendor_source_id,
+        app: page.app,
+        screen: page.screen,
+        title: formatVendorKnowledgeTitle(page.app, page.screen),
+        content: page.content,
+        sourceUrl: page.source_url,
+        updatedAt: page.updated_at,
+        confidence: 0.98,
+        distance: 0.02,
+        matchType: 'exact',
+      }));
+  } catch (error) {
+    console.error(
+      '[compiled-memory-context] context-matched vendor page lookup failed:',
+      error,
+    );
+    return [];
+  }
+}
+
+async function resolveContextMatchedOrgPages(
+  args: {
+    orgId: string;
+    pageIds: string[];
+    asOf?: string | null;
+  },
+  deps: ResolveCompiledMemoryContextDeps = {},
+): Promise<ResolvedOrgWikiPage[]> {
+  const ids = uniqueIds(args.pageIds);
+  if (ids.length === 0) return [];
+
+  try {
+    const createAdminClientFn = deps.createAdminClient ?? createAdminClient;
+    const supabase = createAdminClientFn();
+    let query = supabase
+      .from('org_wiki_pages')
+      .select(
+        'id, app, screen, topic, content, confidence, valid_from, valid_until',
+      )
+      .eq('org_id', args.orgId)
+      .in('id', ids);
+
+    if (args.asOf) {
+      query = query
+        .lte('valid_from', args.asOf)
+        .or(`valid_until.is.null,valid_until.gt.${args.asOf}`);
+    } else {
+      query = query.is('valid_until', null);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    const rows =
+      (data as
+        | Array<{
+            id: string;
+            app: string | null;
+            screen: string | null;
+            topic: string;
+            content: string;
+            confidence: number;
+          }>
+        | null) ?? [];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+
+    return ids
+      .map((id) => byId.get(id))
+      .filter((page): page is NonNullable<typeof page> => page != null)
+      .map((page) => ({
+        id: page.id,
+        app: page.app,
+        screen: page.screen,
+        topic: page.topic,
+        content: page.content,
+        confidence: Math.max(page.confidence ?? 0, 0.98),
+        distance: 0.02,
+      }));
+  } catch (error) {
+    console.error(
+      '[compiled-memory-context] context-matched org page lookup failed:',
+      error,
+    );
+    return [];
+  }
 }
 
 async function resolveVendorTrainingPages(args: {
@@ -597,49 +733,73 @@ export async function resolveCompiledMemoryContext(
     questionEmbedding,
     asOf,
     limit = DEFAULT_MATCH_LIMIT,
+    contextMatches,
   } = args;
   const resolveVendorWikiPageFn =
     deps.resolveVendorWikiPage ?? resolveVendorWikiPage;
   const resolveVendorCorpusPagesFn =
     deps.resolveVendorCorpusPages ?? resolveVendorCorpusPages;
 
-  const [vendorPage, vendorCorpusPages, vendorTrainingPages, orgKnowledge] =
-    await Promise.all([
-      resolveVendorWikiPageFn({ app, screen }),
-      resolveVendorCorpusPagesFn({
+  const [
+    vendorPage,
+    vendorCorpusPages,
+    vendorTrainingPages,
+    orgKnowledge,
+    contextMatchedVendorPages,
+    contextMatchedOrgPages,
+  ] = await Promise.all([
+    resolveVendorWikiPageFn({ app, screen }),
+    resolveVendorCorpusPagesFn({
+      app,
+      screen,
+      question,
+      questionEmbedding,
+      limit,
+    }),
+    resolveVendorTrainingPages(
+      {
+        orgId,
         app,
-        screen,
-        question,
         questionEmbedding,
+        asOf,
         limit,
-      }),
-      resolveVendorTrainingPages(
-        {
-          orgId,
-          app,
-          questionEmbedding,
-          asOf,
-          limit,
-        },
-        deps,
-      ),
-      resolveOrgKnowledge(
-        {
-          orgId,
-          userId,
-          questionEmbedding,
-          asOf,
-          limit,
-        },
-        deps,
-      ),
-    ]);
+      },
+      deps,
+    ),
+    resolveOrgKnowledge(
+      {
+        orgId,
+        userId,
+        questionEmbedding,
+        asOf,
+        limit,
+      },
+      deps,
+    ),
+    resolveContextMatchedVendorPages(contextMatches?.vendorPageIds ?? [], deps),
+    resolveContextMatchedOrgPages(
+      {
+        orgId,
+        pageIds: contextMatches?.orgPageIds ?? [],
+        asOf,
+      },
+      deps,
+    ),
+  ]);
 
   const vendorPages: VendorCorpusPageMatch[] = [];
   const seenVendorPageIds = new Set<string>();
   const seenSourceIds = new Set<string>();
 
-  if (vendorPage) {
+  for (const contextMatchedVendorPage of contextMatchedVendorPages) {
+    vendorPages.push(contextMatchedVendorPage);
+    if (contextMatchedVendorPage.vendorPageId) {
+      seenVendorPageIds.add(contextMatchedVendorPage.vendorPageId);
+    }
+    seenSourceIds.add(contextMatchedVendorPage.id);
+  }
+
+  if (vendorPage && !seenVendorPageIds.has(vendorPage.id)) {
     const exactCorpusPage =
       vendorCorpusPages.find(
         (page) =>
@@ -689,11 +849,21 @@ export async function resolveCompiledMemoryContext(
     }
   }
 
+  const orgPages = [
+    ...contextMatchedOrgPages,
+    ...orgKnowledge.pages.filter(
+      (page) =>
+        !contextMatchedOrgPages.some(
+          (contextPage) => contextPage.id === page.id,
+        ),
+    ),
+  ];
+
   const citationsBySourceId = await buildCitationsBySourceId({
     vendorPage,
     vendorPages,
     vendorTrainingPages,
-    orgPages: orgKnowledge.pages,
+    orgPages,
   }, deps);
 
   return {
@@ -704,7 +874,10 @@ export async function resolveCompiledMemoryContext(
     vendorTraining: {
       pages: vendorTrainingPages,
     },
-    orgKnowledge,
+    orgKnowledge: {
+      pages: orgPages,
+      priorTopics: orgKnowledge.priorTopics,
+    },
     citationsBySourceId,
   };
 }

@@ -17,6 +17,8 @@ const resolveCompiledMemoryAnswerContext =
   jest.fn<() => Promise<unknown>>();
 const mockRequireApiKeyOrSession =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const resolveExtensionContextMatches =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const resolveCustomerOrgForVendor =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockCreateAdminClient = jest.fn<() => unknown>();
@@ -45,6 +47,11 @@ jest.mock('@/lib/utils/api-key-auth', () => ({
 jest.mock('@/lib/services/vendor-customers', () => ({
   resolveCustomerOrgForVendor: (...args: unknown[]) =>
     resolveCustomerOrgForVendor(...args),
+}));
+
+jest.mock('@/lib/services/extension-context', () => ({
+  resolveExtensionContextMatches: (...args: unknown[]) =>
+    resolveExtensionContextMatches(...args),
 }));
 
 jest.mock('@/lib/utils/api', () => ({
@@ -160,6 +167,17 @@ describe('POST /api/extension/query', () => {
     jest.clearAllMocks();
     afterCallbacks.length = 0;
     mockCreateAdminClient.mockReset();
+    resolveExtensionContextMatches.mockResolvedValue({
+      vendorKnowledgeMatch: null,
+      orgKnowledgeMatch: null,
+      knowledgeAvailability: {
+        hasVendorDocs: false,
+        hasOrgKnowledge: false,
+        mode: 'dom_only',
+        message: 'No knowledge available.',
+      },
+      relevantWikiPages: [],
+    });
     resolveCompiledMemoryAnswerContext.mockResolvedValue({
       context: 'compiled memory context',
       sources: [
@@ -263,6 +281,7 @@ describe('POST /api/extension/query', () => {
     const response = await POST(request);
 
     expect(response.status).toBe(200);
+    const streamBody = await response.text();
     expect(mockRequireApiKeyOrSession).toHaveBeenCalledWith(
       request,
       'query',
@@ -282,7 +301,7 @@ describe('POST /api/extension/query', () => {
         elements: [{ selector: '#next-step', label: 'Next step' }],
       }),
     );
-    expect(await response.text()).toContain('"type":"element_ref"');
+    expect(streamBody).toContain('"type":"element_ref"');
   });
 
   it('writes API-key usage analytics with vendor and customer org IDs', async () => {
@@ -437,6 +456,7 @@ describe('POST /api/extension/query', () => {
     );
 
     expect(response.status).toBe(200);
+    const streamBody = await response.text();
     expect(buildExtensionCompiledMemoryPrompt).toHaveBeenCalledWith(
       expect.objectContaining({
         pageContext: expect.objectContaining({
@@ -446,7 +466,7 @@ describe('POST /api/extension/query', () => {
         }),
       }),
     );
-    expect(await response.text()).not.toContain('help center');
+    expect(streamBody).not.toContain('help center');
   });
 
   it('sanitizes posted page context before building the model prompt', async () => {
@@ -487,6 +507,7 @@ describe('POST /api/extension/query', () => {
     );
 
     expect(response.status).toBe(200);
+    await response.text();
     const promptArgs = buildExtensionCompiledMemoryPrompt.mock.calls[0]?.[0];
     expect(promptArgs).toMatchObject({
       elements: [{ selector: '#email', label: 'Email [REDACTED]' }],
@@ -518,6 +539,127 @@ describe('POST /api/extension/query', () => {
     expect(JSON.stringify(promptArgs)).not.toContain('user:pass');
     expect(JSON.stringify(promptArgs)).not.toContain(
       'button[aria-label="[REDACTED]"]',
+    );
+  });
+
+  it.each([
+    {
+      basis: 'exact',
+      vendorPageId: 'vendor-exact-page',
+      orgPageId: 'org-exact-page',
+    },
+    {
+      basis: 'screen_alias',
+      vendorPageId: 'vendor-alias-page',
+      orgPageId: 'org-alias-page',
+    },
+    {
+      basis: 'app_only',
+      vendorPageId: 'vendor-app-page',
+      orgPageId: 'org-app-page',
+    },
+    {
+      basis: 'domain_alias',
+      vendorPageId: 'vendor-domain-page',
+      orgPageId: 'org-domain-page',
+    },
+  ] as const)(
+    'passes $basis context match page IDs into compiled-memory recall',
+    async ({ basis, vendorPageId, orgPageId }) => {
+      resolveExtensionContextMatches.mockResolvedValueOnce({
+        vendorKnowledgeMatch: {
+          matched: true,
+          basis,
+          confidence: 0.8,
+          pageIds: [vendorPageId],
+        },
+        orgKnowledgeMatch: {
+          matched: true,
+          basis,
+          confidence: 0.9,
+          pageIds: [orgPageId],
+        },
+        knowledgeAvailability: {
+          hasVendorDocs: true,
+          hasOrgKnowledge: true,
+          mode: 'org_backed',
+          message: 'Knowledge available.',
+        },
+        relevantWikiPages: [vendorPageId, orgPageId],
+      });
+      const { POST } = await import('../route');
+
+      const response = await POST(
+        buildRequest({
+          question: 'What should I do here?',
+          context: {
+            url:
+              basis === 'domain_alias'
+                ? 'https://acme.salesforce.com/lightning/page/home'
+                : 'https://example.com/accounts/123',
+            appSignature:
+              basis === 'domain_alias'
+                ? 'unknown:home'
+                : 'salesforce:account-detail',
+            interactiveElements: [],
+          },
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      await response.text();
+      expect(resolveExtensionContextMatches).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orgId: 'org_test',
+          app: basis === 'domain_alias' ? 'unknown' : 'salesforce',
+          screen: basis === 'domain_alias' ? 'home' : 'account-detail',
+        }),
+      );
+      expect(resolveCompiledMemoryAnswerContext).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contextMatches: {
+            vendorPageIds: [vendorPageId],
+            orgPageIds: [orgPageId],
+          },
+        }),
+      );
+    },
+  );
+
+  it('maps legacy context.elements into shared interactiveElements at the route boundary', async () => {
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        question: 'How do I save this?',
+        context: {
+          url: 'https://example.com/deals/123',
+          appSignature: 'salesforce:opportunity-detail',
+          elements: [
+            {
+              selector: '#legacy-save',
+              label: 'Legacy save',
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(buildExtensionCompiledMemoryPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        elements: [{ selector: '#legacy-save', label: 'Legacy save' }],
+        pageContext: expect.objectContaining({
+          interactiveElements: [
+            expect.objectContaining({
+              selector: '#legacy-save',
+              label: 'Legacy save',
+              type: 'unknown',
+            }),
+          ],
+        }),
+      }),
     );
   });
 });

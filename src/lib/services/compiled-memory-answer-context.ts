@@ -81,6 +81,10 @@ interface ResolveCompiledMemoryAnswerContextArgs {
   screen?: string;
   asOf?: string | null;
   limit?: number;
+  contextMatches?: {
+    vendorPageIds?: string[];
+    orgPageIds?: string[];
+  };
 }
 
 interface ResolveCompiledMemoryAnswerContextDeps {
@@ -742,6 +746,7 @@ export async function resolveCompiledMemoryAnswerContext(
     screen = DEFAULT_CHAT_COMPILED_MEMORY_SCOPE.screen,
     asOf,
     limit,
+    contextMatches,
   } = args;
 
   const trimmedQuestion = question.trim();
@@ -784,6 +789,7 @@ export async function resolveCompiledMemoryAnswerContext(
       question: trimmedQuestion,
       questionEmbedding,
       limit,
+      contextMatches,
     });
 
     return buildCompiledMemoryAnswerContext(compiledMemory, limit);
