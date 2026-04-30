@@ -6,6 +6,14 @@ const generateOrgWikiPageEmbeddingBestEffortMock = jest.fn();
 const revalidatePathMock = jest.fn();
 const updateTagMock = jest.fn();
 const recordKnowledgeTelemetryEventMock = jest.fn();
+const reviewApprovalMock = jest.fn();
+const determineRoutingReviewDecisionActionMock = jest.fn();
+const enqueueRoutingCompileWikiJobMock = jest.fn();
+const normalizeRoutingAppMock = jest.fn();
+const normalizeRoutingSlugMock = jest.fn();
+const parseRoutingReviewStateMock = jest.fn();
+const parseRoutingReviewProposedActionMock = jest.fn();
+const writeRoutingReviewStateMock = jest.fn();
 
 jest.mock('next/cache', () => ({
   revalidatePath: revalidatePathMock,
@@ -35,7 +43,7 @@ jest.mock('@/lib/services/org-wiki-embedding', () => ({
 }));
 
 jest.mock('@/lib/services/agent-permissions', () => ({
-  reviewApproval: jest.fn(),
+  reviewApproval: (...args: unknown[]) => reviewApprovalMock(...args),
 }));
 
 jest.mock('@/lib/services/knowledge-telemetry', () => ({
@@ -44,18 +52,25 @@ jest.mock('@/lib/services/knowledge-telemetry', () => ({
 }));
 
 jest.mock('@/lib/services/routing-review', () => ({
-  determineRoutingReviewDecisionAction: jest.fn(),
+  determineRoutingReviewDecisionAction: (...args: unknown[]) =>
+    determineRoutingReviewDecisionActionMock(...args),
   ROUTING_REVIEW_ACTION_TYPE: 'routing_review',
-  enqueueRoutingCompileWikiJob: jest.fn(),
-  normalizeRoutingApp: jest.fn(),
-  normalizeRoutingSlug: jest.fn(),
-  parseRoutingReviewState: jest.fn(),
-  parseRoutingReviewProposedAction: jest.fn(),
-  writeRoutingReviewState: jest.fn(),
+  enqueueRoutingCompileWikiJob: (...args: unknown[]) =>
+    enqueueRoutingCompileWikiJobMock(...args),
+  normalizeRoutingApp: (...args: unknown[]) => normalizeRoutingAppMock(...args),
+  normalizeRoutingSlug: (...args: unknown[]) => normalizeRoutingSlugMock(...args),
+  parseRoutingReviewState: (...args: unknown[]) =>
+    parseRoutingReviewStateMock(...args),
+  parseRoutingReviewProposedAction: (...args: unknown[]) =>
+    parseRoutingReviewProposedActionMock(...args),
+  writeRoutingReviewState: (...args: unknown[]) =>
+    writeRoutingReviewStateMock(...args),
 }));
 
 let approveContradiction: typeof import('./actions').approveContradiction;
 let editAndApproveContradiction: typeof import('./actions').editAndApproveContradiction;
+let approveRoutingReview: typeof import('./actions').approveRoutingReview;
+let rejectRoutingReview: typeof import('./actions').rejectRoutingReview;
 
 function loadPageResponse(page: unknown) {
   const query = {
@@ -88,6 +103,57 @@ function auditInsertResponse() {
   return {
     insert: jest.fn(async () => ({ error: null })),
   };
+}
+
+function routingApprovalRow() {
+  return {
+    id: 'approval-1',
+    org_id: 'org-1',
+    action_type: 'routing_review',
+    content_id: 'content-1',
+    status: 'pending',
+    created_at: '2026-04-29T00:00:00.000Z',
+    proposed_action: {
+      kind: 'routing_review',
+      routeConfidence: 0.8,
+      routeReason: 'Ambiguous route',
+      proposedRoute: {
+        topic: 'renewals',
+        app: 'salesforce',
+        screen: 'opportunities',
+      },
+    },
+  };
+}
+
+function routingContentRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'content-1',
+    org_id: 'org-1',
+    metadata: { existing: true },
+    title: 'Demo recording',
+    updated_at: '2026-04-29T00:00:01.000Z',
+    ...overrides,
+  };
+}
+
+function routingSelectSingleResponse(data: unknown) {
+  const query = {
+    select: jest.fn(() => query),
+    eq: jest.fn(() => query),
+    single: jest.fn(async () => ({ data, error: null })),
+  };
+  return query;
+}
+
+function routingUpdateResponse(data: unknown = { id: 'content-1' }) {
+  const query = {
+    update: jest.fn(() => query),
+    eq: jest.fn(() => query),
+    select: jest.fn(() => query),
+    maybeSingle: jest.fn(async () => ({ data, error: null })),
+  };
+  return query;
 }
 
 function basePage() {
@@ -129,14 +195,25 @@ describe('wiki review actions embedding freshness', () => {
     ({
       approveContradiction,
       editAndApproveContradiction,
+      approveRoutingReview,
+      rejectRoutingReview,
     } = await import('./actions'));
   });
 
   beforeEach(() => {
     jest.clearAllMocks();
+    fromMock.mockReset();
     requireAdminMock.mockResolvedValue({ userId: 'user-1', orgId: 'org-1' } as never);
     generateOrgWikiPageEmbeddingBestEffortMock.mockResolvedValue(true as never);
     recordKnowledgeTelemetryEventMock.mockResolvedValue(undefined as never);
+    reviewApprovalMock.mockResolvedValue({ id: 'approval-1', status: 'approved' } as never);
+    determineRoutingReviewDecisionActionMock.mockReturnValue('approve');
+    enqueueRoutingCompileWikiJobMock.mockResolvedValue(undefined as never);
+    normalizeRoutingAppMock.mockImplementation((value: unknown) => value);
+    normalizeRoutingSlugMock.mockImplementation((value: unknown) => value);
+    parseRoutingReviewStateMock.mockReturnValue(null);
+    parseRoutingReviewProposedActionMock.mockImplementation((value: unknown) => value);
+    writeRoutingReviewStateMock.mockReturnValue({ reviewed: true });
   });
 
   it('generates an embedding for the superseding page when approving a contradiction', async () => {
@@ -188,5 +265,155 @@ describe('wiki review actions embedding freshness', () => {
         contentLength: 'Admin edited approved content.'.length,
       })
     );
+  });
+});
+
+describe('wiki routing review actions', () => {
+  beforeAll(async () => {
+    ({
+      approveRoutingReview,
+      rejectRoutingReview,
+    } = await import('./actions'));
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    fromMock.mockReset();
+    requireAdminMock.mockResolvedValue({ userId: 'user-1', orgId: 'org-1' } as never);
+    reviewApprovalMock.mockResolvedValue({ id: 'approval-1', status: 'approved' } as never);
+    determineRoutingReviewDecisionActionMock.mockReturnValue('approve');
+    enqueueRoutingCompileWikiJobMock.mockResolvedValue(undefined as never);
+    normalizeRoutingAppMock.mockImplementation((value: unknown) => value);
+    normalizeRoutingSlugMock.mockImplementation((value: unknown) => value);
+    parseRoutingReviewStateMock.mockReturnValue(null);
+    parseRoutingReviewProposedActionMock.mockImplementation((value: unknown) => value);
+    writeRoutingReviewStateMock.mockReturnValue({ reviewed: true });
+  });
+
+  it('claims routing approvals before persisting metadata and enqueueing compile_wiki', async () => {
+    const contentUpdate = routingUpdateResponse();
+    fromMock
+      .mockReturnValueOnce(routingSelectSingleResponse(routingApprovalRow()))
+      .mockReturnValueOnce(routingSelectSingleResponse(routingContentRow()))
+      .mockReturnValueOnce(contentUpdate)
+      .mockReturnValueOnce(auditInsertResponse());
+
+    await expect(
+      approveRoutingReview({
+        approvalId: 'approval-1',
+        contentId: 'content-1',
+        topic: 'renewals',
+        app: 'salesforce',
+        screen: 'opportunities',
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(reviewApprovalMock).toHaveBeenCalledWith(
+      'approval-1',
+      'org-1',
+      'user-1',
+      'approved',
+    );
+    expect(reviewApprovalMock.mock.invocationCallOrder[0]).toBeLessThan(
+      contentUpdate.update.mock.invocationCallOrder[0],
+    );
+    expect(contentUpdate.eq).toHaveBeenCalledWith(
+      'updated_at',
+      '2026-04-29T00:00:01.000Z',
+    );
+    expect(contentUpdate.update.mock.invocationCallOrder[0]).toBeLessThan(
+      enqueueRoutingCompileWikiJobMock.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('does not persist metadata when admin approval claim fails', async () => {
+    reviewApprovalMock.mockResolvedValue(null as never);
+    const contentUpdate = routingUpdateResponse();
+    fromMock
+      .mockReturnValueOnce(routingSelectSingleResponse(routingApprovalRow()))
+      .mockReturnValueOnce(routingSelectSingleResponse(routingContentRow()))
+      .mockReturnValueOnce(contentUpdate);
+
+    const result = await approveRoutingReview({
+      approvalId: 'approval-1',
+      contentId: 'content-1',
+      topic: 'renewals',
+      app: null,
+      screen: null,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(contentUpdate.update).not.toHaveBeenCalled();
+    expect(enqueueRoutingCompileWikiJobMock).not.toHaveBeenCalled();
+  });
+
+  it('resets claimed admin approvals when compile enqueue fails', async () => {
+    enqueueRoutingCompileWikiJobMock.mockRejectedValue(new Error('queue unavailable') as never);
+    const contentUpdate = routingUpdateResponse();
+    const resetUpdate = {
+      update: jest.fn(() => resetUpdate),
+      eq: jest.fn(() => resetUpdate),
+    };
+    fromMock
+      .mockReturnValueOnce(routingSelectSingleResponse(routingApprovalRow()))
+      .mockReturnValueOnce(routingSelectSingleResponse(routingContentRow()))
+      .mockReturnValueOnce(contentUpdate)
+      .mockReturnValueOnce(resetUpdate);
+
+    const result = await approveRoutingReview({
+      approvalId: 'approval-1',
+      contentId: 'content-1',
+      topic: 'renewals',
+      app: null,
+      screen: null,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(enqueueRoutingCompileWikiJobMock).toHaveBeenCalledWith({
+      recordingId: 'content-1',
+      orgId: 'org-1',
+      approvalId: 'approval-1',
+    });
+    expect(resetUpdate.update).toHaveBeenCalledWith({
+      status: 'pending',
+      reviewed_by: null,
+      reviewed_at: null,
+      rejection_reason: null,
+    });
+    expect(resetUpdate.eq).toHaveBeenCalledWith('id', 'approval-1');
+    expect(resetUpdate.eq).toHaveBeenCalledWith('org_id', 'org-1');
+    expect(resetUpdate.eq).toHaveBeenCalledWith('status', 'approved');
+    expect(resetUpdate.eq).toHaveBeenCalledWith('reviewed_by', 'user-1');
+  });
+
+  it('claims routing rejections before persisting rejected metadata', async () => {
+    reviewApprovalMock.mockResolvedValue({ id: 'approval-1', status: 'rejected' } as never);
+    determineRoutingReviewDecisionActionMock.mockReturnValue('reject');
+    const contentUpdate = routingUpdateResponse();
+    fromMock
+      .mockReturnValueOnce(routingSelectSingleResponse(routingApprovalRow()))
+      .mockReturnValueOnce(routingSelectSingleResponse(routingContentRow()))
+      .mockReturnValueOnce(contentUpdate)
+      .mockReturnValueOnce(auditInsertResponse());
+
+    await expect(
+      rejectRoutingReview({
+        approvalId: 'approval-1',
+        contentId: 'content-1',
+        rejectionReason: 'Wrong route',
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(reviewApprovalMock).toHaveBeenCalledWith(
+      'approval-1',
+      'org-1',
+      'user-1',
+      'rejected',
+      'Wrong route',
+    );
+    expect(reviewApprovalMock.mock.invocationCallOrder[0]).toBeLessThan(
+      contentUpdate.update.mock.invocationCallOrder[0],
+    );
+    expect(enqueueRoutingCompileWikiJobMock).not.toHaveBeenCalled();
   });
 });
