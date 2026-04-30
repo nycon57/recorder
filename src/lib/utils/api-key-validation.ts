@@ -48,7 +48,7 @@ export async function validateApiKey(
     // We need to fetch candidates and use bcrypt.compare() to find the match
     const { data: apiKeys, error: fetchError } = await supabaseAdmin
       .from('api_keys')
-      .select('id, key_hash, org_id, scopes, rate_limit, status, expires_at, ip_whitelist, usage_count')
+      .select('id, key_hash, org_id, scopes, rate_limit, status, expires_at, ip_whitelist')
       .eq('key_prefix', keyPrefix)
       .eq('status', 'active');
 
@@ -144,16 +144,10 @@ export async function validateApiKey(
       }
     }
 
-    // Update last used timestamp and usage count
-    // Fire and forget - don't block validation on this update
+    // Update last used timestamp and usage count atomically.
     supabaseAdmin
-      .from('api_keys')
-      .update({
-        last_used_at: new Date().toISOString(),
-        usage_count: (matchedKey.usage_count ?? 0) + 1,
-      })
-      .eq('id', matchedKey.id)
-      .then(({ error }) => {
+      .rpc('increment_api_key_usage_count' as never, { p_key_id: matchedKey.id } as never)
+      .then(({ error }: { error: unknown }) => {
         if (error) {
           console.error('[API Key Validation] Failed to update last_used_at:', error);
         }

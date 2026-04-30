@@ -999,6 +999,10 @@ export class NotionConnector implements Connector {
       return;
     }
 
+    if (!this.connectorId) {
+      throw new Error('Notion connector ID is required to store imported documents');
+    }
+
     try {
       const supabase = createClient();
 
@@ -1008,8 +1012,8 @@ export class NotionConnector implements Connector {
       // Check if document already exists
       const { data: existing } = await supabase
         .from('imported_documents')
-        .select('id, content_hash')
-        .eq('org_id', this.orgId)
+        .select('id, content_hash, sync_count')
+        .eq('connector_id', this.connectorId)
         .eq('external_id', doc.externalId)
         .single();
 
@@ -1048,10 +1052,6 @@ export class NotionConnector implements Connector {
             .eq('id', existing.id);
         }
       } else {
-        if (!this.connectorId) {
-          throw new Error('Notion connector ID is required to store imported documents');
-        }
-
         // Insert new document
         await supabase.from('imported_documents').insert({
           connector_id: this.connectorId,
