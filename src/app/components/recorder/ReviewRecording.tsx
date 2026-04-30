@@ -49,7 +49,6 @@ export function ReviewRecording() {
 
     // Clear video URL when blob is cleared
     console.log('[Review] Recording blob cleared, clearing video URL');
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Clearing the derived preview URL when the Blob is removed is intentional.
     setVideoUrl('');
   }, [recordingBlob, clearRecording]);
 

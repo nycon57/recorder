@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
@@ -335,7 +335,7 @@ function BulkInviteForm({
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (csvFile) {
       // Validate file
