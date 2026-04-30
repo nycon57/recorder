@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { validateApiKey } from '@/lib/services/vendor-api-keys';
+import { resolveCustomerOrgForVendor } from '@/lib/services/vendor-customers';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 import type {
@@ -58,6 +59,21 @@ export async function GET(request: NextRequest) {
         { error: 'Invalid or revoked API key' },
         { status: 401, headers: CORS_HEADERS },
       );
+    }
+
+    const customerOrgId = request.headers.get('x-tribora-customer-org-id');
+    if (customerOrgId) {
+      const customerOrg = await resolveCustomerOrgForVendor(
+        keyData.vendorOrgId,
+        customerOrgId,
+      );
+
+      if (!customerOrg) {
+        return NextResponse.json(
+          { error: 'Customer organization is not linked to this vendor' },
+          { status: 403, headers: CORS_HEADERS },
+        );
+      }
     }
 
     // Fetch the white-label config associated with this API key

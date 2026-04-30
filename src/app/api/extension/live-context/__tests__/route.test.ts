@@ -11,14 +11,19 @@ const buildLiveContextPack =
     (input: { context: PageContext; [key: string]: unknown }) => unknown
   >();
 const mockCreateAdminClient = jest.fn();
+const mockRequireApiKeyOrSession =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const resolveCustomerOrgForVendor =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
 jest.mock('@/lib/utils/api-key-auth', () => ({
-  requireApiKeyOrSession: async () => ({
-    orgId: 'org_test',
-    userId: 'user_test',
-    role: 'admin',
-    authMethod: 'session',
-  }),
+  requireApiKeyOrSession: (...args: unknown[]) =>
+    mockRequireApiKeyOrSession(...args),
+}));
+
+jest.mock('@/lib/services/vendor-customers', () => ({
+  resolveCustomerOrgForVendor: (...args: unknown[]) =>
+    resolveCustomerOrgForVendor(...args),
 }));
 
 jest.mock('@/lib/utils/api', () => ({
@@ -161,6 +166,19 @@ describe('POST /api/extension/live-context', () => {
         orgRows: [],
       }),
     );
+    mockRequireApiKeyOrSession.mockResolvedValue({
+      orgId: 'org_test',
+      userId: 'user_test',
+      role: 'admin',
+      authMethod: 'session',
+    });
+    resolveCustomerOrgForVendor.mockResolvedValue({
+      id: 'customer_org',
+      name: 'Customer Org',
+      slug: 'customer-org',
+      plan: 'pro',
+      created_at: '2026-04-29T00:00:00.000Z',
+    });
   });
 
   it('re-resolves matches when supplied knowledge has no provenance', async () => {
@@ -407,5 +425,51 @@ describe('POST /api/extension/live-context', () => {
       'vendor_generic',
       'vendor_generic',
     ]);
+  });
+
+  it('uses verified customer org scope for API-key live context', async () => {
+    mockRequireApiKeyOrSession.mockResolvedValueOnce({
+      orgId: 'vendor_org',
+      authMethod: 'api_key',
+      keyId: 'key_1',
+      configId: 'config_1',
+      scopes: ['query'],
+    });
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        customerOrgId: 'customer_org',
+        context: baseContext(),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(resolveCustomerOrgForVendor).toHaveBeenCalledWith(
+      'vendor_org',
+      'customer_org',
+    );
+    expect(resolveExtensionContextMatches).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'customer_org',
+      }),
+    );
+  });
+
+  it('rejects API-key live context without a customer org target', async () => {
+    mockRequireApiKeyOrSession.mockResolvedValueOnce({
+      orgId: 'vendor_org',
+      authMethod: 'api_key',
+      keyId: 'key_1',
+      configId: 'config_1',
+      scopes: ['query'],
+    });
+    const { POST } = await import('../route');
+
+    const response = await POST(buildRequest({ context: baseContext() }));
+
+    expect(response.status).toBe(400);
+    expect(resolveCustomerOrgForVendor).not.toHaveBeenCalled();
+    expect(resolveExtensionContextMatches).not.toHaveBeenCalled();
   });
 });

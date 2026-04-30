@@ -103,6 +103,8 @@ export interface KnowledgeChatTelemetryInput
 export interface KnowledgeExtensionQueryTelemetryPayload
   extends SharedVendorTelemetryFields {
   orgId: string;
+  vendorOrgId?: string | null;
+  customerOrgId?: string | null;
   userId: string;
   app: string;
   screen: string;
@@ -189,21 +191,6 @@ export interface KnowledgeTelemetrySummary {
     empty: number;
   };
 }
-
-const CHAT_ANSWER_MODES: KnowledgeChatAnswerMode[] = [
-  'compiled-memory',
-  'discovery',
-  'tool-discovery',
-  'empty',
-];
-
-const REVIEW_OUTCOMES: KnowledgeReviewOutcome[] = [
-  'approved',
-  'rejected',
-  'edited_and_approved',
-  'auto_rejected_noop',
-  'error',
-];
 
 function isRecord(value: Json): value is Record<string, Json | undefined> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

@@ -36,6 +36,7 @@ import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 import { resolveExtensionContextMatches } from '@/lib/services/extension-context';
+import { resolveCustomerOrgForVendor } from '@/lib/services/vendor-customers';
 import { buildExtensionContextTelemetry } from '@/lib/services/extension-context-telemetry';
 import { recordKnowledgeTelemetryEvent } from '@/lib/services/knowledge-telemetry';
 import type { Json } from '@/lib/types/database';
@@ -106,11 +107,21 @@ export async function POST(request: NextRequest) {
     const authCtx = await requireApiKeyOrSession(request, 'query');
 
     const body = await request.json();
-    const { url, appSignature, context } = body as {
+    const {
+      url,
+      appSignature,
+      context,
+      customerOrgId: rawCustomerOrgId,
+    } = body as {
       url?: string;
       appSignature?: string;
       context?: PageContext;
+      customerOrgId?: string;
     };
+    const customerOrgId =
+      typeof rawCustomerOrgId === 'string' && rawCustomerOrgId.trim()
+        ? rawCustomerOrgId.trim()
+        : null;
 
     const sanitizedIncomingContext = context
       ? sanitizePageContextForNetwork(context)
@@ -147,8 +158,28 @@ export async function POST(request: NextRequest) {
           ? resolvedAppSignature.slice(colonIdx + 1).toLowerCase()
           : screenFromUrl(resolvedUrl);
 
+    let effectiveOrgId = authCtx.orgId;
+    if (authCtx.authMethod === 'api_key') {
+      if (!customerOrgId) {
+        return errors.badRequest(
+          'customerOrgId is required for API-key recall',
+        );
+      }
+
+      const customerOrg = await resolveCustomerOrgForVendor(
+        authCtx.orgId,
+        customerOrgId,
+      );
+
+      if (!customerOrg) {
+        return errors.forbidden();
+      }
+
+      effectiveOrgId = customerOrg.id;
+    }
+
     const matches = await resolveExtensionContextMatches({
-      orgId: authCtx.orgId,
+      orgId: effectiveOrgId,
       app,
       screen,
       url: resolvedUrl,
@@ -194,7 +225,7 @@ export async function POST(request: NextRequest) {
       context: mergedContext,
       latencyMs: Date.now() - requestStartedAt,
       authMethod: authCtx.authMethod,
-      orgId: authCtx.orgId,
+      orgId: effectiveOrgId,
       actorId:
         authCtx.authMethod === 'session' ? authCtx.userId : authCtx.keyId,
     });
@@ -220,7 +251,7 @@ export async function POST(request: NextRequest) {
         });
       } catch (error) {
         logger.warn('Failed to record extension context telemetry', {
-          orgId: authCtx.orgId,
+          orgId: effectiveOrgId,
           error: error instanceof Error ? error.message : String(error),
         });
       }

@@ -73,6 +73,7 @@ import {
   summarizeCompiledMemoryAnswerObservability,
   type CompiledMemoryAnswerCitation,
 } from '@/lib/services/compiled-memory-answer-context';
+import { resolveCustomerOrgForVendor } from '@/lib/services/vendor-customers';
 import {
   buildKnowledgeExtensionQueryTelemetry,
   recordKnowledgeTelemetryEvent,
@@ -121,6 +122,7 @@ type SseEvent = TextChunkEvent | ElementRefEvent | CitationEvent | DoneEvent;
 type QueryRequestBody = {
   question?: unknown;
   context?: unknown;
+  customerOrgId?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -417,6 +419,8 @@ export async function POST(request: NextRequest) {
   // get a plain 401 rather than a half-opened SSE connection.
   // TRIB-56: Accept API key auth (Bearer sk_live_...) alongside session auth.
   let orgId: string;
+  let vendorOrgId: string | null = null;
+  let customerOrgId: string | null = null;
   let userId: string;
   let authCtx: Awaited<ReturnType<typeof requireApiKeyOrSession>>;
   try {
@@ -447,6 +451,10 @@ export async function POST(request: NextRequest) {
     const rawBody = await request.json();
     const body: QueryRequestBody = isRecord(rawBody) ? rawBody : {};
     question = typeof body.question === 'string' ? body.question : '';
+    customerOrgId =
+      typeof body.customerOrgId === 'string' && body.customerOrgId.trim()
+        ? body.customerOrgId.trim()
+        : null;
     context = isRecord(body.context)
       ? sanitizePageContextForNetwork(body.context as unknown as PageContext)
       : undefined;
@@ -461,6 +469,30 @@ export async function POST(request: NextRequest) {
     return errors.badRequest(
       'context.url and context.appSignature are required',
     );
+  }
+
+  if (authCtx.authMethod === 'api_key') {
+    vendorOrgId = authCtx.orgId;
+
+    if (!customerOrgId) {
+      return errors.badRequest('customerOrgId is required for API-key recall');
+    }
+
+    try {
+      const customerOrg = await resolveCustomerOrgForVendor(
+        authCtx.orgId,
+        customerOrgId,
+      );
+
+      if (!customerOrg) {
+        return errors.forbidden();
+      }
+
+      orgId = customerOrg.id;
+    } catch (error) {
+      console.error('[extension/query] customer org verification failed:', error);
+      return errors.forbidden();
+    }
   }
 
   // TRIB-40: parse optional `?as_of=<ISO>` for point-in-time retrieval.
@@ -526,6 +558,8 @@ export async function POST(request: NextRequest) {
           screen,
           hadOrgKnowledge,
           hadVendorKnowledge,
+          vendorOrgId,
+          customerOrgId: orgId !== vendorOrgId ? orgId : null,
           knowledgeMode: hadOrgKnowledge
             ? 'org_backed'
             : hadVendorKnowledge
