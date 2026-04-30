@@ -91,6 +91,19 @@ const REQUIRED_MIGRATION_SNIPPETS: RequiredSnippet[] = [
   },
 ];
 
+const PROHIBITED_RPC_GRANTS = [
+  {
+    name: 'job claim RPC has no normal-client execute grant',
+    rpcName: 'claim_pending_jobs',
+    details: 'No migration grants claim_pending_jobs execution to public, anon, or authenticated.',
+  },
+  {
+    name: 'Wiki supersede RPC has no normal-client execute grant',
+    rpcName: 'supersede_org_wiki_page',
+    details: 'No migration grants supersede_org_wiki_page execution to public, anon, or authenticated.',
+  },
+];
+
 const REQUIRED_CODE_SNIPPETS: Array<RequiredSnippet & { file: string }> = [
   {
     file: 'src/lib/workers/job-processor.ts',
@@ -188,6 +201,25 @@ function checkSnippetSet(text: string, snippets: RequiredSnippet[]): ContractChe
   return snippets.map((snippet) => checkSnippet(text, snippet));
 }
 
+function checkNoProhibitedRpcGrant(
+  migrationsText: string,
+  grant: (typeof PROHIBITED_RPC_GRANTS)[number],
+): ContractCheck {
+  const prohibitedGrant = new RegExp(
+    `grant\\s+execute\\s+on\\s+function\\s+public\\.${grant.rpcName}\\s*\\([^;]*\\)\\s+to\\s+(public|anon|authenticated)\\b`,
+    'i',
+  );
+  const found = prohibitedGrant.test(migrationsText);
+
+  return {
+    name: grant.name,
+    status: found ? 'fail' : 'pass',
+    details: found
+      ? `Found prohibited execute grant for ${grant.rpcName}.`
+      : grant.details,
+  };
+}
+
 function readMigrations(root: string): string {
   const migrationsDir = path.join(root, 'supabase/migrations');
   if (!existsSync(migrationsDir)) {
@@ -213,7 +245,13 @@ export function runKnowledgeContractVerification(
     ),
   );
 
-  checks.push(...checkSnippetSet(readMigrations(root), REQUIRED_MIGRATION_SNIPPETS));
+  const migrationsText = readMigrations(root);
+  checks.push(...checkSnippetSet(migrationsText, REQUIRED_MIGRATION_SNIPPETS));
+  checks.push(
+    ...PROHIBITED_RPC_GRANTS.map((grant) =>
+      checkNoProhibitedRpcGrant(migrationsText, grant),
+    ),
+  );
 
   for (const required of [...REQUIRED_CODE_SNIPPETS, ...REQUIRED_ROUTE_TEST_SNIPPETS]) {
     checks.push(checkSnippet(readText(root, required.file), required));

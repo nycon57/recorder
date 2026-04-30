@@ -127,4 +127,23 @@ describe('knowledge contract verification', () => {
       }),
     );
   });
+
+  it('fails closed when a later migration grants a protected RPC to normal clients', () => {
+    const root = createCompleteFixture();
+    writeFixture(
+      root,
+      'supabase/migrations/20260430012000_bad_grant.sql',
+      'grant execute on function public.supersede_org_wiki_page(uuid, uuid, text, text, text, text, double precision, uuid, jsonb, timestamptz) to authenticated;',
+    );
+
+    const result = runKnowledgeContractVerification(root);
+
+    expect(result.ok).toBe(false);
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({
+        name: 'Wiki supersede RPC has no normal-client execute grant',
+        status: 'fail',
+      }),
+    );
+  });
 });
