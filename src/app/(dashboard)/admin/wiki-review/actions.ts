@@ -739,6 +739,12 @@ export async function approveRoutingReview(input: {
         },
         decisionHint: input.decisionAction ?? null,
       });
+
+      await enqueueRoutingCompileWikiJob({
+        recordingId: persisted.content.id,
+        orgId,
+        approvalId: approval.id,
+      });
     } catch (error) {
       try {
         await resetClaimedRoutingApproval({
@@ -755,12 +761,6 @@ export async function approveRoutingReview(input: {
       }
       throw error;
     }
-
-    await enqueueRoutingCompileWikiJob({
-      recordingId: persisted.content.id,
-      orgId,
-      approvalId: approval.id,
-    });
 
     await writeReviewAuditLog({
       orgId,

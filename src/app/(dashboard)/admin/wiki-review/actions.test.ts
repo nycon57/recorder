@@ -347,6 +347,45 @@ describe('wiki routing review actions', () => {
     expect(enqueueRoutingCompileWikiJobMock).not.toHaveBeenCalled();
   });
 
+  it('resets claimed admin approvals when compile enqueue fails', async () => {
+    enqueueRoutingCompileWikiJobMock.mockRejectedValue(new Error('queue unavailable') as never);
+    const contentUpdate = routingUpdateResponse();
+    const resetUpdate = {
+      update: jest.fn(() => resetUpdate),
+      eq: jest.fn(() => resetUpdate),
+    };
+    fromMock
+      .mockReturnValueOnce(routingSelectSingleResponse(routingApprovalRow()))
+      .mockReturnValueOnce(routingSelectSingleResponse(routingContentRow()))
+      .mockReturnValueOnce(contentUpdate)
+      .mockReturnValueOnce(resetUpdate);
+
+    const result = await approveRoutingReview({
+      approvalId: 'approval-1',
+      contentId: 'content-1',
+      topic: 'renewals',
+      app: null,
+      screen: null,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(enqueueRoutingCompileWikiJobMock).toHaveBeenCalledWith({
+      recordingId: 'content-1',
+      orgId: 'org-1',
+      approvalId: 'approval-1',
+    });
+    expect(resetUpdate.update).toHaveBeenCalledWith({
+      status: 'pending',
+      reviewed_by: null,
+      reviewed_at: null,
+      rejection_reason: null,
+    });
+    expect(resetUpdate.eq).toHaveBeenCalledWith('id', 'approval-1');
+    expect(resetUpdate.eq).toHaveBeenCalledWith('org_id', 'org-1');
+    expect(resetUpdate.eq).toHaveBeenCalledWith('status', 'approved');
+    expect(resetUpdate.eq).toHaveBeenCalledWith('reviewed_by', 'user-1');
+  });
+
   it('claims routing rejections before persisting rejected metadata', async () => {
     reviewApprovalMock.mockResolvedValue({ id: 'approval-1', status: 'rejected' } as never);
     determineRoutingReviewDecisionActionMock.mockReturnValue('reject');
