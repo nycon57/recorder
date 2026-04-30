@@ -50,6 +50,8 @@ interface Webhook {
   timeout_ms: number;
 }
 
+type WebhookEvent = NonNullable<UpdateWebhookInput['events']>[number];
+
 interface EditWebhookModalProps {
   webhook: Webhook;
   open: boolean;
@@ -302,13 +304,13 @@ export function EditWebhookModal({ webhook, open, onOpenChange }: EditWebhookMod
                         className="flex items-start space-x-3 space-y-0"
                       >
                         <Checkbox
-                          checked={field.value?.includes(event.value as UpdateWebhookInput['events'][number])}
+                          checked={field.value?.includes(event.value as WebhookEvent)}
                           onCheckedChange={(checked) => {
                             if (checked) {
-                              field.onChange([...(field.value || []), event.value]);
+                              field.onChange([...(field.value || []), event.value as WebhookEvent]);
                             } else {
                               field.onChange(
-                                field.value?.filter((v: string) => v !== event.value)
+                                field.value?.filter((v) => v !== event.value)
                               );
                             }
                           }}
