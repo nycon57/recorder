@@ -6,6 +6,7 @@ import {
 } from '@/lib/services/compiled-memory-context';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
 import { formatVendorKnowledgeTitle } from '@/lib/services/vendor-doc-corpus';
+import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { PageContext } from '@tribora/shared';
 
 const ORG_SEPARATOR = '\n\n---\n\n';
@@ -85,6 +86,18 @@ interface ResolveCompiledMemoryAnswerContextArgs {
 interface ResolveCompiledMemoryAnswerContextDeps {
   generateEmbedding?: typeof generateEmbeddingWithFallback;
   resolveCompiledMemory?: typeof resolveCompiledMemoryContext;
+}
+
+interface ResolveScopedCompiledMemoryAnswerContextArgs {
+  orgId: string;
+  userId?: string;
+  question: string;
+  sourceIds: string[];
+  limit?: number;
+}
+
+interface ResolveScopedCompiledMemoryAnswerContextDeps {
+  createAdminClient?: typeof createAdminClient;
 }
 
 function clampContent(value: string | null | undefined): string {
@@ -389,6 +402,153 @@ export function buildCompiledMemoryCitations(
     provenance: source.provenance,
     matchType: source.matchType ?? null,
   }));
+}
+
+function emptyCompiledMemoryAnswerContext(): CompiledMemoryAnswerContext {
+  return {
+    context: '',
+    sources: [],
+    citations: [],
+    citationsBySourceId: {},
+    priorTopics: [],
+  };
+}
+
+export async function resolveScopedCompiledMemoryAnswerContext(
+  args: ResolveScopedCompiledMemoryAnswerContextArgs,
+  deps: ResolveScopedCompiledMemoryAnswerContextDeps = {},
+): Promise<CompiledMemoryAnswerContext> {
+  const sourceIds = Array.from(
+    new Set(args.sourceIds.map((sourceId) => sourceId.trim()).filter(Boolean)),
+  );
+  const trimmedQuestion = args.question.trim();
+
+  if (sourceIds.length === 0 || !trimmedQuestion) {
+    return emptyCompiledMemoryAnswerContext();
+  }
+
+  const createAdminClientFn = deps.createAdminClient ?? createAdminClient;
+  const supabase = createAdminClientFn();
+  const sourceLimit = Math.max(1, Math.min(args.limit ?? 5, 20));
+
+  const { data: sourceRows, error: sourceError } = await supabase
+    .from('wiki_page_sources')
+    .select('page_id, source_id, source_type')
+    .in('source_id', sourceIds)
+    .in('source_type', ['recording', 'video', 'audio', 'document', 'text']);
+
+  if (sourceError) {
+    throw new Error(
+      `Failed to resolve scoped compiled-memory sources: ${sourceError.message}`,
+    );
+  }
+
+  const rows =
+    (sourceRows as
+      | Array<{ page_id: string; source_id: string; source_type: string }>
+      | null) ?? [];
+  const pageIds = Array.from(new Set(rows.map((row) => row.page_id))).slice(
+    0,
+    sourceLimit,
+  );
+
+  if (pageIds.length === 0) {
+    return emptyCompiledMemoryAnswerContext();
+  }
+
+  const { data: pageRows, error: pageError } = await supabase
+    .from('org_wiki_pages')
+    .select('id, app, screen, topic, content, confidence, updated_at')
+    .eq('org_id', args.orgId)
+    .is('valid_until', null)
+    .in('id', pageIds);
+
+  if (pageError) {
+    throw new Error(
+      `Failed to load scoped compiled-memory pages: ${pageError.message}`,
+    );
+  }
+
+  const pagesById = new Map(
+    ((pageRows as
+      | Array<{
+          id: string;
+          app: string | null;
+          screen: string | null;
+          topic: string;
+          content: string;
+          confidence: number;
+          updated_at: string | null;
+        }>
+      | null) ?? []).map((page) => [page.id, page]),
+  );
+
+  const pageSourcesById = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    if (!pageSourcesById.has(row.page_id)) {
+      pageSourcesById.set(row.page_id, row);
+    }
+  }
+
+  const orgPages = pageIds
+    .map((pageId) => pagesById.get(pageId))
+    .filter((page): page is NonNullable<typeof page> => page != null)
+    .map((page) => ({
+      id: page.id,
+      app: page.app,
+      screen: page.screen,
+      topic: page.topic,
+      content: page.content,
+      confidence: page.confidence,
+      distance: 0,
+    }));
+
+  const citationsBySourceId = Object.fromEntries(
+    orgPages.map((page) => {
+      const source = pageSourcesById.get(page.id);
+      return [
+        page.id,
+        {
+          sourceId: page.id,
+          title: page.topic,
+          layer: 'org' as const,
+          linkUrl: source?.source_id
+            ? `/dashboard/recordings/${source.source_id}`
+            : undefined,
+          freshness: {
+            updatedAt: pagesById.get(page.id)?.updated_at ?? null,
+            lastSuccessfulSyncAt: null,
+            freshnessTarget: null,
+            isStale: null,
+          },
+          provenance: {
+            pageId: page.id,
+            vendorPageId: null,
+            vendorSourceId: null,
+            sourceKind: source?.source_type ?? null,
+            sourceUrl: source?.source_id
+              ? `/dashboard/recordings/${source.source_id}`
+              : null,
+          },
+        },
+      ];
+    }),
+  );
+
+  return buildCompiledMemoryAnswerContext({
+    vendorKnowledge: {
+      page: null,
+      pages: [],
+    },
+    vendorTraining: {
+      pages: [],
+    },
+    orgKnowledge: {
+      pages: orgPages,
+      priorTopics: [],
+    },
+    citationsBySourceId,
+  });
 }
 
 export function summarizeCompiledMemoryAnswerObservability(

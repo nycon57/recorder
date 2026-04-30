@@ -11,7 +11,7 @@
  *
  * Tools:
  * 1. answerQuestion - Compiled-memory Q&A with citation-ordered context
- * 2. searchRecordings - Raw evidence discovery across recordings/transcripts
+ * 2. searchRecordings - Compiled Wiki discovery across customer knowledge
  * 3. getDocument - Retrieve full document content by ID
  * 4. getTranscript - Get transcript with timestamps
  * 5. getRecordingMetadata - Fetch content metadata
@@ -20,11 +20,12 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
-import { injectRAGContext, type SourceCitation } from './chat-rag-integration';
 import {
   buildCompiledMemoryCitations,
   resolveCompiledMemoryAnswerContext,
+  resolveScopedCompiledMemoryAnswerContext,
 } from './compiled-memory-answer-context';
+import { searchCompiledOrgWikiPages } from './wiki-search';
 
 /**
  * Tool execution context
@@ -33,6 +34,7 @@ import {
 export interface ToolContext {
   orgId: string;
   userId: string;
+  contentIds?: string[];
 }
 
 /**
@@ -42,7 +44,14 @@ interface ToolResponse<T = any> {
   success: boolean;
   data?: T;
   error?: string;
-  sources?: SourceCitation[];
+  sources?: Array<{
+    title: string;
+    excerpt: string;
+    relevanceScore: number;
+    type: 'compiled_wiki';
+    contentId: string;
+    url: string;
+  }>;
 }
 
 /**
@@ -129,20 +138,16 @@ export async function executeAnswerQuestion(
 /**
  * Search Recordings Execute Function
  *
- * Uses RAG integration to perform semantic search across recordings and transcripts.
- * Returns relevant excerpts with source citations.
+ * Uses compiled Wiki pages as the production-facing knowledge discovery layer.
+ * Raw transcript/document tools remain available for exact evidence retrieval
+ * after a user chooses a specific content item.
  */
 export async function executeSearchRecordings(
   {
     query,
     limit,
-    contentIds,
-    recordingIds,
-    includeTranscripts,
-    includeDocuments,
-    minRelevance,
   }: any,
-  { orgId }: ToolContext
+  { orgId, userId, contentIds }: ToolContext
 ): Promise<ToolResponse> {
     try {
       // Input validation
@@ -153,57 +158,95 @@ export async function executeSearchRecordings(
         };
       }
 
-      const scopedContentIds = contentIds ?? recordingIds;
-
-      // Perform RAG search
-      const ragContext = await injectRAGContext(query, orgId, {
-        limit: limit || 5,
-        minRelevance: minRelevance || 0.7,
-        includeTranscripts: includeTranscripts !== false,
-        includeDocuments: includeDocuments !== false,
-        contentIds: scopedContentIds,
-        useHierarchical: true,
-        enableCache: true,
-      });
+      const scopedContentIds = Array.isArray(contentIds)
+        ? contentIds.filter(Boolean)
+        : [];
+      const scopedContext =
+        scopedContentIds.length > 0
+          ? await resolveScopedCompiledMemoryAnswerContext({
+              orgId,
+              userId,
+              question: query,
+              sourceIds: scopedContentIds,
+              limit: limit || 5,
+            })
+          : null;
+      const pages =
+        scopedContext != null
+          ? scopedContext.sources.map((source) => ({
+              id: source.sourceId,
+              title: source.title,
+              snippet: source.excerpt,
+              content: source.content,
+              app: null,
+              screen: null,
+              similarity: source.confidence,
+            }))
+          : await searchCompiledOrgWikiPages({
+              orgId,
+              query,
+              limit: limit || 5,
+            });
 
       // Check if results found
-      if (!ragContext.sources || ragContext.sources.length === 0) {
+      if (pages.length === 0) {
         return {
           success: true,
           data: {
-            message: 'No relevant content found for your query. Try different keywords or check if you have any content.',
+            message:
+              scopedContentIds.length > 0
+                ? 'No compiled Wiki knowledge is linked to the selected recording yet.'
+                : 'No compiled Wiki knowledge matched your query yet. Try a different topic or inspect a specific recording/document.',
             results: [],
-            searchMetadata: ragContext.metadata,
+            searchMetadata: {
+              searchMode:
+                scopedContentIds.length > 0
+                  ? 'compiled_wiki_scoped'
+                  : 'compiled_wiki',
+              cacheHit: false,
+            },
           },
           sources: [],
         };
       }
 
       // Format results for the assistant
-      const formattedResults = ragContext.sources.map((source, index) => ({
+      const formattedResults = pages.map((page, index) => ({
         rank: index + 1,
-        title: source.title,
-        excerpt: source.excerpt,
-        relevanceScore: Math.round(source.relevanceScore * 100),
-        type: source.type,
-        contentId: source.contentId,
-        timestamp: source.timestamp ? formatTimestamp(source.timestamp) : undefined,
-        url: source.url,
-        hasVisualContext: source.metadata?.hasVisualContext || false,
+        title: page.title,
+        excerpt: page.snippet,
+        relevanceScore: Math.round(page.similarity * 100),
+        type: 'compiled_wiki',
+        contentId: page.id,
+        url: `/dashboard/knowledge/wiki-pages/${page.id}`,
+        app: page.app,
+        screen: page.screen,
+      }));
+
+      const sources = pages.map((page) => ({
+        title: page.title,
+        excerpt: page.snippet,
+        relevanceScore: page.similarity,
+        type: 'compiled_wiki' as const,
+        contentId: page.id,
+        url: `/dashboard/knowledge/wiki-pages/${page.id}`,
       }));
 
       return {
         success: true,
         data: {
-          message: `Found ${ragContext.sources.length} relevant result(s)`,
+          message: `Found ${pages.length} compiled Wiki result(s)`,
           results: formattedResults,
           searchMetadata: {
-            searchMode: ragContext.metadata?.searchMode,
-            searchTimeMs: ragContext.metadata?.searchTimeMs,
-            cacheHit: ragContext.metadata?.cacheHit,
+            searchMode:
+              scopedContentIds.length > 0
+                ? 'compiled_wiki_scoped'
+                : 'compiled_wiki',
+            scopedContentIds,
+            cacheHit: false,
           },
         },
-        sources: ragContext.sources,
+        sources,
       };
   } catch (error) {
     console.error('[ChatTools] searchRecordings error:', error);

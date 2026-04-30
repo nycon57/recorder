@@ -3,7 +3,7 @@
  *
  * Handles chat requests with:
  * - Real-time streaming via streamText()
- * - RAG (Retrieval Augmented Generation) with sources
+ * - Compiled-memory answer context with sources
  * - Reasoning display for complex queries
  * - Message persistence to Supabase
  */
@@ -14,7 +14,6 @@ import { checkBotId } from 'botid/server';
 import { after } from 'next/server';
 
 import { requireOrg } from '@/lib/utils/api';
-import { retrieveContext } from '@/lib/services/rag-google';
 import {
   resolveCompiledMemoryAnswerContext,
   summarizeCompiledMemoryAnswerObservability,
@@ -22,8 +21,6 @@ import {
 } from '@/lib/services/compiled-memory-answer-context';
 import { preprocessQuery } from '@/lib/services/query-preprocessor';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { routeQuery, getRetrievalConfig, explainRoute, type QueryRoute } from '@/lib/services/query-router';
-import { isCohereConfigured } from '@/lib/services/reranking';
 import {
   executeSearchRecordings,
   executeGetDocument,
@@ -60,8 +57,6 @@ export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
 
 // Configuration flags (can be overridden via env vars)
-const ENABLE_AGENTIC_RAG = process.env.ENABLE_AGENTIC_RAG !== 'false';
-const ENABLE_RERANKING = process.env.ENABLE_RERANKING !== 'false';
 const ENABLE_CHAT_TOOLS = process.env.ENABLE_CHAT_TOOLS !== 'false';
 const ENABLE_SEARCH_MONITORING = process.env.ENABLE_SEARCH_MONITORING === 'true';
 
@@ -122,30 +117,6 @@ export function __setSourcesCacheEntryForTest(
 
 export function __clearSourcesCacheForTest() {
   sourcesCache.clear();
-}
-
-/**
- * Alert when search returns no results but user has content in their library
- */
-async function alertSearchFailure(
-  query: string,
-  orgId: string,
-  attempts: number,
-  config: any,
-  recordingsCount: number
-) {
-  if (recordingsCount > 0) {
-    console.warn('[Chat API] ⚠️ SEARCH FAILURE ALERT:', {
-      query: query.substring(0, 100),
-      orgId,
-      recordingsInLibrary: recordingsCount,
-      retrievalAttempts: attempts,
-      finalThreshold: config.threshold,
-      useAgentic: config.useAgentic,
-      rerank: config.rerank,
-      recommendation: 'User has content but search returned 0 results. Consider further threshold tuning or query preprocessing.',
-    });
-  }
 }
 
 /**
@@ -241,7 +212,7 @@ export async function POST(req: Request) {
     queryId = createQueryId();
     requestStartTime = Date.now();
 
-    // Get the last user message for RAG
+    // Get the last user message for compiled-memory retrieval.
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
     let userQuery = '';
 
@@ -292,15 +263,11 @@ export async function POST(req: Request) {
     }
 
     // Retrieve answer context if there's a query
-    let ragContext;
     let compiledAnswerContext: CompiledMemoryAnswerContext | undefined;
-    let route: QueryRoute | undefined;
     let retrievalAttempts = 0;
     let selectedStrategy = 'none';
-    let finalThreshold: number | null = null;
-    let averageSimilarity = 0;
     let actualRecordingsCount = 0;
-    let answerMode: 'compiled-memory' | 'discovery' | 'tool-discovery' | 'empty' = 'empty';
+    let answerMode: 'compiled-memory' | 'tool-discovery' | 'empty' = 'empty';
     let isMetaDiscoveryQuery = false;
     const isScopedDiscoveryMode = Array.isArray(recordingIds) && recordingIds.length > 0;
     let useToolDiscovery = false;
@@ -323,295 +290,26 @@ export async function POST(req: Request) {
       isMetaDiscoveryQuery =
         preprocessed.wasTransformed &&
         preprocessed.transformation === 'meta-question-extraction-and-expansion';
-      useToolDiscovery = isMetaDiscoveryQuery;
+      useToolDiscovery = isMetaDiscoveryQuery || isScopedDiscoveryMode;
 
-      if (useToolDiscovery) {
+      if (useToolDiscovery || isScopedDiscoveryMode) {
         answerMode = 'tool-discovery';
-        selectedStrategy = isMetaDiscoveryQuery ? 'tool_discovery_meta' : 'tool_discovery';
-        console.log('[Chat API] Using tool-based discovery strategy');
-      } else if (isScopedDiscoveryMode) {
-        const { count: summariesCount } = await supabaseAdmin
-          .from('content_summaries')
-          .select('id', { count: 'exact', head: true })
-          .eq('org_id', orgId);
-
-        const hasSummaries = (summariesCount || 0) > 0;
-        const hasReranking = ENABLE_RERANKING && isCohereConfigured();
-
-        console.log('[Chat API] Scoped discovery context:', {
-          recordingsCount: actualRecordingsCount,
-          hasSummaries,
-          hasReranking,
-          agenticEnabled: ENABLE_AGENTIC_RAG,
-        });
-
-        // Scoped retrieval is explicit discovery mode, so we still route for
-        // retrieval strategy tuning here.
-        route = await routeQuery(searchableQuery, {
-          recordingsCount: actualRecordingsCount,
-          hasSummaries,
-          hasReranking,
-        });
-
-        console.log('[Chat API] Query routing:');
-        console.log(explainRoute(route));
-
-        // Get retrieval configuration from route
-        const retrievalConfig = getRetrievalConfig(route);
-
-        // Track retrieval attempts for logging
-        retrievalAttempts = 1;
-        answerMode = 'discovery';
-        selectedStrategy = `${route.strategy}:discovery`;
-        finalThreshold = retrievalConfig.threshold || 0.7;
-
-        // Update monitoring with configuration
+        selectedStrategy = isScopedDiscoveryMode
+          ? 'tool_discovery_scoped'
+          : isMetaDiscoveryQuery
+            ? 'tool_discovery_meta'
+            : 'tool_discovery';
         if (ENABLE_SEARCH_MONITORING && userQuery) {
           searchMonitor.updateConfig(queryId, {
             strategy: selectedStrategy,
-            threshold: finalThreshold,
-            useAgentic: retrievalConfig.useAgentic || false,
+            threshold: undefined,
+            useAgentic: false,
           });
         }
-
-        try {
-          ragContext = await retrieveContext(searchableQuery, orgId, {
-            ...retrievalConfig,
-            contentIds: recordingIds,
-            useAgentic: ENABLE_AGENTIC_RAG && retrievalConfig.useAgentic,
-            rerank: ENABLE_RERANKING && retrievalConfig.rerank,
-          });
-
-          console.log('[Chat API] Initial discovery retrieval:', {
-            sourcesFound: ragContext?.sources?.length || 0,
-            totalChunks: ragContext?.totalChunks || 0,
-            strategy: selectedStrategy,
-            agenticUsed: ragContext?.agenticMetadata !== undefined,
-          });
-
-          if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
-            console.log('[Chat API] No discovery results - attempting retry strategies');
-
-            if (retrievalConfig.threshold && retrievalConfig.threshold > 0.5) {
-              console.log('[Chat API] Retry attempt 1: Lowering threshold to 0.5');
-              retrievalAttempts++;
-
-              if (ENABLE_SEARCH_MONITORING && userQuery) {
-                searchMonitor.recordRetry(queryId, 'lowerThreshold');
-              }
-
-              try {
-                ragContext = await retrieveContext(searchableQuery, orgId, {
-                  ...retrievalConfig,
-                  threshold: 0.5,
-                  contentIds: recordingIds,
-                  useAgentic: ENABLE_AGENTIC_RAG && retrievalConfig.useAgentic,
-                  rerank: ENABLE_RERANKING && retrievalConfig.rerank,
-                });
-
-                console.log('[Chat API] Retry 1 results:', {
-                  sourcesFound: ragContext?.sources?.length || 0,
-                });
-              } catch (error) {
-                console.error('[Chat API] Discovery retry 1 failed:', error);
-              }
-            }
-
-            if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
-              console.log('[Chat API] Retry attempt 2: Forcing hybrid search');
-              retrievalAttempts++;
-
-              if (ENABLE_SEARCH_MONITORING && userQuery) {
-                searchMonitor.recordRetry(queryId, 'hybrid');
-              }
-
-              try {
-                const { hybridSearch } = await import('@/lib/services/vector-search-google');
-                const hybridResults = await hybridSearch(searchableQuery, {
-                  orgId,
-                  limit: retrievalConfig.maxChunks || 10,
-                  threshold: 0.5,
-                  contentIds: recordingIds,
-                });
-
-                if (hybridResults && hybridResults.length > 0) {
-                  // Convert hybrid results to RAG context format
-                  const sources = hybridResults.map((result) => ({
-                    contentId: result.contentId,
-                    contentTitle: result.contentTitle,
-                    chunkId: result.id,
-                    chunkText: result.chunkText,
-                    similarity: result.similarity,
-                    timestamp: result.metadata.startTime,
-                    timestampRange: result.metadata.timestampRange,
-                    source: result.metadata.source,
-                    hasVisualContext: result.metadata.hasVisualContext || false,
-                    visualDescription: result.metadata.visualDescription,
-                    contentType: result.metadata.contentType || 'audio',
-                    url: `/library/${result.contentId}`,
-                  }));
-
-                  const context = sources
-                    .map((source, index) => {
-                      const citation = `[${index + 1}] ${source.contentTitle}`;
-                      const timeInfo = source.timestampRange
-                        ? ` (${source.timestampRange})`
-                        : source.timestamp
-                        ? ` (at ${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')})`
-                        : '';
-                      const visualIndicator = source.hasVisualContext ? ' [Video with screen context]' : '';
-                      return `${citation}${timeInfo}${visualIndicator}:\n${source.chunkText}\n`;
-                    })
-                    .join('\n');
-
-                  ragContext = {
-                    query: searchableQuery,
-                    context,
-                    sources,
-                    totalChunks: sources.length,
-                  };
-
-                  console.log('[Chat API] Retry 2 results (hybrid):', {
-                    sourcesFound: ragContext?.sources?.length || 0,
-                  });
-                }
-              } catch (error) {
-                console.error('[Chat API] Retry 2 (hybrid search) failed:', error);
-              }
-            }
-
-            if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
-              console.log('[Chat API] Retry attempt 3: Trying keyword-only search');
-              retrievalAttempts++;
-
-              if (ENABLE_SEARCH_MONITORING && userQuery) {
-                searchMonitor.recordRetry(queryId, 'keyword');
-              }
-
-              try {
-                const { hybridSearch } = await import('@/lib/services/vector-search-google');
-                const keywordResults = await hybridSearch(searchableQuery, {
-                  orgId,
-                  limit: retrievalConfig.maxChunks || 10,
-                  threshold: 0.3, // Even lower threshold for keyword fallback
-                  contentIds: recordingIds,
-                });
-
-                if (keywordResults && keywordResults.length > 0) {
-                  // Convert to RAG context format
-                  const sources = keywordResults.map((result) => ({
-                    contentId: result.contentId,
-                    contentTitle: result.contentTitle,
-                    chunkId: result.id,
-                    chunkText: result.chunkText,
-                    similarity: result.similarity,
-                    timestamp: result.metadata.startTime,
-                    timestampRange: result.metadata.timestampRange,
-                    source: result.metadata.source,
-                    hasVisualContext: result.metadata.hasVisualContext || false,
-                    visualDescription: result.metadata.visualDescription,
-                    contentType: result.metadata.contentType || 'audio',
-                    url: `/library/${result.contentId}`,
-                  }));
-
-                  const context = sources
-                    .map((source, index) => {
-                      const citation = `[${index + 1}] ${source.contentTitle}`;
-                      const timeInfo = source.timestampRange
-                        ? ` (${source.timestampRange})`
-                        : source.timestamp
-                        ? ` (at ${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')})`
-                        : '';
-                      const visualIndicator = source.hasVisualContext ? ' [Video with screen context]' : '';
-                      return `${citation}${timeInfo}${visualIndicator}:\n${source.chunkText}\n`;
-                    })
-                    .join('\n');
-
-                  ragContext = {
-                    query: searchableQuery,
-                    context,
-                    sources,
-                    totalChunks: sources.length,
-                  };
-
-                  console.log('[Chat API] Retry 3 results (keyword fallback):', {
-                    sourcesFound: ragContext?.sources?.length || 0,
-                  });
-                }
-              } catch (error) {
-                console.error('[Chat API] Retry 3 (keyword search) failed:', error);
-              }
-            }
-          }
-
-          if (ragContext?.sources && ragContext.sources.length > 0) {
-            const similarities = ragContext.sources
-              .map(s => s.similarity)
-              .filter((s): s is number => s != null && !isNaN(s));
-            averageSimilarity = similarities.length > 0
-              ? similarities.reduce((a, b) => a + b, 0) / similarities.length
-              : 0;
-
-            if (ENABLE_SEARCH_MONITORING && userQuery && similarities.length > 0) {
-              const minSimilarity = Math.min(...similarities);
-              const maxSimilarity = Math.max(...similarities);
-
-              searchMonitor.updateConfig(queryId, {
-                sourcesFound: ragContext.sources.length,
-                avgSimilarity: averageSimilarity,
-                minSimilarity: minSimilarity,
-                maxSimilarity: maxSimilarity,
-                retrievalAttempts: retrievalAttempts,
-                searchTimeMs: Date.now() - requestStartTime,
-              });
-            }
-          }
-
-          console.log('[Chat API] Final discovery retrieval:', {
-            attempts: retrievalAttempts,
-            sourcesFound: ragContext?.sources?.length || 0,
-            finalStrategy: selectedStrategy,
-            threshold: retrievalConfig.threshold,
-            averageSimilarity: averageSimilarity.toFixed(3),
-          });
-
-          if (!ragContext || !ragContext.sources || ragContext.sources.length === 0) {
-            await alertSearchFailure(searchableQuery, orgId, retrievalAttempts, retrievalConfig, actualRecordingsCount);
-          }
-
-          console.log('[Chat API] Search quality metrics:', {
-            timestamp: new Date().toISOString(),
-            orgId,
-            userId,
-            query: userQuery,
-            queryLength: userQuery.length,
-            queryWordCount: userQuery.split(/\s+/).length,
-            retrievalAttempts,
-            sourcesFound: ragContext?.sources?.length || 0,
-            strategy: selectedStrategy,
-            threshold: retrievalConfig.threshold,
-            agenticUsed: retrievalConfig.useAgentic || false,
-            rerankingUsed: retrievalConfig.rerank || false,
-            retrievalTimeMs: Date.now() - requestStartTime,
-          });
-        } catch (error) {
-          console.error('[Chat API] Discovery retrieval error:', error);
-
-          console.error('[Chat API] Error details:', {
-            query: searchableQuery,
-            orgId,
-            config: retrievalConfig,
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-            errorStack: error instanceof Error ? error.stack : undefined,
-          });
-
-          ragContext = {
-            query: searchableQuery,
-            context: '',
-            sources: [],
-            totalChunks: 0,
-          };
-        }
+        console.log('[Chat API] Using tool-based discovery strategy:', {
+          selectedStrategy,
+          scopedContentIds: isScopedDiscoveryMode ? recordingIds : undefined,
+        });
       } else {
         retrievalAttempts = 1;
         answerMode = 'compiled-memory';
@@ -725,30 +423,19 @@ ${compiledAnswerContext.context}
 
 **Your Task:**
 Answer the user's question using ONLY the compiled memory above. Do not invent or assume anything. Use citation numbers [1], [2], etc. to reference sources.`;
-    } else if (answerMode === 'discovery' && ragContext) {
-      systemPrompt = `You are a helpful AI assistant. The user explicitly asked to work against selected recordings, so you are in discovery mode.
-
-**Mode boundary:**
-- Discovery mode uses RAW evidence from transcripts/documents.
-- Raw evidence is useful for audit, verification, and scoped investigation.
-- Do not present discovery-mode findings as the canonical compiled-memory answer layer.
-
-**CRITICAL RULES:**
-1. ONLY use information explicitly stated in the raw evidence below
-2. If the answer is not in the evidence, respond with: "I couldn't find that in the selected recordings."
-3. Make it clear you are summarizing raw evidence from the selected recordings
-4. Use citation numbers [1], [2], [3] for every factual claim
-
-**RAW EVIDENCE FROM SELECTED RECORDINGS:**
-${ragContext.context}
-
-Answer using ONLY the evidence above.`;
     } else if (actualRecordingsCount > 0) {
       systemPrompt = `You are a helpful AI assistant. The organization has recordings, but I could not find compiled knowledge for this question yet.
 
 Tell the user that you don't have compiled knowledge about that yet and offer to search the raw recordings if they want discovery evidence, transcript snippets, or document excerpts. Do not guess.`;
     } else {
       systemPrompt = 'You are a helpful AI assistant. The user has no recordings yet. Let them know they need to create recordings first before you can answer questions about them.';
+    }
+
+    if (isScopedDiscoveryMode) {
+      systemPrompt += `\n\nSCOPED RECORDING MODE:
+- The user selected specific recording IDs. Stay within that selected content.
+- Use searchRecordings only; it is constrained to compiled Wiki pages linked to the selected recording IDs.
+- Do not browse, summarize, or infer from the broader organization library.`;
     }
 
     if (answerMode === 'compiled-memory' && compiledAnswerContext) {
@@ -761,29 +448,25 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
       console.log('[Chat API] Full context length:', compiledAnswerContext.context.length);
       console.log('[Chat API] Context preview:', compiledAnswerContext.context.substring(0, 500));
       console.log('[Chat API] ===============================');
-    } else if (ragContext && ragContext.sources && Array.isArray(ragContext.sources)) {
-      console.log('[Chat API] ===== DISCOVERY EVIDENCE DEBUG =====');
-      ragContext.sources.forEach((source, idx) => {
-        console.log(`  [${idx + 1}] ${source.contentTitle}`);
-        console.log(`      Content ID: ${source.contentId}`);
-        console.log(`      Chunk: ${source.chunkText.substring(0, 100)}...`);
-        console.log(`      Similarity: ${source.similarity}`);
-      });
-      console.log('[Chat API] Full context length:', ragContext.context.length);
-      console.log('[Chat API] Context preview:', ragContext.context.substring(0, 500));
-      console.log('[Chat API] ===============================');
     }
 
     // Create tools with bound context
     // Pass Zod schemas directly - AI SDK v5 handles conversion for Gemini
-    const toolsWithContext = ENABLE_CHAT_TOOLS && useToolDiscovery ? {
+    const scopedSearchRecordingsTool = {
       searchRecordings: tool({
         description: toolDescriptions.searchRecordings,
         inputSchema: searchRecordingsInputSchema,
         execute: async (args: any) => {
-          return await executeSearchRecordings(args, { orgId, userId });
+          return await executeSearchRecordings(args, {
+            orgId,
+            userId,
+            contentIds: isScopedDiscoveryMode ? recordingIds : undefined,
+          });
         },
       }),
+    };
+
+    const unscopedDiscoveryTools = {
       getDocument: tool({
         description: toolDescriptions.getDocument,
         inputSchema: getDocumentInputSchema,
@@ -834,12 +517,20 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
           return await executeExploreKnowledgeGraph(args, { orgId, userId });
         },
       }),
-    } : undefined;
+    };
+
+    const toolsWithContext =
+      ENABLE_CHAT_TOOLS && useToolDiscovery
+        ? {
+            ...scopedSearchRecordingsTool,
+            ...(isScopedDiscoveryMode ? {} : unscopedDiscoveryTools),
+          }
+        : undefined;
 
     const shouldPreferTools = useToolDiscovery;
 
     console.log('[Chat API] Streaming configuration:', {
-      strategy: route?.strategy,
+      strategy: selectedStrategy,
       answerMode,
       shouldPreferTools,
       toolsEnabled: !!toolsWithContext,
@@ -928,6 +619,7 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
         if (step.toolCalls && step.toolCalls.length > 0) {
           console.log('[Chat API] Tool calls in this step:');
           step.toolCalls.forEach((toolCall, idx) => {
+            if (!toolCall) return;
             console.log(`  [${idx + 1}] ${toolCall.toolName}:`,
               'args' in toolCall ? JSON.stringify(toolCall.args, null, 2) : '(streaming)'
             );
@@ -938,6 +630,7 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
         if (step.toolResults && step.toolResults.length > 0) {
           console.log('[Chat API] Tool results in this step:');
           step.toolResults.forEach((result, idx) => {
+            if (!result) return;
             const resultData = 'result' in result ? result.result : '(no result)';
             console.log(`  [${idx + 1}] ${result.toolName}:`,
               typeof resultData === 'string'
@@ -1001,21 +694,7 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
               },
             },
           })) || []
-        : ragContext?.sources?.map((source, index) => ({
-            id: `source-${index + 1}`,
-            recordingId: source.contentId,
-            title: source.contentTitle,
-            url: source.url || `/library/${source.contentId}`,
-            snippet: source.chunkText.substring(0, 200),
-            relevanceScore: source.similarity,
-            timestamp: source.timestampRange || (source.timestamp ? `${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')}` : undefined),
-            metadata: {
-              chunkId: source.chunkId,
-              hasVisualContext: source.hasVisualContext,
-              contentType: source.contentType,
-              sourceType: 'raw_evidence',
-            },
-          })) || [];
+        : [];
 
     const sourcesCount = sourceCitations.length;
 
@@ -1059,11 +738,8 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
     response.headers.set('X-Search-Strategy', selectedStrategy);
     response.headers.set('X-Sources-Count', String(sourcesCount));
     response.headers.set('X-Retrieval-Attempts', String(retrievalAttempts));
-    response.headers.set('X-Threshold-Used', finalThreshold != null ? String(finalThreshold) : 'N/A');
-    response.headers.set(
-      'X-Similarity-Avg',
-      answerMode === 'discovery' && averageSimilarity > 0 ? averageSimilarity.toFixed(3) : 'N/A',
-    );
+    response.headers.set('X-Threshold-Used', 'N/A');
+    response.headers.set('X-Similarity-Avg', 'N/A');
 
     console.log('[Chat API] Response headers:', {
       contentType: response.headers.get('Content-Type'),
@@ -1098,13 +774,13 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
       queryLength: userQuery.length,
       queryWordCount: userQuery.trim() ? userQuery.trim().split(/\s+/).length : 0,
       answerMode,
-      routeStrategy: route?.strategy ?? null,
+      routeStrategy: selectedStrategy,
       selectedStrategy,
       recordingsCount: actualRecordingsCount,
       sourcesCount,
       retrievalAttempts,
-      finalThreshold,
-      averageSimilarity,
+      finalThreshold: null,
+      averageSimilarity: 0,
       totalTimeMs: Date.now() - requestStartTime,
       routingFailed: false,
       routingFailureReason: null,
