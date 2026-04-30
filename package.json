@@ -14,6 +14,7 @@
     "build:sdk": "npm run build --workspace=@tribora/sdk",
     "verify:extension-release": "bash scripts/verify-extension-release-gate.sh",
     "verify:knowledge-contracts": "tsx scripts/verify-knowledge-contracts.ts",
+    "verify:knowledge-readiness": "tsx scripts/verify-knowledge-readiness.ts",
     "start": "next start",
     "lint": "eslint . --cache --max-warnings 0",
     "format": "prettier . --cache",
