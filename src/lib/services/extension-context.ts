@@ -552,6 +552,7 @@ async function fetchVendorMatchCandidates(
     .from('vendor_wiki_pages')
     .select('id, app, screen, element_selectors')
     .in('app', appCandidates)
+    .is('retired_at', null)
     .order('updated_at', { ascending: false })) as {
     data: VendorRow[] | null;
     error: unknown;

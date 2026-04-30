@@ -4,6 +4,8 @@ import {
   buildLegacyVendorSourceBackfill,
   buildVendorSourceFailurePatch,
   buildVendorSourceSuccessPatch,
+  getVendorSourceSyncBlockReason,
+  isVendorSourceQueryable,
   normalizeVendorSourceDraft,
 } from '../vendor-source-registry';
 
@@ -33,6 +35,8 @@ describe('vendor-source-registry', () => {
       planBand: ['Marketing Hub', 'Sales Hub'],
       applicability: {},
       termsReviewStatus: 'pending',
+      lifecycle: 'active',
+      legalReview: null,
     });
   });
 
@@ -43,7 +47,7 @@ describe('vendor-source-registry', () => {
         sourceKind: 'documentation',
         sourceUrl: 'https://docs.vercel.com/storage',
         fetchStrategy: 'sanctioned_crawl',
-      } as any)
+      } as unknown as Parameters<typeof normalizeVendorSourceDraft>[0])
     ).toThrow(/publisher hostname/i);
 
     expect(() =>
@@ -104,6 +108,8 @@ describe('vendor-source-registry', () => {
           legacyScreens: ['contacts-list'],
         },
         termsReviewStatus: 'pending',
+        lifecycle: 'active',
+        legalReview: null,
       },
     ]);
 
@@ -139,5 +145,31 @@ describe('vendor-source-registry', () => {
       last_error: 'crawler timed out',
       updated_at: succeededAt,
     });
+  });
+
+  test('source lifecycle gates sync and queryability separately from terms status', () => {
+    const activeApproved = {
+      lifecycle: 'active' as const,
+      retired_at: null,
+      terms_review_status: 'approved' as const,
+      official_source: true,
+    };
+
+    expect(isVendorSourceQueryable(activeApproved)).toBe(true);
+    expect(getVendorSourceSyncBlockReason(activeApproved)).toBeNull();
+
+    expect(
+      getVendorSourceSyncBlockReason({
+        ...activeApproved,
+        lifecycle: 'paused',
+      }),
+    ).toBe('Vendor source is paused and cannot be synced');
+
+    expect(
+      getVendorSourceSyncBlockReason({
+        ...activeApproved,
+        lifecycle: 'retired',
+      }),
+    ).toBe('Vendor source is retired and cannot be synced');
   });
 });

@@ -3,6 +3,7 @@ import type { Database, Json } from '@/lib/types/database';
 
 import {
   createVendorSourceRegistryService,
+  getVendorSourceSyncBlockReason,
   type VendorSourceRow,
 } from './vendor-source-registry';
 import {
@@ -204,12 +205,13 @@ export function createVendorSourceSyncService(
           continue;
         }
 
-        if (source.terms_review_status !== 'approved') {
+        const syncBlockReason = getVendorSourceSyncBlockReason(source);
+        if (syncBlockReason) {
           results.push({
             sourceId: source.id,
             app: source.app,
             status: 'unsupported',
-            reason: `Vendor source must be terms-approved before sync (status: ${source.terms_review_status})`,
+            reason: syncBlockReason,
           });
           continue;
         }

@@ -143,7 +143,10 @@ async function loadCoverageMap(
   lintResult: LintResult | null,
 ): Promise<CoverageMapData> {
   const [vendorRes, activeRes] = await Promise.all([
-    supabaseAdmin.from('vendor_wiki_pages').select('app, screen'),
+    supabaseAdmin
+      .from('vendor_wiki_pages')
+      .select('app, screen')
+      .is('retired_at', null),
     supabaseAdmin
       .from('org_wiki_pages')
       .select('app, screen')
@@ -235,7 +238,8 @@ async function resolveVendorPageLinks(
 
   const { data, error } = await supabaseAdmin
     .from('vendor_wiki_pages')
-    .select('id, app, screen');
+    .select('id, app, screen')
+    .is('retired_at', null);
 
   if (error || !data) return new Map();
 

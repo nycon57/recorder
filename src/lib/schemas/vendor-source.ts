@@ -8,6 +8,26 @@
 
 import { z } from 'zod';
 
+function isValidUrl(value: string): boolean {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const optionalHttpsUrlSchema = z
+  .string()
+  .optional()
+  .refine(
+    (url) => !url || url.startsWith('https://'),
+    'Legal review reference must use https protocol',
+  )
+  .refine((url) => !url || isValidUrl(url), {
+    message: 'Legal review reference must be a valid URL',
+  });
+
 export const vendorIngestInputSchema = z.object({
   app: z
     .string()
@@ -26,6 +46,8 @@ export const vendorIngestInputSchema = z.object({
     .max(500, 'Max pages cannot exceed 500')
     .optional(),
   force: z.boolean().optional(),
+  legalReviewReferenceUrl: optionalHttpsUrlSchema,
+  legalReviewNotes: z.string().max(4000).optional(),
 });
 
 export type VendorIngestInput = z.infer<typeof vendorIngestInputSchema>;
@@ -43,3 +65,33 @@ export const vendorResyncInputSchema = z.object({
 });
 
 export type VendorResyncInput = z.infer<typeof vendorResyncInputSchema>;
+
+export const vendorSourceLifecycleSchema = z.enum(['active', 'paused', 'retired']);
+
+export const vendorSourceUpdateSchema = z.object({
+  lifecycle: vendorSourceLifecycleSchema.optional(),
+  termsReviewStatus: z
+    .enum(['pending', 'approved', 'restricted', 'rejected'])
+    .optional(),
+  legalReviewReferenceUrl: z.preprocess(
+    (value) => (value === '' ? null : value),
+    z
+      .string()
+      .url('Legal review reference must be a valid URL')
+      .refine(
+        (u) => u.startsWith('https://'),
+        'Legal review reference must use https protocol',
+      )
+      .nullable()
+      .optional(),
+  ),
+  legalReviewNotes: z.string().max(4000).nullable().optional(),
+});
+
+export const vendorSourceRetireSchema = z.object({
+  reason: z.string().trim().min(5, 'Retirement reason is required'),
+  replacementSourceId: z.string().uuid().nullable().optional(),
+});
+
+export type VendorSourceUpdateInput = z.infer<typeof vendorSourceUpdateSchema>;
+export type VendorSourceRetireInput = z.infer<typeof vendorSourceRetireSchema>;

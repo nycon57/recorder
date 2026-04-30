@@ -68,7 +68,8 @@ async function loadVendorPages(
   const { data, error } = await supabase
     .from('vendor_wiki_pages')
     .select('id, screen, content')
-    .in('id', requestedPageIds);
+    .in('id', requestedPageIds)
+    .is('retired_at', null);
 
   if (error) {
     throw new Error(`Failed to load vendor pages: ${error.message}`);

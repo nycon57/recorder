@@ -447,7 +447,8 @@ async function detectCoverageGaps(
 ): Promise<CoverageGapDetail[]> {
   const { data, error } = await supabase
     .from('vendor_wiki_pages')
-    .select('app, screen');
+    .select('app, screen')
+    .is('retired_at', null);
 
   if (error) {
     throw new Error(`[wiki-lint] Failed to load vendor pages: ${error.message}`);

@@ -2,16 +2,27 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { RefreshCw, Table2 } from 'lucide-react';
+import { Archive, RefreshCw, Table2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/app/components/ui/dialog';
+import { Label } from '@/app/components/ui/label';
+import { Textarea } from '@/app/components/ui/textarea';
 
 interface SourceCardActionsProps {
   sourceId: string;
   app: string;
   /** If a job is already pending/processing, warn the operator before re-queuing. */
   activeJobStatus: 'pending' | 'processing' | null;
+  syncBlockReason: string | null;
+  lifecycle: 'active' | 'paused' | 'retired';
   onResyncSuccess?: () => void;
 }
 
@@ -26,9 +37,14 @@ export function SourceCardActions({
   sourceId,
   app,
   activeJobStatus,
+  syncBlockReason,
+  lifecycle,
   onResyncSuccess,
 }: SourceCardActionsProps) {
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isRetiring, setIsRetiring] = useState(false);
+  const [retireOpen, setRetireOpen] = useState(false);
+  const [retirementReason, setRetirementReason] = useState('');
 
   async function handleResync() {
     setIsSyncing(true);
@@ -68,23 +84,104 @@ export function SourceCardActions({
     }
   }
 
+  async function handleRetire() {
+    const reason = retirementReason.trim();
+    if (reason.length < 5) {
+      toast.error('Retirement reason is required.');
+      return;
+    }
+
+    setIsRetiring(true);
+    try {
+      const res = await fetch(`/api/admin/vendor-sources/${sourceId}/retire`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        toast.error(json?.error?.message ?? json?.message ?? `Retire failed (${res.status})`);
+        return;
+      }
+
+      toast.success(`Retired ${app}`);
+      setRetirementReason('');
+      setRetireOpen(false);
+      onResyncSuccess?.();
+    } catch (err) {
+      toast.error('Network error — please try again.');
+      console.error('[SourceCardActions] retire error:', err);
+    } finally {
+      setIsRetiring(false);
+    }
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
       <Button
         variant="outline"
         size="sm"
         onClick={handleResync}
-        disabled={isSyncing}
+        disabled={isSyncing || Boolean(syncBlockReason)}
         className="gap-1.5"
         title={
-          activeJobStatus
+          syncBlockReason ??
+          (activeJobStatus
             ? `A ${activeJobStatus} job already exists — force=true will re-enqueue anyway`
-            : 'Queue a manual re-sync for this source'
+            : 'Queue a manual re-sync for this source')
         }
       >
         <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
         {isSyncing ? 'Queueing...' : 'Re-sync now'}
       </Button>
+
+      <Dialog open={retireOpen} onOpenChange={setRetireOpen}>
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={lifecycle === 'retired'}
+            className="gap-1.5"
+          >
+            <Archive className="h-3.5 w-3.5" />
+            Retire
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Retire {app}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor={`retire-${sourceId}`}>Reason</Label>
+            <Textarea
+              id={`retire-${sourceId}`}
+              value={retirementReason}
+              onChange={(event) => setRetirementReason(event.target.value)}
+              rows={4}
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setRetireOpen(false)}
+                disabled={isRetiring}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleRetire}
+                disabled={isRetiring}
+              >
+                {isRetiring ? 'Retiring...' : 'Retire source'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Button variant="ghost" size="sm" asChild className="gap-1.5">
         <Link href={`/admin/vendor-sources/pages?app=${encodeURIComponent(app)}`}>

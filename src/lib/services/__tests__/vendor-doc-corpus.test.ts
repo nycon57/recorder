@@ -5,6 +5,10 @@ import {
   syncVendorCorpusFromLegacyPages,
 } from '../vendor-doc-corpus';
 
+type VendorDocCorpusDeps = NonNullable<
+  Parameters<typeof syncVendorCorpusFromLegacyPages>[1]
+>;
+
 type LegacyVendorPage = {
   id: string;
   app: string;
@@ -99,15 +103,19 @@ describe('vendor-doc-corpus', () => {
     ];
 
     const upsert = jest.fn(async () => ({ error: null }));
-    const supabase: any = {
+    const supabase = {
       from: jest.fn((table: string) => {
         if (table === 'vendor_wiki_pages') {
-          return {
+          const query = {
             select: jest.fn().mockReturnThis(),
-            eq: jest.fn(async () => ({
+            eq: jest.fn().mockReturnThis(),
+            is: jest.fn(async () => ({
               data: legacyPages,
               error: null,
             })),
+          };
+          return {
+            ...query,
           };
         }
 
@@ -118,6 +126,8 @@ describe('vendor-doc-corpus', () => {
               data: existingRows,
               error: null,
             })),
+            delete: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({ error: null })),
             upsert,
           };
         }
@@ -126,17 +136,19 @@ describe('vendor-doc-corpus', () => {
       }),
     };
 
-    const generateEmbedding: any = jest.fn();
+    const generateEmbedding =
+      jest.fn<NonNullable<VendorDocCorpusDeps['generateEmbedding']>>();
     generateEmbedding.mockResolvedValue({
       embedding: [0.7, 0.3],
-      provider: 'google',
+      provider: 'google' as const,
     });
 
     const result = await syncVendorCorpusFromLegacyPages(
       { app: 'hubspot' },
       {
-        supabase,
-        generateEmbedding,
+        supabase: supabase as unknown as VendorDocCorpusDeps['supabase'],
+        generateEmbedding:
+          generateEmbedding as unknown as VendorDocCorpusDeps['generateEmbedding'],
       },
     );
 
@@ -249,12 +261,13 @@ describe('vendor-doc-corpus', () => {
       },
     ];
 
-    const supabase: any = {
+    const supabase = {
       from: jest.fn((table: string) => {
         if (table === 'vendor_wiki_pages') {
           return {
             select: jest.fn().mockReturnThis(),
-            eq: jest.fn(async () => ({
+            eq: jest.fn().mockReturnThis(),
+            is: jest.fn(async () => ({
               data: legacyPages,
               error: null,
             })),
@@ -268,6 +281,8 @@ describe('vendor-doc-corpus', () => {
               data: corpusRows,
               error: null,
             })),
+            delete: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({ error: null })),
             upsert: jest.fn(async () => ({ error: null })),
           };
         }
@@ -285,7 +300,7 @@ describe('vendor-doc-corpus', () => {
         limit: 2,
       },
       {
-        supabase,
+        supabase: supabase as unknown as VendorDocCorpusDeps['supabase'],
       },
     );
 

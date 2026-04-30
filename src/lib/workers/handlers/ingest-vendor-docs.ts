@@ -27,6 +27,7 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { withAgentLogging } from '@/lib/services/agent-logger';
 import {
   createVendorSourceRegistryService,
+  getVendorSourceSyncBlockReason,
   hashVendorSourcePages,
   type VendorFetchStrategy,
   type VendorSourceRow,
@@ -89,7 +90,7 @@ interface PageWriteOutcome {
   sourceUrl: string;
   screen: string;
   contentHash: string;
-  status: 'inserted' | 'updated' | 'unchanged' | 'failed';
+  status: 'inserted' | 'updated' | 'unchanged' | 'retired' | 'failed';
   pageId: string | null;
   error?: string;
 }
@@ -98,6 +99,7 @@ interface PageWriteManifest {
   inserted: number;
   updated: number;
   skipped: number;
+  retired: number;
   failed: number;
   outcomes: PageWriteOutcome[];
 }
@@ -247,14 +249,9 @@ function buildSourceAcquisitionPlan(
   source: VendorSourceRow,
   payload: IngestVendorDocsPayload,
 ): SourceAcquisitionPlan {
-  if (source.terms_review_status !== 'approved') {
-    throw new Error(
-      `Vendor source ${source.id} is not approved for ingestion (${source.terms_review_status})`,
-    );
-  }
-
-  if (!source.official_source) {
-    throw new Error(`Vendor source ${source.id} is not marked as official`);
+  const syncBlockReason = getVendorSourceSyncBlockReason(source);
+  if (syncBlockReason) {
+    throw new Error(`Vendor source ${source.id} cannot be ingested: ${syncBlockReason}`);
   }
 
   const seed = new URL(source.source_url);
@@ -748,8 +745,11 @@ async function upsertPages(
   let inserted = 0;
   let updated = 0;
   let skipped = 0;
+  let retired = 0;
   let failed = 0;
   const outcomes: PageWriteOutcome[] = [];
+  const seenSourceUrls = new Set(pages.map((page) => page.url));
+  const now = () => new Date().toISOString();
 
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i];
@@ -784,6 +784,39 @@ async function upsertPages(
           nextVendorSourceId: options?.vendorSourceId,
         })
       ) {
+        const { error: provenanceError } = await (supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .from('vendor_wiki_pages') as any)
+          .update({
+            source_url: page.url,
+            vendor_source_id: options?.vendorSourceId ?? existing.vendor_source_id,
+            curated_by: options?.triggeredByUserId ?? null,
+            ingest_job_id: options?.jobId ?? null,
+            last_seen_at: now(),
+            retired_at: null,
+            retired_by: null,
+            retirement_reason: null,
+            updated_at: now(),
+          })
+          .eq('id', existing.id);
+
+        if (provenanceError) {
+          failed++;
+          outcomes.push({
+            sourceUrl: page.url,
+            screen: page.screen,
+            contentHash: page.contentHash,
+            status: 'failed',
+            pageId: existing.id,
+            error: provenanceError.message,
+          });
+          logger.error('Failed to refresh unchanged vendor wiki page provenance', {
+            context: { app, screen: page.screen },
+            error: provenanceError,
+          });
+          continue;
+        }
+
         skipped++;
         outcomes.push({
           sourceUrl: page.url,
@@ -810,9 +843,13 @@ async function upsertPages(
           source_url: page.url,
           content_hash: page.contentHash,
           vendor_source_id: options?.vendorSourceId ?? existing.vendor_source_id,
-          updated_at: new Date().toISOString(),
+          last_seen_at: now(),
+          updated_at: now(),
           curated_by: options?.triggeredByUserId ?? null,
           ingest_job_id: options?.jobId ?? null,
+          retired_at: null,
+          retired_by: null,
+          retirement_reason: null,
         })
         .eq('id', existing.id);
 
@@ -855,6 +892,10 @@ async function upsertPages(
           vendor_source_id: options?.vendorSourceId ?? null,
           curated_by: options?.triggeredByUserId ?? null,
           ingest_job_id: options?.jobId ?? null,
+          last_seen_at: now(),
+          retired_at: null,
+          retired_by: null,
+          retirement_reason: null,
         })
         .select('id')
         .single();
@@ -886,7 +927,70 @@ async function upsertPages(
     }
   }
 
-  return { inserted, updated, skipped, failed, outcomes };
+  if (options?.vendorSourceId) {
+    const retiredAt = now();
+    const { data: stalePages, error: stalePagesError } = await (supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .from('vendor_wiki_pages') as any)
+      .select('id, screen, source_url, content_hash')
+      .eq('vendor_source_id', options.vendorSourceId)
+      .is('retired_at', null);
+
+    if (stalePagesError) {
+      failed++;
+      outcomes.push({
+        sourceUrl: '',
+        screen: '',
+        contentHash: '',
+        status: 'failed',
+        pageId: null,
+        error: stalePagesError.message,
+      });
+    } else {
+      for (const stalePage of stalePages ?? []) {
+        const sourceUrl =
+          typeof stalePage.source_url === 'string' ? stalePage.source_url : '';
+        if (!sourceUrl || seenSourceUrls.has(sourceUrl)) {
+          continue;
+        }
+
+        const { error: retireError } = await (supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .from('vendor_wiki_pages') as any)
+          .update({
+            retired_at: retiredAt,
+            retired_by: options.triggeredByUserId ?? null,
+            retirement_reason: 'Missing from latest complete vendor source sync',
+            updated_at: retiredAt,
+          })
+          .eq('id', stalePage.id);
+
+        if (retireError) {
+          failed++;
+          outcomes.push({
+            sourceUrl,
+            screen: stalePage.screen ?? '',
+            contentHash: stalePage.content_hash ?? '',
+            status: 'failed',
+            pageId: stalePage.id ?? null,
+            error: retireError.message,
+          });
+          continue;
+        }
+
+        retired++;
+        outcomes.push({
+          sourceUrl,
+          screen: stalePage.screen ?? '',
+          contentHash: stalePage.content_hash ?? '',
+          status: 'retired',
+          pageId: stalePage.id ?? null,
+        });
+      }
+    }
+  }
+
+  return { inserted, updated, skipped, retired, failed, outcomes };
 }
 
 async function recordVendorIngestJobResult(
@@ -928,6 +1032,13 @@ export async function handleIngestVendorDocs(
 
   if (!registrySource) {
     throw new Error(`Vendor source ${payload.sourceId} was not found`);
+  }
+
+  const executionBlockReason = getVendorSourceSyncBlockReason(registrySource);
+  if (executionBlockReason) {
+    throw new Error(
+      `Vendor source ${registrySource.id} cannot be ingested: ${executionBlockReason}`,
+    );
   }
 
   await registry.recordAttempt(registrySource.id, attemptedAt);
@@ -1033,7 +1144,7 @@ export async function handleIngestVendorDocs(
           );
         }
 
-        if (result.inserted + result.updated + result.skipped === 0) {
+        if (result.inserted + result.updated + result.skipped + result.retired === 0) {
           throw new Error('Vendor source ingestion did not persist any pages');
         }
 
@@ -1049,7 +1160,10 @@ export async function handleIngestVendorDocs(
 
         const combinedHashInput = hashVendorSourcePages(
           result.outcomes
-            .filter((outcome) => outcome.status !== 'failed')
+            .filter(
+              (outcome) =>
+                outcome.status !== 'failed' && outcome.status !== 'retired',
+            )
             .map((outcome) => ({
               screen: outcome.screen,
               contentHash: outcome.contentHash,
@@ -1075,6 +1189,7 @@ export async function handleIngestVendorDocs(
             inserted: result.inserted,
             updated: result.updated,
             skipped: result.skipped,
+            retired: result.retired,
             failed: result.failed,
           },
         });
@@ -1082,7 +1197,7 @@ export async function handleIngestVendorDocs(
         if (progressCallback) {
           progressCallback(
             100,
-            `Done: ${result.inserted} new, ${result.updated} updated, ${result.skipped} unchanged`
+            `Done: ${result.inserted} new, ${result.updated} updated, ${result.skipped} unchanged, ${result.retired} retired`
           );
         }
       } catch (error) {

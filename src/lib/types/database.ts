@@ -6239,9 +6239,18 @@ export type Database = {
           last_attempt_at: string | null
           last_error: string | null
           last_success_at: string | null
+          legal_review_notes: string | null
+          legal_review_reference_url: string | null
+          legal_reviewed_at: string | null
+          legal_reviewed_by: string | null
+          lifecycle: Database["public"]["Enums"]["vendor_source_lifecycle"]
           official_source: boolean
           plan_band: string[]
           publisher_hostname: string
+          replacement_source_id: string | null
+          retired_at: string | null
+          retired_by: string | null
+          retirement_reason: string | null
           source_kind: Database["public"]["Enums"]["vendor_source_kind"]
           source_url: string
           terms_review_status: Database["public"]["Enums"]["vendor_terms_review_status"]
@@ -6259,9 +6268,18 @@ export type Database = {
           last_attempt_at?: string | null
           last_error?: string | null
           last_success_at?: string | null
+          legal_review_notes?: string | null
+          legal_review_reference_url?: string | null
+          legal_reviewed_at?: string | null
+          legal_reviewed_by?: string | null
+          lifecycle?: Database["public"]["Enums"]["vendor_source_lifecycle"]
           official_source?: boolean
           plan_band?: string[]
           publisher_hostname: string
+          replacement_source_id?: string | null
+          retired_at?: string | null
+          retired_by?: string | null
+          retirement_reason?: string | null
           source_kind: Database["public"]["Enums"]["vendor_source_kind"]
           source_url: string
           terms_review_status?: Database["public"]["Enums"]["vendor_terms_review_status"]
@@ -6279,9 +6297,18 @@ export type Database = {
           last_attempt_at?: string | null
           last_error?: string | null
           last_success_at?: string | null
+          legal_review_notes?: string | null
+          legal_review_reference_url?: string | null
+          legal_reviewed_at?: string | null
+          legal_reviewed_by?: string | null
+          lifecycle?: Database["public"]["Enums"]["vendor_source_lifecycle"]
           official_source?: boolean
           plan_band?: string[]
           publisher_hostname?: string
+          replacement_source_id?: string | null
+          retired_at?: string | null
+          retired_by?: string | null
+          retirement_reason?: string | null
           source_kind?: Database["public"]["Enums"]["vendor_source_kind"]
           source_url?: string
           terms_review_status?: Database["public"]["Enums"]["vendor_terms_review_status"]
@@ -6371,6 +6398,10 @@ export type Database = {
           element_selectors: Json | null
           id: string
           ingest_job_id: string | null
+          last_seen_at: string | null
+          retired_at: string | null
+          retired_by: string | null
+          retirement_reason: string | null
           screen: string
           source_url: string | null
           updated_at: string | null
@@ -6386,6 +6417,10 @@ export type Database = {
           element_selectors?: Json | null
           id?: string
           ingest_job_id?: string | null
+          last_seen_at?: string | null
+          retired_at?: string | null
+          retired_by?: string | null
+          retirement_reason?: string | null
           screen: string
           source_url?: string | null
           updated_at?: string | null
@@ -6401,6 +6436,10 @@ export type Database = {
           element_selectors?: Json | null
           id?: string
           ingest_job_id?: string | null
+          last_seen_at?: string | null
+          retired_at?: string | null
+          retired_by?: string | null
+          retirement_reason?: string | null
           screen?: string
           source_url?: string | null
           updated_at?: string | null
@@ -8413,6 +8452,7 @@ export type Database = {
         | "api_reference"
         | "release_notes"
         | "mcp_snapshot"
+      vendor_source_lifecycle: "active" | "paused" | "retired"
       vendor_terms_review_status:
         | "pending"
         | "approved"
@@ -8586,6 +8626,7 @@ export const Constants = {
         "release_notes",
         "mcp_snapshot",
       ],
+      vendor_source_lifecycle: ["active", "paused", "retired"],
       vendor_terms_review_status: [
         "pending",
         "approved",

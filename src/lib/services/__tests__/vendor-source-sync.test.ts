@@ -31,6 +31,15 @@ function makeSource(
     plan_band: [],
     applicability: {},
     terms_review_status: 'pending',
+    lifecycle: 'active',
+    legal_reviewed_at: null,
+    legal_reviewed_by: null,
+    legal_review_reference_url: null,
+    legal_review_notes: null,
+    retired_at: null,
+    retired_by: null,
+    retirement_reason: null,
+    replacement_source_id: null,
     created_at: '2026-04-20T00:00:00.000Z',
     updated_at: '2026-04-20T00:00:00.000Z',
     ...overrides,
@@ -245,6 +254,83 @@ describe('vendor-source-sync', () => {
           'Vendor source must be terms-approved before sync (status: pending)',
       },
     ]);
+    expect(jobsInsertCount).toBe(0);
+  });
+
+  test('refuses to queue paused or retired sources even when terms-approved', async () => {
+    const sources = [
+      makeSource({
+        id: 'paused-source',
+        terms_review_status: 'approved',
+        lifecycle: 'paused',
+      }),
+      makeSource({
+        id: 'retired-source',
+        terms_review_status: 'approved',
+        lifecycle: 'retired',
+        retired_at: '2026-04-20T12:00:00.000Z',
+      }),
+    ];
+    let index = 0;
+    let jobsInsertCount = 0;
+
+    const supabase = {
+      from(table: string) {
+        if (table === 'vendor_doc_sources') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            async maybeSingle() {
+              return { data: sources[index++], error: null };
+            },
+          };
+        }
+
+        if (table === 'jobs') {
+          return {
+            insert() {
+              jobsInsertCount += 1;
+              return this;
+            },
+            select() {
+              return this;
+            },
+            async single() {
+              return { data: { id: 'job-1' }, error: null };
+            },
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      },
+    };
+
+    const service = createVendorSourceSyncService(
+      supabase as unknown as Parameters<typeof createVendorSourceSyncService>[0],
+    );
+
+    await expect(
+      service.scheduleSources({ sourceId: 'paused-source', force: true, mode: 'manual' }),
+    ).resolves.toMatchObject([
+      {
+        status: 'unsupported',
+        reason: 'Vendor source is paused and cannot be synced',
+      },
+    ]);
+
+    await expect(
+      service.scheduleSources({ sourceId: 'retired-source', force: true, mode: 'manual' }),
+    ).resolves.toMatchObject([
+      {
+        status: 'unsupported',
+        reason: 'Vendor source is retired and cannot be synced',
+      },
+    ]);
+
     expect(jobsInsertCount).toBe(0);
   });
 });

@@ -23,6 +23,15 @@ function makeSource(
     plan_band: [],
     applicability: {},
     terms_review_status: 'approved',
+    lifecycle: 'active',
+    legal_reviewed_at: null,
+    legal_reviewed_by: null,
+    legal_review_reference_url: null,
+    legal_review_notes: null,
+    retired_at: null,
+    retired_by: null,
+    retirement_reason: null,
+    replacement_source_id: null,
     created_at: '2026-04-20T00:00:00.000Z',
     updated_at: '2026-04-20T11:30:00.000Z',
     ...overrides,
@@ -93,6 +102,8 @@ describe('vendor-source-ops', () => {
       failingSources: 1,
       neverSyncedSources: 1,
       restrictedSources: 1,
+      pausedSources: 0,
+      retiredSources: 0,
     });
 
     expect(snapshot.sources.map((source) => [source.id, source.status])).toEqual([
@@ -108,6 +119,8 @@ describe('vendor-source-ops', () => {
       legacyPageCount: 1,
       isDueForSync: false,
       termsReviewStatus: 'approved',
+      lifecycle: 'active',
+      syncBlockReason: null,
     });
 
     expect(snapshot.sources.find((source) => source.id === 'source-5')).toMatchObject({

@@ -122,7 +122,8 @@ export async function fetchKnowledgeStatusSummary(
       .eq('org_id', orgId),
     supabaseAdmin
       .from('vendor_wiki_pages')
-      .select('app, screen'),
+      .select('app, screen')
+      .is('retired_at', null),
   ]);
 
   if (processingResult.error) {

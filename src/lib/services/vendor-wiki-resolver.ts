@@ -28,6 +28,7 @@ export async function resolveVendorWikiPage({
     .select('*')
     .eq('app', app.toLowerCase())
     .eq('screen', screen.toLowerCase())
+    .is('retired_at', null)
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -46,7 +47,8 @@ export async function resolveVendorWikiPage({
 export async function countVendorWikiPages(): Promise<number> {
   const { count, error } = await supabaseAdmin
     .from('vendor_wiki_pages')
-    .select('id', { count: 'exact', head: true });
+    .select('id', { count: 'exact', head: true })
+    .is('retired_at', null);
 
   if (error) {
     console.error('[vendor-wiki-resolver] countVendorWikiPages error:', error);
@@ -62,7 +64,8 @@ export async function countVendorWikiPages(): Promise<number> {
 export async function listVendorApps(): Promise<string[]> {
   const { data, error } = await supabaseAdmin
     .from('vendor_wiki_pages')
-    .select('app') as { data: Array<{ app: string }> | null; error: unknown };
+    .select('app')
+    .is('retired_at', null) as { data: Array<{ app: string }> | null; error: unknown };
 
   if (error) {
     console.error('[vendor-wiki-resolver] listVendorApps error:', error);

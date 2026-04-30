@@ -253,7 +253,8 @@ export async function searchVendorWikiPages(args: {
   const limit = clampLimit(args.limit);
   let query = supabaseAdmin
     .from('vendor_wiki_pages')
-    .select('id, app, screen, content, source_url, updated_at');
+    .select('id, app, screen, content, source_url, updated_at')
+    .is('retired_at', null);
 
   if (args.app) {
     query = query.eq('app', normalize(args.app));
@@ -325,6 +326,7 @@ export async function getVendorWikiPage(args: {
     .from('vendor_wiki_pages')
     .select('id, app, screen, content, source_url, updated_at')
     .eq('id', args.pageId)
+    .is('retired_at', null)
     .single();
 
   if (error) {

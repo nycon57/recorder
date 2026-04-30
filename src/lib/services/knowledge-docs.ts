@@ -346,7 +346,8 @@ async function fetchClusters(args: { supabase: AdminClient; orgId: string }) {
 async function fetchVendorPages(args: { supabase: AdminClient }) {
   const { data, error } = await args.supabase
     .from('vendor_wiki_pages')
-    .select('app, screen');
+    .select('app, screen')
+    .is('retired_at', null);
 
   if (error) {
     throw new Error(`Failed to fetch vendor wiki pages: ${error.message}`);

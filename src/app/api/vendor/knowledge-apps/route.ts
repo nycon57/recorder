@@ -21,7 +21,8 @@ export const GET = apiHandler(async () => {
 
   const { data, error } = await supabaseAdmin
     .from('vendor_wiki_pages')
-    .select('app');
+    .select('app')
+    .is('retired_at', null);
 
   if (error) {
     console.error('[vendor/knowledge-apps] Error fetching apps:', error);
