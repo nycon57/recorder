@@ -1,6 +1,5 @@
 'use client';
 
-import * as React from 'react';
 import {
   Download,
   Edit,
@@ -18,15 +17,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { Separator } from '@/app/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { formatFileSize } from '@/lib/types/content';
-import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
-import type { Tag } from '@/lib/types/database';
+import type { ContentType, FileType, RecordingStatus, Tag } from '@/lib/types/database';
 import {
   getKnowledgeStatusMeta,
   type KnowledgeStatus,
 } from '@/lib/utils/knowledge-status';
 import TagBadge from '@/app/components/TagBadge';
-import ContentTypeBadge from '../shared/ContentTypeBadge';
 import { ConceptSection } from '@/app/components/knowledge';
+
+import ContentTypeBadge from '../shared/ContentTypeBadge';
 
 interface Document {
   id: string;
@@ -79,7 +78,6 @@ interface ContentSidebarProps {
 }
 
 export default function ContentSidebar({
-  recordingId,
   contentType,
   fileType,
   status,
@@ -93,7 +91,6 @@ export default function ContentSidebar({
   tags = [],
   concepts = [],
   onConceptClick,
-  document,
   textContent,
   onEdit,
   onDelete,

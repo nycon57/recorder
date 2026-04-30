@@ -1,8 +1,9 @@
 'use client';
 
+/* global MediaQueryListEvent */
+
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { Loader2, Bell, Monitor, Globe } from 'lucide-react';
+import { Loader2, Bell, Monitor } from 'lucide-react';
 
 import { useToast } from '@/app/components/ui/use-toast';
 import { Button } from '@/app/components/ui/button';
@@ -140,7 +141,6 @@ export function PreferencesForm() {
     };
 
     fetchProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const savePreferences = async () => {

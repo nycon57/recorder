@@ -18,9 +18,10 @@ import {
 } from '@/app/components/ui/alert-dialog';
 import { toast } from '@/app/components/ui/use-toast';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
-import TextNoteViewer from './TextNoteViewer';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import type { ContentType, FileType, Json, RecordingStatus, Tag } from '@/lib/types/database';
+import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
-// New unified sidebar component
 import ContentSidebar from '../viewers/ContentSidebar';
 import ThumbnailHero from '../viewers/ThumbnailHero';
 import ShareControls from '../shared/ShareControls';
@@ -29,17 +30,13 @@ import InlineEditableField from '../shared/InlineEditableField';
 import InlineTagsEditor from '../shared/InlineTagsEditor';
 import AIDocumentPanel from '../shared/AIDocumentPanel';
 
-import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-
-import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
-import type { Tag } from '@/lib/types/database';
-import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
+import TextNoteViewer from './TextNoteViewer';
 
 interface Transcript {
   id: string;
   content_id: string;
   text: string;
-  words_json?: any;
+  words_json?: unknown;
   language?: string | null;
   confidence?: number | null;
   provider?: string | null;
@@ -56,24 +53,26 @@ interface Document {
   model?: string | null;
 }
 
+type InitialTag = Omit<Tag, 'color'> & { color: string | null };
+
 interface Recording {
   id: string;
   title: string | null;
   description: string | null;
-  status: RecordingStatus;
+  status: string;
   duration_sec: number | null;
   storage_path_raw: string | null;
   storage_path_processed: string | null;
   thumbnail_url: string | null;
   videoUrl: string | null;
   downloadUrl: string | null;
-  metadata: any;
+  metadata: Json | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
   deleted_at: string | null;
-  content_type: ContentType | null;
-  file_type: FileType | null;
+  content_type: string | null;
+  file_type: string | null;
   original_filename: string | null;
   file_size: number | null;
 }
@@ -83,7 +82,7 @@ export interface TextNoteDetailViewProps {
   transcript: Transcript | null; // For text notes, the content is stored in transcript.text
   document: Document | null; // AI-enhanced summary/document
   knowledgeStatus: KnowledgeStatus;
-  initialTags: Tag[];
+  initialTags: Array<InitialTag | null>;
   /** Cache key for fetching highlight sources */
   sourceKey?: string;
   /** ID of transcript chunk to highlight (from search) */
@@ -99,14 +98,18 @@ export default function TextNoteDetailView({
 }: TextNoteDetailViewProps) {
   const router = useRouter();
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
-  const [tags, setTags] = React.useState<Tag[]>(initialTags);
+  const [tags, setTags] = React.useState<Tag[]>(() =>
+    initialTags
+      .filter((tag): tag is InitialTag => Boolean(tag))
+      .map((tag) => ({ ...tag, color: tag.color ?? '#64748b' }))
+  );
   const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
 
   const isTrashed = !!recording.deleted_at;
 
-  const handleContentUpdate = (newContent: string) => {
+  const handleContentUpdate = () => {
     // This will be handled by the TextNoteViewer component
     // which will update via API and trigger a page refresh
   };
@@ -441,9 +444,9 @@ export default function TextNoteDetailView({
             <div className="lg:sticky lg:top-6">
               <ContentSidebar
                 recordingId={recording.id}
-                contentType={recording.content_type}
-                fileType={recording.file_type}
-                status={recording.status}
+                contentType={recording.content_type as ContentType | null}
+                fileType={recording.file_type as FileType | null}
+                status={recording.status as RecordingStatus}
                 knowledgeStatus={knowledgeStatus}
                 fileSize={recording.file_size}
                 duration={recording.duration_sec}
@@ -532,7 +535,7 @@ export default function TextNoteDetailView({
       <KeyboardShortcutsDialog
         open={showKeyboardShortcuts}
         onOpenChange={setShowKeyboardShortcuts}
-        contentType={recording.content_type}
+        contentType={recording.content_type as ContentType | null}
       />
     </div>
   );

@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -17,7 +16,6 @@ interface DeleteDepartmentModalProps {
   open: boolean;
   onClose: () => void;
   department: Department | null;
-  departments: Department[];
 }
 
 async function deleteDepartment(id: string): Promise<void> {
@@ -29,7 +27,7 @@ async function deleteDepartment(id: string): Promise<void> {
     try {
       const error = await res.json();
       throw new Error(error.message || 'Failed to delete department');
-    } catch (parseError) {
+    } catch {
       const textError = await res.text();
       throw new Error(textError || 'Failed to delete department');
     }
@@ -40,7 +38,6 @@ export function DeleteDepartmentModal({
   open,
   onClose,
   department,
-  departments,
 }: DeleteDepartmentModalProps) {
   const queryClient = useQueryClient();
 

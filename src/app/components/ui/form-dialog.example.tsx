@@ -9,8 +9,8 @@
 
 'use client';
 
-import { useState } from 'react';
 import { z } from 'zod';
+
 import { FormDialog } from '@/app/components/ui/form-dialog';
 import {
   FormField,
@@ -32,8 +32,6 @@ const createApiKeySchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
 });
-
-type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;
 
 export function CreateApiKeyModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
@@ -108,8 +106,6 @@ const createWebhookSchema = z.object({
   description: z.string().optional(),
   events: z.array(z.string()).min(1, 'Select at least one event'),
 });
-
-type CreateWebhookInput = z.infer<typeof createWebhookSchema>;
 
 const WEBHOOK_EVENTS = [
   { value: 'recording.created', label: 'Recording Created' },
@@ -236,8 +232,6 @@ const inviteUserSchema = z.object({
   role: z.enum(['member', 'admin']),
 });
 
-type InviteUserInput = z.infer<typeof inviteUserSchema>;
-
 export function InviteUserModal({
   open,
   onOpenChange,
@@ -322,8 +316,6 @@ const deleteResourceSchema = z.object({
     message: 'Type DELETE to confirm',
   }),
 });
-
-type DeleteResourceInput = z.infer<typeof deleteResourceSchema>;
 
 export function DeleteResourceModal({
   open,

@@ -1,5 +1,9 @@
 "use client";
 
+import { ChevronDownIcon } from "lucide-react";
+import type { ChangeEvent, ComponentProps, KeyboardEvent, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+
 import { Button } from "@/app/components/ui/button";
 import {
   Collapsible,
@@ -10,13 +14,9 @@ import { Input } from "@/app/components/ui/input";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/app/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { ChevronDownIcon } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
-import { createContext, useContext, useEffect, useState } from "react";
 
 export type WebPreviewContextValue = {
   url: string;
@@ -157,11 +157,12 @@ export const WebPreviewUrl = ({
   // Sync input value with context URL when it changes externally (only for uncontrolled)
   useEffect(() => {
     if (!isControlled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setInputValue(url);
     }
   }, [url, isControlled]);
 
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     // Update internal state only if uncontrolled
     if (!isControlled) {
       setInputValue(event.target.value);
@@ -170,7 +171,7 @@ export const WebPreviewUrl = ({
     onChange?.(event);
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       // Use current input value from event target
       const target = event.target as HTMLInputElement;

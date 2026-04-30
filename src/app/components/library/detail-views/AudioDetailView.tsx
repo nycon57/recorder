@@ -21,9 +21,10 @@ import { toast } from '@/app/components/ui/use-toast';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
 import ProcessingPipeline from '@/app/components/ProcessingPipeline';
 import ReprocessStreamModal from '@/app/components/ReprocessStreamModal';
-import AudioPlayer from './AudioPlayer';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import type { ContentType, FileType, Json, RecordingStatus, Tag } from '@/lib/types/database';
+import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
-// New unified sidebar component
 import ContentSidebar from '../viewers/ContentSidebar';
 import TranscriptPanel from '../shared/TranscriptPanel';
 import ShareControls from '../shared/ShareControls';
@@ -32,11 +33,7 @@ import InlineEditableField from '../shared/InlineEditableField';
 import InlineTagsEditor from '../shared/InlineTagsEditor';
 import PublishModal from '../PublishModal';
 
-import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-
-import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
-import type { Tag } from '@/lib/types/database';
-import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
+import AudioPlayer from './AudioPlayer';
 
 interface Word {
   word: string;
@@ -66,24 +63,26 @@ interface Document {
   model?: string | null;
 }
 
+type InitialTag = Omit<Tag, 'color'> & { color: string | null };
+
 interface Recording {
   id: string;
   title: string | null;
   description: string | null;
-  status: RecordingStatus;
+  status: string;
   duration_sec: number | null;
   storage_path_raw: string | null;
   storage_path_processed: string | null;
   thumbnail_url: string | null;
   videoUrl: string | null;
   downloadUrl: string | null;
-  metadata: any;
+  metadata: Json | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
   deleted_at: string | null;
-  content_type: ContentType | null;
-  file_type: FileType | null;
+  content_type: string | null;
+  file_type: string | null;
   original_filename: string | null;
   file_size: number | null;
 }
@@ -93,7 +92,7 @@ export interface AudioDetailViewProps {
   transcript: Transcript | null;
   document: Document | null;
   knowledgeStatus: KnowledgeStatus;
-  initialTags: Tag[];
+  initialTags: Array<InitialTag | null>;
   /** Cache key for fetching highlight sources */
   sourceKey?: string;
   /** ID of transcript chunk to highlight (from search) */
@@ -113,7 +112,11 @@ export default function AudioDetailView({
   const router = useRouter();
 
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
-  const [tags, setTags] = React.useState<Tag[]>(initialTags);
+  const [tags, setTags] = React.useState<Tag[]>(() =>
+    initialTags
+      .filter((tag): tag is InitialTag => Boolean(tag))
+      .map((tag) => ({ ...tag, color: tag.color ?? '#64748b' }))
+  );
   const [isReprocessModalOpen, setIsReprocessModalOpen] = React.useState(false);
   const [reprocessStep, setReprocessStep] = React.useState<
     'transcribe' | 'document' | 'embeddings' | 'all'
@@ -122,7 +125,7 @@ export default function AudioDetailView({
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = React.useState(false);
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const audioRef = React.useRef<React.ElementRef<'audio'> | null>(null);
 
   const isTrashed = !!recording.deleted_at;
 
@@ -248,11 +251,6 @@ export default function AudioDetailView({
     if (wasSuccessful) {
       router.refresh();
     }
-  };
-
-  const handleRegenerateDocument = async () => {
-    setReprocessStep('document');
-    setIsReprocessModalOpen(true);
   };
 
   const handleRestore = async () => {
@@ -557,7 +555,7 @@ export default function AudioDetailView({
                       Transcription in progress
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      We're transcribing your audio using AI. This usually takes 1-2 minutes.
+                      We&apos;re transcribing your audio using AI. This usually takes 1-2 minutes.
                     </p>
                   </div>
                 </CardContent>
@@ -570,9 +568,9 @@ export default function AudioDetailView({
             <div className="lg:sticky lg:top-6 space-y-6">
               <ContentSidebar
                 recordingId={recording.id}
-                contentType={recording.content_type}
-                fileType={recording.file_type}
-                status={recording.status}
+                contentType={recording.content_type as ContentType | null}
+                fileType={recording.file_type as FileType | null}
+                status={recording.status as RecordingStatus}
                 knowledgeStatus={knowledgeStatus}
                 fileSize={recording.file_size}
                 duration={recording.duration_sec}
@@ -590,7 +588,7 @@ export default function AudioDetailView({
 
               {/* Processing Pipeline */}
               <ProcessingPipeline
-                recording={recording}
+                recording={recording as React.ComponentProps<typeof ProcessingPipeline>['recording']}
                 hasTranscript={!!transcript}
                 hasDocument={!!document}
                 onReprocess={handleReprocess}
@@ -677,7 +675,7 @@ export default function AudioDetailView({
       <KeyboardShortcutsDialog
         open={showKeyboardShortcuts}
         onOpenChange={setShowKeyboardShortcuts}
-        contentType={recording.content_type}
+        contentType={recording.content_type as ContentType | null}
       />
 
       {/* Publish Modal */}
@@ -687,7 +685,7 @@ export default function AudioDetailView({
         contentTitle={recording.title || 'Untitled'}
         isOpen={isPublishModalOpen}
         onClose={() => setIsPublishModalOpen(false)}
-        onPublishComplete={(publication) => {
+        onPublishComplete={() => {
           toast({ description: 'Document published successfully!' });
           router.refresh();
         }}

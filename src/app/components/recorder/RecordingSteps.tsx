@@ -1,6 +1,7 @@
 'use client';
 
 import { Check, Monitor, Circle, Play, Upload } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 
 export type RecordingStep = 'setup' | 'ready' | 'recording' | 'review';

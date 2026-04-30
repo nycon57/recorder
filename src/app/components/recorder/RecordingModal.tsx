@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, Upload, Loader2 } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
@@ -20,6 +20,13 @@ import { Progress } from '@/app/components/ui/progress';
 interface RecordingModalProps {
   onUploadComplete?: (recordingId: string) => void;
 }
+
+const fileDataToArrayBuffer = (data: Awaited<ReturnType<FFmpeg['readFile']>>) => {
+  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+};
 
 export function RecordingModal({ onUploadComplete }: RecordingModalProps) {
   const { recordingBlob, clearRecording } = useRecording();
@@ -98,7 +105,7 @@ export function RecordingModal({ onUploadComplete }: RecordingModalProps) {
 
       // Read the output file
       const data = await ffmpeg.readFile('output.mp4');
-      const mp4Blob = new Blob([data], { type: 'video/mp4' });
+      const mp4Blob = new Blob([fileDataToArrayBuffer(data)], { type: 'video/mp4' });
 
       // Download the MP4 file
       const url = URL.createObjectURL(mp4Blob);

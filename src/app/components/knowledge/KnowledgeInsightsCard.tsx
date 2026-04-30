@@ -1,22 +1,21 @@
 'use client';
 
-import React from 'react';
 import useSWR from 'swr';
-import { Brain, TrendingUp, Sparkles } from 'lucide-react';
+import { Brain, Sparkles, TrendingUp } from 'lucide-react';
 
-import { cn } from '@/lib/utils/cn';
+import type { Concept, ConceptType } from '@/lib/validations/knowledge';
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
   CardDescription,
+  CardHeader,
+  CardTitle,
 } from '@/app/components/ui/card';
 import { Skeleton } from '@/app/components/ui/skeleton';
+import { cn } from '@/lib/utils/cn';
+
 import { ConceptBadge, ConceptTypeLabel } from './ConceptBadge';
 import { ConceptsEmptyStateCompact } from './ConceptsEmptyState';
-import type { Concept, ConceptType } from '@/lib/validations/knowledge';
-import { CONCEPT_TYPES } from '@/lib/validations/knowledge';
 
 /**
  * API Response Types

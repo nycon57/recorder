@@ -115,7 +115,7 @@ export function ApiKeysTab() {
           });
         }
       }
-    } catch (err) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to copy to clipboard',

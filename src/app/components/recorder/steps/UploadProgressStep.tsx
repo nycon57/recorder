@@ -1,18 +1,18 @@
 'use client';
 
+/* global EventSource */
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, XCircle, ExternalLink, AlertCircle } from 'lucide-react';
+
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 import ProcessingStageIndicator, {
   type ProcessingStage,
 } from '@/app/components/ProcessingStageIndicator';
-import { cn } from '@/lib/utils';
 import {
   JOB_TYPE_TO_STAGE,
-  SIMPLIFIED_STAGES,
-  DETAILED_TO_SIMPLIFIED,
   getStageConfig,
   STATUS_MESSAGES,
 } from '@/lib/constants/processing-messages';
@@ -33,7 +33,7 @@ interface SSEMessage {
   message?: string;
   step?: string;
   progress?: number;
-  data?: any;
+  data?: unknown;
   timestamp?: string;
 }
 
@@ -109,8 +109,8 @@ export default function UploadProgressStep({
   >('connecting');
 
   const eventSourceRef = useRef<EventSource | null>(null);
-  const startTimeRef = useRef<number>(Date.now());
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSSEMessageRef = useRef<((message: SSEMessage) => void) | null>(null);
   const progressRef = useRef<number>(0);
 
@@ -314,7 +314,7 @@ export default function UploadProgressStep({
       }
     };
 
-    eventSource.onerror = (err) => {
+    eventSource.onerror = () => {
       // Check if the connection is closed (happens on completion)
       if (eventSource.readyState === EventSource.CLOSED) {
         // Normal closure after completion - not an error
@@ -343,12 +343,15 @@ export default function UploadProgressStep({
         eventSourceRef.current = null;
       }
     };
-  }, [streamUrl]); // Only reconnect if streamUrl changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- Only reconnect if streamUrl changes; other values are read through refs/current state.
+  }, [streamUrl]);
 
   /**
    * Start elapsed time timer
    */
   useEffect(() => {
+    startTimeRef.current = Date.now();
+
     timerRef.current = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
       setElapsedTime(elapsed);

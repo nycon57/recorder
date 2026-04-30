@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+/* global HTMLVideoElement */
+
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { toast } from 'sonner';
 import { Upload, Loader2, X, Image as ImageIcon } from 'lucide-react';
 
@@ -77,10 +79,10 @@ export function SaveRecordingModal({
     if (isOpen && !title) {
       setTitle(`Recording ${new Date().toLocaleString()}`);
     }
-  }, [isOpen]);
+  }, [isOpen, title]);
 
   // Handle thumbnail file selection
-  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleThumbnailChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 

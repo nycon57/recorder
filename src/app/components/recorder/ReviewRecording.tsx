@@ -7,7 +7,7 @@
  * with the initial page load. FFmpeg is only needed after recording is complete.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, Save, RotateCcw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,24 +39,26 @@ export function ReviewRecording() {
       }
 
       const url = URL.createObjectURL(recordingBlob);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- The preview URL synchronizes external Blob state with the video element.
       setVideoUrl(url);
       return () => {
         console.log('[Review] Revoking blob URL:', url);
         URL.revokeObjectURL(url);
       };
-    } else {
-      // Clear video URL when blob is cleared
-      console.log('[Review] Recording blob cleared, clearing video URL');
-      setVideoUrl('');
     }
+
+    // Clear video URL when blob is cleared
+    console.log('[Review] Recording blob cleared, clearing video URL');
+    setVideoUrl('');
   }, [recordingBlob, clearRecording]);
 
   // Warn user about unsaved recording
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    const handleBeforeUnload = (e: Event) => {
       e.preventDefault();
-      e.returnValue = 'You have an unsaved recording. Leaving will discard it.';
-      return e.returnValue;
+      const message = 'You have an unsaved recording. Leaving will discard it.';
+      (e as unknown as { returnValue: string }).returnValue = message;
+      return message;
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -118,7 +120,7 @@ export function ReviewRecording() {
             <div>
               <h3 className="text-lg font-semibold text-foreground">Recording Complete</h3>
               <p className="text-sm text-muted-foreground">
-                Choose how you'd like to proceed with your recording
+                Choose how you&apos;d like to proceed with your recording
               </p>
             </div>
           </div>

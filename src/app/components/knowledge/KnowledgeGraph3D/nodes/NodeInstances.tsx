@@ -7,9 +7,12 @@
 
 'use client';
 
-import { useRef, useMemo, useEffect } from 'react';
+/* eslint-disable react/no-unknown-property -- React Three Fiber JSX uses Three.js element props. */
+
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+
 import type { GraphNode3D, LODConfig, NodeInteractionState } from '../types';
 import { CONCEPT_TYPE_COLORS } from '../types';
 

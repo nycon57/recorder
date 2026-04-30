@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -67,7 +67,7 @@ export function DepartmentFormModal({
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     setValue,
     reset,
     formState: { errors },
@@ -82,7 +82,9 @@ export function DepartmentFormModal({
   });
 
   // Update slug preview
-  const name = watch('name');
+  const name = useWatch({ control, name: 'name' }) || '';
+  const parentId = useWatch({ control, name: 'parentId' });
+  const defaultVisibility = useWatch({ control, name: 'defaultVisibility' });
   const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -235,7 +237,7 @@ export function DepartmentFormModal({
           <div className="space-y-2">
             <Label htmlFor="parentId">Parent Department</Label>
             <Select
-              value={watch('parentId') || 'none'}
+              value={parentId || 'none'}
               onValueChange={(value) => setValue('parentId', value === 'none' ? null : value)}
             >
               <SelectTrigger id="parentId">
@@ -255,7 +257,7 @@ export function DepartmentFormModal({
           <div className="space-y-3">
             <Label>Default Content Visibility</Label>
             <RadioGroup
-              value={watch('defaultVisibility')}
+              value={defaultVisibility}
               onValueChange={(value) => setValue('defaultVisibility', value as 'private' | 'department' | 'org' | 'public')}
               className="space-y-3"
             >

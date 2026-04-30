@@ -1,16 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   MoreVertical,
   Edit,
-  Eye,
   Mail,
   Shield,
   Ban,
   Trash2,
-  UserX,
   ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -24,7 +22,6 @@ import {
   DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu';
 import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
-
 import type { OrganizationMember } from '@/app/(dashboard)/settings/organization/members/types';
 
 import { EditRoleModal } from './EditRoleModal';
@@ -60,7 +57,7 @@ export function MemberRowActions({ member }: MemberRowActionsProps) {
           : 'Member reactivated successfully'
       );
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast.error(error.message || 'Failed to update member status');
     },
   });
@@ -77,7 +74,7 @@ export function MemberRowActions({ member }: MemberRowActionsProps) {
     onSuccess: () => {
       toast.success('Password reset email sent');
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast.error(error.message || 'Failed to send password reset');
     },
   });
@@ -96,7 +93,7 @@ export function MemberRowActions({ member }: MemberRowActionsProps) {
       toast.success('Member removed successfully');
       setShowDeleteConfirm(false);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast.error(error.message || 'Failed to remove member');
     },
   });
@@ -150,7 +147,7 @@ export function MemberRowActions({ member }: MemberRowActionsProps) {
 
       {/* Edit Role Modal */}
       <EditRoleModal
-        member={member as any}
+        member={member}
         open={showEditRole}
         onClose={() => setShowEditRole(false)}
         onSuccess={() => {

@@ -1,6 +1,5 @@
 'use client';
 
-import * as React from 'react';
 import {
   Video,
   Mic,
@@ -9,6 +8,7 @@ import {
   Monitor,
   LucideIcon
 } from 'lucide-react';
+
 import { Badge } from '@/app/components/ui/badge';
 import type { ContentType } from '@/lib/types/database';
 

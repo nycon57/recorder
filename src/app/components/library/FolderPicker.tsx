@@ -51,6 +51,9 @@ interface FolderTreeNode extends FolderInfo {
   isExpanded?: boolean;
 }
 
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
+
 /**
  * FolderPicker Component
  * Hierarchical folder browser for external storage systems (Google Drive, SharePoint, OneDrive)
@@ -84,7 +87,7 @@ export default function FolderPicker({
   const [error, setError] = useState<string | null>(null);
 
   // Refs
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const createInputRef = useRef<HTMLInputElement>(null);
 
   // Debounce search query
@@ -130,7 +133,7 @@ export default function FolderPicker({
 
         const data = await response.json();
         return data.data?.folders || [];
-      } catch (err: any) {
+      } catch (err) {
         console.error('Failed to fetch folders:', err);
         throw err;
       }
@@ -153,8 +156,8 @@ export default function FolderPicker({
             isExpanded: false,
           }))
         );
-      } catch (err: any) {
-        setError(err.message || 'Failed to load folders');
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to load folders'));
       } finally {
         setIsLoading(false);
       }
@@ -182,8 +185,8 @@ export default function FolderPicker({
             isExpanded: false,
           }))
         );
-      } catch (err: any) {
-        setError(err.message || 'Search failed');
+      } catch (err) {
+        setError(getErrorMessage(err, 'Search failed'));
       } finally {
         setIsLoading(false);
       }
@@ -244,7 +247,7 @@ export default function FolderPicker({
           };
           return updateNode(prevFolders);
         });
-      } catch (err: any) {
+      } catch (err) {
         console.error('Failed to load folder children:', err);
         newExpanded.delete(folderId);
 
@@ -377,9 +380,9 @@ export default function FolderPicker({
       // Reset
       setNewFolderName('');
       setShowCreateInput(false);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to create folder:', err);
-      setError(err.message || 'Failed to create folder');
+      setError(getErrorMessage(err, 'Failed to create folder'));
     } finally {
       setIsCreating(false);
     }

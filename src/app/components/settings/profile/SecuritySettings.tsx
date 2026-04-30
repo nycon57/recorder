@@ -1,8 +1,8 @@
 'use client';
 
 import { Shield, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { useSession } from '@/lib/auth/auth-client';
 
+import { useSession } from '@/lib/auth/auth-client';
 import { Badge } from '@/app/components/ui/badge';
 import { Separator } from '@/app/components/ui/separator';
 import { Label } from '@/app/components/ui/label';

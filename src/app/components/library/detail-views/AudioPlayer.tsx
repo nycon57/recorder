@@ -1,7 +1,9 @@
 'use client';
 
+/* global HTMLAudioElement */
+
 import * as React from 'react';
-import { Download, Loader2 } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Card, CardContent } from '@/app/components/ui/card';

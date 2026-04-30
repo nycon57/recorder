@@ -1,11 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { X, Mail, Upload } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
-
-import { enhancedInviteMemberSchema, type EnhancedInviteMemberInput } from '@/lib/validations/api';
 
 import { Button } from '@/app/components/ui/button';
 import {
@@ -26,7 +24,6 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { Textarea } from '@/app/components/ui/textarea';
-import { Badge } from '@/app/components/ui/badge';
 import { DepartmentSelector, type Department } from '@/app/components/shared/DepartmentSelector';
 import { FormDialog } from '@/app/components/ui/form-dialog';
 import {
@@ -38,6 +35,7 @@ import {
   FormMessage,
 } from '@/app/components/ui/form';
 import type { UserRole } from '@/lib/types/database';
+import { enhancedInviteMemberSchema, type EnhancedInviteMemberInput } from '@/lib/validations/api';
 
 interface InviteMemberModalProps {
   open: boolean;
@@ -108,7 +106,7 @@ export function InviteMemberModal({ open, onClose, departments }: InviteMemberMo
           title="Invite Team Member"
           description="Send an invitation to join your organization"
           size="lg"
-          schema={enhancedInviteMemberSchema as any}
+          schema={enhancedInviteMemberSchema}
           defaultValues={{
             email: '',
             role: 'reader' as const,
@@ -337,7 +335,7 @@ function BulkInviteForm({
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (csvFile) {
       // Validate file

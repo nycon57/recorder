@@ -30,8 +30,6 @@ interface ConceptsEmptyStateProps {
 
 export function ConceptsEmptyState({
   variant = 'no-content',
-  contentCount = 0,
-  onAddContent,
   className,
 }: ConceptsEmptyStateProps) {
   const router = useRouter();
@@ -58,7 +56,7 @@ export function ConceptsEmptyState({
           <EmptyTitle>Extracting Concepts</EmptyTitle>
 
           <EmptyDescription>
-            We're analyzing your content and extracting key concepts. This usually takes a few
+            We&apos;re analyzing your content and extracting key concepts. This usually takes a few
             minutes after content is processed.
           </EmptyDescription>
         </EmptyHeader>
@@ -86,7 +84,7 @@ export function ConceptsEmptyState({
           <EmptyTitle>No Concepts Detected</EmptyTitle>
 
           <EmptyDescription>
-            We analyzed your content but didn't find any specific tools, processes, or technical
+            We analyzed your content but didn&apos;t find any specific tools, processes, or technical
             terms to extract. Try adding more detailed or technical content.
           </EmptyDescription>
         </EmptyHeader>
@@ -123,7 +121,7 @@ export function ConceptsEmptyState({
         <EmptyTitle>Build Your Knowledge Graph</EmptyTitle>
 
         <EmptyDescription className="max-w-md">
-          As you add recordings, videos, and documents, we'll automatically extract key concepts
+          As you add recordings, videos, and documents, we&apos;ll automatically extract key concepts
           like tools, processes, and technical terms—creating a searchable knowledge network.
         </EmptyDescription>
       </EmptyHeader>

@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import {
-  ArrowLeft,
   Check,
   ChevronRight,
   File,
@@ -265,28 +264,7 @@ export default function GoogleDriveImportModal({
 
   const currentFolderId = breadcrumbs[breadcrumbs.length - 1]?.id;
 
-  // Fetch files when folder changes
-  React.useEffect(() => {
-    if (isOpen) {
-      fetchFiles();
-    }
-  }, [isOpen, currentFolderId]);
-
-  // Reset state when modal closes
-  React.useEffect(() => {
-    if (!isOpen) {
-      setFiles([]);
-      setSelectedFiles(new Set());
-      setSearchQuery('');
-      setBreadcrumbs([{ id: 'root', name: 'My Drive' }]);
-      setError(null);
-      setFileTypeFilter('all');
-      setNextPageToken(undefined);
-      setHasMore(false);
-    }
-  }, [isOpen]);
-
-  const fetchFiles = async (search?: string, append = false, pageToken?: string) => {
+  const fetchFiles = React.useCallback(async (search?: string, append = false, pageToken?: string) => {
     if (append) {
       setIsLoadingMore(true);
     } else {
@@ -345,7 +323,28 @@ export default function GoogleDriveImportModal({
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  };
+  }, [currentFolderId]);
+
+  // Fetch files when folder changes
+  React.useEffect(() => {
+    if (isOpen) {
+      fetchFiles();
+    }
+  }, [isOpen, fetchFiles]);
+
+  // Reset state when modal closes
+  React.useEffect(() => {
+    if (!isOpen) {
+      setFiles([]);
+      setSelectedFiles(new Set());
+      setSearchQuery('');
+      setBreadcrumbs([{ id: 'root', name: 'My Drive' }]);
+      setError(null);
+      setFileTypeFilter('all');
+      setNextPageToken(undefined);
+      setHasMore(false);
+    }
+  }, [isOpen]);
 
   const loadMoreFiles = () => {
     if (nextPageToken && !isLoadingMore) {

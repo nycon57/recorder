@@ -13,22 +13,22 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Box, Layers, AlertCircle } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
+import type { GraphNode, GraphEdge } from '@/lib/validations/knowledge';
+import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/app/components/ui/tooltip';
-import { Alert, AlertDescription } from '@/app/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 import { KnowledgeGraph, KnowledgeGraphSkeleton } from './KnowledgeGraph';
 import { KnowledgeGraph3DSkeleton } from './KnowledgeGraph3D';
-import type { GraphNode, GraphEdge } from '@/lib/validations/knowledge';
 
 // Dynamic import for 3D component (avoids SSR issues with Three.js)
 const KnowledgeGraph3D = dynamic(
@@ -185,22 +185,24 @@ export function KnowledgeGraphContainer({
 
   // Load persisted preference and check WebGL on mount
   useEffect(() => {
-    // Check WebGL support
-    const status = checkWebGLSupport();
-    setWebglStatus({ checked: true, ...status });
+    queueMicrotask(() => {
+      // Check WebGL support
+      const status = checkWebGLSupport();
+      setWebglStatus({ checked: true, ...status });
 
-    // Load persisted preference
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY) as GraphViewMode | null;
-      if (stored === '2d' || stored === '3d') {
-        // Only use 3D if WebGL is supported
-        setViewMode(stored === '3d' && status.supported ? '3d' : stored === '3d' ? '2d' : stored);
+      // Load persisted preference
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY) as GraphViewMode | null;
+        if (stored === '2d' || stored === '3d') {
+          // Only use 3D if WebGL is supported
+          setViewMode(stored === '3d' && status.supported ? '3d' : stored === '3d' ? '2d' : stored);
+        }
+      } catch {
+        // localStorage not available
       }
-    } catch {
-      // localStorage not available
-    }
 
-    setHasHydrated(true);
+      setHasHydrated(true);
+    });
   }, []);
 
   // Handle mode change

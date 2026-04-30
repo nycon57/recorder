@@ -9,7 +9,6 @@ import {
   RefreshCcw,
   Clock,
   FileJson,
-  ArrowUpDown,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -22,14 +21,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/app/components/ui/sheet';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Skeleton } from '@/app/components/ui/skeleton';
@@ -48,6 +39,14 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 interface Webhook {
   id: string;
   name: string;
@@ -62,9 +61,9 @@ interface WebhookDelivery {
   status_code: number;
   duration_ms: number;
   request_headers: Record<string, string>;
-  request_body: any;
+  request_body: JsonValue;
   response_headers: Record<string, string>;
-  response_body: any;
+  response_body: JsonValue;
   error?: string;
   attempt_count: number;
   created_at: string;
@@ -87,7 +86,7 @@ export function WebhookDeliveriesDrawer({
   const limit = 20;
 
   // Fetch deliveries
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['webhook-deliveries', webhook.id, page, statusFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -148,7 +147,12 @@ export function WebhookDeliveriesDrawer({
 
         <div className="mt-6 space-y-4">
           <div className="flex justify-between items-center">
-            <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) =>
+                setStatusFilter(value as 'all' | 'success' | 'failure')
+              }
+            >
               <SelectTrigger className="w-[180px]">
                 <SelectValue />
               </SelectTrigger>

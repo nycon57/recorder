@@ -18,11 +18,11 @@ declare module 'd3-force-3d' {
     [key: string]: unknown;
   }
 
-  export interface Force<NodeType extends SimulationNode = SimulationNode> {
+  export interface Force {
     (alpha: number): void;
   }
 
-  export interface ForceLink<NodeType extends SimulationNode = SimulationNode> extends Force<NodeType> {
+  export interface ForceLink<NodeType extends SimulationNode = SimulationNode> extends Force {
     links(): SimulationLink<NodeType>[];
     links(links: SimulationLink<NodeType>[]): this;
     id(): (node: NodeType) => string | number;
@@ -33,12 +33,12 @@ declare module 'd3-force-3d' {
     strength(strength: number | ((link: SimulationLink<NodeType>) => number)): this;
   }
 
-  export interface ForceManyBody<NodeType extends SimulationNode = SimulationNode> extends Force<NodeType> {
+  export interface ForceManyBody<NodeType extends SimulationNode = SimulationNode> extends Force {
     strength(): number;
     strength(strength: number | ((node: NodeType) => number)): this;
   }
 
-  export interface ForceCenter<NodeType extends SimulationNode = SimulationNode> extends Force<NodeType> {
+  export interface ForceCenter extends Force {
     x(): number;
     x(x: number): this;
     y(): number;
@@ -49,7 +49,7 @@ declare module 'd3-force-3d' {
     strength(strength: number): this;
   }
 
-  export interface ForceZ<NodeType extends SimulationNode = SimulationNode> extends Force<NodeType> {
+  export interface ForceZ extends Force {
     z(): number;
     z(z: number): this;
     strength(): number;
@@ -69,8 +69,8 @@ declare module 'd3-force-3d' {
     alphaTarget(target: number): this;
     velocityDecay(): number;
     velocityDecay(decay: number): this;
-    force(name: string): Force<NodeType> | undefined;
-    force(name: string, force: Force<NodeType> | null): this;
+    force(name: string): Force | undefined;
+    force(name: string, force: Force | null): this;
     find(x: number, y: number, z?: number, radius?: number): NodeType | undefined;
     on(typenames: string): (() => void) | undefined;
     on(typenames: string, listener: (() => void) | null): this;

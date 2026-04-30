@@ -13,19 +13,15 @@ import {
   Loader2,
   Type,
   Hash,
-  Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
-import ReactMarkdown, { Components } from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { Button } from '@/app/components/ui/button';
 import { Textarea } from '@/app/components/ui/textarea';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { Separator } from '@/app/components/ui/separator';
-import { Badge } from '@/app/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import { Card, CardContent } from '@/app/components/ui/card';
 import {
   Tabs,
   TabsList,
@@ -42,6 +38,35 @@ interface TextNoteViewerProps {
   onContentUpdate?: (content: string) => void;
 }
 
+type TextNoteTab = 'edit' | 'preview';
+type MarkdownCodeProps = React.ComponentPropsWithoutRef<'code'> & {
+  inline?: boolean;
+  node?: unknown;
+};
+
+const markdownComponents: Components = {
+  code(props) {
+    const { inline, className, children, node, ...rest } = props as MarkdownCodeProps;
+    void node;
+    const match = /language-(\w+)/.exec(className || '');
+    const language = match ? match[1] : '';
+
+    return !inline && language ? (
+      <SyntaxHighlighter
+        style={oneDark}
+        language={language}
+        PreTag="div"
+      >
+        {String(children).replace(/\n$/, '')}
+      </SyntaxHighlighter>
+    ) : (
+      <code className={className} {...rest}>
+        {children}
+      </code>
+    );
+  },
+};
+
 export default function TextNoteViewer({
   recordingId,
   content: initialContent,
@@ -52,7 +77,7 @@ export default function TextNoteViewer({
   const [isEditing, setIsEditing] = React.useState(false);
   const [editedContent, setEditedContent] = React.useState(initialContent);
   const [isSaving, setIsSaving] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState<'edit' | 'preview'>('preview');
+  const [activeTab, setActiveTab] = React.useState<TextNoteTab>('preview');
 
   const isMarkdown = fileType === 'md';
   const wordCount = initialContent.split(/\s+/).filter(Boolean).length;
@@ -120,11 +145,6 @@ export default function TextNoteViewer({
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast.success('Download started');
-  };
-
-  const handleExportPDF = () => {
-    // For future implementation: convert to PDF using browser print
-    window.print();
   };
 
   const handleSave = async () => {
@@ -292,7 +312,7 @@ export default function TextNoteViewer({
       {isEditing ? (
         <Card>
           <CardContent className="p-0">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TextNoteTab)}>
               <div className="border-b px-4 pt-4">
                 <TabsList>
                   <TabsTrigger value="edit">
@@ -323,27 +343,7 @@ export default function TextNoteViewer({
                   <div className="min-h-[600px] max-h-[800px] overflow-y-auto">
                     <div className="prose dark:prose-invert max-w-3xl mx-auto prose-sm sm:prose-base prose-headings:font-semibold prose-p:leading-relaxed">
                       <ReactMarkdown
-                        components={{
-                          code(props) {
-                            const { node, inline, className, children, ...rest } = props as any;
-                            const match = /language-(\w+)/.exec(className || '');
-                            const language = match ? match[1] : '';
-
-                            return !inline && language ? (
-                              <SyntaxHighlighter
-                                style={oneDark}
-                                language={language}
-                                PreTag="div"
-                              >
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
-                            ) : (
-                              <code className={className} {...rest}>
-                                {children}
-                              </code>
-                            );
-                          },
-                        }}
+                        components={markdownComponents}
                       >
                         {editedContent}
                       </ReactMarkdown>
@@ -361,27 +361,7 @@ export default function TextNoteViewer({
               {isMarkdown ? (
                 <div className="prose dark:prose-invert max-w-3xl mx-auto prose-sm sm:prose-base prose-headings:font-semibold prose-p:leading-relaxed">
                   <ReactMarkdown
-                    components={{
-                      code(props) {
-                        const { node, inline, className, children, ...rest } = props as any;
-                        const match = /language-(\w+)/.exec(className || '');
-                        const language = match ? match[1] : '';
-
-                        return !inline && language ? (
-                          <SyntaxHighlighter
-                            style={oneDark}
-                            language={language}
-                            PreTag="div"
-                          >
-                            {String(children).replace(/\n$/, '')}
-                          </SyntaxHighlighter>
-                        ) : (
-                          <code className={className} {...rest}>
-                            {children}
-                          </code>
-                        );
-                      },
-                    }}
+                    components={markdownComponents}
                   >
                     {initialContent}
                   </ReactMarkdown>
@@ -397,7 +377,7 @@ export default function TextNoteViewer({
       )}
 
       {/* Print styles for PDF export */}
-      <style jsx global>{`
+      <style>{`
         @media print {
           body * {
             visibility: hidden;

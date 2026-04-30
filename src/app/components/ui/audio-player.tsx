@@ -1,8 +1,11 @@
 "use client"
 
+/* global HTMLAudioElement, MediaError */
+
 import {
   ComponentProps,
   createContext,
+  HTMLAttributes,
   HTMLProps,
   ReactNode,
   RefObject,
@@ -15,6 +18,7 @@ import {
 } from "react"
 import * as SliderPrimitive from "@radix-ui/react-slider"
 import { PauseIcon, PlayIcon } from "lucide-react"
+import { CheckIcon, GearIcon } from "@radix-ui/react-icons"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/app/components/ui/button"
@@ -24,7 +28,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/app/components/ui/dropdown-menu"
-import { CheckIcon, GearIcon } from "@radix-ui/react-icons"
 
 enum ReadyState {
   HAVE_NOTHING = 0,
@@ -397,7 +400,7 @@ function Spinner({ className }: SpinnerProps) {
   )
 }
 
-interface PlayButtonProps extends React.ComponentProps<typeof Button> {
+interface PlayButtonProps extends ComponentProps<typeof Button> {
   playing: boolean
   onPlayingChange: (playing: boolean) => void
   loading?: boolean
@@ -443,7 +446,7 @@ const PlayButton = ({
 }
 
 export interface AudioPlayerButtonProps<TData = unknown>
-  extends React.ComponentProps<typeof Button> {
+  extends ComponentProps<typeof Button> {
   item?: AudioPlayerItem<TData>
 }
 
@@ -521,7 +524,7 @@ function useAnimationFrame(callback: Callback) {
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const
 
 export interface AudioPlayerSpeedProps
-  extends React.ComponentProps<typeof Button> {
+  extends ComponentProps<typeof Button> {
   speeds?: readonly number[]
 }
 
@@ -567,7 +570,7 @@ export function AudioPlayerSpeed({
 }
 
 export interface AudioPlayerSpeedButtonGroupProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "children"> {
+  extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   speeds?: readonly number[]
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Search, Filter, X, Calendar } from 'lucide-react';
 
 import { Input } from '@/app/components/ui/input';

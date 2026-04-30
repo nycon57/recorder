@@ -8,7 +8,6 @@ import {
   Trash2,
   Share2,
   RefreshCw,
-  FileText,
   Clock,
   Calendar,
   HardDrive,
@@ -19,7 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { Button } from '@/app/components/ui/button';
+import { Button, buttonVariants } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Separator } from '@/app/components/ui/separator';
@@ -34,13 +33,12 @@ import {
   AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
-import { buttonVariants } from '@/app/components/ui/button';
 import { formatFileSize } from '@/lib/types/content';
-import type { ContentType, FileType, RecordingStatus } from '@/lib/types/database';
-import type { Tag } from '@/lib/types/database';
+import type { ContentType, FileType, RecordingStatus, Tag } from '@/lib/types/database';
 import TagBadge from '@/app/components/TagBadge';
-import ContentTypeBadge from './ContentTypeBadge';
 import { Skeleton } from '@/app/components/ui/skeleton';
+
+import ContentTypeBadge from './ContentTypeBadge';
 
 interface MetadataSidebarProps {
   recordingId: string;

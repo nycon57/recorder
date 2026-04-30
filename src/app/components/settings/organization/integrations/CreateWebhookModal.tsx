@@ -3,8 +3,6 @@
 import { useState } from 'react';
 import { ChevronDown, AlertCircle, Lock } from 'lucide-react';
 
-import { createWebhookSchema, type CreateWebhookInput } from '@/lib/validations/api';
-
 import { FormDialog } from '@/app/components/ui/form-dialog';
 import {
   DynamicFieldArray,
@@ -30,6 +28,7 @@ import {
   CollapsibleTrigger,
 } from '@/app/components/ui/collapsible';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
+import { createWebhookSchema, type CreateWebhookInput } from '@/lib/validations/api';
 
 interface CreateWebhookModalProps {
   open: boolean;
@@ -109,18 +108,18 @@ export function CreateWebhookModal({ open, onOpenChange }: CreateWebhookModalPro
   };
 
   return (
-    <FormDialog
+    <FormDialog<CreateWebhookInput>
       open={open}
       onOpenChange={onOpenChange}
       title="Create Webhook"
       description="Configure a webhook endpoint to receive real-time notifications about events in your organization."
       size="2xl"
-      schema={createWebhookSchema as any}
+      schema={createWebhookSchema}
       defaultValues={{
         name: '',
         description: '',
         url: '',
-        events: [] as any,
+        events: [],
         headers: {} as Record<string, string>,
         retry_enabled: true,
         max_retries: 3,

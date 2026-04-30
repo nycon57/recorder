@@ -1,5 +1,7 @@
 "use client"
 
+/* eslint-disable react/no-unknown-property -- React Three Fiber maps these JSX props onto Three.js objects. */
+
 /**
  * PERF-FE-002: Three.js Orb Visualization Component
  *
@@ -20,7 +22,7 @@
  * DO NOT import this component directly - it will add ~350KB to your bundle.
  */
 
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, type RefObject } from "react"
 import { useTexture } from "@react-three/drei"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import * as THREE from "three"
@@ -29,15 +31,15 @@ export type AgentState = null | "thinking" | "listening" | "talking"
 
 type OrbProps = {
   colors?: [string, string]
-  colorsRef?: React.RefObject<[string, string]>
+  colorsRef?: RefObject<[string, string]>
   resizeDebounce?: number
   seed?: number
   agentState?: AgentState
   volumeMode?: "auto" | "manual"
   manualInput?: number
   manualOutput?: number
-  inputVolumeRef?: React.RefObject<number>
-  outputVolumeRef?: React.RefObject<number>
+  inputVolumeRef?: RefObject<number>
+  outputVolumeRef?: RefObject<number>
   getInputVolume?: () => number
   getOutputVolume?: () => number
   className?: string
@@ -100,14 +102,14 @@ function Scene({
   getOutputVolume,
 }: {
   colors: [string, string]
-  colorsRef?: React.RefObject<[string, string]>
+  colorsRef?: RefObject<[string, string]>
   seed?: number
   agentState: AgentState
   volumeMode: "auto" | "manual"
   manualInput?: number
   manualOutput?: number
-  inputVolumeRef?: React.RefObject<number>
-  outputVolumeRef?: React.RefObject<number>
+  inputVolumeRef?: RefObject<number>
+  outputVolumeRef?: RefObject<number>
   getInputVolume?: () => number
   getOutputVolume?: () => number
 }) {
@@ -151,7 +153,7 @@ function Scene({
   }, [manualOutput, outputVolumeRef, getOutputVolume])
 
   const random = useMemo(
-    () => splitmix32(seed ?? Math.floor(Math.random() * 2 ** 32)),
+    () => splitmix32(seed ?? 0xdecafbad),
     [seed]
   )
   const offsets = useMemo(
@@ -191,6 +193,7 @@ function Scene({
       if (live[1]) targetColor2Ref.current.set(live[1])
     }
     const u = mat.uniforms
+    // eslint-disable-next-line react-hooks/immutability -- R3F frame callbacks update Three.js uniforms imperatively.
     u.uTime.value += delta * 0.5
 
     if (u.uOpacity.value < 1) {
@@ -251,9 +254,13 @@ function Scene({
       canvas.removeEventListener("webglcontextlost", onContextLost, false)
   }, [gl])
 
-  const uniforms = useMemo(() => {
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- Three.js textures require mutable wrapping configuration.
     perlinNoiseTexture.wrapS = THREE.RepeatWrapping
     perlinNoiseTexture.wrapT = THREE.RepeatWrapping
+  }, [perlinNoiseTexture])
+
+  const uniforms = useMemo(() => {
     const isDark =
       typeof document !== "undefined" &&
       document.documentElement.classList.contains("dark")

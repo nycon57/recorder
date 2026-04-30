@@ -7,14 +7,18 @@
 
 'use client';
 
-import { useRef, useState, useCallback, useMemo, Suspense } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+/* eslint-disable react/no-unknown-property -- React Three Fiber JSX uses Three.js element props. */
+
+import { Suspense, useMemo, useRef, useState } from 'react';
 import { OrbitControls, Stars, Text, Billboard } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+import { useFrame, useThree } from '@react-three/fiber';
+import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+
 import type { GraphNode3D, GraphEdge3D, LODConfig, NodeInteractionState } from './types';
-import { NodeInstances } from './nodes/NodeInstances';
 import { EdgeLines } from './edges/EdgeLines';
+import { NodeInstances } from './nodes/NodeInstances';
 
 interface GraphSceneProps {
   nodes: GraphNode3D[];
@@ -34,7 +38,7 @@ function CameraController({
   selectedNode?: GraphNode3D | null;
   onFlyComplete?: () => void;
 }) {
-  const controlsRef = useRef<any>(null);
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const { camera } = useThree();
   const isFlying = useRef(false);
   const targetPosition = useRef(new THREE.Vector3(0, 0, 0));
@@ -174,8 +178,6 @@ function NodeLabels({
   hoveredNodeId?: string | null;
   lodConfig: LODConfig;
 }) {
-  const { camera } = useThree();
-
   // Filter nodes that should show labels
   const labelNodes = useMemo(() => {
     if (!lodConfig.showLabels) return [];

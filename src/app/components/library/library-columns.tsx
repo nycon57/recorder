@@ -1,6 +1,5 @@
 'use client';
 
-import * as React from 'react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { ColumnDef } from '@tanstack/react-table';
@@ -30,8 +29,18 @@ import {
 } from '@/app/components/ui/dropdown-menu';
 import { TagBadge } from '@/app/components/tags/TagBadge';
 import { FavoriteButton } from '@/app/components/favorites/FavoriteButton';
-
 import type { ContentItem } from '@/app/components/content/ContentCard';
+
+type LibraryTag = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+type LibraryRow = ContentItem & {
+  tags?: LibraryTag[];
+  is_favorite?: boolean;
+};
 
 /**
  * Helper functions for formatting
@@ -263,12 +272,13 @@ export function createLibraryColumns(actions: LibraryColumnActions): ColumnDef<C
       id: 'tags',
       header: 'Tags',
       cell: ({ row }) => {
-        const tags = (row.original as any).tags ?? [];
+        const item = row.original as LibraryRow;
+        const tags = item.tags ?? item.metadata?.tags ?? [];
         if (tags.length === 0) return null;
 
         return (
           <div className="flex flex-wrap gap-1">
-            {tags.slice(0, 2).map((tag: any) => (
+            {tags.slice(0, 2).map((tag) => (
               <TagBadge key={tag.id} tag={tag} size="sm" />
             ))}
             {tags.length > 2 && (
@@ -290,7 +300,7 @@ export function createLibraryColumns(actions: LibraryColumnActions): ColumnDef<C
         <div onClick={(e) => e.stopPropagation()}>
           <FavoriteButton
             recordingId={row.original.id}
-            isFavorite={(row.original as any).is_favorite || false}
+            isFavorite={Boolean((row.original as LibraryRow).is_favorite)}
             size="sm"
           />
         </div>

@@ -5,11 +5,11 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, Brain, Sparkles } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { ConceptBadge, ConceptList, ConceptTypeLabel } from './ConceptBadge';
 import type { ConceptType } from '@/lib/validations/knowledge';
+
+import { ConceptList, ConceptTypeLabel } from './ConceptBadge';
 
 interface Concept {
   id: string;

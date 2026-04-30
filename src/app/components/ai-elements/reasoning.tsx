@@ -1,15 +1,17 @@
 "use client";
 
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
+import { BrainIcon, ChevronDownIcon } from "lucide-react";
+import type { ComponentProps } from "react";
+import { createContext, memo, useContext, useEffect, useState } from "react";
+
+import { cn } from "@/lib/utils";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/app/components/ui/collapsible";
-import { cn } from "@/lib/utils";
-import { BrainIcon, ChevronDownIcon } from "lucide-react";
-import type { ComponentProps } from "react";
-import { createContext, memo, useContext, useEffect, useState } from "react";
+
 import { Response } from "./response";
 import { Shimmer } from "./shimmer";
 
@@ -68,6 +70,7 @@ export const Reasoning = memo(
     // Reset hasAutoClosed when new streaming cycle starts
     useEffect(() => {
       if (isStreaming) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setHasAutoClosed(false);
       }
     }, [isStreaming]);
@@ -76,6 +79,7 @@ export const Reasoning = memo(
     useEffect(() => {
       if (isStreaming) {
         if (startTime === null) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setStartTime(Date.now());
         }
       } else if (startTime !== null) {

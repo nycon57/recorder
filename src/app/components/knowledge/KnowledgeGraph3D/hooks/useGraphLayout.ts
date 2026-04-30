@@ -5,10 +5,12 @@
  * Supports dynamic updates and warm-up for initial stabilization.
  */
 
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import type { GraphNode, GraphEdge } from '@/lib/validations/knowledge';
-import type { GraphNode3D, GraphEdge3D } from '../types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Simulation } from 'd3-force-3d';
+
+import type { GraphNode, GraphEdge } from '@/lib/validations/knowledge';
+
+import type { GraphNode3D, GraphEdge3D } from '../types';
 
 interface UseGraphLayoutOptions {
   strength?: number;          // Charge strength (negative = repulsion)

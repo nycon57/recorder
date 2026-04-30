@@ -114,6 +114,7 @@ export function DataTable<TData, TValue>({
   const rowSelection = externalRowSelection ?? internalRowSelection;
   const setRowSelection = externalSetRowSelection ?? setInternalRowSelection;
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table intentionally returns imperative table helpers.
   const table = useReactTable({
     data,
     columns,

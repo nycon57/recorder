@@ -7,6 +7,7 @@ import { FileText, Image as ImageIcon, Expand, Pencil, Trash2 } from 'lucide-rea
 
 import { cn } from '@/lib/utils/cn';
 import { Button } from '@/app/components/ui/button';
+
 import { ThumbnailLightbox, ThumbnailEditModal } from '../modals';
 
 interface ThumbnailHeroProps {

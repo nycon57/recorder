@@ -1,5 +1,7 @@
 "use client";
 
+import type { ComponentProps } from "react";
+
 import { Button } from "@/app/components/ui/button";
 import {
   Tooltip,
@@ -8,7 +10,6 @@ import {
   TooltipTrigger,
 } from "@/app/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { ComponentProps } from "react";
 
 export type ActionsProps = ComponentProps<"div">;
 

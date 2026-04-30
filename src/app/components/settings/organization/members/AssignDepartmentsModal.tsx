@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Briefcase, Check, Loader2 } from 'lucide-react';
+import { Briefcase, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
@@ -17,8 +17,10 @@ import { Button } from '@/app/components/ui/button';
 import { Label } from '@/app/components/ui/label';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-
-import type { OrganizationMember, Department } from '@/app/(dashboard)/settings/organization/members/types';
+import type {
+  OrganizationMember,
+  Department,
+} from '@/app/(dashboard)/settings/organization/members/types';
 
 interface AssignDepartmentsModalProps {
   member: OrganizationMember;
@@ -49,13 +51,6 @@ export function AssignDepartmentsModal({
     enabled: open,
   });
 
-  // Update selected departments when modal opens
-  useEffect(() => {
-    if (open) {
-      setSelectedDepts(member.departments?.map((d: Department) => d.id) || []);
-    }
-  }, [open, member.departments]);
-
   const updateDepartmentsMutation = useMutation({
     mutationFn: async (departmentIds: string[]) => {
       const response = await fetch(`/api/organizations/members/${member.id}/departments`, {
@@ -70,7 +65,7 @@ export function AssignDepartmentsModal({
       toast.success('Member departments updated successfully');
       onSuccess();
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast.error(error.message || 'Failed to update departments');
     },
   });
@@ -81,7 +76,7 @@ export function AssignDepartmentsModal({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     updateDepartmentsMutation.mutate(selectedDepts);
   };

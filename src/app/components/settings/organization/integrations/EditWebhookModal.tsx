@@ -1,13 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Plus, Trash2, AlertCircle, Lock } from 'lucide-react';
-import toast from 'react-hot-toast';
-
-import { updateWebhookSchema, type UpdateWebhookInput } from '@/lib/validations/api';
+import { toast } from 'react-hot-toast';
 
 import {
   Dialog,
@@ -37,6 +35,7 @@ import {
   CollapsibleTrigger,
 } from '@/app/components/ui/collapsible';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
+import { updateWebhookSchema, type UpdateWebhookInput } from '@/lib/validations/api';
 
 interface Webhook {
   id: string;
@@ -50,6 +49,8 @@ interface Webhook {
   max_retries: number;
   timeout_ms: number;
 }
+
+type WebhookEvent = NonNullable<UpdateWebhookInput['events']>[number];
 
 interface EditWebhookModalProps {
   webhook: Webhook;
@@ -123,12 +124,16 @@ export function EditWebhookModal({ webhook, open, onOpenChange }: EditWebhookMod
       name: webhook.name,
       description: webhook.description || '',
       url: webhook.url,
-      events: webhook.events as any,
+      events: webhook.events as UpdateWebhookInput['events'],
       enabled: webhook.enabled,
       retry_enabled: webhook.retry_enabled,
       max_retries: webhook.max_retries,
       timeout_ms: webhook.timeout_ms,
     },
+  });
+  const retryEnabled = useWatch({
+    control: form.control,
+    name: 'retry_enabled',
   });
 
   // ✅ Removed form reset Effect - Dialog key prop handles form reset automatically
@@ -299,13 +304,13 @@ export function EditWebhookModal({ webhook, open, onOpenChange }: EditWebhookMod
                         className="flex items-start space-x-3 space-y-0"
                       >
                         <Checkbox
-                          checked={field.value?.includes(event.value as any)}
+                          checked={field.value?.includes(event.value as WebhookEvent)}
                           onCheckedChange={(checked) => {
                             if (checked) {
-                              field.onChange([...(field.value || []), event.value]);
+                              field.onChange([...(field.value || []), event.value as WebhookEvent]);
                             } else {
                               field.onChange(
-                                field.value?.filter((v: string) => v !== event.value)
+                                field.value?.filter((v) => v !== event.value)
                               );
                             }
                           }}
@@ -405,7 +410,7 @@ export function EditWebhookModal({ webhook, open, onOpenChange }: EditWebhookMod
                     )}
                   />
 
-                  {form.watch('retry_enabled') && (
+                  {retryEnabled && (
                     <FormField
                       control={form.control}
                       name="max_retries"

@@ -51,6 +51,15 @@ interface ConnectorConfig {
   supports_publish: boolean;
 }
 
+interface IntegrationSummary {
+  id: string;
+  type: PublishDestination;
+  name: string;
+  externalUserName?: string | null;
+  supportsPublish?: boolean;
+  status?: string;
+}
+
 interface FolderInfo {
   id: string;
   name: string;
@@ -187,9 +196,10 @@ export default function PublishModal({
       const data = await response.json();
 
       // Filter to only show connectors that support publishing
-      const publishableConnectors: ConnectorConfig[] = (data.integrations || [])
-        .filter((integration: any) => integration.supportsPublish && integration.status === 'connected')
-        .map((integration: any) => ({
+      const integrations = (data.integrations || []) as IntegrationSummary[];
+      const publishableConnectors: ConnectorConfig[] = integrations
+        .filter((integration) => integration.supportsPublish && integration.status === 'connected')
+        .map((integration) => ({
           id: integration.id,
           connector_type: integration.type as PublishDestination,
           display_name: integration.externalUserName

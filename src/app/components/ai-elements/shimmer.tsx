@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import {
   type CSSProperties,
@@ -9,6 +8,8 @@ import {
   memo,
   useMemo,
 } from "react";
+
+import { cn } from "@/lib/utils";
 
 export type TextShimmerProps = {
   children: string;
@@ -38,6 +39,7 @@ const ShimmerComponent = ({
   }, [children, spread]);
 
   return (
+    // eslint-disable-next-line react-hooks/static-components
     <MotionComponent
       animate={{ backgroundPosition: "0% center" }}
       className={cn(

@@ -1,5 +1,7 @@
 'use client';
 
+/* global HTMLVideoElement */
+
 /**
  * PERF-FE-002: Code-split heavy components
  *
@@ -7,7 +9,7 @@
  * FFmpeg (~650KB + 4.5MB WASM) is only loaded when the user finishes recording.
  */
 
-import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { MonitorPlay, RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';

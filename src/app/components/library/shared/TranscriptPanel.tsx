@@ -7,7 +7,6 @@ import {
   Search,
   X,
   FileText,
-  Loader2,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
@@ -54,7 +53,6 @@ export default function TranscriptPanel({
   className,
 }: TranscriptPanelProps) {
   const [searchQuery, setSearchQuery] = React.useState('');
-  const [isSearching, setIsSearching] = React.useState(false);
   const [highlightedIndices, setHighlightedIndices] = React.useState<number[]>(
     []
   );
@@ -73,11 +71,9 @@ export default function TranscriptPanel({
   React.useEffect(() => {
     if (!searchQuery.trim()) {
       setHighlightedIndices([]);
-      setIsSearching(false);
       return;
     }
 
-    setIsSearching(true);
     const query = searchQuery.toLowerCase();
     const matches: number[] = [];
 
@@ -88,7 +84,6 @@ export default function TranscriptPanel({
     });
 
     setHighlightedIndices(matches);
-    setIsSearching(false);
   }, [searchQuery, words]);
 
   const handleCopyTranscript = async () => {

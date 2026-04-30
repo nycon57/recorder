@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type ChangeEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Upload, AlertCircle, ImageIcon } from 'lucide-react';
+
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
@@ -13,7 +14,6 @@ import { Label } from '@/app/components/ui/label';
 import { TagInput } from '@/app/components/tags/TagInput';
 import ProcessingOptions from '@/app/components/upload/ProcessingOptions';
 import type { AnalysisType } from '@/lib/services/analysis-templates';
-import { cn } from '@/lib/utils';
 import {
   Form,
   FormControl,
@@ -75,7 +75,7 @@ export default function MetadataCollectionStep({
   const [thumbnail, setThumbnail] = useState<string | undefined>(defaultThumbnail);
   const [thumbnailFile, setThumbnailFile] = useState<File | undefined>(undefined);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
-  const [isLoadingTags, setIsLoadingTags] = useState(false);
+  const [, setIsLoadingTags] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
 
@@ -168,7 +168,7 @@ export default function MetadataCollectionStep({
    * Handle thumbnail file selection
    */
   const handleThumbnailChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
+    (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
 

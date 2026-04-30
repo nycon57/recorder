@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+/* global HTMLAudioElement, HTMLVideoElement */
+
+import { useState, useRef, useCallback, useEffect, useMemo, type ChangeEvent, type DragEvent } from 'react';
 import { Upload, X, AlertCircle, FileIcon, Video, Music, FileText } from 'lucide-react';
+
 import { Button } from '@/app/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
@@ -9,7 +12,6 @@ import {
   formatFileSize,
   getContentTypeFromMimeType,
   CONTENT_TYPE_LABELS,
-  CONTENT_TYPE_EMOJI,
   type ContentType,
 } from '@/lib/types/content';
 
@@ -51,8 +53,6 @@ export default function FileUploadStep({
   const [thumbnail, setThumbnail] = useState<string | null>(initialFileData?.thumbnail || null);
   const [durationSec, setDurationSec] = useState<number | undefined>(initialFileData?.durationSec);
   const [isExtracting, setIsExtracting] = useState(false);
-  const [videoObjectUrl, setVideoObjectUrl] = useState<string | null>(null);
-  const [audioObjectUrl, setAudioObjectUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -73,44 +73,18 @@ export default function FileUploadStep({
     }
   }, [initialFileData]);
 
-  /**
-   * Manage object URLs for video/audio previews
-   * Create URL when file changes, revoke on cleanup
-   */
-  useEffect(() => {
-    if (!file) {
-      // No file - revoke any existing URLs
-      if (videoObjectUrl) {
-        URL.revokeObjectURL(videoObjectUrl);
-        setVideoObjectUrl(null);
-      }
-      if (audioObjectUrl) {
-        URL.revokeObjectURL(audioObjectUrl);
-        setAudioObjectUrl(null);
-      }
-      return;
-    }
+  const videoObjectUrl = useMemo(() => {
+    if (!file?.type.startsWith('video/')) return null;
+    return URL.createObjectURL(file);
+  }, [file]);
 
-    // Create object URLs based on file type
-    if (file.type.startsWith('video/')) {
-      // Revoke previous video URL if exists
-      if (videoObjectUrl) {
-        URL.revokeObjectURL(videoObjectUrl);
-      }
-      const newUrl = URL.createObjectURL(file);
-      setVideoObjectUrl(newUrl);
-    } else if (file.type.startsWith('audio/')) {
-      // Revoke previous audio URL if exists
-      if (audioObjectUrl) {
-        URL.revokeObjectURL(audioObjectUrl);
-      }
-      const newUrl = URL.createObjectURL(file);
-      setAudioObjectUrl(newUrl);
-    }
-  }, [file, videoObjectUrl, audioObjectUrl]); // Re-run when file changes
+  const audioObjectUrl = useMemo(() => {
+    if (!file?.type.startsWith('audio/')) return null;
+    return URL.createObjectURL(file);
+  }, [file]);
 
   /**
-   * Cleanup object URLs on unmount
+   * Cleanup object URLs when previews change or unmount
    */
   useEffect(() => {
     return () => {
@@ -269,7 +243,7 @@ export default function FileUploadStep({
    * Handle file selection from input
    */
   const handleFileSelect = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
+    (event: ChangeEvent<HTMLInputElement>) => {
       const selectedFile = event.target.files?.[0];
       if (selectedFile) {
         processFile(selectedFile);
@@ -281,25 +255,25 @@ export default function FileUploadStep({
   /**
    * Handle drag events
    */
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
+  const handleDragEnter = useCallback((e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
+  const handleDragLeave = useCallback((e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
   }, []);
 
   const handleDrop = useCallback(
-    (e: React.DragEvent) => {
+    (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
       setIsDragging(false);

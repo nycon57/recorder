@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -34,7 +34,10 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import { DepartmentSelector } from '@/app/components/shared/DepartmentSelector';
+import {
+  DepartmentSelector,
+  type Department as SelectorDepartment,
+} from '@/app/components/shared/DepartmentSelector';
 import { updateMemberSchema } from '@/lib/validations/organizations';
 
 interface Department {
@@ -82,7 +85,7 @@ export function EditMemberModal({
   departments,
 }: EditMemberModalProps) {
   const queryClient = useQueryClient();
-  const [currentUserRole, setCurrentUserRole] = useState<string>('admin'); // This would come from auth context
+  const [currentUserRole] = useState<string>('admin'); // This would come from auth context
 
   const form = useForm<FormValues>({
     resolver: zodResolver(updateMemberSchema),
@@ -189,7 +192,7 @@ export function EditMemberModal({
                   </FormLabel>
                   <FormControl>
                     <DepartmentSelector
-                      departments={departments as any}
+                      departments={departments as unknown as SelectorDepartment[]}
                       value={field.value || []}
                       onValueChange={field.onChange}
                       placeholder="Select departments..."

@@ -12,6 +12,7 @@ import {
   Check,
   X,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -20,8 +21,6 @@ import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
 import { Badge } from '@/app/components/ui/badge';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Separator } from '@/app/components/ui/separator';
-import { toast } from 'sonner';
-
 import type { CommentWithUser } from '@/lib/types/database';
 
 interface TimeStampedCommentsProps {
@@ -85,12 +84,7 @@ export default function TimeStampedComments({
   const [editingCommentId, setEditingCommentId] = React.useState<string | null>(null);
   const [editText, setEditText] = React.useState('');
 
-  // Fetch comments on mount
-  React.useEffect(() => {
-    fetchComments();
-  }, [recordingId]);
-
-  const fetchComments = async () => {
+  const fetchComments = React.useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await fetch(
@@ -109,7 +103,12 @@ export default function TimeStampedComments({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [recordingId]);
+
+  // Fetch comments on mount
+  React.useEffect(() => {
+    fetchComments();
+  }, [fetchComments]);
 
   const handleAddComment = async () => {
     if (!newCommentText.trim()) {

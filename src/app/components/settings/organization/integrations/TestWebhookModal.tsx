@@ -6,12 +6,10 @@ import {
   Send,
   CheckCircle,
   XCircle,
-  AlertCircle,
   Loader2,
   Copy,
-  FileJson
 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -61,7 +59,15 @@ const TEST_EVENTS = [
   { value: 'user.deleted', label: 'User Deleted' },
 ];
 
-const SAMPLE_PAYLOADS: Record<string, any> = {
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+const SAMPLE_PAYLOADS: Record<string, JsonValue> = {
   'recording.created': {
     event: 'recording.created',
     timestamp: new Date().toISOString(),
@@ -126,7 +132,7 @@ interface TestResult {
   status_code?: number;
   duration_ms?: number;
   response_headers?: Record<string, string>;
-  response_body?: any;
+  response_body?: JsonValue;
   error?: string;
 }
 
@@ -175,7 +181,7 @@ export function TestWebhookModal({ webhook, open, onOpenChange }: TestWebhookMod
     if (activeTab === 'custom' && customPayload) {
       try {
         JSON.parse(customPayload);
-      } catch (e) {
+      } catch {
         toast.error('Invalid JSON payload');
         return;
       }

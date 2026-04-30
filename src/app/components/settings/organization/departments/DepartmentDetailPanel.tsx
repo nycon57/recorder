@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import {
   Building2,
   X,
@@ -25,7 +24,6 @@ import {
 } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Separator } from '@/app/components/ui/separator';
-import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { UserAvatar } from '@/app/components/shared/UserAvatar';
 import { RoleBadge } from '@/app/components/shared/RoleBadge';

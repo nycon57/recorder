@@ -1,5 +1,8 @@
 "use client";
 
+import { ChevronDownIcon, PaperclipIcon } from "lucide-react";
+import type { ComponentProps, ReactNode } from "react";
+
 import { Button } from "@/app/components/ui/button";
 import {
   Collapsible,
@@ -8,8 +11,6 @@ import {
 } from "@/app/components/ui/collapsible";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { ChevronDownIcon, PaperclipIcon } from "lucide-react";
-import type { ComponentProps } from "react";
 
 export type QueueMessagePart = {
   type: string;
@@ -233,7 +234,7 @@ export const QueueSectionTrigger = ({
 export type QueueSectionLabelProps = ComponentProps<"span"> & {
   count?: number;
   label: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
 };
 
 export const QueueSectionLabel = ({

@@ -1,6 +1,5 @@
 'use client';
 
-import * as React from 'react';
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 
@@ -39,10 +38,28 @@ interface Transcript {
   id: string;
   content_id: string;
   text: string;
-  words_json?: any;
+  words_json?: unknown;
   language?: string | null;
   confidence?: number | null;
 }
+
+interface TranscriptWord {
+  word: string;
+  start: number;
+  end: number;
+  confidence?: number;
+}
+
+const isTranscriptWords = (words: unknown): words is TranscriptWord[] =>
+  Array.isArray(words) &&
+  words.every(
+    (word) =>
+      typeof word === 'object' &&
+      word !== null &&
+      typeof (word as TranscriptWord).word === 'string' &&
+      typeof (word as TranscriptWord).start === 'number' &&
+      typeof (word as TranscriptWord).end === 'number'
+  );
 
 interface UnifiedContentViewerProps {
   contentType: ContentType | null;
@@ -75,7 +92,6 @@ export default function UnifiedContentViewer({
   contentType,
   fileType,
   recordingId,
-  videoUrl,
   audioUrl,
   downloadUrl,
   documentUrl,
@@ -98,7 +114,7 @@ export default function UnifiedContentViewer({
           </div>
         );
 
-      case 'audio':
+      case 'audio': {
         if (!audioUrl) {
           return (
             <div className="p-12 text-center text-muted-foreground">
@@ -106,15 +122,24 @@ export default function UnifiedContentViewer({
             </div>
           );
         }
+        const audioTranscript = transcript
+          ? {
+              ...transcript,
+              words_json: isTranscriptWords(transcript.words_json)
+                ? transcript.words_json
+                : null,
+            }
+          : null;
         return (
           <AudioPlayer
             audioUrl={audioUrl}
             downloadUrl={downloadUrl}
-            transcript={transcript}
+            transcript={audioTranscript}
             title={title}
             duration={duration}
           />
         );
+      }
 
       case 'document':
         // Handle PDF vs DOCX differently

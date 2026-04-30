@@ -1,14 +1,9 @@
 'use client';
 
-import React from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
 import {
-  X,
   User,
   Mail,
-  Shield,
-  Calendar,
-  Activity,
   Building2,
   Edit,
   Trash2,

@@ -1,9 +1,6 @@
 'use client';
 
-import React from 'react';
-
 import { editRoleFormSchema } from '@/lib/validations/api';
-
 import { FormDialog } from '@/app/components/ui/form-dialog';
 import {
   FormControl,
@@ -18,13 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
-
-interface OrganizationMember {
-  id: string;
-  name?: string;
-  email: string;
-  role: 'owner' | 'admin' | 'contributor' | 'reader';
-}
+import type { OrganizationMember } from '@/app/(dashboard)/settings/organization/members/types';
 
 interface EditRoleModalProps {
   member: OrganizationMember;

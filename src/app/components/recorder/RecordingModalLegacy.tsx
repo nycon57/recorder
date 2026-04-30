@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from '@/lib/auth/auth-client';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL, fetchFile } from '@ffmpeg/util';
 import { toast } from 'sonner';
 
+import { useSession } from '@/lib/auth/auth-client';
 import ReprocessStreamModal from '@/app/components/ReprocessStreamModal';
 
 interface RecordingModalProps {
@@ -14,6 +14,13 @@ interface RecordingModalProps {
   recordingBlob: Blob | null;
   onClose: () => void;
 }
+
+const fileDataToArrayBuffer = (data: Awaited<ReturnType<FFmpeg['readFile']>>) => {
+  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+};
 
 export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModalProps) {
   const router = useRouter();
@@ -89,7 +96,7 @@ export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModa
 
       // Read output
       const data = await ffmpeg.readFile('output.mp4');
-      const mp4Blob = new Blob([data], { type: 'video/mp4' });
+      const mp4Blob = new Blob([fileDataToArrayBuffer(data)], { type: 'video/mp4' });
 
       // Download
       const url = URL.createObjectURL(mp4Blob);
