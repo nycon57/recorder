@@ -4,9 +4,10 @@
  * Run with: npx tsx scripts/apply-match-chunks-migration.ts
  */
 
-import { supabaseAdmin } from '../src/lib/supabase/admin';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+
+import { supabaseAdmin } from '../src/lib/supabase/admin';
 
 async function applyMigration() {
   console.log('[Migration] Applying match_chunks function...');
@@ -42,7 +43,7 @@ async function applyMigration() {
 
     // Test the function
     const testEmbedding = new Array(1536).fill(0.1);
-    const { data, error: testError } = await supabaseAdmin.rpc('match_chunks', {
+    const { error: testError } = await supabaseAdmin.rpc('match_chunks', {
       query_embedding: `[${testEmbedding.join(',')}]`,
       match_threshold: 0.7,
       match_count: 1,
@@ -57,8 +58,8 @@ async function applyMigration() {
 
     console.log('[Migration] ✓ Function is working correctly');
     console.log('[Migration] Done! Your RAG system should now work.');
-  } catch (error: any) {
-    console.error('[Migration] Error:', error.message);
+  } catch (error: unknown) {
+    console.error('[Migration] Error:', error instanceof Error ? error.message : error);
     console.log('\n[Migration] Please run this SQL manually in Supabase Dashboard > SQL Editor:');
     console.log('\n' + migrationSQL);
     process.exit(1);

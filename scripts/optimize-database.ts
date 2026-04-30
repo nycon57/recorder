@@ -330,7 +330,7 @@ async function generateOptimizationReport() {
   }
 
   const policiesByTable: Record<string, RLSPolicy[]> = {};
-  policies.forEach((policy: any) => {
+  policies.forEach((policy: RLSPolicy) => {
     if (!policiesByTable[policy.tablename]) {
       policiesByTable[policy.tablename] = [];
     }

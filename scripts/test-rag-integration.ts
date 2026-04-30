@@ -8,8 +8,9 @@
  * Usage: npx tsx scripts/test-rag-integration.ts
  */
 
-import { config } from 'dotenv';
 import { join } from 'path';
+
+import { config } from 'dotenv';
 
 // Load environment variables
 config({ path: join(process.cwd(), '.env.local') });
@@ -32,6 +33,10 @@ async function testRAGIntegration() {
       const { vectorSearch } = await import('@/lib/services/vector-search-google');
       const { searchMonitor } = await import('@/lib/services/search-monitoring');
       const { assignVariant, getExperimentConfig } = await import('@/lib/services/ab-testing');
+      void vectorSearch;
+      void searchMonitor;
+      void assignVariant;
+      void getExperimentConfig;
       results.imports = true;
       console.log('  ✅ All modules imported successfully\n');
     } catch (error) {

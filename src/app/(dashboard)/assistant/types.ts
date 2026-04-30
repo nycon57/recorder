@@ -7,7 +7,7 @@ import type { UIToolInvocation } from 'ai';
 
 // Type aliases for backward compatibility
 type Message = UIMessage;
-type ToolInvocation = UIToolInvocation<any>;
+type ToolInvocation = UIToolInvocation<never>;
 
 /**
  * Extended message type with additional metadata

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ComponentType } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -56,7 +56,7 @@ interface GoalTemplate {
   agent_type: string;
   target_metric: string;
   default_target: number;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
 }
 
 const GOAL_TEMPLATES: GoalTemplate[] = [
@@ -92,7 +92,7 @@ const GOAL_TEMPLATES: GoalTemplate[] = [
   },
 ];
 
-const STATUS_CONFIG: Record<AgentGoalStatus, { label: string; variant: string }> = {
+const STATUS_CONFIG: Record<AgentGoalStatus, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   active: { label: 'Active', variant: 'default' },
   paused: { label: 'Paused', variant: 'secondary' },
   achieved: { label: 'Achieved', variant: 'outline' },
@@ -105,6 +105,18 @@ const GOAL_TYPE_LABELS: Record<AgentGoalType, string> = {
   quality: 'Quality',
   custom: 'Custom',
 };
+
+function getGoalStatusConfig(status: string) {
+  return status in STATUS_CONFIG
+    ? STATUS_CONFIG[status as AgentGoalStatus]
+    : STATUS_CONFIG.active;
+}
+
+function getGoalTypeLabel(goalType: string) {
+  return goalType in GOAL_TYPE_LABELS
+    ? GOAL_TYPE_LABELS[goalType as AgentGoalType]
+    : 'Custom';
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -162,7 +174,7 @@ interface GoalCardProps {
 
 function GoalCard({ goal, inactive, onEdit, onToggleStatus, isUpdating }: GoalCardProps) {
   const pct = computeProgress(goal);
-  const statusCfg = STATUS_CONFIG[goal.status];
+  const statusCfg = getGoalStatusConfig(goal.status);
   const canResume = goal.status === 'active' || goal.status === 'paused' || goal.status === 'failed';
 
   return (
@@ -171,8 +183,8 @@ function GoalCard({ goal, inactive, onEdit, onToggleStatus, isUpdating }: GoalCa
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant={statusCfg.variant as 'default'}>{statusCfg.label}</Badge>
-              <Badge variant="outline">{GOAL_TYPE_LABELS[goal.goal_type]}</Badge>
+              <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
+              <Badge variant="outline">{getGoalTypeLabel(goal.goal_type)}</Badge>
             </div>
             <p className="text-sm mt-1.5">{goal.goal_description}</p>
           </div>

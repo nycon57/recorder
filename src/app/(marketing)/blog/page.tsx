@@ -196,7 +196,7 @@ export default function BlogPage() {
         result.sort((a, b) => a.title.localeCompare(b.title));
         break;
       case 'reading_time':
-        result.sort((a, b) => a.reading_time_minutes - b.reading_time_minutes);
+        result.sort((a, b) => (a.reading_time_minutes ?? 0) - (b.reading_time_minutes ?? 0));
         break;
       case 'newest':
       default:

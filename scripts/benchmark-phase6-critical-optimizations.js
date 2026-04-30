@@ -10,13 +10,13 @@
  */
 
 import { performance } from 'perf_hooks';
+
 import { QuotaManager } from '../src/lib/services/quotas/quota-manager.js';
 import { RateLimiter } from '../src/lib/services/quotas/rate-limiter.js';
 
 // Test configuration
 const TEST_ORG_ID = 'test-org-' + Date.now();
 const NUM_ITERATIONS = 100;
-const NUM_PARALLEL = 10;
 
 // Color output helpers
 const colors = {

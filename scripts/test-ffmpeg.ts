@@ -34,7 +34,7 @@ async function testFFmpeg() {
         ffmpegPath = stdout.trim();
       }
       console.log(`✅ FFmpeg found at: ${ffmpegPath}\n`);
-    } catch (error) {
+    } catch {
       throw new Error(
         'FFmpeg not found in system PATH. Please install FFmpeg:\n' +
         '  - macOS: brew install ffmpeg\n' +
@@ -131,7 +131,7 @@ async function testFFmpeg() {
       const probeMatch = ffprobeVersion.match(/ffprobe version (\S+)/);
       const probeVer = probeMatch ? probeMatch[1] : 'unknown';
       console.log(`✅ FFprobe version: ${probeVer}\n`);
-    } catch (error) {
+    } catch {
       console.log('⚠️  FFprobe not found (usually installed with FFmpeg)\n');
     }
 

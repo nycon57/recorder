@@ -10,10 +10,14 @@
  * Or with explicit env: npx tsx --env-file=.env.local scripts/test-r2.ts
  */
 
-// Load environment variables from .env.local BEFORE any other imports
-require('dotenv').config({ path: require('path').resolve(process.cwd(), '.env.local') });
+import { resolve } from 'path';
 
-import { r2Client } from '@/lib/cloudflare/r2-client';
+import { config } from 'dotenv';
+
+// Load environment variables from .env.local before loading the R2 client.
+config({ path: resolve(process.cwd(), '.env.local') });
+
+const { r2Client } = await import('@/lib/cloudflare/r2-client');
 
 async function testR2() {
   console.log('🧪 Testing Cloudflare R2 connection...\n');

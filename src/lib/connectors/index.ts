@@ -53,6 +53,7 @@ export function createConnector(options: ConnectorFactoryOptions): Connector {
       }
       return new NotionConnector(options.credentials, {
         orgId: options.orgId,
+        connectorId: options.connectorId,
       });
 
     case ConnectorType.ZOOM:
@@ -60,7 +61,7 @@ export function createConnector(options: ConnectorFactoryOptions): Connector {
         throw new Error('Zoom connector requires credentials');
       }
       return new ZoomConnector(
-        options.credentials as any,
+        options.credentials as ConstructorParameters<typeof ZoomConnector>[0],
         {
           orgId: options.orgId,
           connectorId: options.connectorId,
@@ -72,7 +73,7 @@ export function createConnector(options: ConnectorFactoryOptions): Connector {
         throw new Error('Microsoft Teams connector requires credentials');
       }
       return new MicrosoftTeamsConnector(
-        options.credentials as any,
+        options.credentials as ConstructorParameters<typeof MicrosoftTeamsConnector>[0],
         {
           orgId: options.orgId,
           connectorId: options.connectorId,
@@ -91,7 +92,17 @@ export function createConnector(options: ConnectorFactoryOptions): Connector {
  * Get connector metadata
  */
 export function getConnectorInfo(type: ConnectorType) {
-  const connectorInfo = {
+  const connectorInfo: Partial<Record<ConnectorType, {
+    name: string;
+    description: string;
+    requiresOAuth: boolean;
+    supportsWebhooks: boolean;
+    status: string;
+    supportedTypes?: string[];
+    maxFileSize?: number;
+    timeout?: number;
+    features?: string[];
+  }>> = {
     [ConnectorType.FILE_UPLOAD]: {
       name: 'File Upload',
       description:

@@ -8,6 +8,26 @@
  */
 
 import {
+  PublishableConnector,
+  FolderListRequest,
+  FolderListResponse,
+  FolderInfo,
+  CreateFolderRequest,
+  CreateFolderResponse,
+  ConnectorPublishOptions,
+  ConnectorPublishResult,
+  ConnectorUpdateOptions,
+  ExternalDocumentInfo,
+  PublishFormat,
+} from '@/lib/types/publishing';
+import {
+  TokenManager,
+  createMicrosoftRefreshFunction,
+  type TokenSet,
+  type StoredCredentials,
+} from '@/lib/services/token-manager';
+
+import {
   Connector,
   ConnectorType,
   ConnectorCredentials,
@@ -21,27 +41,6 @@ import {
   FileContent,
   WebhookEvent,
 } from './base';
-
-import {
-  PublishableConnector,
-  FolderListRequest,
-  FolderListResponse,
-  FolderInfo,
-  CreateFolderRequest,
-  CreateFolderResponse,
-  ConnectorPublishOptions,
-  ConnectorPublishResult,
-  ConnectorUpdateOptions,
-  ExternalDocumentInfo,
-  PublishFormat,
-} from '@/lib/types/publishing';
-
-import {
-  TokenManager,
-  createMicrosoftRefreshFunction,
-  type TokenSet,
-  type StoredCredentials,
-} from '@/lib/services/token-manager';
 
 // =====================================================
 // CONSTANTS & TYPES
@@ -75,21 +74,6 @@ const FORMAT_MIME_TYPES: Record<PublishFormat, string> = {
   pdf: MICROSOFT_MIME_TYPES.PDF,
   html: MICROSOFT_MIME_TYPES.HTML,
 };
-
-/** Supported file types for import */
-const SUPPORTED_MIME_TYPES = [
-  MICROSOFT_MIME_TYPES.WORD,
-  MICROSOFT_MIME_TYPES.EXCEL,
-  MICROSOFT_MIME_TYPES.POWERPOINT,
-  MICROSOFT_MIME_TYPES.PDF,
-  MICROSOFT_MIME_TYPES.MARKDOWN,
-  MICROSOFT_MIME_TYPES.HTML,
-  MICROSOFT_MIME_TYPES.PLAIN_TEXT,
-  'image/jpeg',
-  'image/png',
-  'video/mp4',
-  'audio/mpeg',
-];
 
 /** Write scopes that enable publishing */
 const WRITE_SCOPES = [
@@ -137,6 +121,7 @@ interface GraphDriveItem {
   createdDateTime?: string;
   lastModifiedDateTime?: string;
   '@microsoft.graph.downloadUrl'?: string;
+  '@odata.etag'?: string;
 }
 
 interface GraphListResponse<T> {
@@ -602,7 +587,9 @@ export class SharePointConnector implements Connector, PublishableConnector {
       }
 
       // Convert content to buffer
-      const contentBuffer = Buffer.from(options.content, 'utf-8');
+      const contentBuffer = Buffer.isBuffer(options.content)
+        ? options.content
+        : Buffer.from(options.content, 'utf-8');
 
       // For files < 4MB, use simple upload
       // For larger files, use upload session
@@ -612,7 +599,7 @@ export class SharePointConnector implements Connector, PublishableConnector {
           headers: {
             'Content-Type': mimeType,
           },
-          body: contentBuffer,
+          body: contentBuffer as unknown as globalThis.BodyInit,
         });
 
         console.log(`[SharePoint] Document published: ${response.name} (${response.id})`);
@@ -626,7 +613,7 @@ export class SharePointConnector implements Connector, PublishableConnector {
         };
       } else {
         // Use resumable upload for larger files
-        return await this.uploadLargeFile(options, fileName, contentBuffer, mimeType);
+        return await this.uploadLargeFile(options, fileName, contentBuffer);
       }
     } catch (error) {
       console.error('[SharePoint] Publish document failed:', error);
@@ -646,14 +633,16 @@ export class SharePointConnector implements Connector, PublishableConnector {
       // If content is provided, update the file content
       if (options.content) {
         const uploadUrl = `${GRAPH_API_BASE}${drivePath}/items/${options.externalId}/content`;
-        const contentBuffer = Buffer.from(options.content, 'utf-8');
+        const contentBuffer = Buffer.isBuffer(options.content)
+          ? options.content
+          : Buffer.from(options.content, 'utf-8');
 
         await this.graphRequest(uploadUrl, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/octet-stream',
           },
-          body: contentBuffer,
+          body: contentBuffer as unknown as globalThis.BodyInit,
         });
       }
 
@@ -778,7 +767,7 @@ export class SharePointConnector implements Connector, PublishableConnector {
    */
   private async graphRequest<T>(
     url: string,
-    options: RequestInit = {}
+    options: globalThis.RequestInit = {}
   ): Promise<T> {
     if (!this.accessToken) {
       throw new Error('Not authenticated');
@@ -979,8 +968,7 @@ export class SharePointConnector implements Connector, PublishableConnector {
   private async uploadLargeFile(
     options: ConnectorPublishOptions,
     fileName: string,
-    content: Buffer,
-    _mimeType: string
+    content: Buffer
   ): Promise<ConnectorPublishResult> {
     const drivePath = this.getDrivePath();
 
@@ -1018,7 +1006,7 @@ export class SharePointConnector implements Connector, PublishableConnector {
           'Content-Length': String(chunk.length),
           'Content-Range': `bytes ${uploadedBytes}-${chunkEnd - 1}/${totalSize}`,
         },
-        body: chunk,
+        body: chunk as unknown as globalThis.BodyInit,
       });
 
       if (!uploadResponse.ok && uploadResponse.status !== 202) {

@@ -11,8 +11,9 @@
 
 'use client';
 
-import React, { useState, useCallback, useRef } from 'react';
-import { Send, Paperclip, X } from 'lucide-react';
+import { useCallback, useRef } from 'react';
+import { Paperclip } from 'lucide-react';
+
 import { Button } from '@/app/components/ui/button';
 import {
   PromptInput,
@@ -27,8 +28,9 @@ import {
   PromptInputSpeechButton,
   type PromptInputMessage,
 } from '@/app/components/ai-elements/prompt-input';
-import type { MessageAttachment } from '../types';
 import { cn } from '@/lib/utils';
+
+import type { MessageAttachment } from '../types';
 
 /**
  * Chat Input Props
@@ -109,8 +111,6 @@ export interface ChatInputProps {
  * Advanced input with file uploads, speech-to-text, and suggestions.
  */
 export function ChatInput({
-  value,
-  onChange,
   onSubmit,
   isLoading = false,
   placeholder = 'Ask a question about your recordings...',
@@ -120,8 +120,6 @@ export function ChatInput({
   maxFileSize = 10 * 1024 * 1024, // 10MB
   maxFiles = 5,
   className,
-  suggestions = [],
-  onSuggestionClick,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 

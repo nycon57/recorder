@@ -482,7 +482,7 @@ export function mapPublishedDocumentRow(
     folderPath: row.folder_path ?? undefined,
     format: row.format as PublishFormat,
     customTitle: row.custom_title ?? undefined,
-    brandingConfig: (row.branding_config as BrandingConfig) ?? DEFAULT_BRANDING_CONFIG,
+    brandingConfig: (row.branding_config as unknown as BrandingConfig) ?? DEFAULT_BRANDING_CONFIG,
     status: row.status as PublishStatus,
     lastPublishedAt: row.last_published_at
       ? new Date(row.last_published_at)
@@ -540,7 +540,7 @@ export function mapOrgPublishSettingsRow(
     autoPublishFolderId: row.auto_publish_folder_id ?? undefined,
     autoPublishFolderPath: row.auto_publish_folder_path ?? undefined,
     defaultFormat: row.default_format as PublishFormat,
-    defaultBranding: (row.default_branding as BrandingConfig) ?? DEFAULT_BRANDING_CONFIG,
+    defaultBranding: (row.default_branding as unknown as BrandingConfig) ?? DEFAULT_BRANDING_CONFIG,
     whiteLabelEnabled: row.white_label_enabled,
     customFooterText: row.custom_footer_text ?? undefined,
     customVideoDomain: row.custom_video_domain ?? undefined,

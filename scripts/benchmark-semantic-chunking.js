@@ -4,10 +4,12 @@
  * Tests performance characteristics of Phase 2 implementation
  */
 
-const { performance } = require('perf_hooks');
+const nodeRequire = module.require.bind(module);
+const { performance } = nodeRequire('perf_hooks');
 
 // Mock the Xenova transformers for benchmarking
 const mockEmbedder = async (text) => {
+  void text;
   // Simulate embedding generation time (~10ms per sentence)
   await new Promise(resolve => setTimeout(resolve, 10));
   return {
@@ -74,6 +76,7 @@ class PerformanceBenchmark {
   async generateEmbeddings(sentences, batchSize = 32) {
     const embeddings = [];
     const batches = Math.ceil(sentences.length / batchSize);
+    void batches;
 
     for (let i = 0; i < sentences.length; i += batchSize) {
       const batch = sentences.slice(i, i + batchSize);
@@ -108,6 +111,7 @@ class PerformanceBenchmark {
    */
   async saveChunks(chunks, batchSize = 100) {
     const batches = Math.ceil(chunks.length / batchSize);
+    void batches;
 
     for (let i = 0; i < chunks.length; i += batchSize) {
       // Simulate database write time (50ms per batch)

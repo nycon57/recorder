@@ -18,6 +18,7 @@ import { createHash } from 'crypto';
 import axios, { AxiosError } from 'axios';
 
 import { createClient } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/types/database';
 
 import {
   Connector,
@@ -27,7 +28,6 @@ import {
   TestResult,
   SyncOptions,
   SyncResult,
-  SyncError,
   ListOptions,
   ConnectorFile,
   FileContent,
@@ -69,7 +69,7 @@ interface TeamsMeeting {
         };
       };
     };
-    attendees?: any[];
+    attendees?: unknown[];
   };
 }
 
@@ -145,9 +145,9 @@ export class MicrosoftTeamsConnector implements Connector {
         userId: response.data.id,
         userName: response.data.displayName || response.data.userPrincipalName,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Try to refresh token if expired
-      if (error.response?.status === 401) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
         const refreshed = await this.refreshAccessToken();
 
         if (refreshed) {
@@ -190,7 +190,7 @@ export class MicrosoftTeamsConnector implements Connector {
           userName: authResult.userName,
         },
       };
-    } catch (error) {
+    } catch {
       return {
         success: true, // Auth worked, but might not have meeting permissions
         message: `Connected as ${authResult.userName} (limited permissions)`,
@@ -236,7 +236,7 @@ export class MicrosoftTeamsConnector implements Connector {
         try {
           await this.processMeeting(meeting);
           results.filesProcessed++;
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(`[Teams Sync] Failed to process meeting ${meeting.id}:`, error);
           results.filesFailed++;
           results.errors.push({
@@ -249,7 +249,7 @@ export class MicrosoftTeamsConnector implements Connector {
       }
 
       results.success = results.filesFailed === 0;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Teams Sync] Sync failed:', error);
       results.success = false;
       results.errors.push({
@@ -346,7 +346,7 @@ export class MicrosoftTeamsConnector implements Connector {
     });
 
     const buffer = Buffer.from(response.data);
-    const contentType = response.headers['content-type'] || 'application/octet-stream';
+    const contentType = String(response.headers['content-type'] || 'application/octet-stream');
 
     return {
       id: fileId,
@@ -473,7 +473,7 @@ export class MicrosoftTeamsConnector implements Connector {
       );
 
       return response.data.value || [];
-    } catch (error) {
+    } catch {
       // Recording API may not be available
       console.debug(`[Teams] Could not fetch recordings for meeting ${meetingId}`);
       return [];
@@ -493,7 +493,7 @@ export class MicrosoftTeamsConnector implements Connector {
       );
 
       return response.data.value || [];
-    } catch (error) {
+    } catch {
       console.debug(`[Teams] Could not fetch transcripts for meeting ${meetingId}`);
       return [];
     }
@@ -658,8 +658,12 @@ export class MicrosoftTeamsConnector implements Connector {
     content: string | Buffer;
     fileType: string;
     fileSize: number;
-    sourceMetadata: any;
+    sourceMetadata: Json;
   }): Promise<void> {
+    if (!this.connectorId) {
+      throw new Error('Microsoft Teams connector ID is required to store imported documents');
+    }
+
     const supabase = createClient();
 
     // Convert buffer to base64 if needed
@@ -672,8 +676,8 @@ export class MicrosoftTeamsConnector implements Connector {
     // Check if document already exists
     const { data: existing } = await supabase
       .from('imported_documents')
-      .select('id, content_hash')
-      .eq('connector_id', this.connectorId || null)
+      .select('id, content_hash, sync_count')
+      .eq('connector_id', this.connectorId)
       .eq('external_id', doc.externalId)
       .single();
 
@@ -683,7 +687,7 @@ export class MicrosoftTeamsConnector implements Connector {
         .from('imported_documents')
         .update({
           last_synced_at: new Date().toISOString(),
-          sync_count: supabase.rpc('increment', { row_id: existing.id }),
+          sync_count: (existing.sync_count || 0) + 1,
         })
         .eq('id', existing.id);
 
@@ -694,7 +698,7 @@ export class MicrosoftTeamsConnector implements Connector {
     // Insert or update document
     const { error } = await supabase.from('imported_documents').upsert(
       {
-        connector_id: this.connectorId || null,
+        connector_id: this.connectorId,
         org_id: this.orgId,
         external_id: doc.externalId,
         title: doc.title,
@@ -750,12 +754,17 @@ export class MicrosoftTeamsConnector implements Connector {
   /**
    * Handle recording created webhook
    */
-  private async handleRecordingCreated(payload: any): Promise<void> {
+  private async handleRecordingCreated(payload: unknown): Promise<void> {
     console.log('[Teams Webhook] Processing callRecording event');
+
+    if (!this.isRecord(payload)) {
+      console.error('[Teams Webhook] Invalid recording payload');
+      return;
+    }
 
     const { meetingId, recordingUrl } = payload;
 
-    if (!meetingId || !recordingUrl) {
+    if (typeof meetingId !== 'string' || typeof recordingUrl !== 'string') {
       console.error('[Teams Webhook] Missing required fields in payload');
       return;
     }
@@ -774,12 +783,17 @@ export class MicrosoftTeamsConnector implements Connector {
   /**
    * Handle transcript created webhook
    */
-  private async handleTranscriptCreated(payload: any): Promise<void> {
+  private async handleTranscriptCreated(payload: unknown): Promise<void> {
     console.log('[Teams Webhook] Processing callTranscript event');
+
+    if (!this.isRecord(payload)) {
+      console.error('[Teams Webhook] Invalid transcript payload');
+      return;
+    }
 
     const { meetingId, transcriptUrl } = payload;
 
-    if (!meetingId || !transcriptUrl) {
+    if (typeof meetingId !== 'string' || typeof transcriptUrl !== 'string') {
       console.error('[Teams Webhook] Missing required fields in payload');
       return;
     }
@@ -867,12 +881,18 @@ export class MicrosoftTeamsConnector implements Connector {
   /**
    * Extract error message from axios error
    */
-  private extractErrorMessage(error: any): string {
+  private extractErrorMessage(error: unknown): string {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
       if (axiosError.response?.data) {
-        const data = axiosError.response.data as any;
-        return data.error?.message || data.message || data.error || axiosError.message;
+        const data = axiosError.response.data as Record<string, unknown>;
+        const nestedError = data.error;
+        if (this.isRecord(nestedError) && typeof nestedError.message === 'string') {
+          return nestedError.message;
+        }
+        if (typeof data.message === 'string') return data.message;
+        if (typeof data.error === 'string') return data.error;
+        return axiosError.message;
       }
       return axiosError.message;
     }
@@ -882,5 +902,9 @@ export class MicrosoftTeamsConnector implements Connector {
     }
 
     return String(error);
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
   }
 }

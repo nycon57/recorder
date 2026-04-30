@@ -7,14 +7,29 @@
  * uploaded but never had its processing pipeline initiated.
  */
 
+import { resolve } from 'path';
+
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
-import { resolve } from 'path';
 
 // Load environment variables
 dotenv.config({ path: resolve(process.cwd(), '.env.local') });
 
 const RECORDING_ID = '80e70735-9b25-4c8a-8345-c7d41545ccc7';
+
+interface JobRecord {
+  id: string;
+  type: string;
+  status: string;
+  created_at: string | null;
+  run_at?: string | null;
+  attempts?: number | null;
+  error?: string | null;
+  payload?: {
+    recordingId?: string;
+    recording_id?: string;
+  } | null;
+}
 
 // Initialize Supabase Admin Client
 const supabase = createClient(
@@ -65,18 +80,18 @@ async function fixStuckRecording(recordingId: string) {
     .order('created_at', { ascending: false })
     .limit(100);
 
-  const existingJobs = allJobs?.filter((job: any) => {
-    const payload = job.payload as any;
+  const existingJobs = (allJobs as JobRecord[] | null)?.filter((job) => {
+    const payload = job.payload;
     return payload?.recordingId === recordingId || payload?.recording_id === recordingId;
   }) || [];
 
   if (existingJobs.length > 0) {
     console.log(`   ⚠️  Found ${existingJobs.length} existing job(s):`);
-    existingJobs.forEach((job: any) => {
+    existingJobs.forEach((job) => {
       console.log(`      - ${job.type} (${job.status}) - Created: ${job.created_at}`);
     });
 
-    const transcribeJob = existingJobs.find((j: any) => j.type === 'transcribe');
+    const transcribeJob = existingJobs.find((j) => j.type === 'transcribe');
     if (transcribeJob) {
       console.log(`\n   ⚠️  Transcribe job already exists (ID: ${transcribeJob.id})`);
       console.log(`   Status: ${transcribeJob.status}`);

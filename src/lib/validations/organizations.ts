@@ -20,9 +20,9 @@ export const updateOrganizationSchema = z.object({
     .regex(/^[a-z0-9.-]+\.[a-z]{2,}$/, 'Must be a valid domain')
     .optional()
     .nullable(),
-  features: z.record(z.boolean()).optional(),
+  features: z.record(z.string(), z.boolean()).optional(),
   billing_email: z.string().email().optional().nullable(),
-  settings: z.record(z.any()).optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
 });
 
 // List members query parameters

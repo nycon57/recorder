@@ -47,7 +47,7 @@ import {
   DEMO_ORG,
 } from './fixtures.js';
 import { deriveChunkId } from './ids.js'; // eslint-disable-line import/order
-import { seed } from './index.js'; // eslint-disable-line import/order
+import { seed } from './index.js';
 
 const { Pool } = pg;
 

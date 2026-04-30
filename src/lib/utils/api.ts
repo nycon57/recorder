@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
+import type { ZodType } from 'zod';
 
 import { auth } from '@/lib/auth/auth';
 import type { ApiError, ApiSuccess } from '@/lib/validations/api';
-import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { UserCache } from '@/lib/services/cache';
 
@@ -32,7 +32,7 @@ export function errorResponse(
   message: string,
   code: string,
   status = 400,
-  details?: any,
+  details?: unknown,
   requestId?: string
 ): NextResponse<ApiError> {
   return NextResponse.json(
@@ -69,10 +69,10 @@ export const errors = {
       requestId
     ),
 
-  badRequest: (message: string, details?: any, requestId?: string) =>
+  badRequest: (message: string, details?: unknown, requestId?: string) =>
     errorResponse(message, 'BAD_REQUEST', 400, details, requestId),
 
-  validationError: (details: any, requestId?: string) =>
+  validationError: (details: unknown, requestId?: string) =>
     errorResponse(
       'Validation failed',
       'VALIDATION_ERROR',
@@ -90,7 +90,7 @@ export const errors = {
       requestId
     ),
 
-  rateLimitExceeded: (details?: any, requestId?: string) =>
+  rateLimitExceeded: (details?: unknown, requestId?: string) =>
     errorResponse(
       'Rate limit exceeded. Please try again later.',
       'RATE_LIMIT_EXCEEDED',
@@ -99,7 +99,7 @@ export const errors = {
       requestId
     ),
 
-  quotaExceeded: (details?: any, requestId?: string) =>
+  quotaExceeded: (details?: unknown, requestId?: string) =>
     errorResponse(
       'Quota exceeded. Please upgrade your plan or wait for quota reset.',
       'QUOTA_EXCEEDED',
@@ -182,14 +182,16 @@ export async function requireOrg() {
     throw new Error('Organization context required');
   }
 
+  const role = userData!.role ?? 'reader';
+
   // Cache the user data for 5 minutes (best effort - don't fail request on cache errors)
   try {
     await UserCache.set(cacheKey, {
       id: userData!.id,
       orgId: userData!.org_id,
-      role: userData!.role,
-      email: userData!.email,
-      name: userData!.name,
+      role,
+      email: userData!.email ?? undefined,
+      name: userData!.name ?? undefined,
     });
   } catch (error) {
     // Log cache write error but don't fail the request
@@ -199,7 +201,7 @@ export async function requireOrg() {
   return {
     userId: userData!.id,
     orgId: userData!.org_id,
-    role: userData!.role,
+    role,
   };
 }
 
@@ -256,60 +258,62 @@ export async function requireSystemAdmin() {
 // Parse and validate request body with Zod
 export async function parseBody<T>(
   request: NextRequest,
-  schema: any
+  schema: ZodType<T>
 ): Promise<T> {
   try {
     const body = await request.json();
     return schema.parse(body);
-  } catch (error: any) {
-    throw new Error(`Invalid request body: ${error.message}`);
+  } catch (error) {
+    throw new Error(`Invalid request body: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 // Parse and validate URL search params with Zod
 export function parseSearchParams<T>(
   request: NextRequest,
-  schema: any
+  schema: ZodType<T>
 ): T {
   try {
     const { searchParams } = new URL(request.url);
     const params = Object.fromEntries(searchParams.entries());
     return schema.parse(params);
-  } catch (error: any) {
-    throw new Error(`Invalid search params: ${error.message}`);
+  } catch (error) {
+    throw new Error(`Invalid search params: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 // Handle API route with error handling
-export function apiHandler<T = any>(
+export function apiHandler<T = unknown>(
   handler: (
     request: NextRequest,
-    context?: any
+    context?: unknown
   ) => Promise<NextResponse<ApiSuccess<T>> | NextResponse<ApiError> | Response>
 ) {
-  return async (request: NextRequest, context?: any) => {
+  return async (request: NextRequest, context?: unknown) => {
     const requestId = generateRequestId();
 
     try {
       return await handler(request, context);
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[${requestId}] API Error:`, error);
 
-      if (error.message === 'Unauthorized') {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+
+      if (message === 'Unauthorized') {
         return errors.unauthorized(requestId);
       }
 
       if (
-        error.message === 'Organization context required' ||
-        error.message === 'User organization not found' ||
-        error.message === 'Admin privileges required' ||
-        error.message.includes('not found in database')
+        message === 'Organization context required' ||
+        message === 'User organization not found' ||
+        message === 'Admin privileges required' ||
+        message.includes('not found in database')
       ) {
         return errors.forbidden(requestId);
       }
 
-      if (error.message.startsWith('Invalid request body')) {
-        return errors.validationError(error.message, requestId);
+      if (message.startsWith('Invalid request body')) {
+        return errors.validationError(message, requestId);
       }
 
       return errors.internalError(requestId);

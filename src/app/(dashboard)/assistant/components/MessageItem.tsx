@@ -12,31 +12,14 @@
 
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { Bot, Copy, Check, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
 import { useSession } from '@/lib/auth/auth-client';
-import {
-  messageVariants,
-  usePrefersReducedMotion,
-} from '../utils/animations';
 import { Button } from '@/app/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { ExtendedMessage } from '../types';
-import {
-  extractMessageText,
-  formatMessageTimestamp,
-  formatSources,
-  messageHasSources,
-  messageHasReasoning,
-  messageHasToolCalls,
-  copyMessageToClipboard,
-  getMessageColor,
-  parseCitationsToMarkdown,
-} from '../utils/message-utils';
-
-// Import ai-elements components
 import {
   Message,
   MessageContent,
@@ -63,6 +46,32 @@ import {
 } from '@/app/components/ai-elements/tool';
 import { Response } from '@/app/components/ai-elements/response';
 import { Badge } from '@/app/components/ui/badge';
+
+import {
+  extractMessageText,
+  formatMessageTimestamp,
+  formatSources,
+  messageHasSources,
+  messageHasReasoning,
+  messageHasToolCalls,
+  copyMessageToClipboard,
+  getMessageColor,
+  parseCitationsToMarkdown,
+} from '../utils/message-utils';
+import type { ExtendedMessage } from '../types';
+import {
+  messageVariants,
+  usePrefersReducedMotion,
+} from '../utils/animations';
+
+type DisplayToolInvocation = {
+  toolName: string;
+  state?: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
+  args?: unknown;
+  result?: unknown;
+};
+
+type ToolHeaderProps = React.ComponentProps<typeof ToolHeader>;
 
 /**
  * Message Item Props
@@ -126,11 +135,6 @@ export function MessageItem({
   message,
   showActions = true,
   onCopy,
-  onEdit,
-  onRegenerate,
-  onBranch,
-  onDelete,
-  onFeedback,
   className,
   animate = true,
 }: MessageItemProps) {
@@ -152,7 +156,7 @@ export function MessageItem({
   const sourceKey = message.metadata?.custom?.sourceKey as string | undefined;
 
   // Debug: Log message metadata to verify data flow
-  React.useEffect(() => {
+  useEffect(() => {
     if (isAssistant && hasSources) {
       console.log('[MessageItem] Rendering with message:', {
         messageId: message.id,
@@ -209,20 +213,20 @@ export function MessageItem({
         {/* Tool Calls */}
         {isAssistant && hasToolCalls && message.toolInvocations && (
           <div className="space-y-2">
-            {message.toolInvocations.map((tool: any, idx) => (
+            {(message.toolInvocations as unknown as DisplayToolInvocation[]).map((tool, idx) => (
               <Tool key={idx} defaultOpen={false}>
                 <ToolHeader
                   title={tool.toolName}
-                  type={tool.toolName as any}
-                  state={tool.state}
+                  type={`tool-${tool.toolName}` as ToolHeaderProps['type']}
+                  state={tool.state as ToolHeaderProps['state']}
                 />
                 <ToolContent>
-                  {tool.args && (
-                    <ToolInput input={tool.args} />
-                  )}
+                  {tool.args != null ? (
+                    <ToolInput input={typeof tool.args === 'string' ? tool.args : JSON.stringify(tool.args)} />
+                  ) : null}
                   {(tool.result || tool.state === 'output-error') && (
                     <ToolOutput
-                      output={tool.result}
+                      output={typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result)}
                       errorText={tool.state === 'output-error' ? 'Tool execution failed' : undefined}
                     />
                   )}

@@ -6,9 +6,9 @@
  */
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 import { ConnectorRegistry } from '@/lib/connectors/registry';
-import { ConnectorType, type SyncOptions } from '@/lib/connectors/base';
+import { ConnectorType, type ConnectorCredentials, type SyncOptions } from '@/lib/connectors/base';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger({ service: 'sync-connector' });
@@ -22,6 +22,18 @@ interface SyncConnectorPayload {
   fullSync?: boolean;
   since?: string; // ISO date string
   limit?: number;
+}
+
+function jsonObject(value: Json | null | unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function stringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : undefined;
 }
 
 /**
@@ -71,8 +83,13 @@ export async function syncConnector(job: Job): Promise<void> {
 
     // Create connector instance
     const connectorType = connectorConfig.connector_type as ConnectorType;
-    const credentials = connectorConfig.credentials as any;
-    const settings = connectorConfig.settings as any;
+    const credentials = jsonObject(connectorConfig.credentials) as ConnectorCredentials;
+    const connectorSettings = jsonObject(connectorConfig.settings);
+    const settings = {
+      ...connectorSettings,
+      orgId,
+      connectorId,
+    };
 
     logger.info('Creating connector instance', {
       context: { connectorType, connectorId },
@@ -95,9 +112,9 @@ export async function syncConnector(job: Job): Promise<void> {
       fullSync,
       since: since ? new Date(since) : undefined,
       limit,
-      fileTypes: settings?.fileTypes,
-      paths: settings?.paths,
-      filters: settings?.filters,
+      fileTypes: stringArray(connectorSettings.fileTypes),
+      paths: stringArray(connectorSettings.paths),
+      filters: jsonObject(connectorSettings.filters),
     };
 
     // Execute sync

@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const createRecordingSchema = z.object({
   title: z.string().min(1).max(255).optional(),
   description: z.string().max(2000).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   analysisType: z.enum(['none', 'meeting', 'tutorial', 'sop', 'demo', 'general']).optional().default('general'),
   skipAnalysis: z.boolean().optional().default(false),
 });
@@ -12,7 +12,7 @@ export const createRecordingSchema = z.object({
 export const updateRecordingSchema = z.object({
   title: z.string().min(1).max(255).optional(),
   description: z.string().max(2000).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   analysisType: z.enum(['none', 'meeting', 'tutorial', 'sop', 'demo', 'general']).optional(),
   skipAnalysis: z.boolean().optional(),
 });
@@ -222,8 +222,8 @@ export const createConnectorSchema = z.object({
     'url_import',
   ]),
   name: z.string().min(1).max(255).optional(),
-  credentials: z.record(z.any()),
-  settings: z.record(z.any()).optional().default({}),
+  credentials: z.record(z.string(), z.unknown()),
+  settings: z.record(z.string(), z.unknown()).optional().default({}),
   syncFrequency: z
     .enum(['manual', 'hourly', 'daily', 'weekly'])
     .optional()
@@ -232,8 +232,8 @@ export const createConnectorSchema = z.object({
 
 export const updateConnectorSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  credentials: z.record(z.any()).optional(),
-  settings: z.record(z.any()).optional(),
+  credentials: z.record(z.string(), z.unknown()).optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
   syncFrequency: z.enum(['manual', 'hourly', 'daily', 'weekly']).optional(),
   isActive: z.boolean().optional(),
 });
@@ -244,7 +244,7 @@ export const syncConnectorSchema = z.object({
   limit: z.coerce.number().int().min(1).max(1000).optional(),
   fileTypes: z.array(z.string()).optional(),
   paths: z.array(z.string()).optional(),
-  filters: z.record(z.any()).optional(),
+  filters: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const listConnectorDocumentsSchema = z.object({
@@ -302,7 +302,7 @@ export const singleFileUploadSchema = z.object({
   fileName: z.string().min(1).max(255),
   fileSize: z.number().positive(),
   mimeType: z.string(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const batchUploadSchema = z.object({
@@ -312,10 +312,10 @@ export const batchUploadSchema = z.object({
       fileName: z.string().min(1).max(255),
       fileSize: z.number().positive(),
       mimeType: z.string(),
-      metadata: z.record(z.any()).optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
     })
   ).min(1).max(100),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 // Phase 6: Admin API Validation Schemas
@@ -411,18 +411,18 @@ export const adminCreateExperimentSchema = z.object({
     .array(
       z.object({
         name: z.string().min(1).max(100),
-        config: z.record(z.any()),
+        config: z.record(z.string(), z.unknown()),
       })
     )
     .min(2)
     .max(5),
-  trafficAllocation: z.record(z.number().min(0).max(1)),
+  trafficAllocation: z.record(z.string(), z.number().min(0).max(1)),
 });
 
 export const adminUpdateExperimentSchema = z.object({
   experimentId: z.string().uuid(),
   status: z.enum(['draft', 'running', 'paused', 'completed']).optional(),
-  trafficAllocation: z.record(z.number().min(0).max(1)).optional(),
+  trafficAllocation: z.record(z.string(), z.number().min(0).max(1)).optional(),
   description: z.string().max(1000).optional(),
 });
 
@@ -437,11 +437,6 @@ const roleEnum = z.enum(['owner', 'admin', 'contributor', 'reader']);
 
 /**
  * User status validation
- */
-const userStatusEnum = z.enum(['pending', 'active', 'suspended', 'deleted']);
-
-/**
- * Visibility levels
  */
 const visibilityEnum = z.enum(['private', 'department', 'org', 'public']);
 
@@ -477,8 +472,8 @@ export const updateProfileSchema = z.object({
     .optional()
     .nullable(),
   timezone: timezoneSchema.optional(),
-  notification_preferences: z.record(z.any()).optional(),
-  ui_preferences: z.record(z.any()).optional(),
+  notification_preferences: z.record(z.string(), z.unknown()).optional(),
+  ui_preferences: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(['active', 'suspended', 'deleted']).optional(),
 });
 
@@ -552,16 +547,6 @@ export type UpdateUIPreferencesInput = z.infer<typeof updateUIPreferencesSchema>
 /**
  * Subscription status enum
  */
-const subscriptionStatusEnum = z.enum([
-  'active',
-  'cancelled',
-  'past_due',
-  'trialing',
-  'incomplete',
-  'incomplete_expired',
-  'unpaid',
-]);
-
 /**
  * Update organization details
  */
@@ -952,7 +937,7 @@ export type UpdateWebhookInput = z.infer<typeof updateWebhookSchema>;
 export const testWebhookSchema = z.object({
   webhookId: z.string().uuid(),
   event_type: webhookEventEnum.optional().default('recording.created'),
-  test_payload: z.record(z.any()).optional(),
+  test_payload: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type TestWebhookInput = z.infer<typeof testWebhookSchema>;
@@ -1157,7 +1142,7 @@ export const logActivitySchema = z.object({
   ]),
   resource_type: z.enum(['recording', 'collection', 'tag', 'document', 'user']),
   resource_id: z.string().uuid().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type LogActivityInput = z.infer<typeof logActivitySchema>;
@@ -1244,7 +1229,7 @@ export const bulkUploadSchema = z.object({
       file_name: z.string().min(1).max(255),
       file_size: z.number().positive(),
       mime_type: z.string(),
-      metadata: z.record(z.any()).optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
     })
   ).min(1, 'At least one item required').max(50, 'Maximum 50 items at once'),
   collection_id: z.string().uuid().optional(),
@@ -1447,11 +1432,11 @@ export type RecommendationProgressInput = z.infer<typeof recommendationProgressS
 export type ApiError = {
   code: string;
   message: string;
-  details?: any;
+  details?: unknown;
   requestId?: string;
 };
 
-export type ApiSuccess<T = any> = {
+export type ApiSuccess<T = unknown> = {
   data: T;
   requestId?: string;
 };

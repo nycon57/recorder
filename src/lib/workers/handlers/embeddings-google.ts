@@ -10,7 +10,7 @@ import OpenAI from 'openai';
 
 import { GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 import { chunkTranscriptWithSegments, chunkVideoTranscript, type VideoTranscriptChunk } from '@/lib/services/chunking';
 import { createSemanticChunker } from '@/lib/services/semantic-chunker';
 import { classifyContent } from '@/lib/services/content-classifier';
@@ -22,12 +22,106 @@ import { sendEmbeddingProgress, isStreamingAvailable } from '@/lib/services/llm-
 import { extractAndStoreConcepts } from '@/lib/services/concept-extractor';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
+type TranscriptChunkInsert = Database['public']['Tables']['transcript_chunks']['Insert'];
 
 interface EmbeddingsPayload {
   recordingId: string;
   transcriptId: string;
   documentId: string;
   orgId: string;
+}
+
+interface AudioSegment {
+  timestamp: string;
+  startTime: number;
+  endTime: number;
+  text: string;
+}
+
+interface SimpleSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+interface VisualEvent {
+  timestamp: string;
+  type: 'click' | 'type' | 'navigate' | 'scroll' | 'other';
+  target?: string;
+  location?: string;
+  description: string;
+}
+
+interface BasicTranscriptChunk {
+  text: string;
+  index: number;
+  startChar: number;
+  endChar: number;
+  startTime?: number;
+  endTime?: number;
+}
+
+type EmbeddingChunk = {
+  text: string;
+  source: 'transcript' | 'document';
+  contentType: 'audio' | 'visual' | 'combined' | 'document';
+  metadata: Record<string, Json | undefined>;
+};
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  return typeof error === 'object' && error !== null && 'status' in error
+    ? Number((error as { status?: unknown }).status)
+    : undefined;
+}
+
+function getRecord(value: Json | null): Record<string, Json | undefined> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value
+    : {};
+}
+
+function getNumber(value: Json | undefined): number {
+  return typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+      ? Number(value) || 0
+      : 0;
+}
+
+function getText(value: Json | undefined): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function getNullableText(value: Json | undefined): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function toVisualEvent(value: Json): VisualEvent | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const event = value as Record<string, Json | undefined>;
+  if (
+    typeof event.timestamp !== 'string' ||
+    typeof event.description !== 'string' ||
+    typeof event.type !== 'string' ||
+    !['click', 'type', 'navigate', 'scroll', 'other'].includes(event.type)
+  ) {
+    return null;
+  }
+
+  return {
+    timestamp: event.timestamp,
+    type: event.type as VisualEvent['type'],
+    description: event.description,
+    target: typeof event.target === 'string' ? event.target : undefined,
+    location: typeof event.location === 'string' ? event.location : undefined,
+  };
 }
 
 // PERF-AI-002: Increased batch size from 20 to 50 for ~40-50% faster embedding generation
@@ -75,19 +169,21 @@ async function generateEmbeddingWithFallback(
     }
 
     return { embedding, provider: 'google' };
-  } catch (googleError: any) {
+  } catch (googleError) {
+    const googleErrorMessage = getErrorMessage(googleError);
+    const googleErrorStatus = getErrorStatus(googleError);
     // Check if it's a recoverable error (503, overload, rate limit)
     const isRecoverable =
-      googleError.message?.includes('503') ||
-      googleError.message?.includes('overloaded') ||
-      googleError.message?.includes('RESOURCE_EXHAUSTED') ||
-      googleError.status === 503 ||
-      googleError.status === 429;
+      googleErrorMessage.includes('503') ||
+      googleErrorMessage.includes('overloaded') ||
+      googleErrorMessage.includes('RESOURCE_EXHAUSTED') ||
+      googleErrorStatus === 503 ||
+      googleErrorStatus === 429;
 
     if (isRecoverable && process.env.OPENAI_API_KEY) {
       logger.warn('Google embedding failed, attempting OpenAI fallback', {
         context: {
-          googleError: googleError.message,
+          googleError: googleErrorMessage,
           textPreview: text.substring(0, 50),
         },
       });
@@ -103,14 +199,15 @@ async function generateEmbeddingWithFallback(
         const embedding = response.data[0].embedding;
         logger.info('OpenAI fallback successful');
         return { embedding, provider: 'openai' };
-      } catch (openaiError: any) {
+      } catch (openaiError) {
+        const openaiErrorMessage = getErrorMessage(openaiError);
         logger.error('Both Google and OpenAI failed', {
           context: {
-            googleError: googleError.message,
-            openaiError: openaiError.message,
+            googleError: googleErrorMessage,
+            openaiError: openaiErrorMessage,
           },
         });
-        throw new Error(`All embedding providers failed: Google (${googleError.message}), OpenAI (${openaiError.message})`);
+        throw new Error(`All embedding providers failed: Google (${googleErrorMessage}), OpenAI (${openaiErrorMessage})`);
       }
     }
 
@@ -123,7 +220,7 @@ async function generateEmbeddingWithFallback(
  * Validate and sanitize semantic score to ensure it meets database constraints
  * Constraint: semantic_score IS NULL OR (semantic_score >= 0 AND semantic_score <= 1)
  */
-function validateSemanticScore(score: any): number | null {
+function validateSemanticScore(score: unknown): number | null {
   // Handle null/undefined
   if (score === null || score === undefined) {
     return null;
@@ -148,7 +245,7 @@ function validateSemanticScore(score: any): number | null {
 /**
  * Generate embeddings for transcript and document using Google
  */
-export async function generateEmbeddings(job: Job, progressCallback?: (percent: number, message: string, data?: any) => void): Promise<void> {
+export async function generateEmbeddings(job: Job, progressCallback?: (percent: number, message: string, data?: Json) => void): Promise<void> {
   const payload = job.payload as unknown as EmbeddingsPayload;
   const { recordingId, transcriptId, documentId, orgId } = payload;
 
@@ -211,9 +308,9 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
         },
         dedupe_key: `generate_summary:${recordingId}`,
       });
-      console.log(
-        `[Embeddings] Enqueued summary generation job for existing embeddings`
-      );
+      logger.info('Enqueued summary generation job for existing embeddings', {
+        context: { recordingId },
+      });
     }
 
     return;
@@ -272,8 +369,10 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     });
 
     // Extract segments from words_json
-    const wordsData = (transcript.words_json || {}) as Record<string, any>;
-    const rawSegments = (wordsData.segments || []) as Array<any>;
+    const wordsData = getRecord(transcript.words_json);
+    const rawSegments = Array.isArray(wordsData.segments)
+      ? wordsData.segments
+      : [];
 
     // Helper to format seconds to MM:SS timestamp
     function formatTimestamp(seconds: number): string {
@@ -283,26 +382,34 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     }
 
     // Convert segments to AudioSegment type (for video chunking)
-    const audioSegments = rawSegments.map(seg => {
-      const start = typeof seg.start === 'number' ? seg.start : Number(seg.start || 0);
-      const end = typeof seg.end === 'number' ? seg.end : Number(seg.end || 0);
+    const audioSegments: AudioSegment[] = rawSegments.map((segment) => {
+      const seg = getRecord(segment);
+      const start = getNumber(seg.start);
+      const end = getNumber(seg.end);
       return {
         timestamp: formatTimestamp(start),
         startTime: start,
         endTime: end,
-        text: String(seg.text || ''),
+        text: getText(seg.text),
       };
     });
 
     // Simple segments for text-based chunking
-    const simpleSegments = rawSegments.map(seg => ({
-      start: typeof seg.start === 'number' ? seg.start : Number(seg.start || 0),
-      end: typeof seg.end === 'number' ? seg.end : Number(seg.end || 0),
-      text: String(seg.text || ''),
-    }));
+    const simpleSegments: SimpleSegment[] = rawSegments.map((segment) => {
+      const seg = getRecord(segment);
+      return {
+        start: getNumber(seg.start),
+        end: getNumber(seg.end),
+        text: getText(seg.text),
+      };
+    });
 
     // Check if this is a video transcript with visual context
-    const visualEvents = (transcript.visual_events || []) as any[];
+    const visualEvents = Array.isArray(transcript.visual_events)
+      ? transcript.visual_events
+          .map(toVisualEvent)
+          .filter((event): event is VisualEvent => event !== null)
+      : [];
     const hasVisualContext = visualEvents.length > 0;
     const isGeminiVideo = transcript.provider === 'gemini-video';
 
@@ -321,7 +428,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     }
 
     // Chunk transcript based on type
-    let transcriptChunks: VideoTranscriptChunk[] | Array<any>;
+    let transcriptChunks: Array<VideoTranscriptChunk | BasicTranscriptChunk>;
 
     if (hasVisualContext && isGeminiVideo) {
       // Use enhanced video chunking with visual context
@@ -390,7 +497,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     });
 
     // Combine all chunks with enhanced metadata
-    const allChunks = [
+    const allChunks: EmbeddingChunk[] = [
       ...transcriptChunks.map(chunk => {
         const baseMetadata = {
           chunkIndex: chunk.index,
@@ -484,7 +591,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     const genai = new GoogleGenAI({ apiKey });
 
     // Generate embeddings in batches
-    const embeddingRecords = [];
+    const embeddingRecords: TranscriptChunkInsert[] = [];
     const totalBatches = Math.ceil(validChunks.length / BATCH_SIZE);
 
     logger.info('Starting batch embedding generation', {
@@ -524,7 +631,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
       // PERFORMANCE FIX: Process chunks in parallel using Promise.allSettled for fault tolerance
       // PERF-AI-006: Uses fallback (Google → OpenAI) for resilience
       const batchSettledResults = await Promise.allSettled(
-        batch.map(async (chunk, chunkIndex) => {
+        batch.map(async (chunk, chunkIndex): Promise<TranscriptChunkInsert> => {
           try {
             // Call embedding with automatic fallback (Google → OpenAI)
             const { embedding, provider } = await generateEmbeddingWithFallback(
@@ -539,19 +646,15 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
             }
 
             // Sanitize metadata to prevent injection and data leakage
-            const sanitizedMetadata = sanitizeMetadata(chunk.metadata);
+            const sanitizedMetadata = sanitizeMetadata(chunk.metadata) as Record<string, Json | undefined>;
 
             return {
               content_id: recordingId,
               org_id: orgId,
               chunk_text: chunk.text,
               chunk_index: sanitizedMetadata.chunkIndex as number,
-              start_time_sec: 'startTime' in sanitizedMetadata
-                ? (sanitizedMetadata.startTime ?? null)
-                : null,
-              end_time_sec: 'endTime' in sanitizedMetadata
-                ? (sanitizedMetadata.endTime ?? null)
-                : null,
+              start_time_sec: getNumber(sanitizedMetadata.startTime) || null,
+              end_time_sec: getNumber(sanitizedMetadata.endTime) || null,
               embedding: JSON.stringify(embedding), // Supabase expects string for vector type
               content_type: chunk.contentType || 'audio',
               // Semantic chunking metadata (only for document chunks)
@@ -560,10 +663,10 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
                 ? validateSemanticScore(sanitizedMetadata.semanticScore)
                 : null,
               structure_type: 'structureType' in sanitizedMetadata
-                ? (sanitizedMetadata.structureType ?? null)
+                ? getNullableText(sanitizedMetadata.structureType)
                 : null,
               boundary_type: 'boundaryType' in sanitizedMetadata
-                ? (sanitizedMetadata.boundaryType ?? null)
+                ? getNullableText(sanitizedMetadata.boundaryType)
                 : null,
               metadata: {
                 source: chunk.source,
@@ -572,7 +675,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
                 documentId: chunk.source === 'document' ? documentId : undefined,
                 embedding_provider: provider, // PERF-AI-006: Track which provider generated the embedding
                 ...sanitizedMetadata,
-              },
+              } satisfies Json,
             };
           } catch (error) {
             // Log the error with chunk details but don't fail the entire batch
@@ -591,9 +694,12 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
       );
 
       // Filter out failed results and collect only successful embeddings
-      const batchResults = batchSettledResults
-        .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
-        .map(result => result.value);
+      const batchResults: TranscriptChunkInsert[] = [];
+      for (const result of batchSettledResults) {
+        if (result.status === 'fulfilled') {
+          batchResults.push(result.value);
+        }
+      }
 
       // Log failures for monitoring
       const failedResults = batchSettledResults.filter(result => result.status === 'rejected');

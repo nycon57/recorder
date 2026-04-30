@@ -8,6 +8,9 @@
  *   npx tsx scripts/verify-chat-tools.ts
  */
 
+import fs from 'fs';
+import path from 'path';
+
 import {
   executeAnswerQuestion,
   executeSearchRecordings,
@@ -228,7 +231,7 @@ function testParameterSchemas(): boolean {
       message: 'Should have rejected empty question',
     });
     allValid = false;
-  } catch (error) {
+  } catch {
     logResult({
       name: 'answerQuestion schema (invalid input)',
       success: true,
@@ -262,7 +265,7 @@ function testParameterSchemas(): boolean {
       message: 'Should have rejected empty query',
     });
     allValid = false;
-  } catch (error) {
+  } catch {
     logResult({
       name: 'searchRecordings schema (invalid input)',
       success: true,
@@ -307,7 +310,7 @@ function checkTypes(): boolean {
     logResult({
       name: 'ToolContext type',
       success: true,
-      message: 'Type definition exists and compiles',
+      message: `Type definition exists for org ${dummyContext.orgId}`,
     });
 
     // Verify tool functions are properly exported
@@ -362,8 +365,6 @@ function verifyFileStructure(): boolean {
   let allPresent = true;
 
   for (const file of requiredFiles) {
-    const fs = require('fs');
-    const path = require('path');
     const filePath = path.join(process.cwd(), file.path);
     const exists = fs.existsSync(filePath);
 
@@ -387,11 +388,6 @@ async function performanceCheck(): Promise<boolean> {
 
   console.log(`${INFO} Simulating tool execution to check performance...`);
 
-  const testContext: ToolContext = {
-    orgId: 'test-org-id',
-    userId: 'test-user-id',
-  };
-
   // Note: These will fail with database errors in test mode
   // but we're measuring initialization time
   const tools = {
@@ -413,7 +409,7 @@ async function performanceCheck(): Promise<boolean> {
         // Don't actually call - just verify it's a function
         timings[toolName] = Date.now() - startTime;
       }
-    } catch (error) {
+    } catch {
       // Expected to fail without real database
       timings[toolName] = Date.now() - startTime;
     }

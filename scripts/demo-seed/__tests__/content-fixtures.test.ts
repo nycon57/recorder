@@ -1,3 +1,5 @@
+/* global describe, expect, it */
+
 /**
  * @jest-environment node
  *

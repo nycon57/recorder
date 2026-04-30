@@ -201,7 +201,7 @@ function verifyMigrations() {
   try {
     execSync('npm run type:check', { stdio: 'inherit' });
     log.success('Type check passed');
-  } catch (error) {
+  } catch {
     log.error('Type check failed - please review errors above');
     process.exit(1);
   }
@@ -222,20 +222,27 @@ export {
 /**
  * Helper function to validate migration rules
  */
-function validateRule(rule: any, source: string): rule is MigrationRule {
-  if (!rule.name || typeof rule.name !== 'string') {
+function validateRule(rule: unknown, source: string): rule is MigrationRule {
+  if (!rule || typeof rule !== 'object') {
+    log.warn(`Invalid rule from ${source}: expected an object`);
+    return false;
+  }
+
+  const candidate = rule as Partial<MigrationRule>;
+
+  if (!candidate.name || typeof candidate.name !== 'string') {
     log.warn(`Invalid rule from ${source}: missing or invalid 'name' property`);
     return false;
   }
-  if (!rule.description || typeof rule.description !== 'string') {
+  if (!candidate.description || typeof candidate.description !== 'string') {
     log.warn(`Invalid rule from ${source}: missing or invalid 'description' property`);
     return false;
   }
-  if (!rule.filePattern || !(rule.filePattern instanceof RegExp)) {
+  if (!candidate.filePattern || !(candidate.filePattern instanceof RegExp)) {
     log.warn(`Invalid rule from ${source}: missing or invalid 'filePattern' property`);
     return false;
   }
-  if (!rule.transform || typeof rule.transform !== 'function') {
+  if (!candidate.transform || typeof candidate.transform !== 'function') {
     log.warn(`Invalid rule from ${source}: missing or invalid 'transform' function`);
     return false;
   }
@@ -252,7 +259,7 @@ async function loadRulesFromFile(filePath: string): Promise<MigrationRule[]> {
     const loadedRules = module.default || module.rules || [];
 
     // Validate each rule
-    const validRules = loadedRules.filter((rule: any) =>
+    const validRules = loadedRules.filter((rule: unknown) =>
       validateRule(rule, filePath)
     );
 
@@ -263,8 +270,11 @@ async function loadRulesFromFile(filePath: string): Promise<MigrationRule[]> {
     return validRules;
   } catch (error) {
     // File doesn't exist or has errors - this is expected for migrations not yet implemented
-    if ((error as any)?.code === 'ERR_MODULE_NOT_FOUND' ||
-        (error as any)?.code === 'MODULE_NOT_FOUND') {
+    const errorCode = error && typeof error === 'object' && 'code' in error
+      ? String(error.code)
+      : undefined;
+    if (errorCode === 'ERR_MODULE_NOT_FOUND' ||
+        errorCode === 'MODULE_NOT_FOUND') {
       log.info(`No rules file found at ${filePath} (migration not yet implemented)`);
     } else {
       log.warn(`Error loading rules from ${filePath}: ${error instanceof Error ? error.message : String(error)}`);

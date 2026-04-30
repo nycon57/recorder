@@ -1,3 +1,5 @@
+/* global describe, expect, it */
+
 // We test the slug derivation logic directly.
 // The `deriveSlug` function is internal to build.ts, so we duplicate its
 // logic here as a pure function to keep the test dependency-free.

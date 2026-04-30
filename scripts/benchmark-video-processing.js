@@ -11,10 +11,6 @@
  * Usage: node scripts/benchmark-video-processing.js
  */
 
-const fs = require('fs').promises;
-const path = require('path');
-const { performance } = require('perf_hooks');
-
 // Simulated video processing performance characteristics
 const PERFORMANCE_PROFILES = {
   frameExtraction: {

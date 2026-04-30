@@ -10,19 +10,21 @@
 
 'use client';
 
-import React from 'react';
 import { Bot } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
+
 import {
   Conversation,
   ConversationContent,
   ConversationEmptyState,
   ConversationScrollButton,
 } from '@/app/components/ai-elements/conversation';
-import { MessageItem, type MessageItemProps } from './MessageItem';
-import { TypingIndicator, MessageSkeleton, ShimmerSkeleton } from './LoadingSkeletons';
-import type { ExtendedMessage } from '../types';
 import { cn } from '@/lib/utils';
+
+import type { ExtendedMessage } from '../types';
+
+import { TypingIndicator, ShimmerSkeleton } from './LoadingSkeletons';
+import { MessageItem, type MessageItemProps } from './MessageItem';
 
 /**
  * Message List Props

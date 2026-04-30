@@ -8,13 +8,16 @@
  */
 
 import { createReadStream, createWriteStream } from 'fs';
-import { readFile, unlink, writeFile, stat } from 'fs/promises';
+import { readFile, unlink, stat } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
+import type { ReadableStream as WebReadableStream } from 'stream/web';
+
 import OpenAI from 'openai';
+import type { Uploadable } from 'openai/uploads';
 
 import type { Database, Json } from '@/lib/types/database';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
@@ -36,14 +39,11 @@ import {
   shouldSplitVideo,
   splitVideoIntoSegments,
   getVideoDuration,
-  getSegmentConfig,
   compressVideoBeforeSplit,
   SPLIT_THRESHOLD_SECONDS,
 } from '@/lib/services/video-splitter';
 import {
   FILE_TYPE_TO_MIME_TYPE,
-  getProcessingStrategy,
-  calculateSegmentCount,
   estimateProcessingTime,
   type ContentType,
   type FileType,
@@ -73,10 +73,6 @@ const GEMINI_MEDIA_FILE_TYPES: readonly FileType[] = [
   'ogg',
 ];
 
-// Maximum video duration for single-pass transcription (30 minutes)
-// Videos longer than this will be split into segments
-const MAX_SINGLE_PASS_DURATION = SPLIT_THRESHOLD_SECONDS;
-
 /**
  * Sleep helper for polling file processing status
  */
@@ -100,16 +96,27 @@ function getOpenAIClient(): OpenAI {
 /**
  * PERF-AI-006: Check if error is recoverable (should fall back to Whisper)
  */
-function isRecoverableGeminiError(error: any): boolean {
-  const errorMessage = error?.message || String(error);
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  return typeof error === 'object' && error !== null && 'status' in error
+    ? Number((error as { status?: unknown }).status)
+    : undefined;
+}
+
+function isRecoverableGeminiError(error: unknown): boolean {
+  const errorMessage = getErrorMessage(error);
+  const status = getErrorStatus(error);
   return (
     errorMessage.includes('503') ||
     errorMessage.includes('overloaded') ||
     errorMessage.includes('RESOURCE_EXHAUSTED') ||
     errorMessage.includes('rate limit') ||
     errorMessage.includes('quota') ||
-    error?.status === 503 ||
-    error?.status === 429
+    status === 503 ||
+    status === 429
   );
 }
 
@@ -297,6 +304,18 @@ interface GeminiVideoResponse {
   }>;
 }
 
+interface WhisperSegment {
+  start?: number;
+  end?: number;
+  text?: string;
+}
+
+interface WhisperVerboseResponse {
+  text?: string;
+  duration?: number;
+  segments?: WhisperSegment[];
+}
+
 /**
  * PERF-AI-006: Fallback transcription using OpenAI Whisper
  * Used when Gemini is unavailable (503, rate limits, quota exhausted)
@@ -312,30 +331,30 @@ async function transcribeWithWhisperFallback(
 
   // Call Whisper API
   const transcription = await openai.audio.transcriptions.create({
-    file: createReadStream(tempFilePath) as any,
+    file: createReadStream(tempFilePath) as Uploadable,
     model: 'whisper-1',
     language: 'en',
     response_format: 'verbose_json',
     timestamp_granularities: ['word', 'segment'],
-  });
+  }) as WhisperVerboseResponse;
 
   // Convert Whisper response to GeminiVideoResponse format
-  const segments = (transcription as any).segments || [];
+  const segments = transcription.segments ?? [];
   const audioTranscript: AudioSegment[] = segments.map(
-    (seg: any, index: number) => ({
-      timestamp: formatTimestamp(seg.start),
-      startTime: seg.start,
-      endTime: seg.end,
+    (seg) => ({
+      timestamp: formatTimestamp(seg.start ?? 0),
+      startTime: seg.start ?? 0,
+      endTime: seg.end ?? seg.start ?? 0,
       speaker: 'narrator',
-      text: seg.text.trim(),
+      text: (seg.text ?? '').trim(),
     }),
   );
 
   const fullText =
-    (transcription as any).text || audioTranscript.map((s) => s.text).join(' ');
+    transcription.text || audioTranscript.map((s) => s.text).join(' ');
   const duration =
-    (transcription as any).duration ||
-    (segments.length > 0 ? segments[segments.length - 1].end : 0);
+    transcription.duration ||
+    (segments.length > 0 ? (segments[segments.length - 1].end ?? 0) : 0);
 
   logger.info('Whisper fallback completed', {
     context: {
@@ -560,7 +579,10 @@ export async function transcribeRecording(job: Job): Promise<void> {
     // Use streaming to write blob to file
     const blobStream = videoBlob.stream();
     const writeStream = createWriteStream(tempFilePath);
-    await pipeline(Readable.fromWeb(blobStream as any), writeStream);
+    await pipeline(
+      Readable.fromWeb(blobStream as WebReadableStream<Uint8Array>),
+      writeStream,
+    );
 
     // Verify file was written correctly
     const tempFileStats = await stat(tempFilePath);
@@ -1257,7 +1279,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
           provider: 'gemini',
         },
       });
-    } catch (geminiError: any) {
+    } catch (geminiError) {
       // PERF-AI-006: Check if we should fall back to Whisper
       if (
         isRecoverableGeminiError(geminiError) &&
@@ -1266,7 +1288,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       ) {
         logger.warn('Gemini transcription failed, using Whisper fallback', {
           context: {
-            geminiError: geminiError.message,
+            geminiError: getErrorMessage(geminiError),
             recordingId,
           },
         });
@@ -1292,16 +1314,16 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
               audioSegments: parsedResponse.audioTranscript.length,
             },
           });
-        } catch (whisperError: any) {
+        } catch (whisperError) {
           logger.error('Both Gemini and Whisper failed', {
             context: {
-              geminiError: geminiError.message,
-              whisperError: whisperError.message,
+              geminiError: getErrorMessage(geminiError),
+              whisperError: getErrorMessage(whisperError),
               recordingId,
             },
           });
           throw new Error(
-            `All transcription providers failed: Gemini (${geminiError.message}), Whisper (${whisperError.message})`,
+            `All transcription providers failed: Gemini (${getErrorMessage(geminiError)}), Whisper (${getErrorMessage(whisperError)})`,
           );
         }
       } else {
@@ -1433,7 +1455,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown formatting or explanatory te
       .single();
 
     // Build array of jobs to create in parallel
-    const jobPromises: Promise<any>[] = [
+    const jobPromises: Array<Promise<unknown>> = [
       // Document generation job
       Promise.resolve(
         supabase.from('jobs').insert({

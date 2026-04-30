@@ -31,7 +31,7 @@ export interface ApiKeyAuthResult {
 export interface SessionAuthResult {
   orgId: string;
   userId: string;
-  role: string;
+  role: string | null;
   authMethod: 'session';
 }
 

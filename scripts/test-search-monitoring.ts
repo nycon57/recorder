@@ -7,6 +7,8 @@
  * Run with: tsx scripts/test-search-monitoring.ts
  */
 
+import { nanoid } from 'nanoid';
+
 import { searchMonitor } from '@/lib/services/search-monitoring';
 import {
   assignVariant,
@@ -16,7 +18,16 @@ import {
   getVariantDistribution,
   calculateSampleSize,
 } from '@/lib/services/ab-testing';
-import { nanoid } from 'nanoid';
+
+interface RecentSearchMetric {
+  query: string;
+  strategy: string;
+  success: boolean;
+  sourcesFound: number;
+  avgSimilarity: number;
+  totalTimeMs: number;
+  retrievalAttempts: number;
+}
 
 /**
  * Simulate a search request with monitoring
@@ -180,7 +191,7 @@ async function runSimulations(): Promise<void> {
   console.log('='.repeat(60) + '\n');
 
   const recent = await searchMonitor.getRecentMetrics(undefined, 5);
-  recent.forEach((metric: any, idx: number) => {
+  recent.forEach((metric: RecentSearchMetric, idx: number) => {
     console.log(`${idx + 1}. Query: "${metric.query.substring(0, 40)}..."`);
     console.log(`   Strategy: ${metric.strategy}`);
     console.log(`   Success: ${metric.success ? '✅' : '❌'}`);

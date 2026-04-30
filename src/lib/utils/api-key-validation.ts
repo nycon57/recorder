@@ -68,7 +68,7 @@ export async function validateApiKey(
     }
 
     // Find matching key using bcrypt.compare() - constant time comparison
-    let matchedKey: typeof apiKeys[0] | null = null;
+    let matchedKey: (typeof apiKeys)[number] | null = null;
 
     for (const key of apiKeys) {
       const isMatch = await bcrypt.compare(apiKey, key.key_hash);
@@ -100,7 +100,29 @@ export async function validateApiKey(
     }
 
     // Check IP whitelist if configured
-    if (matchedKey.ip_whitelist && matchedKey.ip_whitelist.length > 0) {
+    if (matchedKey.ip_whitelist != null && !Array.isArray(matchedKey.ip_whitelist)) {
+      return {
+        valid: false,
+        error: 'API key whitelist configuration is invalid',
+      };
+    }
+
+    const ipWhitelist = Array.isArray(matchedKey.ip_whitelist)
+      ? matchedKey.ip_whitelist.filter((value): value is string => typeof value === 'string')
+      : [];
+
+    if (
+      Array.isArray(matchedKey.ip_whitelist) &&
+      matchedKey.ip_whitelist.length > 0 &&
+      ipWhitelist.length === 0
+    ) {
+      return {
+        valid: false,
+        error: 'API key whitelist configuration is invalid',
+      };
+    }
+
+    if (ipWhitelist.length > 0) {
       if (!ipAddress) {
         return {
           valid: false,
@@ -109,7 +131,7 @@ export async function validateApiKey(
       }
 
       // Check if IP is in whitelist
-      const isWhitelisted = matchedKey.ip_whitelist.some((whitelistedIp: string) => {
+      const isWhitelisted = ipWhitelist.some((whitelistedIp) => {
         // Support CIDR notation in the future - for now, exact match
         return whitelistedIp === ipAddress;
       });
@@ -123,10 +145,14 @@ export async function validateApiKey(
     }
 
     // Check scope if required
+    const scopes = Array.isArray(matchedKey.scopes)
+      ? matchedKey.scopes.filter((value): value is string => typeof value === 'string')
+      : [];
+
     if (requiredScope) {
       const hasScope =
-        matchedKey.scopes.includes('*') || // Wildcard scope
-        matchedKey.scopes.includes(requiredScope);
+        scopes.includes('*') || // Wildcard scope
+        scopes.includes(requiredScope);
 
       if (!hasScope) {
         return {
@@ -136,26 +162,27 @@ export async function validateApiKey(
       }
     }
 
-    // Update last used timestamp and usage count
-    // Fire and forget - don't block validation on this update
-    supabaseAdmin
-      .from('api_keys')
-      .update({
-        last_used_at: new Date().toISOString(),
-        usage_count: ((matchedKey as any).usage_count || 0) + 1,
-      })
-      .eq('id', matchedKey.id)
-      .then(({ error }) => {
+    // Update last used timestamp and usage count atomically.
+    void Promise.resolve(
+      supabaseAdmin.rpc(
+        'increment_api_key_usage_count' as never,
+        { p_key_id: matchedKey.id } as never
+      )
+    )
+      .then(({ error }: { error: unknown }) => {
         if (error) {
-          console.error('[API Key Validation] Failed to update last_used_at:', error);
+          console.error('[API Key Validation] Failed to update usage stats:', error);
         }
+      })
+      .catch((error: unknown) => {
+        console.error('[API Key Validation] Failed to update usage stats:', error);
       });
 
     return {
       valid: true,
       orgId: matchedKey.org_id,
-      scopes: matchedKey.scopes,
-      rateLimit: matchedKey.rate_limit,
+      scopes,
+      rateLimit: matchedKey.rate_limit ?? undefined,
     };
   } catch (error) {
     console.error('[API Key Validation] Unexpected error:', error);

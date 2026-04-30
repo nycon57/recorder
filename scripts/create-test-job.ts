@@ -5,13 +5,13 @@
  * This script creates a test job in the database to see if the worker picks it up
  */
 
-import { config } from 'dotenv';
 import { resolve } from 'path';
+
+import { createClient } from '@supabase/supabase-js';
+import { config } from 'dotenv';
 
 // Load .env.local file
 config({ path: resolve(process.cwd(), '.env.local') });
-
-import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;

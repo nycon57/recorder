@@ -5,8 +5,6 @@
  * Tests caching, quota checks, rate limiting, and analytics tracking performance
  */
 
-const crypto = require('crypto');
-
 // Test configuration
 const TEST_CONFIG = {
   orgId: '550e8400-e29b-41d4-a716-446655440000', // Test org UUID
@@ -81,6 +79,8 @@ async function benchmarkCache() {
   // Simulating cache operations
   const cacheKey = 'test:key:' + Date.now();
   const cacheValue = { data: 'test', timestamp: Date.now() };
+  void cacheKey;
+  void cacheValue;
 
   // Test memory cache (L1)
   for (let i = 0; i < TEST_CONFIG.iterations; i++) {
@@ -165,6 +165,7 @@ async function benchmarkSearchRequest() {
 
   for (let i = 0; i < TEST_CONFIG.iterations; i++) {
     const query = TEST_CONFIG.searchQueries[i % TEST_CONFIG.searchQueries.length];
+    void query;
     const start = performance.now();
 
     // Simulate complete search flow

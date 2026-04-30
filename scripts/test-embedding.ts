@@ -1,11 +1,15 @@
+import { resolve } from 'path';
+
 import { GoogleGenAI } from '@google/genai';
-import { GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
-import { resolve } from 'path';
+
+import { GOOGLE_CONFIG } from '@/lib/google/client';
 
 // Load environment variables
 dotenv.config({ path: resolve(process.cwd(), '.env.local') });
+
+type DocumentMarkdown = { markdown?: string | null };
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -29,7 +33,7 @@ async function main() {
     .single();
 
   console.log('Transcript length:', transcript?.text?.length);
-  console.log('Document length:', (document as any)?.markdown?.length);
+  console.log('Document length:', (document as DocumentMarkdown | null)?.markdown?.length);
   console.log('');
 
   // Now test with empty string (which might be the issue)
@@ -37,7 +41,7 @@ async function main() {
     console.log('Test 1: Embedding empty string...');
     const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
-    const result = await genai.models.embedContent({
+    await genai.models.embedContent({
       model: GOOGLE_CONFIG.EMBEDDING_MODEL,
       contents: '',  // Empty string!
       config: {
@@ -48,8 +52,8 @@ async function main() {
 
     console.log('✅ Empty string succeeded!');
 
-  } catch (error: any) {
-    console.error('❌ Empty string failed:', error.message);
+  } catch (error: unknown) {
+    console.error('❌ Empty string failed:', error instanceof Error ? error.message : error);
   }
 
   console.log('');
@@ -59,9 +63,9 @@ async function main() {
     console.log('Test 2: Embedding null...');
     const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
-    const result = await genai.models.embedContent({
+    await genai.models.embedContent({
       model: GOOGLE_CONFIG.EMBEDDING_MODEL,
-      contents: null as any,
+      contents: null as unknown as string,
       config: {
         taskType: GOOGLE_CONFIG.EMBEDDING_TASK_TYPE,
         outputDimensionality: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS,
@@ -70,8 +74,8 @@ async function main() {
 
     console.log('✅ Null succeeded!');
 
-  } catch (error: any) {
-    console.error('❌ Null failed:', error.message);
+  } catch (error: unknown) {
+    console.error('❌ Null failed:', error instanceof Error ? error.message : error);
   }
 
   console.log('');
@@ -93,8 +97,8 @@ async function main() {
     console.log('✅ Transcript succeeded!');
     console.log('Embedding length:', result.embeddings?.[0]?.values?.length);
 
-  } catch (error: any) {
-    console.error('❌ Transcript failed:', error.message);
+  } catch (error: unknown) {
+    console.error('❌ Transcript failed:', error instanceof Error ? error.message : error);
   }
 }
 

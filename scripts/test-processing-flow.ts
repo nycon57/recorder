@@ -22,9 +22,15 @@ import { transcribeRecording } from '@/lib/workers/handlers/transcribe-gemini-vi
 import { generateDocument } from '@/lib/workers/handlers/docify-google';
 import { generateEmbeddings } from '@/lib/workers/handlers/embeddings-google';
 
-type RecordingStatus = Database['public']['Tables']['recordings']['Row']['status'];
+type RecordingStatus = string;
 type JobStatus = Database['public']['Tables']['jobs']['Row']['status'];
-type RecordingRow = Database['public']['Tables']['recordings']['Row'];
+type RecordingRow = {
+  id: string;
+  storage_path_raw: string | null;
+};
+type FinalizeDetails = {
+  jobId?: string;
+};
 
 // Test configuration
 const TEST_TIMEOUT_MS = 60000; // 60 seconds for entire test suite
@@ -73,7 +79,7 @@ interface TestResult {
   passed: boolean;
   duration: number;
   error?: string;
-  details?: any;
+  details?: unknown;
 }
 
 const testResults: TestResult[] = [];
@@ -691,7 +697,7 @@ async function runTests() {
     const { orgId, userId } = await getTestOrgAndUser();
 
     // Create test recording
-    const { recordingId, storagePath } = await createTestRecording(orgId, userId);
+    const { recordingId } = await createTestRecording(orgId, userId);
     logInfo(`Test recording ID: ${recordingId}\n`);
 
     // Test 1: Non-streaming finalize
@@ -705,7 +711,13 @@ async function runTests() {
     }
 
     // Get job ID from test 1
-    const jobId = finalizeResult.details?.jobId;
+    const finalizeDetails =
+      finalizeResult.details &&
+      typeof finalizeResult.details === 'object' &&
+      'jobId' in finalizeResult.details
+        ? (finalizeResult.details as FinalizeDetails)
+        : {};
+    const jobId = finalizeDetails.jobId;
     if (!jobId) {
       throw new Error('No job ID from finalize test');
     }

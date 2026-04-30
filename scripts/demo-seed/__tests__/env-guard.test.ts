@@ -1,3 +1,5 @@
+/* global describe, expect, it */
+
 import { checkGuard, extractHost, extractProjectRef } from '../env-guard';
 
 // ─── extractHost ──────────────────────────────────────────────────────────────
