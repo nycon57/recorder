@@ -88,6 +88,11 @@ function makeUploadRequest(
 
   return new Request('http://localhost/api/library/upload', {
     method: 'POST',
+    headers: {
+      'content-length': String(
+        files.reduce((sum, file) => sum + file.size, 0),
+      ),
+    },
     body: formData,
   }) as unknown as NextRequest;
 }
@@ -248,7 +253,7 @@ describe('POST /api/library/upload', () => {
     const formData = jest.fn<() => Promise<FormData>>();
     const request = {
       headers: new Headers({
-        'content-length': String(2 * 1024 * 1024 * 1024 + 1),
+        'content-length': String(100 * 1024 * 1024 + 1),
       }),
       formData,
     } as unknown as NextRequest;
@@ -256,6 +261,22 @@ describe('POST /api/library/upload', () => {
     const response = await POST(request);
 
     expect(response.status).toBe(413);
+    expect(formData).not.toHaveBeenCalled();
+    expect(mockQuotaCheck).not.toHaveBeenCalled();
+    expect(contentInsert).not.toHaveBeenCalled();
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it('rejects requests without content-length before multipart parsing', async () => {
+    const formData = jest.fn<() => Promise<FormData>>();
+    const request = {
+      headers: new Headers(),
+      formData,
+    } as unknown as NextRequest;
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(411);
     expect(formData).not.toHaveBeenCalled();
     expect(mockQuotaCheck).not.toHaveBeenCalled();
     expect(contentInsert).not.toHaveBeenCalled();
@@ -278,7 +299,7 @@ describe('POST /api/library/upload', () => {
     const formData = new FormData();
     const getAll = jest.spyOn(formData, 'getAll').mockReturnValue(files);
     const request = {
-      headers: new Headers(),
+      headers: new Headers({ 'content-length': '1' }),
       formData: jest.fn(() => Promise.resolve(formData)),
     } as unknown as NextRequest;
 
