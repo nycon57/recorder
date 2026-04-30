@@ -531,43 +531,30 @@ export function createVendorSourceRegistryService(
       }
 
       const retiredAt = input.retiredAt ?? new Date().toISOString();
-      const sourcePatch: VendorSourceUpdate = {
-        lifecycle: 'retired',
-        retired_at: retiredAt,
-        retired_by: input.retiredBy,
-        retirement_reason: reason,
-        replacement_source_id: input.replacementSourceId ?? null,
-        last_error: null,
-        updated_at: retiredAt,
-      };
-
-      const { error: sourceError } = await (supabase
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .from('vendor_doc_sources') as any)
-        .update(sourcePatch)
-        .eq('id', input.sourceId);
+      const { error: sourceError } = await (
+        supabase as unknown as {
+          rpc: (
+            fn: 'retire_vendor_source',
+            args: {
+              p_source_id: string;
+              p_retired_by: string;
+              p_reason: string;
+              p_replacement_source_id: string | null;
+              p_retired_at: string;
+            },
+          ) => Promise<{ error: { message: string } | null }>;
+        }
+      ).rpc('retire_vendor_source', {
+        p_source_id: input.sourceId,
+        p_retired_by: input.retiredBy,
+        p_reason: reason,
+        p_replacement_source_id: input.replacementSourceId ?? null,
+        p_retired_at: retiredAt,
+      });
 
       if (sourceError) {
         throw new Error(
           `[vendor-source-registry] Failed to retire source ${input.sourceId}: ${sourceError.message}`
-        );
-      }
-
-      const { error: pageError } = await (supabase
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .from('vendor_wiki_pages') as any)
-        .update({
-          retired_at: retiredAt,
-          retired_by: input.retiredBy,
-          retirement_reason: reason,
-          updated_at: retiredAt,
-        })
-        .eq('vendor_source_id', input.sourceId)
-        .is('retired_at', null);
-
-      if (pageError) {
-        throw new Error(
-          `[vendor-source-registry] Failed to retire pages for source ${input.sourceId}: ${pageError.message}`
         );
       }
     },

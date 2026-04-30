@@ -26,6 +26,7 @@ type VendorSourceJobRow = Pick<
 export type VendorSourceOpsStatus =
   | 'healthy'
   | 'syncing'
+  | 'blocked'
   | 'stale'
   | 'failing'
   | 'never_synced';
@@ -69,6 +70,7 @@ export interface VendorSourceOpsSummary {
   appsCovered: number;
   healthySources: number;
   syncingSources: number;
+  blockedSources: number;
   staleSources: number;
   failingSources: number;
   neverSyncedSources: number;
@@ -107,12 +109,14 @@ function getStatusRank(status: VendorSourceOpsStatus): number {
       return 0;
     case 'stale':
       return 1;
-    case 'never_synced':
+    case 'blocked':
       return 2;
-    case 'syncing':
+    case 'never_synced':
       return 3;
-    case 'healthy':
+    case 'syncing':
       return 4;
+    case 'healthy':
+      return 5;
     default:
       return 5;
   }
@@ -166,6 +170,8 @@ export function buildVendorSourceOpsSnapshot({
       let status: VendorSourceOpsStatus;
       if (source.last_error) {
         status = 'failing';
+      } else if (syncBlockReason) {
+        status = 'blocked';
       } else if (!source.last_success_at) {
         status = 'never_synced';
       } else if (activeJobStatus) {
@@ -231,6 +237,7 @@ export function buildVendorSourceOpsSnapshot({
       syncingSources: items.filter((item) => item.status === 'syncing').length,
       staleSources: items.filter((item) => item.status === 'stale').length,
       failingSources: items.filter((item) => item.status === 'failing').length,
+      blockedSources: items.filter((item) => item.status === 'blocked').length,
       neverSyncedSources: items.filter((item) => item.status === 'never_synced')
         .length,
       restrictedSources: items.filter(

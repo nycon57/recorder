@@ -17,16 +17,20 @@ function isValidUrl(value: string): boolean {
   }
 }
 
-const optionalHttpsUrlSchema = z
-  .string()
-  .optional()
-  .refine(
-    (url) => !url || url.startsWith('https://'),
-    'Legal review reference must use https protocol',
-  )
-  .refine((url) => !url || isValidUrl(url), {
-    message: 'Legal review reference must be a valid URL',
-  });
+const optionalHttpsUrlSchema = z.preprocess(
+  (value) => (value === '' ? null : value),
+  z
+    .string()
+    .refine(
+      (url) => url.startsWith('https://'),
+      'Legal review reference must use https protocol',
+    )
+    .refine((url) => isValidUrl(url), {
+      message: 'Legal review reference must be a valid URL',
+    })
+    .nullable()
+    .optional(),
+);
 
 export const vendorIngestInputSchema = z.object({
   app: z
@@ -73,18 +77,7 @@ export const vendorSourceUpdateSchema = z.object({
   termsReviewStatus: z
     .enum(['pending', 'approved', 'restricted', 'rejected'])
     .optional(),
-  legalReviewReferenceUrl: z.preprocess(
-    (value) => (value === '' ? null : value),
-    z
-      .string()
-      .url('Legal review reference must be a valid URL')
-      .refine(
-        (u) => u.startsWith('https://'),
-        'Legal review reference must use https protocol',
-      )
-      .nullable()
-      .optional(),
-  ),
+  legalReviewReferenceUrl: optionalHttpsUrlSchema,
   legalReviewNotes: z.string().max(4000).nullable().optional(),
 });
 

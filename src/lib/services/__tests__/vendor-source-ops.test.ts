@@ -93,25 +93,26 @@ describe('vendor-source-ops', () => {
       ],
     });
 
-    expect(snapshot.summary).toEqual({
-      totalSources: 5,
-      appsCovered: 5,
-      healthySources: 1,
-      syncingSources: 1,
-      staleSources: 1,
-      failingSources: 1,
-      neverSyncedSources: 1,
-      restrictedSources: 1,
+      expect(snapshot.summary).toEqual({
+        totalSources: 5,
+        appsCovered: 5,
+        healthySources: 1,
+        syncingSources: 1,
+        staleSources: 0,
+        failingSources: 1,
+        blockedSources: 1,
+        neverSyncedSources: 1,
+        restrictedSources: 1,
       pausedSources: 0,
       retiredSources: 0,
     });
 
-    expect(snapshot.sources.map((source) => [source.id, source.status])).toEqual([
-      ['source-4', 'failing'],
-      ['source-2', 'stale'],
-      ['source-3', 'never_synced'],
-      ['source-5', 'syncing'],
-      ['source-1', 'healthy'],
+      expect(snapshot.sources.map((source) => [source.id, source.status])).toEqual([
+        ['source-4', 'failing'],
+        ['source-2', 'blocked'],
+        ['source-3', 'never_synced'],
+        ['source-5', 'syncing'],
+        ['source-1', 'healthy'],
     ]);
 
     expect(snapshot.sources.find((source) => source.id === 'source-1')).toMatchObject({

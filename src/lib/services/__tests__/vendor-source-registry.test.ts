@@ -1,9 +1,10 @@
-import { describe, expect, test } from '@jest/globals';
+import { describe, expect, jest, test } from '@jest/globals';
 
 import {
   buildLegacyVendorSourceBackfill,
   buildVendorSourceFailurePatch,
   buildVendorSourceSuccessPatch,
+  createVendorSourceRegistryService,
   getVendorSourceSyncBlockReason,
   isVendorSourceQueryable,
   normalizeVendorSourceDraft,
@@ -171,5 +172,28 @@ describe('vendor-source-registry', () => {
         lifecycle: 'retired',
       }),
     ).toBe('Vendor source is retired and cannot be synced');
+  });
+
+  test('retireSource delegates source and page retirement to the database RPC', async () => {
+    const rpc = jest.fn(async () => ({ error: null }));
+    const service = createVendorSourceRegistryService({
+      rpc,
+    } as unknown as Parameters<typeof createVendorSourceRegistryService>[0]);
+
+    await service.retireSource({
+      sourceId: '11111111-1111-4111-8111-111111111111',
+      retiredBy: '22222222-2222-4222-8222-222222222222',
+      reason: 'Superseded by official docs root',
+      replacementSourceId: '33333333-3333-4333-8333-333333333333',
+      retiredAt: '2026-04-30T12:00:00.000Z',
+    });
+
+    expect(rpc).toHaveBeenCalledWith('retire_vendor_source', {
+      p_source_id: '11111111-1111-4111-8111-111111111111',
+      p_retired_by: '22222222-2222-4222-8222-222222222222',
+      p_reason: 'Superseded by official docs root',
+      p_replacement_source_id: '33333333-3333-4333-8333-333333333333',
+      p_retired_at: '2026-04-30T12:00:00.000Z',
+    });
   });
 });

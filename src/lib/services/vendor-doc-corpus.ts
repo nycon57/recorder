@@ -227,13 +227,6 @@ export async function syncVendorCorpusFromLegacyPages(args: {
   }
 
   const legacyPages = (legacyData as VendorWikiPage[] | null) ?? [];
-  if (legacyPages.length === 0) {
-    return {
-      inserted: 0,
-      updated: 0,
-      skipped: 0,
-    };
-  }
 
   const { data: existingData, error: existingError } = await supabase
     .from('vendor_corpus_pages')
@@ -276,6 +269,14 @@ export async function syncVendorCorpusFromLegacyPages(args: {
         `Failed to delete retired vendor corpus pages for ${app}: ${deleteError.message}`,
       );
     }
+  }
+
+  if (legacyPages.length === 0) {
+    return {
+      inserted: 0,
+      updated: 0,
+      skipped: 0,
+    };
   }
 
   const rowsToUpsert: Array<Record<string, unknown>> = [];

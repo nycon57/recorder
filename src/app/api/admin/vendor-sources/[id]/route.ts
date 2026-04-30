@@ -27,6 +27,12 @@ export const PATCH = apiHandler(
       );
     }
 
+    if (parsed.data.lifecycle === 'retired') {
+      return errors.badRequest(
+        'Retire vendor sources through the dedicated retirement endpoint so audit fields are captured',
+      );
+    }
+
     const now = new Date().toISOString();
     const patch: Record<string, unknown> = {
       updated_at: now,
@@ -61,9 +67,13 @@ export const PATCH = apiHandler(
       .update(patch)
       .eq('id', id)
       .select('*')
-      .single();
+      .maybeSingle();
 
-    if (error || !data) {
+    if (error) {
+      return errors.internalError();
+    }
+
+    if (!data) {
       return errors.notFound('Vendor source');
     }
 

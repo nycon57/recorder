@@ -100,7 +100,29 @@ export type Database = {
           traffic_allocation?: Json
           variants?: Json
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vendor_doc_sources_legal_reviewed_by_fkey"
+            columns: ["legal_reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_doc_sources_replacement_source_id_fkey"
+            columns: ["replacement_source_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_doc_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_doc_sources_retired_by_fkey"
+            columns: ["retired_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ab_metrics: {
         Row: {
@@ -6461,6 +6483,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "vendor_wiki_pages_retired_by_fkey"
+            columns: ["retired_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "vendor_wiki_pages_vendor_source_id_fkey"
             columns: ["vendor_source_id"]
             isOneToOne: false
@@ -7508,6 +7537,16 @@ export type Database = {
       check_quota_optimized: {
         Args: { p_amount?: number; p_org_id: string; p_quota_type: string }
         Returns: boolean
+      }
+      retire_vendor_source: {
+        Args: {
+          p_source_id: string
+          p_retired_by: string
+          p_reason: string
+          p_replacement_source_id?: string | null
+          p_retired_at?: string
+        }
+        Returns: undefined
       }
       claim_pending_jobs: {
         Args: { p_batch_size: number; p_claimed_at?: string }

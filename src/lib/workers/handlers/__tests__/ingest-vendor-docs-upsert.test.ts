@@ -79,6 +79,8 @@ describe('ingest-vendor-docs source code — attribution fields (TRIB-152)', () 
     );
     expect(WORKER_SRC).toContain("status: 'retired'");
     expect(WORKER_SRC).toContain('seenSourceUrls');
+    expect(WORKER_SRC).toContain('crawlComplete: crawlResult.complete');
+    expect(WORKER_SRC).toContain('options?.vendorSourceId && options.crawlComplete');
   });
 });
 

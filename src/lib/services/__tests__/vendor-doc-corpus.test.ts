@@ -176,6 +176,66 @@ describe('vendor-doc-corpus', () => {
     });
   });
 
+  it('deletes stale corpus rows when every legacy vendor page is retired', async () => {
+    const deleteFromCorpus = jest.fn().mockReturnThis();
+    const deleteIds = jest.fn(async () => ({ error: null }));
+    const generateEmbedding =
+      jest.fn<NonNullable<VendorDocCorpusDeps['generateEmbedding']>>();
+    const supabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'vendor_wiki_pages') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            is: jest.fn(async () => ({
+              data: [],
+              error: null,
+            })),
+          };
+        }
+
+        if (table === 'vendor_corpus_pages') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn(async () => ({
+              data: [
+                {
+                  id: 'corpus-retired',
+                  vendor_page_id: 'retired-page',
+                  content_hash: 'old-hash',
+                  embedding: [0.1],
+                },
+              ],
+              error: null,
+            })),
+            delete: deleteFromCorpus,
+            in: deleteIds,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    };
+
+    const result = await syncVendorCorpusFromLegacyPages(
+      { app: 'hubspot' },
+      {
+        supabase: supabase as unknown as VendorDocCorpusDeps['supabase'],
+        generateEmbedding:
+          generateEmbedding as unknown as VendorDocCorpusDeps['generateEmbedding'],
+      },
+    );
+
+    expect(deleteFromCorpus).toHaveBeenCalledTimes(1);
+    expect(deleteIds).toHaveBeenCalledWith('id', ['corpus-retired']);
+    expect(generateEmbedding).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      inserted: 0,
+      updated: 0,
+      skipped: 0,
+    });
+  });
+
   it('ranks vendor corpus pages with screen-context boost while still surfacing broader semantic matches', async () => {
     const legacyPages: LegacyVendorPage[] = [
       {
