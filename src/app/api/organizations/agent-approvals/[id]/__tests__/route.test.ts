@@ -97,12 +97,14 @@ function approvalRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function contentRow() {
+function contentRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 'content_1',
     org_id: 'org_1',
     title: 'Demo recording',
     metadata: { existing: true },
+    updated_at: '2026-04-29T00:00:01.000Z',
+    ...overrides,
   };
 }
 
@@ -124,10 +126,12 @@ function mockSelectSingle(data: unknown) {
   return query;
 }
 
-function mockUpdate() {
+function mockUpdate(data: unknown = { id: 'content_1' }) {
   const query = {
     update: jest.fn(() => query),
     eq: jest.fn(() => query),
+    select: jest.fn(() => query),
+    maybeSingle: jest.fn(async () => ({ data, error: null })),
     then: (resolve: (value: { error: null }) => unknown) => resolve({ error: null }),
   };
   return query;
@@ -169,7 +173,7 @@ describe('PATCH /api/organizations/agent-approvals/[id]', () => {
   });
 
   it('claims approved routing before persisting side effects and enqueuing compile_wiki', async () => {
-    setupRoutingQueries();
+    const { contentUpdate } = setupRoutingQueries();
 
     const response = await PATCH(makeRequest({ action: 'approved' }), {
       params: Promise.resolve({ id: 'approval_1' }),
@@ -203,6 +207,43 @@ describe('PATCH /api/organizations/agent-approvals/[id]', () => {
     expect(reviewApprovalMock.mock.invocationCallOrder[0]).toBeLessThan(
       enqueueRoutingCompileWikiJobMock.mock.invocationCallOrder[0],
     );
+    expect(contentUpdate.eq).toHaveBeenCalledWith(
+      'updated_at',
+      '2026-04-29T00:00:01.000Z',
+    );
+  });
+
+  it('retries routing metadata persistence when content changes concurrently', async () => {
+    const firstUpdate = mockUpdate(null);
+    const secondUpdate = mockUpdate();
+    fromMock
+      .mockReturnValueOnce(mockSelectMaybeSingle(approvalRow()))
+      .mockReturnValueOnce(mockSelectSingle(contentRow()))
+      .mockReturnValueOnce(firstUpdate)
+      .mockReturnValueOnce(mockSelectSingle(contentRow({
+        metadata: { existing: true, concurrent: true },
+        updated_at: '2026-04-29T00:00:02.000Z',
+      })))
+      .mockReturnValueOnce(secondUpdate);
+
+    const response = await PATCH(makeRequest({ action: 'approved' }), {
+      params: Promise.resolve({ id: 'approval_1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(firstUpdate.eq).toHaveBeenCalledWith(
+      'updated_at',
+      '2026-04-29T00:00:01.000Z',
+    );
+    expect(secondUpdate.eq).toHaveBeenCalledWith(
+      'updated_at',
+      '2026-04-29T00:00:02.000Z',
+    );
+    expect(writeRoutingReviewStateMock).toHaveBeenLastCalledWith(
+      { existing: true, concurrent: true },
+      expect.objectContaining({ approvalId: 'approval_1' }),
+    );
+    expect(enqueueRoutingCompileWikiJobMock).toHaveBeenCalledTimes(1);
   });
 
   it('allows approved routing to keep nullable app and screen values', async () => {
