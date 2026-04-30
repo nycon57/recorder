@@ -66,6 +66,24 @@ type OrgWikiPageInsert = Database['public']['Tables']['org_wiki_pages']['Insert'
 type OrgWikiPageRow = Database['public']['Tables']['org_wiki_pages']['Row'];
 type WikiPageSourceInsert = Database['public']['Tables']['wiki_page_sources']['Insert'];
 
+type SupersedeOrgWikiPageRpc = {
+  rpc(
+    fn: 'supersede_org_wiki_page',
+    args: {
+      p_existing_page_id: string;
+      p_org_id: string;
+      p_app: string | null;
+      p_screen: string | null;
+      p_topic: string;
+      p_content: string;
+      p_confidence: number;
+      p_supersedes_id: string;
+      p_compilation_log: Json;
+      p_valid_until: string;
+    },
+  ): Promise<{ data: string | null; error: { message: string } | null }>;
+};
+
 // Narrow row shapes for the subset of columns this handler selects. The
 // generated Supabase typings sometimes infer `never` from string-literal
 // select arguments, so we annotate the fetched data explicitly.
@@ -1758,18 +1776,6 @@ async function applyContradictionWithSupersede(args: {
     return null;
   }
 
-  // Supersede the old row (valid_until = now()).
-  const { error: supersedeError } = await supabase
-    .from('org_wiki_pages')
-    .update({ valid_until: nowIso } as never)
-    .eq('id', existingPage.id);
-
-  if (supersedeError) {
-    throw new Error(
-      `Failed to supersede old page ${existingPage.id}: ${supersedeError.message}`
-    );
-  }
-
   const newConfidence = clampConfidence(
     (existingPage.confidence ?? 0.5) + diff.confidence_delta
   );
@@ -1807,23 +1813,31 @@ async function applyContradictionWithSupersede(args: {
     compilation_log: [appliedLogEntry] as unknown as Json,
   };
 
-  const insertResponse = await supabase
-    .from('org_wiki_pages')
-    .insert(newPageInsert as never)
-    .select('id')
-    .single();
+  const supersedeResponse = await (supabase as unknown as SupersedeOrgWikiPageRpc)
+    .rpc('supersede_org_wiki_page', {
+      p_existing_page_id: existingPage.id,
+      p_org_id: orgId,
+      p_app: newPageInsert.app ?? null,
+      p_screen: newPageInsert.screen ?? null,
+      p_topic: newPageInsert.topic,
+      p_content: newPageInsert.content,
+      p_confidence: newPageInsert.confidence ?? 0.5,
+      p_supersedes_id: existingPage.id,
+      p_compilation_log: newPageInsert.compilation_log as Json,
+      p_valid_until: nowIso,
+    });
 
-  const insertError = insertResponse.error;
-  const newPage = insertResponse.data as { id: string } | null;
+  const supersedeError = supersedeResponse.error;
+  const newPageId = supersedeResponse.data;
 
-  if (insertError || !newPage) {
+  if (supersedeError || !newPageId) {
     throw new Error(
-      `Failed to insert superseding page for ${existingPage.id}: ${insertError?.message ?? 'unknown error'}`
+      `Failed to atomically supersede page ${existingPage.id}: ${supersedeError?.message ?? 'unknown error'}`
     );
   }
 
   await insertWikiPageSource(supabase, {
-    pageId: newPage.id,
+    pageId: newPageId,
     recordingId,
     recordingTitle,
     sourceType,
@@ -1832,12 +1846,12 @@ async function applyContradictionWithSupersede(args: {
   });
 
   console.log(
-    `[compile-wiki] Contradiction auto-applied: superseded ${existingPage.id} → ${newPage.id} ` +
+    `[compile-wiki] Contradiction auto-applied: superseded ${existingPage.id} → ${newPageId} ` +
       `(${diff.contradictions.length} conflicts resolved, confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`
   );
 
   return {
-    pageId: newPage.id,
+    pageId: newPageId,
     content: mergedContent,
     contentChanged: true,
     embeddingContext: 'compile-wiki.auto-supersede',
