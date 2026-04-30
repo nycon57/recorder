@@ -171,6 +171,7 @@ async function fetchVendorPages(args: {
     const { data, error } = await args.supabase
       .from('vendor_wiki_pages')
       .select('id, app, screen, source_url')
+      .is('retired_at', null)
       .order('app', { ascending: true })
       .order('screen', { ascending: true })
       .limit(args.query.vendorPageLimit);
@@ -189,6 +190,7 @@ async function fetchVendorPages(args: {
     .from('vendor_wiki_pages')
     .select('id, app, screen, source_url')
     .in('app', appFilters)
+    .is('retired_at', null)
     .order('app', { ascending: true })
     .order('screen', { ascending: true })
     .limit(candidateLimit);

@@ -435,6 +435,7 @@ export async function fetchKnowledgePageDetail(input: {
             )
             .ilike('app', page.app)
             .ilike('screen', page.screen)
+            .is('retired_at', null)
             .order('updated_at', { ascending: false })
             .limit(5)
         : Promise.resolve({
@@ -627,6 +628,7 @@ export async function fetchKnowledgePageDetail(input: {
     .from('vendor_wiki_pages')
     .select('id, app, screen, content, source_url, app_version, created_at, updated_at')
     .eq('id', input.pageId)
+    .is('retired_at', null)
     .maybeSingle();
 
   if (vendorPageError) {

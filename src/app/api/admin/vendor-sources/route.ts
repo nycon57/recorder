@@ -20,7 +20,7 @@ export const GET = apiHandler(async () => {
 });
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  await requireSystemAdmin();
+  const session = await requireSystemAdmin();
 
   const rawBody = await request.json().catch(() => null);
   const parsed = vendorIngestInputSchema.safeParse(rawBody);
@@ -41,6 +41,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
     officialSource: true,
     fetchStrategy: 'sanctioned_crawl',
     termsReviewStatus: 'approved',
+    lifecycle: 'active',
+    legalReview: {
+      reviewedBy: session.userId,
+      referenceUrl: parsed.data.legalReviewReferenceUrl,
+      notes: parsed.data.legalReviewNotes,
+    },
   });
 
   return successResponse({ source }, undefined, 201);

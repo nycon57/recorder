@@ -97,20 +97,39 @@ function getFirstPackContext(): PageContext {
 }
 
 function createSupabaseMock(args: {
-  vendorRows?: Array<{ id: string; screen: string; content: string }>;
+  vendorRows?: Array<{
+    id: string;
+    screen: string;
+    content: string;
+    vendor_source_id?: string | null;
+  }>;
   orgRows?: Array<{ id: string; topic: string; content: string }>;
 }) {
   return {
     from: jest.fn((table: string) => {
       if (table === 'vendor_wiki_pages') {
-        return {
-          select: jest.fn(() => ({
-            in: jest.fn(async () => ({
-              data: args.vendorRows ?? [],
-              error: null,
-            })),
+        const query = {
+          select: jest.fn(() => query),
+          in: jest.fn(() => query),
+          is: jest.fn(async () => ({
+            data: args.vendorRows ?? [],
+            error: null,
           })),
         };
+        return {
+          ...query,
+        };
+      }
+
+      if (table === 'vendor_doc_sources') {
+        const query = {
+          select: jest.fn(() => query),
+          in: jest.fn(async () => ({
+            data: [],
+            error: null,
+          })),
+        };
+        return query;
       }
 
       if (table === 'org_wiki_pages') {

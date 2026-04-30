@@ -5,6 +5,10 @@ import {
   syncVendorCorpusFromLegacyPages,
 } from '../vendor-doc-corpus';
 
+type VendorDocCorpusDeps = NonNullable<
+  Parameters<typeof syncVendorCorpusFromLegacyPages>[1]
+>;
+
 type LegacyVendorPage = {
   id: string;
   app: string;
@@ -99,15 +103,19 @@ describe('vendor-doc-corpus', () => {
     ];
 
     const upsert = jest.fn(async () => ({ error: null }));
-    const supabase: any = {
+    const supabase = {
       from: jest.fn((table: string) => {
         if (table === 'vendor_wiki_pages') {
-          return {
+          const query = {
             select: jest.fn().mockReturnThis(),
-            eq: jest.fn(async () => ({
+            eq: jest.fn().mockReturnThis(),
+            is: jest.fn(async () => ({
               data: legacyPages,
               error: null,
             })),
+          };
+          return {
+            ...query,
           };
         }
 
@@ -118,7 +126,27 @@ describe('vendor-doc-corpus', () => {
               data: existingRows,
               error: null,
             })),
+            delete: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({ error: null })),
             upsert,
+          };
+        }
+
+        if (table === 'vendor_doc_sources') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({
+              data: [
+                {
+                  id: 'source-1',
+                  lifecycle: 'active',
+                  retired_at: null,
+                  terms_review_status: 'approved',
+                  official_source: true,
+                },
+              ],
+              error: null,
+            })),
           };
         }
 
@@ -126,17 +154,19 @@ describe('vendor-doc-corpus', () => {
       }),
     };
 
-    const generateEmbedding: any = jest.fn();
+    const generateEmbedding =
+      jest.fn<NonNullable<VendorDocCorpusDeps['generateEmbedding']>>();
     generateEmbedding.mockResolvedValue({
       embedding: [0.7, 0.3],
-      provider: 'google',
+      provider: 'google' as const,
     });
 
     const result = await syncVendorCorpusFromLegacyPages(
       { app: 'hubspot' },
       {
-        supabase,
-        generateEmbedding,
+        supabase: supabase as unknown as VendorDocCorpusDeps['supabase'],
+        generateEmbedding:
+          generateEmbedding as unknown as VendorDocCorpusDeps['generateEmbedding'],
       },
     );
 
@@ -161,6 +191,76 @@ describe('vendor-doc-corpus', () => {
       inserted: 0,
       updated: 1,
       skipped: 1,
+    });
+  });
+
+  it('deletes stale corpus rows when every legacy vendor page is retired', async () => {
+    const deleteFromCorpus = jest.fn().mockReturnThis();
+    const deleteIds = jest.fn(async () => ({ error: null }));
+    const generateEmbedding =
+      jest.fn<NonNullable<VendorDocCorpusDeps['generateEmbedding']>>();
+    const supabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'vendor_wiki_pages') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            is: jest.fn(async () => ({
+              data: [],
+              error: null,
+            })),
+          };
+        }
+
+        if (table === 'vendor_corpus_pages') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn(async () => ({
+              data: [
+                {
+                  id: 'corpus-retired',
+                  vendor_page_id: 'retired-page',
+                  content_hash: 'old-hash',
+                  embedding: [0.1],
+                },
+              ],
+              error: null,
+            })),
+            delete: deleteFromCorpus,
+            in: deleteIds,
+          };
+        }
+
+        if (table === 'vendor_doc_sources') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({
+              data: [],
+              error: null,
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    };
+
+    const result = await syncVendorCorpusFromLegacyPages(
+      { app: 'hubspot' },
+      {
+        supabase: supabase as unknown as VendorDocCorpusDeps['supabase'],
+        generateEmbedding:
+          generateEmbedding as unknown as VendorDocCorpusDeps['generateEmbedding'],
+      },
+    );
+
+    expect(deleteFromCorpus).toHaveBeenCalledTimes(1);
+    expect(deleteIds).toHaveBeenCalledWith('id', ['corpus-retired']);
+    expect(generateEmbedding).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      inserted: 0,
+      updated: 0,
+      skipped: 0,
     });
   });
 
@@ -249,12 +349,13 @@ describe('vendor-doc-corpus', () => {
       },
     ];
 
-    const supabase: any = {
+    const supabase = {
       from: jest.fn((table: string) => {
         if (table === 'vendor_wiki_pages') {
           return {
             select: jest.fn().mockReturnThis(),
-            eq: jest.fn(async () => ({
+            eq: jest.fn().mockReturnThis(),
+            is: jest.fn(async () => ({
               data: legacyPages,
               error: null,
             })),
@@ -268,7 +369,27 @@ describe('vendor-doc-corpus', () => {
               data: corpusRows,
               error: null,
             })),
+            delete: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({ error: null })),
             upsert: jest.fn(async () => ({ error: null })),
+          };
+        }
+
+        if (table === 'vendor_doc_sources') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({
+              data: [
+                {
+                  id: 'source-1',
+                  lifecycle: 'active',
+                  retired_at: null,
+                  terms_review_status: 'approved',
+                  official_source: true,
+                },
+              ],
+              error: null,
+            })),
           };
         }
 
@@ -285,7 +406,7 @@ describe('vendor-doc-corpus', () => {
         limit: 2,
       },
       {
-        supabase,
+        supabase: supabase as unknown as VendorDocCorpusDeps['supabase'],
       },
     );
 
@@ -303,5 +424,86 @@ describe('vendor-doc-corpus', () => {
       }),
     );
     expect(results[0]!.confidence).toBeGreaterThan(results[1]!.confidence);
+  });
+
+  it('excludes corpus rows tied to non-queryable vendor sources', async () => {
+    const supabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'vendor_wiki_pages') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            is: jest.fn(async () => ({
+              data: [],
+              error: null,
+            })),
+          };
+        }
+
+        if (table === 'vendor_corpus_pages') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn(async () => ({
+              data: [
+                {
+                  id: 'corpus-restricted',
+                  app: 'hubspot',
+                  screen: 'deals',
+                  title: 'Deals',
+                  normalized_content: 'Restricted source guidance.',
+                  content_excerpt: 'Restricted source guidance.',
+                  source_url: 'https://docs.example.com/deals',
+                  vendor_page_id: 'vendor-page-1',
+                  vendor_source_id: 'source-1',
+                  content_hash: 'hash-deals',
+                  embedding: [0.9, 0.1],
+                  created_at: '2026-04-18T00:00:00.000Z',
+                  updated_at: '2026-04-19T00:00:00.000Z',
+                },
+              ],
+              error: null,
+            })),
+            delete: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({ error: null })),
+          };
+        }
+
+        if (table === 'vendor_doc_sources') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({
+              data: [
+                {
+                  id: 'source-1',
+                  lifecycle: 'active',
+                  retired_at: null,
+                  terms_review_status: 'restricted',
+                  official_source: true,
+                },
+              ],
+              error: null,
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    };
+
+    const results = await resolveVendorCorpusPages(
+      {
+        app: 'hubspot',
+        screen: 'deals',
+        question: 'How do deals work?',
+        questionEmbedding: [0.9, 0.1],
+      },
+      {
+        supabase: supabase as unknown as VendorDocCorpusDeps['supabase'],
+        generateEmbedding:
+          jest.fn() as unknown as VendorDocCorpusDeps['generateEmbedding'],
+      },
+    );
+
+    expect(results).toEqual([]);
   });
 });

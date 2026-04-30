@@ -16,6 +16,7 @@ import {
   type LiveContextSourcePage,
 } from '@/lib/services/extension-live-context';
 import { resolveCustomerOrgForVendor } from '@/lib/services/vendor-customers';
+import { filterQueryableVendorSourceRows } from '@/lib/services/vendor-source-queryability';
 import { errors } from '@/lib/utils/api';
 import { requireApiKeyOrSession } from '@/lib/utils/api-key-auth';
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
@@ -67,14 +68,17 @@ async function loadVendorPages(
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from('vendor_wiki_pages')
-    .select('id, screen, content')
-    .in('id', requestedPageIds);
+    .select('id, screen, content, vendor_source_id')
+    .in('id', requestedPageIds)
+    .is('retired_at', null);
 
   if (error) {
     throw new Error(`Failed to load vendor pages: ${error.message}`);
   }
 
-  return orderPagesByRequestedIds(data ?? [], requestedPageIds).map((page) => ({
+  const queryablePages = await filterQueryableVendorSourceRows(data ?? [], supabase);
+
+  return orderPagesByRequestedIds(queryablePages, requestedPageIds).map((page) => ({
     id: page.id,
     title: page.screen,
     content: page.content,

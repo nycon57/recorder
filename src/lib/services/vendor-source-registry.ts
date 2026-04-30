@@ -22,6 +22,8 @@ export type VendorTermsReviewStatus =
   | 'restricted'
   | 'rejected';
 
+export type VendorSourceLifecycle = 'active' | 'paused' | 'retired';
+
 export interface VendorSourceDraftInput {
   app: string;
   sourceKind: VendorSourceKind;
@@ -34,6 +36,8 @@ export interface VendorSourceDraftInput {
   planBand?: string[];
   applicability?: Json;
   termsReviewStatus?: VendorTermsReviewStatus;
+  lifecycle?: VendorSourceLifecycle;
+  legalReview?: VendorSourceLegalReviewInput | null;
 }
 
 export interface NormalizedVendorSourceDraft {
@@ -48,6 +52,8 @@ export interface NormalizedVendorSourceDraft {
   planBand: string[];
   applicability: Json;
   termsReviewStatus: VendorTermsReviewStatus;
+  lifecycle: VendorSourceLifecycle;
+  legalReview: NormalizedVendorSourceLegalReview | null;
 }
 
 export interface LegacyVendorWikiPage {
@@ -79,6 +85,28 @@ export interface VendorSourceLookupInput {
   sourceId?: string;
   app: string;
   sourceUrl: string;
+}
+
+export interface VendorSourceLegalReviewInput {
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+  referenceUrl?: string | null;
+  notes?: string | null;
+}
+
+export interface NormalizedVendorSourceLegalReview {
+  reviewedAt: string;
+  reviewedBy: string | null;
+  referenceUrl: string | null;
+  notes: string | null;
+}
+
+export interface VendorSourceRetirementInput {
+  sourceId: string;
+  retiredBy: string;
+  reason: string;
+  replacementSourceId?: string | null;
+  retiredAt?: string;
 }
 
 export type VendorSourceRow =
@@ -129,6 +157,42 @@ function normalizeSourceUrl(sourceUrl: string): URL {
   return parsed;
 }
 
+function normalizeOptionalHttpsUrl(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  const parsed = normalizeSourceUrl(trimmed);
+  return parsed.toString();
+}
+
+function normalizeLifecycle(
+  lifecycle: VendorSourceLifecycle | undefined,
+): VendorSourceLifecycle {
+  return lifecycle ?? 'active';
+}
+
+function normalizeLegalReview(
+  input: VendorSourceLegalReviewInput | null | undefined,
+): NormalizedVendorSourceLegalReview | null {
+  if (!input) return null;
+
+  const notes = input.notes?.trim() || null;
+  const referenceUrl = normalizeOptionalHttpsUrl(input.referenceUrl);
+  const reviewedBy = input.reviewedBy?.trim() || null;
+  const reviewedAt = input.reviewedAt?.trim() || new Date().toISOString();
+
+  if (!notes && !referenceUrl && !reviewedBy && !input.reviewedAt) {
+    return null;
+  }
+
+  return {
+    reviewedAt,
+    reviewedBy,
+    referenceUrl,
+    notes,
+  };
+}
+
 function isOfficialVendorHost(hostname: string, publisherHostname: string): boolean {
   return hostname === publisherHostname || hostname.endsWith(`.${publisherHostname}`);
 }
@@ -172,7 +236,51 @@ export function normalizeVendorSourceDraft(
     planBand: normalizeBand(input.planBand),
     applicability: input.applicability ?? {},
     termsReviewStatus: input.termsReviewStatus ?? 'pending',
+    lifecycle: normalizeLifecycle(input.lifecycle),
+    legalReview: normalizeLegalReview(input.legalReview),
   };
+}
+
+export function isVendorSourceActive(source: Pick<VendorSourceRow, 'lifecycle' | 'retired_at'>): boolean {
+  return source.lifecycle === 'active' && !source.retired_at;
+}
+
+export function isVendorSourceQueryable(
+  source: Pick<
+    VendorSourceRow,
+    'lifecycle' | 'retired_at' | 'terms_review_status' | 'official_source'
+  >,
+): boolean {
+  return (
+    isVendorSourceActive(source) &&
+    source.terms_review_status === 'approved' &&
+    source.official_source
+  );
+}
+
+export function getVendorSourceSyncBlockReason(
+  source: Pick<
+    VendorSourceRow,
+    'lifecycle' | 'retired_at' | 'terms_review_status' | 'official_source'
+  >,
+): string | null {
+  if (source.lifecycle === 'paused') {
+    return 'Vendor source is paused and cannot be synced';
+  }
+
+  if (source.lifecycle === 'retired' || source.retired_at) {
+    return 'Vendor source is retired and cannot be synced';
+  }
+
+  if (source.terms_review_status !== 'approved') {
+    return `Vendor source must be terms-approved before sync (status: ${source.terms_review_status})`;
+  }
+
+  if (!source.official_source) {
+    return 'Vendor source is not marked as official';
+  }
+
+  return null;
 }
 
 export function buildLegacyVendorSourceBackfill(
@@ -275,6 +383,11 @@ function toInsertRow(
     plan_band: source.planBand,
     applicability: source.applicability,
     terms_review_status: source.termsReviewStatus,
+    lifecycle: source.lifecycle,
+    legal_reviewed_at: source.legalReview?.reviewedAt ?? null,
+    legal_reviewed_by: source.legalReview?.reviewedBy ?? null,
+    legal_review_reference_url: source.legalReview?.referenceUrl ?? null,
+    legal_review_notes: source.legalReview?.notes ?? null,
     updated_at: timestamp,
   };
 }
@@ -291,6 +404,7 @@ export function createVendorSourceRegistryService(
       const row = toInsertRow(normalized, timestamp);
 
       const { data, error } = await (supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from('vendor_doc_sources') as any)
         .upsert(row, { onConflict: 'app,source_url' })
         .select('*')
@@ -312,6 +426,7 @@ export function createVendorSourceRegistryService(
     }: VendorSourceLookupInput): Promise<VendorSourceRow | null> {
       if (sourceId) {
         const { data, error } = await (supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .from('vendor_doc_sources') as any)
           .select('*')
           .eq('id', sourceId)
@@ -335,6 +450,7 @@ export function createVendorSourceRegistryService(
       });
 
       const { data, error } = await (supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from('vendor_doc_sources') as any)
         .select('*')
         .eq('app', normalized.app)
@@ -358,6 +474,7 @@ export function createVendorSourceRegistryService(
       };
 
       const { error } = await (supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from('vendor_doc_sources') as any)
         .update(patch)
         .eq('id', sourceId);
@@ -376,6 +493,7 @@ export function createVendorSourceRegistryService(
       const patch: VendorSourceUpdate = buildVendorSourceSuccessPatch(input);
 
       const { error } = await (supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from('vendor_doc_sources') as any)
         .update(patch)
         .eq('id', sourceId);
@@ -394,6 +512,7 @@ export function createVendorSourceRegistryService(
       const patch: VendorSourceUpdate = buildVendorSourceFailurePatch(input);
 
       const { error } = await (supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from('vendor_doc_sources') as any)
         .update(patch)
         .eq('id', sourceId);
@@ -405,8 +524,44 @@ export function createVendorSourceRegistryService(
       }
     },
 
+    async retireSource(input: VendorSourceRetirementInput): Promise<void> {
+      const reason = input.reason.trim();
+      if (!reason) {
+        throw new Error('Vendor source retirement requires a reason');
+      }
+
+      const retiredAt = input.retiredAt ?? new Date().toISOString();
+      const { error: sourceError } = await (
+        supabase as unknown as {
+          rpc: (
+            fn: 'retire_vendor_source',
+            args: {
+              p_source_id: string;
+              p_retired_by: string;
+              p_reason: string;
+              p_replacement_source_id: string | null;
+              p_retired_at: string;
+            },
+          ) => Promise<{ error: { message: string } | null }>;
+        }
+      ).rpc('retire_vendor_source', {
+        p_source_id: input.sourceId,
+        p_retired_by: input.retiredBy,
+        p_reason: reason,
+        p_replacement_source_id: input.replacementSourceId ?? null,
+        p_retired_at: retiredAt,
+      });
+
+      if (sourceError) {
+        throw new Error(
+          `[vendor-source-registry] Failed to retire source ${input.sourceId}: ${sourceError.message}`
+        );
+      }
+    },
+
     async buildLegacyBackfill(): Promise<VendorSourceBackfillResult> {
       const { data, error } = await (supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from('vendor_wiki_pages') as any)
         .select('id, app, screen, source_url, updated_at');
 

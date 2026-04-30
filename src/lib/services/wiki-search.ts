@@ -6,6 +6,8 @@ import {
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 
+import { filterQueryableVendorSourceRows } from './vendor-source-queryability';
+
 type OrgWikiPageRow = Database['public']['Tables']['org_wiki_pages']['Row'];
 type VendorWikiPageRow = Database['public']['Tables']['vendor_wiki_pages']['Row'];
 
@@ -253,7 +255,8 @@ export async function searchVendorWikiPages(args: {
   const limit = clampLimit(args.limit);
   let query = supabaseAdmin
     .from('vendor_wiki_pages')
-    .select('id, app, screen, content, source_url, updated_at');
+    .select('id, app, screen, content, source_url, updated_at, vendor_source_id')
+    .is('retired_at', null);
 
   if (args.app) {
     query = query.eq('app', normalize(args.app));
@@ -274,7 +277,11 @@ export async function searchVendorWikiPages(args: {
     throw new Error(`Failed to search vendor wiki pages: ${error.message}`);
   }
 
-  return ((data ?? []) as VendorWikiPageRow[])
+  const queryableRows = await filterQueryableVendorSourceRows(
+    (data ?? []) as VendorWikiPageRow[],
+  );
+
+  return queryableRows
     .map((page) =>
       mapVendorPage(page, args.query, {
         app: args.app,
@@ -323,8 +330,9 @@ export async function getVendorWikiPage(args: {
 }): Promise<WikiPageResult | null> {
   const { data, error } = await supabaseAdmin
     .from('vendor_wiki_pages')
-    .select('id, app, screen, content, source_url, updated_at')
+    .select('id, app, screen, content, source_url, updated_at, vendor_source_id')
     .eq('id', args.pageId)
+    .is('retired_at', null)
     .single();
 
   if (error) {
@@ -332,7 +340,9 @@ export async function getVendorWikiPage(args: {
     throw new Error(`Failed to fetch vendor wiki page: ${error.message}`);
   }
 
-  const page = data as VendorWikiPageRow | null;
+  const [page] = await filterQueryableVendorSourceRows(
+    data ? ([data] as VendorWikiPageRow[]) : [],
+  );
   if (!page) return null;
 
   return {

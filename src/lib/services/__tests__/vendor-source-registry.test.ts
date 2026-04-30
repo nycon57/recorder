@@ -1,9 +1,12 @@
-import { describe, expect, test } from '@jest/globals';
+import { describe, expect, jest, test } from '@jest/globals';
 
 import {
   buildLegacyVendorSourceBackfill,
   buildVendorSourceFailurePatch,
   buildVendorSourceSuccessPatch,
+  createVendorSourceRegistryService,
+  getVendorSourceSyncBlockReason,
+  isVendorSourceQueryable,
   normalizeVendorSourceDraft,
 } from '../vendor-source-registry';
 
@@ -33,6 +36,8 @@ describe('vendor-source-registry', () => {
       planBand: ['Marketing Hub', 'Sales Hub'],
       applicability: {},
       termsReviewStatus: 'pending',
+      lifecycle: 'active',
+      legalReview: null,
     });
   });
 
@@ -43,7 +48,7 @@ describe('vendor-source-registry', () => {
         sourceKind: 'documentation',
         sourceUrl: 'https://docs.vercel.com/storage',
         fetchStrategy: 'sanctioned_crawl',
-      } as any)
+      } as unknown as Parameters<typeof normalizeVendorSourceDraft>[0])
     ).toThrow(/publisher hostname/i);
 
     expect(() =>
@@ -104,6 +109,8 @@ describe('vendor-source-registry', () => {
           legacyScreens: ['contacts-list'],
         },
         termsReviewStatus: 'pending',
+        lifecycle: 'active',
+        legalReview: null,
       },
     ]);
 
@@ -138,6 +145,55 @@ describe('vendor-source-registry', () => {
       last_attempt_at: attemptedAt,
       last_error: 'crawler timed out',
       updated_at: succeededAt,
+    });
+  });
+
+  test('source lifecycle gates sync and queryability separately from terms status', () => {
+    const activeApproved = {
+      lifecycle: 'active' as const,
+      retired_at: null,
+      terms_review_status: 'approved' as const,
+      official_source: true,
+    };
+
+    expect(isVendorSourceQueryable(activeApproved)).toBe(true);
+    expect(getVendorSourceSyncBlockReason(activeApproved)).toBeNull();
+
+    expect(
+      getVendorSourceSyncBlockReason({
+        ...activeApproved,
+        lifecycle: 'paused',
+      }),
+    ).toBe('Vendor source is paused and cannot be synced');
+
+    expect(
+      getVendorSourceSyncBlockReason({
+        ...activeApproved,
+        lifecycle: 'retired',
+      }),
+    ).toBe('Vendor source is retired and cannot be synced');
+  });
+
+  test('retireSource delegates source and page retirement to the database RPC', async () => {
+    const rpc = jest.fn(async () => ({ error: null }));
+    const service = createVendorSourceRegistryService({
+      rpc,
+    } as unknown as Parameters<typeof createVendorSourceRegistryService>[0]);
+
+    await service.retireSource({
+      sourceId: '11111111-1111-4111-8111-111111111111',
+      retiredBy: '22222222-2222-4222-8222-222222222222',
+      reason: 'Superseded by official docs root',
+      replacementSourceId: '33333333-3333-4333-8333-333333333333',
+      retiredAt: '2026-04-30T12:00:00.000Z',
+    });
+
+    expect(rpc).toHaveBeenCalledWith('retire_vendor_source', {
+      p_source_id: '11111111-1111-4111-8111-111111111111',
+      p_retired_by: '22222222-2222-4222-8222-222222222222',
+      p_reason: 'Superseded by official docs root',
+      p_replacement_source_id: '33333333-3333-4333-8333-333333333333',
+      p_retired_at: '2026-04-30T12:00:00.000Z',
     });
   });
 });

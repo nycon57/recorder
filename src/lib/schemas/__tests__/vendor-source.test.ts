@@ -17,12 +17,33 @@ describe('vendorIngestInputSchema', () => {
       url: 'https://docs.stripe.com/api',
       maxPages: 100,
       force: true,
+      legalReviewReferenceUrl: '',
     });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.maxPages).toBe(100);
       expect(result.data.force).toBe(true);
+      expect(result.data.legalReviewReferenceUrl).toBeNull();
     }
+  });
+
+  test('normalizes empty legal review URL to null and rejects http references', () => {
+    const emptyResult = vendorIngestInputSchema.safeParse({
+      app: 'stripe',
+      url: 'https://docs.stripe.com/api',
+      legalReviewReferenceUrl: '',
+    });
+    expect(emptyResult.success).toBe(true);
+    if (emptyResult.success) {
+      expect(emptyResult.data.legalReviewReferenceUrl).toBeNull();
+    }
+
+    const httpResult = vendorIngestInputSchema.safeParse({
+      app: 'stripe',
+      url: 'https://docs.stripe.com/api',
+      legalReviewReferenceUrl: 'http://legal.example.com/terms',
+    });
+    expect(httpResult.success).toBe(false);
   });
 
   test('rejects empty app', () => {

@@ -58,6 +58,30 @@ describe('ingest-vendor-docs source code — attribution fields (TRIB-152)', () 
   test('upsertPages call site passes jobId from job.id', () => {
     expect(WORKER_SRC).toContain('jobId: job.id');
   });
+
+  test('worker checks source lifecycle before writing pages', () => {
+    expect(WORKER_SRC).toContain('getVendorSourceSyncBlockReason');
+    expect(WORKER_SRC).toContain('executionBlockReason');
+  });
+
+  test('unchanged pages still refresh provenance and clear retirement fields', () => {
+    const unchangedBlock =
+      WORKER_SRC.match(/source_url: page\.url,[\s\S]*?Failed to refresh unchanged vendor wiki page provenance/)?.[0] ?? '';
+    expect(unchangedBlock).toContain('curated_by');
+    expect(unchangedBlock).toContain('ingest_job_id');
+    expect(unchangedBlock).toContain('last_seen_at');
+    expect(unchangedBlock).toContain('retired_at: null');
+  });
+
+  test('complete source sync retires previously seen pages that disappear', () => {
+    expect(WORKER_SRC).toContain(
+      'Missing from latest complete vendor source sync',
+    );
+    expect(WORKER_SRC).toContain("status: 'retired'");
+    expect(WORKER_SRC).toContain('seenSourceUrls');
+    expect(WORKER_SRC).toContain('crawlComplete: crawlResult.complete');
+    expect(WORKER_SRC).toContain('options?.vendorSourceId && options.crawlComplete');
+  });
 });
 
 // ---- Integration mock tests ------------------------------------------------
@@ -79,6 +103,8 @@ let registrySource = {
   official_source: true,
   fetch_strategy: 'sanctioned_crawl',
   terms_review_status: 'approved',
+  lifecycle: 'active',
+  retired_at: null,
   content_hash: null,
 };
 let shouldFailCorpusSync = false;
@@ -86,13 +112,14 @@ let shouldFailCorpusSync = false;
 jest.mock('@/lib/supabase/admin', () => ({
   createClient: () => ({
     from: (table: string) => ({
-      select: () => ({
-        eq: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({ data: null, error: null }),
-          }),
-        }),
-      }),
+      select: () => {
+        const query = {
+          eq: () => query,
+          is: async () => ({ data: [], error: null }),
+          maybeSingle: async () => ({ data: null, error: null }),
+        };
+        return query;
+      },
       insert: (payload: Record<string, unknown>) => {
         _captured.inserts.push({ ...(payload as object) });
         return {
@@ -136,6 +163,7 @@ jest.mock('@/lib/services/vendor-source-registry', () => ({
         _captured.sourceSuccesses.push(payload);
       }),
   }),
+  getVendorSourceSyncBlockReason: jest.fn(() => null),
   hashVendorSourcePages: jest.fn().mockReturnValue('hash-combined'),
 }));
 
@@ -202,6 +230,8 @@ beforeEach(() => {
     official_source: true,
     fetch_strategy: 'sanctioned_crawl',
     terms_review_status: 'approved',
+    lifecycle: 'active',
+    retired_at: null,
     content_hash: null,
   };
   shouldFailCorpusSync = false;

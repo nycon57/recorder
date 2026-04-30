@@ -5,12 +5,19 @@ import {
   buildVendorSourceSyncDedupeKey,
   isVendorSourceDueForSync,
 } from './vendor-source-sync';
-import type { VendorSourceRow } from './vendor-source-registry';
+import {
+  getVendorSourceSyncBlockReason,
+  type VendorSourceRow,
+} from './vendor-source-registry';
 
-type VendorSourcePageCountRow =
-  Database['public']['Views']['vendor_corpus_page_counts']['Row'];
-type LegacyVendorSourcePageCountRow =
-  Database['public']['Views']['vendor_wiki_page_counts']['Row'];
+interface VendorSourcePageCountRow {
+  vendor_source_id: string | null;
+  page_count: number;
+}
+interface LegacyVendorSourcePageCountRow {
+  vendor_source_id: string | null;
+  page_count: number;
+}
 type VendorSourceJobRow = Pick<
   Database['public']['Tables']['jobs']['Row'],
   'status' | 'dedupe_key'
@@ -19,6 +26,7 @@ type VendorSourceJobRow = Pick<
 export type VendorSourceOpsStatus =
   | 'healthy'
   | 'syncing'
+  | 'blocked'
   | 'stale'
   | 'failing'
   | 'never_synced';
@@ -40,11 +48,21 @@ export interface VendorSourceOpsItem {
   planBand: string[];
   applicability: Json;
   termsReviewStatus: VendorSourceRow['terms_review_status'];
+  lifecycle: VendorSourceRow['lifecycle'];
+  legalReviewedAt: string | null;
+  legalReviewedBy: string | null;
+  legalReviewReferenceUrl: string | null;
+  legalReviewNotes: string | null;
+  retiredAt: string | null;
+  retiredBy: string | null;
+  retirementReason: string | null;
+  replacementSourceId: string | null;
   contentHash: string | null;
   corpusPageCount: number;
   legacyPageCount: number;
   activeJobStatus: 'pending' | 'processing' | null;
   isDueForSync: boolean;
+  syncBlockReason: string | null;
 }
 
 export interface VendorSourceOpsSummary {
@@ -52,10 +70,13 @@ export interface VendorSourceOpsSummary {
   appsCovered: number;
   healthySources: number;
   syncingSources: number;
+  blockedSources: number;
   staleSources: number;
   failingSources: number;
   neverSyncedSources: number;
   restrictedSources: number;
+  pausedSources: number;
+  retiredSources: number;
 }
 
 export interface VendorSourceOpsSnapshot {
@@ -88,12 +109,14 @@ function getStatusRank(status: VendorSourceOpsStatus): number {
       return 0;
     case 'stale':
       return 1;
-    case 'never_synced':
+    case 'blocked':
       return 2;
-    case 'syncing':
+    case 'never_synced':
       return 3;
-    case 'healthy':
+    case 'syncing':
       return 4;
+    case 'healthy':
+      return 5;
     default:
       return 5;
   }
@@ -142,10 +165,13 @@ export function buildVendorSourceOpsSnapshot({
         activeJobsByDedupeKey,
       );
       const isDueForSync = isVendorSourceDueForSync(source, now);
+      const syncBlockReason = getVendorSourceSyncBlockReason(source);
 
       let status: VendorSourceOpsStatus;
       if (source.last_error) {
         status = 'failing';
+      } else if (syncBlockReason) {
+        status = 'blocked';
       } else if (!source.last_success_at) {
         status = 'never_synced';
       } else if (activeJobStatus) {
@@ -173,11 +199,21 @@ export function buildVendorSourceOpsSnapshot({
         planBand: source.plan_band,
         applicability: source.applicability,
         termsReviewStatus: source.terms_review_status,
+        lifecycle: source.lifecycle,
+        legalReviewedAt: source.legal_reviewed_at,
+        legalReviewedBy: source.legal_reviewed_by,
+        legalReviewReferenceUrl: source.legal_review_reference_url,
+        legalReviewNotes: source.legal_review_notes,
+        retiredAt: source.retired_at,
+        retiredBy: source.retired_by,
+        retirementReason: source.retirement_reason,
+        replacementSourceId: source.replacement_source_id,
         contentHash: source.content_hash,
         corpusPageCount: corpusPagesBySourceId.get(source.id) ?? 0,
         legacyPageCount: legacyPagesBySourceId.get(source.id) ?? 0,
         activeJobStatus,
         isDueForSync,
+        syncBlockReason,
       };
     })
     .sort((left, right) => {
@@ -201,11 +237,14 @@ export function buildVendorSourceOpsSnapshot({
       syncingSources: items.filter((item) => item.status === 'syncing').length,
       staleSources: items.filter((item) => item.status === 'stale').length,
       failingSources: items.filter((item) => item.status === 'failing').length,
+      blockedSources: items.filter((item) => item.status === 'blocked').length,
       neverSyncedSources: items.filter((item) => item.status === 'never_synced')
         .length,
       restrictedSources: items.filter(
         (item) => item.termsReviewStatus === 'restricted',
       ).length,
+      pausedSources: items.filter((item) => item.lifecycle === 'paused').length,
+      retiredSources: items.filter((item) => item.lifecycle === 'retired').length,
     },
     sources: items,
   };

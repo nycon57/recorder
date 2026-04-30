@@ -5,6 +5,8 @@ import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback
 import type { Database } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 
+import { filterQueryableVendorSourceRows } from './vendor-source-queryability';
+
 const logger = createLogger({ service: 'vendor-doc-corpus' });
 
 const DEFAULT_MATCH_LIMIT = 3;
@@ -46,7 +48,21 @@ const STOP_WORDS = new Set([
 ]);
 
 type VendorWikiPage = Database['public']['Tables']['vendor_wiki_pages']['Row'];
-type VendorCorpusPageRow = Database['public']['Tables']['vendor_corpus_pages']['Row'];
+interface VendorCorpusPageRow {
+  id: string;
+  app: string;
+  screen: string | null;
+  title: string;
+  normalized_content: string;
+  content_excerpt: string;
+  source_url: string | null;
+  vendor_page_id: string | null;
+  vendor_source_id: string | null;
+  content_hash: string;
+  embedding: number[] | null;
+  created_at: string;
+  updated_at: string;
+}
 
 interface VendorDocCorpusDeps {
   supabase?: Pick<typeof supabaseAdmin, 'from'>;
@@ -205,20 +221,17 @@ export async function syncVendorCorpusFromLegacyPages(args: {
     .select(
       'id, app, screen, content, source_url, content_hash, vendor_source_id, created_at, updated_at',
     )
-    .eq('app', app);
+    .eq('app', app)
+    .is('retired_at', null);
 
   if (legacyError) {
     throw new Error(`Failed to load legacy vendor pages for ${app}: ${legacyError.message}`);
   }
 
-  const legacyPages = (legacyData as VendorWikiPage[] | null) ?? [];
-  if (legacyPages.length === 0) {
-    return {
-      inserted: 0,
-      updated: 0,
-      skipped: 0,
-    };
-  }
+  const legacyPages = await filterQueryableVendorSourceRows(
+    (legacyData as VendorWikiPage[] | null) ?? [],
+    supabase,
+  );
 
   const { data: existingData, error: existingError } = await supabase
     .from('vendor_corpus_pages')
@@ -241,6 +254,35 @@ export async function syncVendorCorpusFromLegacyPages(args: {
       .filter((row) => row.vendor_page_id != null)
       .map((row) => [row.vendor_page_id as string, row]),
   );
+  const activeVendorPageIds = new Set(legacyPages.map((page) => page.id));
+  const staleCorpusIds = existingRows
+    .filter(
+      (row) =>
+        row.vendor_page_id != null && !activeVendorPageIds.has(row.vendor_page_id),
+    )
+    .map((row) => row.id);
+
+  if (staleCorpusIds.length > 0) {
+    const { error: deleteError } = await (supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .from('vendor_corpus_pages') as any)
+      .delete()
+      .in('id', staleCorpusIds);
+
+    if (deleteError) {
+      throw new Error(
+        `Failed to delete retired vendor corpus pages for ${app}: ${deleteError.message}`,
+      );
+    }
+  }
+
+  if (legacyPages.length === 0) {
+    return {
+      inserted: 0,
+      updated: 0,
+      skipped: 0,
+    };
+  }
 
   const rowsToUpsert: Array<Record<string, unknown>> = [];
   let inserted = 0;
@@ -304,6 +346,7 @@ export async function syncVendorCorpusFromLegacyPages(args: {
 
   if (rowsToUpsert.length > 0) {
     const { error: upsertError } = await (supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .from('vendor_corpus_pages') as any)
       .upsert(rowsToUpsert, {
         onConflict: 'vendor_page_id',
@@ -362,7 +405,10 @@ export async function resolveVendorCorpusPages(args: {
     throw new Error(`Failed to load vendor corpus pages for ${app}: ${error.message}`);
   }
 
-  const rows = (data as VendorCorpusPageRow[] | null) ?? [];
+  const rows = await filterQueryableVendorSourceRows(
+    (data as VendorCorpusPageRow[] | null) ?? [],
+    supabase,
+  );
   if (rows.length === 0) {
     return [];
   }

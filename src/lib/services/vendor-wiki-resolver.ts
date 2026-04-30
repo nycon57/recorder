@@ -9,6 +9,8 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
 
+import { filterQueryableVendorSourceRows } from './vendor-source-queryability';
+
 export type VendorWikiPage =
   Database['public']['Tables']['vendor_wiki_pages']['Row'];
 
@@ -28,6 +30,7 @@ export async function resolveVendorWikiPage({
     .select('*')
     .eq('app', app.toLowerCase())
     .eq('screen', screen.toLowerCase())
+    .is('retired_at', null)
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -37,23 +40,26 @@ export async function resolveVendorWikiPage({
     return null;
   }
 
-  return data ?? null;
+  const [page] = await filterQueryableVendorSourceRows(data ? [data] : []);
+  return page ?? null;
 }
 
 /**
  * Count all vendor wiki pages currently loaded.
  */
 export async function countVendorWikiPages(): Promise<number> {
-  const { count, error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('vendor_wiki_pages')
-    .select('id', { count: 'exact', head: true });
+    .select('id, vendor_source_id')
+    .is('retired_at', null);
 
   if (error) {
     console.error('[vendor-wiki-resolver] countVendorWikiPages error:', error);
     return 0;
   }
 
-  return count ?? 0;
+  const pages = await filterQueryableVendorSourceRows(data ?? []);
+  return pages.length;
 }
 
 /**
@@ -62,7 +68,11 @@ export async function countVendorWikiPages(): Promise<number> {
 export async function listVendorApps(): Promise<string[]> {
   const { data, error } = await supabaseAdmin
     .from('vendor_wiki_pages')
-    .select('app') as { data: Array<{ app: string }> | null; error: unknown };
+    .select('app, vendor_source_id')
+    .is('retired_at', null) as {
+    data: Array<{ app: string; vendor_source_id: string | null }> | null;
+    error: unknown;
+  };
 
   if (error) {
     console.error('[vendor-wiki-resolver] listVendorApps error:', error);
@@ -70,6 +80,7 @@ export async function listVendorApps(): Promise<string[]> {
   }
 
   // Deduplicate in application code (Supabase JS client doesn't expose DISTINCT)
-  const apps = Array.from(new Set((data ?? []).map((row) => row.app)));
+  const queryableRows = await filterQueryableVendorSourceRows(data ?? []);
+  const apps = Array.from(new Set(queryableRows.map((row) => row.app)));
   return apps.sort();
 }

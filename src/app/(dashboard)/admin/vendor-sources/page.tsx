@@ -45,6 +45,12 @@ function getStatusBadge(status: VendorSourceOpsStatus) {
           Stale
         </Badge>
       );
+    case 'blocked':
+      return (
+        <Badge variant="outline" className="border-orange-500/40 text-orange-700">
+          Blocked
+        </Badge>
+      );
     case 'failing':
       return <Badge variant="destructive">Failing</Badge>;
     case 'never_synced':
@@ -56,6 +62,22 @@ function getStatusBadge(status: VendorSourceOpsStatus) {
     default:
       return <Badge variant="outline">{status}</Badge>;
   }
+}
+
+function getLifecycleBadge(source: VendorSourceOpsItem) {
+  if (source.lifecycle === 'retired') {
+    return <Badge variant="destructive">Retired</Badge>;
+  }
+
+  if (source.lifecycle === 'paused') {
+    return (
+      <Badge variant="outline" className="border-amber-500/40 text-amber-700">
+        Paused
+      </Badge>
+    );
+  }
+
+  return <Badge variant="secondary">Active</Badge>;
 }
 
 function renderBand(values: string[], fallback: string) {
@@ -80,6 +102,7 @@ function SourceCard({ source, onResync }: { source: VendorSourceOpsItem; onResyn
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <CardTitle className="text-base">{source.app}</CardTitle>
+              {getLifecycleBadge(source)}
               {getStatusBadge(source.status)}
               {source.officialSource ? (
                 <Badge variant="outline">Official</Badge>
@@ -154,18 +177,43 @@ function SourceCard({ source, onResync }: { source: VendorSourceOpsItem; onResyn
 
           <div className="space-y-1">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Failure state
+              Legal provenance
             </p>
-            {source.lastError ? (
-              <p className="text-sm text-destructive">{source.lastError}</p>
+            <p className="text-sm">
+              Reviewed: {formatTimestamp(source.legalReviewedAt)}
+            </p>
+            {source.legalReviewReferenceUrl ? (
+              <Link
+                href={source.legalReviewReferenceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-primary hover:underline"
+              >
+                Review reference
+              </Link>
             ) : (
-              <p className="text-sm text-muted-foreground">No active error</p>
+              <p className="text-xs text-muted-foreground">No reference URL</p>
             )}
             <p className="text-xs text-muted-foreground">
               Hash: {source.contentHash ?? 'Unavailable'}
             </p>
           </div>
         </div>
+
+        {source.lifecycle === 'retired' ? (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Retired {formatTimestamp(source.retiredAt)}:{' '}
+              {source.retirementReason ?? 'No reason recorded'}
+            </AlertDescription>
+          </Alert>
+        ) : source.lastError ? (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{source.lastError}</AlertDescription>
+          </Alert>
+        ) : null}
 
         {hasApplicabilityMetadata ? (
           <div className="space-y-2 rounded-md border bg-muted/30 p-3">
@@ -182,6 +230,8 @@ function SourceCard({ source, onResync }: { source: VendorSourceOpsItem; onResyn
           sourceId={source.id}
           app={source.app}
           activeJobStatus={source.activeJobStatus}
+          syncBlockReason={source.syncBlockReason}
+          lifecycle={source.lifecycle}
           onResyncSuccess={onResync}
         />
       </CardContent>
@@ -302,19 +352,21 @@ export default function AdminVendorSourcesPage() {
             {snapshot.summary.failingSources} failing, {snapshot.summary.staleSources}{' '}
             stale, and {snapshot.summary.neverSyncedSources} never-synced vendor
             source{snapshot.summary.totalSources === 1 ? '' : 's'} currently need
-            operator attention.
+            operator attention. {snapshot.summary.pausedSources} paused and{' '}
+            {snapshot.summary.retiredSources} retired source
+            {snapshot.summary.retiredSources === 1 ? '' : 's'} are excluded from sync.
           </AlertDescription>
         </Alert>
       ) : (
         <Alert>
           <CheckCircle2 className="h-4 w-4" />
           <AlertDescription>
-            All shared vendor sources are currently healthy or actively syncing.
+            All active shared vendor sources are currently healthy or actively syncing.
           </AlertDescription>
         </Alert>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Sources</CardTitle>
@@ -370,6 +422,18 @@ export default function AdminVendorSourcesPage() {
               {snapshot.summary.restrictedSources}
             </div>
             <p className="text-xs text-muted-foreground">Terms review restricted</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Lifecycle Holds</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">
+              {snapshot.summary.pausedSources + snapshot.summary.retiredSources}
+            </div>
+            <p className="text-xs text-muted-foreground">Paused or retired</p>
           </CardContent>
         </Card>
       </div>

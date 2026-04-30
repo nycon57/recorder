@@ -17,6 +17,7 @@ import {
   FormMessage,
 } from '@/app/components/ui/form';
 import { Input } from '@/app/components/ui/input';
+import { Textarea } from '@/app/components/ui/textarea';
 import { vendorIngestInputSchema, type VendorIngestInput } from '@/lib/schemas/vendor-source';
 
 /** Suggested tier-1 apps shown below the app input as quick-fill chips. */
@@ -47,6 +48,8 @@ export function NewIngestForm({ onSuccess, defaultApp }: NewIngestFormProps) {
       url: '',
       maxPages: undefined,
       force: false,
+      legalReviewReferenceUrl: '',
+      legalReviewNotes: '',
     },
   });
 
@@ -209,6 +212,48 @@ export function NewIngestForm({ onSuccess, defaultApp }: NewIngestFormProps) {
               <FormDescription>
                 1–500. Leave blank to use the per-app default from sync config.
               </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="legalReviewReferenceUrl"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Legal reference URL</FormLabel>
+              <FormControl>
+                <Input
+                  type="url"
+                  placeholder="https://example.com/terms"
+                  autoComplete="off"
+                  {...field}
+                  value={field.value ?? ''}
+                />
+              </FormControl>
+              <FormDescription>
+                Evidence URL for the terms or legal review.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="legalReviewNotes"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Legal notes</FormLabel>
+              <FormControl>
+                <Textarea
+                  rows={3}
+                  placeholder="Internal review notes"
+                  {...field}
+                  value={field.value ?? ''}
+                />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
