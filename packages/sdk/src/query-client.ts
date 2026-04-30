@@ -55,7 +55,7 @@ export interface QueryCallbacks {
 export interface QueryClientOptions {
   apiKey: string;
   apiUrl: string;
-  customerOrgId?: string;
+  customerOrgId: string;
 }
 
 // ─── SDK Init Response ──────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ export interface SdkInitResponse {
 export class QueryClient {
   private apiKey: string;
   private apiUrl: string;
-  private customerOrgId?: string;
+  private customerOrgId: string;
   private abortController: AbortController | null = null;
 
   constructor(options: QueryClientOptions) {
@@ -98,9 +98,7 @@ export class QueryClient {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
-        ...(this.customerOrgId
-          ? { 'X-Tribora-Customer-Org-Id': this.customerOrgId }
-          : {}),
+        'X-Tribora-Customer-Org-Id': this.customerOrgId,
       },
     });
 
@@ -129,7 +127,7 @@ export class QueryClient {
 
     const body = JSON.stringify({
       question,
-      ...(this.customerOrgId ? { customerOrgId: this.customerOrgId } : {}),
+      customerOrgId: this.customerOrgId,
       context: {
         ...context,
         appSignature: `${context.app}:${context.screen}`,

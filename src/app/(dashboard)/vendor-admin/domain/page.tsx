@@ -429,6 +429,7 @@ export default function DomainPage() {
 <script>
   const tribora = new Tribora({
     apiKey: 'YOUR_API_KEY',
+    customerOrgId: 'CUSTOMER_ORG_ID',
     apiUrl: 'https://${status.domain}'
   });
   tribora.init();
@@ -437,7 +438,7 @@ export default function DomainPage() {
                 <button
                   onClick={() =>
                     copyToClipboard(
-                      `<script src="https://${status.domain}/api/sdk/bundle"></script>\n<script>\n  const tribora = new Tribora({\n    apiKey: 'YOUR_API_KEY',\n    apiUrl: 'https://${status.domain}'\n  });\n  tribora.init();\n</script>`,
+                      `<script src="https://${status.domain}/api/sdk/bundle"></script>\n<script>\n  const tribora = new Tribora({\n    apiKey: 'YOUR_API_KEY',\n    customerOrgId: 'CUSTOMER_ORG_ID',\n    apiUrl: 'https://${status.domain}'\n  });\n  tribora.init();\n</script>`,
                       'Snippet',
                     )
                   }
@@ -448,8 +449,9 @@ export default function DomainPage() {
                 </button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Replace <code>YOUR_API_KEY</code> with your vendor API key from
-                the{' '}
+                Replace <code>YOUR_API_KEY</code> with your vendor API key and{' '}
+                <code>CUSTOMER_ORG_ID</code> with the linked customer
+                organization ID from the{' '}
                 <a
                   href="/vendor-admin/api-keys"
                   className="underline hover:text-foreground"

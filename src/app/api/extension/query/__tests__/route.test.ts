@@ -19,6 +19,8 @@ const mockRequireApiKeyOrSession =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const resolveCustomerOrgForVendor =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockCreateAdminClient = jest.fn<() => unknown>();
+const afterCallbacks: Array<() => void | Promise<void>> = [];
 
 jest.mock('@google/genai', () => ({
   GoogleGenAI: jest.fn().mockImplementation(() => ({
@@ -30,7 +32,9 @@ jest.mock('@google/genai', () => ({
 
 jest.mock('next/server', () => ({
   NextRequest: class {},
-  after: jest.fn(),
+  after: (callback: () => void | Promise<void>) => {
+    afterCallbacks.push(callback);
+  },
 }));
 
 jest.mock('@/lib/utils/api-key-auth', () => ({
@@ -71,7 +75,7 @@ jest.mock('@/lib/services/knowledge-telemetry', () => ({
 }));
 
 jest.mock('@/lib/supabase/admin', () => ({
-  createClient: jest.fn(),
+  createClient: mockCreateAdminClient,
 }));
 
 jest.mock('@/lib/utils/cors', () => ({
@@ -109,9 +113,53 @@ function buildRequest(body: unknown): NextRequest {
   } as unknown as NextRequest;
 }
 
+async function runAfterCallbacks() {
+  for (const callback of afterCallbacks) {
+    await callback();
+  }
+}
+
+function createSupabaseAnalyticsMock() {
+  const userWikiInsert = jest.fn();
+  const vendorUsageInsert = jest.fn();
+  const productEventInsert = jest.fn();
+
+  return {
+    userWikiInsert,
+    vendorUsageInsert,
+    productEventInsert,
+    client: {
+      from: jest.fn((table: string) => {
+        if (table === 'user_wiki_interactions') {
+          const query = {
+            select: jest.fn(() => query),
+            eq: jest.fn(() => query),
+            in: jest.fn(() => query),
+            gte: jest.fn(async () => ({ data: [], error: null })),
+            insert: userWikiInsert,
+          };
+          return query;
+        }
+
+        if (table === 'vendor_usage_events') {
+          return { insert: vendorUsageInsert };
+        }
+
+        if (table === 'extension_product_events') {
+          return { insert: productEventInsert };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    },
+  };
+}
+
 describe('POST /api/extension/query', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    afterCallbacks.length = 0;
+    mockCreateAdminClient.mockReset();
     resolveCompiledMemoryAnswerContext.mockResolvedValue({
       context: 'compiled memory context',
       sources: [
@@ -235,6 +283,56 @@ describe('POST /api/extension/query', () => {
       }),
     );
     expect(await response.text()).toContain('"type":"element_ref"');
+  });
+
+  it('writes API-key usage analytics with vendor and customer org IDs', async () => {
+    mockRequireApiKeyOrSession.mockResolvedValueOnce({
+      orgId: 'vendor_org',
+      authMethod: 'api_key',
+      keyId: 'key_1',
+      configId: 'config_1',
+      scopes: ['query'],
+    });
+    const analytics = createSupabaseAnalyticsMock();
+    mockCreateAdminClient.mockReturnValue(analytics.client);
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      buildRequest({
+        question: 'What should I do on this account page?',
+        customerOrgId: 'customer_org',
+        context: {
+          url: 'https://example.com/accounts/123',
+          appSignature: 'salesforce:account-detail',
+          interactiveElements: [],
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await response.text();
+    await runAfterCallbacks();
+
+    expect(analytics.userWikiInsert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        user_id: 'key_1',
+        org_id: 'customer_org',
+        wiki_page_id: 'page-1',
+        interaction_type: 'taught',
+      }),
+    ]);
+    expect(analytics.vendorUsageInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vendor_org_id: 'vendor_org',
+        customer_org_id: 'customer_org',
+        api_key_id: 'key_1',
+        event_type: 'query',
+        app: 'salesforce',
+        screen: 'account-detail',
+        had_org_knowledge: true,
+        had_vendor_knowledge: false,
+      }),
+    );
   });
 
   it('rejects API-key SDK queries without a customer org target', async () => {

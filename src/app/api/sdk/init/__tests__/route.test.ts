@@ -105,4 +105,21 @@ describe('GET /api/sdk/init', () => {
     });
     expect(fromMock).not.toHaveBeenCalled();
   });
+
+  it('rejects SDK init without a customer org selector', async () => {
+    const { GET } = await import('../route');
+
+    const response = await GET(
+      buildRequest({
+        authorization: 'Bearer sk_live_test',
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Customer organization required',
+    });
+    expect(resolveCustomerOrgForVendor).not.toHaveBeenCalled();
+    expect(fromMock).not.toHaveBeenCalled();
+  });
 });
