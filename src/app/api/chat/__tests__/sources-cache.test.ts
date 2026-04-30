@@ -156,7 +156,8 @@ describe('GET /api/chat sources cache', () => {
       new Request('http://localhost/api/chat?sourcesKey=source-key'),
     );
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ sources: [] });
   });
 
   it('expires source keys', async () => {
@@ -178,6 +179,7 @@ describe('GET /api/chat sources cache', () => {
       new Request('http://localhost/api/chat?sourcesKey=source-key'),
     );
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ sources: [] });
   });
 });

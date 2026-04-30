@@ -170,14 +170,14 @@ export async function GET(req: Request) {
 
     if (!cacheEntry) {
       return new Response(JSON.stringify({ sources: [] }), {
-        status: 404,
+        status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
     if (cacheEntry.orgId !== orgId || cacheEntry.userId !== userId) {
-      return new Response(JSON.stringify({ error: 'Sources not found' }), {
-        status: 404,
+      return new Response(JSON.stringify({ sources: [] }), {
+        status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
