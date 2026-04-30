@@ -146,6 +146,11 @@ begin
 end;
 $$;
 
+revoke all on function public.retire_vendor_source(uuid, uuid, text, uuid, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.retire_vendor_source(uuid, uuid, text, uuid, timestamptz)
+  to service_role;
+
 create index if not exists vendor_doc_sources_active_idx
   on public.vendor_doc_sources (app, source_url)
   where lifecycle = 'active' and retired_at is null;

@@ -5,6 +5,8 @@ import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback
 import type { Database } from '@/lib/types/database';
 import { createLogger } from '@/lib/utils/logger';
 
+import { filterQueryableVendorSourceRows } from './vendor-source-queryability';
+
 const logger = createLogger({ service: 'vendor-doc-corpus' });
 
 const DEFAULT_MATCH_LIMIT = 3;
@@ -226,7 +228,10 @@ export async function syncVendorCorpusFromLegacyPages(args: {
     throw new Error(`Failed to load legacy vendor pages for ${app}: ${legacyError.message}`);
   }
 
-  const legacyPages = (legacyData as VendorWikiPage[] | null) ?? [];
+  const legacyPages = await filterQueryableVendorSourceRows(
+    (legacyData as VendorWikiPage[] | null) ?? [],
+    supabase,
+  );
 
   const { data: existingData, error: existingError } = await supabase
     .from('vendor_corpus_pages')
@@ -400,7 +405,10 @@ export async function resolveVendorCorpusPages(args: {
     throw new Error(`Failed to load vendor corpus pages for ${app}: ${error.message}`);
   }
 
-  const rows = (data as VendorCorpusPageRow[] | null) ?? [];
+  const rows = await filterQueryableVendorSourceRows(
+    (data as VendorCorpusPageRow[] | null) ?? [],
+    supabase,
+  );
   if (rows.length === 0) {
     return [];
   }

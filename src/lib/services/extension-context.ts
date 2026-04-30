@@ -2,6 +2,7 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
 import { resolveOrgWikiPagesByVector } from '@/lib/services/org-wiki-embedding';
 import { resolveVendorCorpusPages } from '@/lib/services/vendor-doc-corpus';
+import { filterQueryableVendorSourceRows } from '@/lib/services/vendor-source-queryability';
 import type {
   KnowledgeAvailability,
   KnowledgeMatch,
@@ -15,6 +16,7 @@ interface VendorRow {
   app: string;
   screen: string;
   element_selectors: unknown;
+  vendor_source_id: string | null;
 }
 
 interface OrgRow {
@@ -550,7 +552,7 @@ async function fetchVendorMatchCandidates(
 
   const { data, error } = (await supabase
     .from('vendor_wiki_pages')
-    .select('id, app, screen, element_selectors')
+    .select('id, app, screen, element_selectors, vendor_source_id')
     .in('app', appCandidates)
     .is('retired_at', null)
     .order('updated_at', { ascending: false })) as {
@@ -563,15 +565,17 @@ async function fetchVendorMatchCandidates(
     return [];
   }
 
+  const queryableRows = await filterQueryableVendorSourceRows(data ?? [], supabase);
+
   const vectorScores = await resolveVendorPageVectorScores({
     app: exactApp,
     screen,
     url,
-    pageIds: (data ?? []).map((row) => row.id),
+    pageIds: queryableRows.map((row) => row.id),
     vectorContext,
   });
   const rows = rankKnowledgeRowsByPageRelevance(
-    applyVectorScores(data ?? [], vectorScores),
+    applyVectorScores(queryableRows, vectorScores),
     {
       screen,
       url,

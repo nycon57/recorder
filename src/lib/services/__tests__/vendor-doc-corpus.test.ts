@@ -132,6 +132,24 @@ describe('vendor-doc-corpus', () => {
           };
         }
 
+        if (table === 'vendor_doc_sources') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({
+              data: [
+                {
+                  id: 'source-1',
+                  lifecycle: 'active',
+                  retired_at: null,
+                  terms_review_status: 'approved',
+                  official_source: true,
+                },
+              ],
+              error: null,
+            })),
+          };
+        }
+
         throw new Error(`Unexpected table ${table}`);
       }),
     };
@@ -210,6 +228,16 @@ describe('vendor-doc-corpus', () => {
             })),
             delete: deleteFromCorpus,
             in: deleteIds,
+          };
+        }
+
+        if (table === 'vendor_doc_sources') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({
+              data: [],
+              error: null,
+            })),
           };
         }
 
@@ -347,6 +375,24 @@ describe('vendor-doc-corpus', () => {
           };
         }
 
+        if (table === 'vendor_doc_sources') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({
+              data: [
+                {
+                  id: 'source-1',
+                  lifecycle: 'active',
+                  retired_at: null,
+                  terms_review_status: 'approved',
+                  official_source: true,
+                },
+              ],
+              error: null,
+            })),
+          };
+        }
+
         throw new Error(`Unexpected table ${table}`);
       }),
     };
@@ -378,5 +424,86 @@ describe('vendor-doc-corpus', () => {
       }),
     );
     expect(results[0]!.confidence).toBeGreaterThan(results[1]!.confidence);
+  });
+
+  it('excludes corpus rows tied to non-queryable vendor sources', async () => {
+    const supabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'vendor_wiki_pages') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            is: jest.fn(async () => ({
+              data: [],
+              error: null,
+            })),
+          };
+        }
+
+        if (table === 'vendor_corpus_pages') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn(async () => ({
+              data: [
+                {
+                  id: 'corpus-restricted',
+                  app: 'hubspot',
+                  screen: 'deals',
+                  title: 'Deals',
+                  normalized_content: 'Restricted source guidance.',
+                  content_excerpt: 'Restricted source guidance.',
+                  source_url: 'https://docs.example.com/deals',
+                  vendor_page_id: 'vendor-page-1',
+                  vendor_source_id: 'source-1',
+                  content_hash: 'hash-deals',
+                  embedding: [0.9, 0.1],
+                  created_at: '2026-04-18T00:00:00.000Z',
+                  updated_at: '2026-04-19T00:00:00.000Z',
+                },
+              ],
+              error: null,
+            })),
+            delete: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({ error: null })),
+          };
+        }
+
+        if (table === 'vendor_doc_sources') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            in: jest.fn(async () => ({
+              data: [
+                {
+                  id: 'source-1',
+                  lifecycle: 'active',
+                  retired_at: null,
+                  terms_review_status: 'restricted',
+                  official_source: true,
+                },
+              ],
+              error: null,
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    };
+
+    const results = await resolveVendorCorpusPages(
+      {
+        app: 'hubspot',
+        screen: 'deals',
+        question: 'How do deals work?',
+        questionEmbedding: [0.9, 0.1],
+      },
+      {
+        supabase: supabase as unknown as VendorDocCorpusDeps['supabase'],
+        generateEmbedding:
+          jest.fn() as unknown as VendorDocCorpusDeps['generateEmbedding'],
+      },
+    );
+
+    expect(results).toEqual([]);
   });
 });
