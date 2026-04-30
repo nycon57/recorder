@@ -25,7 +25,7 @@ interface ConnectorSettings {
   };
 }
 
-function asObjectJson<T extends Record<string, unknown>>(value: Json | null): T {
+function asObjectJson<T>(value: Json | null): T {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as T)
     : ({} as T);
