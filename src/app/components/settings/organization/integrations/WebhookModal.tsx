@@ -53,6 +53,15 @@ const AVAILABLE_EVENTS = [
   { value: 'api_key.revoked', label: 'API Key Revoked' },
 ];
 
+const generateSecret = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = 'whsec_';
+  for (let i = 0; i < 32; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
 export function WebhookModal({ open, onOpenChange, webhook, onSuccess }: WebhookModalProps) {
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
@@ -67,24 +76,24 @@ export function WebhookModal({ open, onOpenChange, webhook, onSuccess }: Webhook
   const isEditing = !!webhook;
 
   useEffect(() => {
-    if (webhook) {
-      setName(webhook.name);
-      setUrl(webhook.url);
-      setEvents(webhook.events);
-    } else {
-      // Generate a new secret for new webhooks
-      setSecret(generateSecret());
-    }
-  }, [webhook]);
+    let cancelled = false;
 
-  const generateSecret = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = 'whsec_';
-    for (let i = 0; i < 32; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  };
+    queueMicrotask(() => {
+      if (cancelled) return;
+
+      if (webhook) {
+        setName(webhook.name);
+        setUrl(webhook.url);
+        setEvents(webhook.events);
+      } else {
+        setSecret(generateSecret());
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [webhook]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {

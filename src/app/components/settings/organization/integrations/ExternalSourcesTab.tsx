@@ -6,7 +6,6 @@ import {
   FileText,
   CheckCircle2,
   XCircle,
-  Settings,
   ExternalLink,
   FileUp,
   Cloud,
@@ -274,7 +273,7 @@ export function ExternalSourcesTab() {
       <Alert>
         <AlertDescription>
           Connect external data sources to automatically import content and publish enriched documents.
-          All imported content is processed with AI for semantic search and chat features.
+          All imported content is processed with AI for knowledge search and chat features.
         </AlertDescription>
       </Alert>
 

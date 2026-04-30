@@ -11,7 +11,7 @@ import {
   Shield,
   Zap
 } from 'lucide-react';
-import { format, addDays, addMonths } from 'date-fns';
+import { addDays, addMonths } from 'date-fns';
 
 import {
   Dialog,
@@ -150,7 +150,7 @@ export function GenerateApiKeyModal({
           title: 'Copied',
           description: 'API key copied to clipboard',
         });
-      } catch (err) {
+      } catch {
         toast({
           title: 'Error',
           description: 'Failed to copy to clipboard',
@@ -185,7 +185,7 @@ export function GenerateApiKeyModal({
             <DialogHeader>
               <DialogTitle>Generate API Key</DialogTitle>
               <DialogDescription>
-                Create a new API key for programmatic access to your organization's data
+                Create a new API key for programmatic access to your organization&apos;s data
               </DialogDescription>
             </DialogHeader>
 
@@ -305,7 +305,7 @@ export function GenerateApiKeyModal({
               <Alert>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  Make sure to copy your API key now. You won't be able to see it again!
+                  Make sure to copy your API key now. You won&apos;t be able to see it again!
                 </AlertDescription>
               </Alert>
 

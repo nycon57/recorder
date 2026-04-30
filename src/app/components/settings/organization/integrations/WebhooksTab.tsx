@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Webhook,
   Plus,
   MoreHorizontal,
   Edit,
@@ -16,7 +15,7 @@ import {
   XCircle,
   AlertCircle
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 
 import {
   Table,

@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
 
 import { useToast } from '@/app/components/ui/use-toast';
@@ -41,15 +40,6 @@ const TIMEZONES = [
   { value: 'Australia/Sydney', label: 'Sydney (AEDT)' },
   { value: 'Pacific/Auckland', label: 'Auckland (NZDT)' },
 ];
-
-interface ProfileData {
-  name: string;
-  email: string;
-  title: string | null;
-  bio: string | null;
-  phone: string | null;
-  timezone: string;
-}
 
 export function ProfileForm() {
   const { toast } = useToast();

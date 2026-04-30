@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { X, Shield, Users, Activity } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';

@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Monitor, Smartphone, Tablet, Globe, MapPin, Clock, Loader2, Shield } from 'lucide-react';
-import { useSession } from '@/lib/auth/auth-client';
 
+import { useSession } from '@/lib/auth/auth-client';
 import { useFetchWithAbort } from '@/app/hooks/useFetchWithAbort';
 import { useToast } from '@/app/components/ui/use-toast';
 import { Button } from '@/app/components/ui/button';
@@ -164,7 +164,7 @@ export function SessionsList() {
         <Shield className="mx-auto h-12 w-12 text-muted-foreground" />
         <h3 className="mt-4 text-lg font-medium">No active sessions</h3>
         <p className="mt-2 text-sm text-muted-foreground">
-          You don't have any active sessions at the moment
+          You don&apos;t have any active sessions at the moment
         </p>
       </div>
     );

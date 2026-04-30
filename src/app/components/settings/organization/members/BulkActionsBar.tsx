@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { Users, Trash2, Download, X } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';

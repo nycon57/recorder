@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -67,7 +67,7 @@ export function DepartmentFormModal({
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     setValue,
     reset,
     formState: { errors },
@@ -82,7 +82,7 @@ export function DepartmentFormModal({
   });
 
   // Update slug preview
-  const name = watch('name');
+  const name = useWatch({ control, name: 'name' }) || '';
   const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')

@@ -1,16 +1,16 @@
 'use client';
 
-import React from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
-import { ChevronDown, ChevronRight, User, Monitor, MapPin } from 'lucide-react';
+import { ChevronDown, ChevronRight, Monitor } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
 import { Badge } from '@/app/components/ui/badge';
 import { TableCell, TableRow } from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
 import { Collapsible, CollapsibleContent } from '@/app/components/ui/collapsible';
-
 import type { AuditLog } from '@/app/(dashboard)/settings/organization/security/types';
+
+type JsonObject = Record<string, unknown>;
 
 interface AuditLogRowProps {
   log: AuditLog;
@@ -60,24 +60,26 @@ const parseUserAgent = (userAgent: string | null) => {
 export function AuditLogRow({ log, isExpanded, onToggleExpand }: AuditLogRowProps) {
   const { browser, device, os } = parseUserAgent(log.user_agent);
 
-  const renderDiff = (oldValues: any, newValues: any) => {
+  const renderDiff = (oldValues: unknown, newValues: unknown) => {
     if (!oldValues && !newValues) return null;
 
     try {
       const oldObj = typeof oldValues === 'string' ? JSON.parse(oldValues) : oldValues;
       const newObj = typeof newValues === 'string' ? JSON.parse(newValues) : newValues;
 
-      const changes: Array<{ key: string; old: any; new: any }> = [];
+      const oldRecord = (oldObj && typeof oldObj === 'object' ? oldObj : {}) as JsonObject;
+      const newRecord = (newObj && typeof newObj === 'object' ? newObj : {}) as JsonObject;
+      const changes: Array<{ key: string; old: unknown; new: unknown }> = [];
 
       // Find changed fields
       const allKeys = new Set([
-        ...Object.keys(oldObj || {}),
-        ...Object.keys(newObj || {}),
+        ...Object.keys(oldRecord),
+        ...Object.keys(newRecord),
       ]);
 
       allKeys.forEach((key) => {
-        const oldVal = oldObj?.[key];
-        const newVal = newObj?.[key];
+        const oldVal = oldRecord[key];
+        const newVal = newRecord[key];
 
         if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
           changes.push({ key, old: oldVal, new: newVal });
@@ -110,7 +112,7 @@ export function AuditLogRow({ log, isExpanded, onToggleExpand }: AuditLogRowProp
           </div>
         </div>
       );
-    } catch (error) {
+    } catch {
       return (
         <div className="text-xs text-muted-foreground">
           Unable to parse change details

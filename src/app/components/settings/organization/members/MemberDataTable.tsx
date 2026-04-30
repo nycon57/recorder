@@ -25,8 +25,8 @@ import {
 } from '@/app/components/ui/table';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { Checkbox } from '@/app/components/ui/checkbox';
-
 import type { OrganizationMember } from '@/app/(dashboard)/settings/organization/members/types';
+
 import { MemberRowActions } from './MemberRowActions';
 
 interface MemberDataTableProps {
@@ -262,6 +262,8 @@ export function MemberDataTable({
     },
   ];
 
+  // TanStack Table intentionally returns dynamic helpers; keep this local suppression scoped.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: members,
     columns,

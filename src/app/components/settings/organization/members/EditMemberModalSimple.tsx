@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, Users, Shield } from 'lucide-react';
+import { Loader2, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
@@ -35,7 +35,6 @@ import {
 } from '@/app/components/ui/select';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { updateMemberSchema } from '@/lib/validations/organizations';
-
 import type { OrganizationMember } from '@/app/(dashboard)/settings/organization/members/types';
 
 interface EditMemberModalProps {
@@ -75,7 +74,7 @@ export function EditMemberModal({
   });
 
   // Reset form when member or open state changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (member && open) {
       form.reset({
         role: member.role || 'reader',

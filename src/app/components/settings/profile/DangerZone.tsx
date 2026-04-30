@@ -1,12 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, Trash2, Download, Ban } from 'lucide-react';
-import { useSession, signOut } from '@/lib/auth/auth-client';
 import { useRouter } from 'next/navigation';
+import { AlertTriangle, Trash2, Download, Ban } from 'lucide-react';
 
+import { useSession, signOut } from '@/lib/auth/auth-client';
 import { Button } from '@/app/components/ui/button';
-import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Separator } from '@/app/components/ui/separator';
 import { useToast } from '@/app/components/ui/use-toast';
@@ -33,10 +32,17 @@ export function DangerZone() {
       }
 
       const data = await response.json();
+      const downloadUrl = data.data?.downloadUrl as string | undefined;
+
+      if (downloadUrl) {
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+      }
 
       toast({
-        title: 'Export Started',
-        description: data.data?.message || 'We\'re preparing your data export. You\'ll receive an email when it\'s ready.',
+        title: 'Export Ready',
+        description:
+          data.data?.message ||
+          'Your data export is ready and should start downloading in a new tab.',
       });
     } catch (error) {
       console.error('Error exporting data:', error);
