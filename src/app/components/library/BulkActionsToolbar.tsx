@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Trash2, Tag, Download, Share2, X, FolderInput, RotateCcw } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';

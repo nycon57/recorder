@@ -1,6 +1,5 @@
 'use client';
 
-import * as React from 'react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { ColumnDef } from '@tanstack/react-table';

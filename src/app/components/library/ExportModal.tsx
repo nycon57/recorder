@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import {
   Download,
   FileArchive,
-  FileText,
   FileSpreadsheet,
   Loader2,
   CheckCircle2,
@@ -188,14 +187,15 @@ export default function ExportModal({
       }
 
       throw new Error('Export timed out');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Export error:', err);
+      const message = err instanceof Error ? err.message : 'Failed to export content';
       setStatus('error');
-      setError(err.message || 'Failed to export content');
+      setError(message);
 
       toast({
         title: 'Export failed',
-        description: err.message || 'Failed to export content',
+        description: message,
         variant: 'destructive',
       });
     }

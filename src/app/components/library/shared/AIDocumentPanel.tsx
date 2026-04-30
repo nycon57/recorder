@@ -47,6 +47,10 @@ interface Document {
   model?: string | null;
 }
 
+type MarkdownCodeProps = React.ComponentPropsWithoutRef<'code'> & {
+  inline?: boolean;
+};
+
 interface AIDocumentPanelProps {
   document: Document;
   recordingId: string;
@@ -260,7 +264,7 @@ ${document.html || document.markdown}
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   <ReactMarkdown
                     components={{
-                      code({ inline, className, children, ...props }: any) {
+                      code({ inline, className, children, ...props }: MarkdownCodeProps) {
                         const match = /language-(\w+)/.exec(className || '');
                         const language = match ? match[1] : '';
 

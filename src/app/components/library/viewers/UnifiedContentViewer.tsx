@@ -1,6 +1,5 @@
 'use client';
 
-import * as React from 'react';
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 
@@ -39,7 +38,7 @@ interface Transcript {
   id: string;
   content_id: string;
   text: string;
-  words_json?: any;
+  words_json?: unknown;
   language?: string | null;
   confidence?: number | null;
 }
@@ -75,7 +74,6 @@ export default function UnifiedContentViewer({
   contentType,
   fileType,
   recordingId,
-  videoUrl,
   audioUrl,
   downloadUrl,
   documentUrl,

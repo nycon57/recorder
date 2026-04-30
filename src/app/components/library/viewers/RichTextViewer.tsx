@@ -1,7 +1,5 @@
 'use client';
 
-import * as React from 'react';
-
 import { Card, CardContent } from '@/app/components/ui/card';
 import { cn } from '@/lib/utils';
 

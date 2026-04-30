@@ -12,14 +12,13 @@ import {
   FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
+import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import { Card, CardContent } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { Separator } from '@/app/components/ui/separator';
 
 interface PDFDocumentViewerProps {
   documentUrl: string;
@@ -42,7 +41,7 @@ export default function PDFDocumentViewer({
   const [error, setError] = React.useState<string | null>(null);
   const [rendering, setRendering] = React.useState(false);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  const renderTask = React.useRef<any>(null);
+  const renderTask = React.useRef<RenderTask | null>(null);
 
   // Load PDF.js dynamically
   React.useEffect(() => {
@@ -59,9 +58,9 @@ export default function PDFDocumentViewer({
         setPdfDoc(pdf);
         setPageCount(pdf.numPages);
         setLoading(false);
-      } catch (err: any) {
+      } catch (err) {
         console.error('Failed to load PDF:', err);
-        setError(err.message || 'Failed to load PDF document');
+        setError(err instanceof Error ? err.message : 'Failed to load PDF document');
         setLoading(false);
       }
     };
@@ -91,17 +90,17 @@ export default function PDFDocumentViewer({
         canvas.height = viewport.height;
         canvas.width = viewport.width;
 
-        const renderContext = {
+        const renderContext: Parameters<PDFPageProxy['render']>[0] = {
           canvasContext: context,
           viewport: viewport,
-        } as any;
+        };
 
         renderTask.current = page.render(renderContext);
         await renderTask.current.promise;
         renderTask.current = null;
         setRendering(false);
-      } catch (err: any) {
-        if (err.name !== 'RenderingCancelledException') {
+      } catch (err) {
+        if (!(err instanceof Error) || err.name !== 'RenderingCancelledException') {
           console.error('Failed to render page:', err);
           setRendering(false);
         }

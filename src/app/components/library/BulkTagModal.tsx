@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Tag, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
