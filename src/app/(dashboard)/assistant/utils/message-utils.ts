@@ -6,6 +6,33 @@
 
 import type { ExtendedMessage, MessagePart, SourceCitation } from '../types';
 
+type MessageWithText = ExtendedMessage & {
+  text?: unknown;
+  parts?: unknown;
+  data?: {
+    sources?: unknown;
+  };
+};
+
+function isMessagePart(part: unknown): part is MessagePart {
+  return (
+    typeof part === 'object' &&
+    part !== null &&
+    'type' in part &&
+    typeof (part as { type?: unknown }).type === 'string'
+  );
+}
+
+function isSourceCitation(source: unknown): source is SourceCitation {
+  return (
+    typeof source === 'object' &&
+    source !== null &&
+    typeof (source as { id?: unknown }).id === 'string' &&
+    typeof (source as { title?: unknown }).title === 'string' &&
+    typeof (source as { url?: unknown }).url === 'string'
+  );
+}
+
 /**
  * Extract text content from a message
  */
@@ -27,16 +54,19 @@ export function extractMessageText(message: ExtendedMessage): string {
   }
 
   // 3. Try 'text' field directly - alternative format
-  if ('text' in message && typeof (message as any).text === 'string') {
-    return (message as any).text;
+  const flexibleMessage = message as MessageWithText;
+
+  if (typeof flexibleMessage.text === 'string') {
+    return flexibleMessage.text;
   }
 
   // 4. Try parts array - AI SDK v5 streaming format
   // This is used by useChat() when streaming responses
-  if ('parts' in message && Array.isArray((message as any).parts)) {
-    const text = (message as any).parts
-      .filter((p: any) => p.type === 'text')
-      .map((p: any) => p.text || '')
+  if (Array.isArray(flexibleMessage.parts)) {
+    const text = flexibleMessage.parts
+      .filter(isMessagePart)
+      .filter((p) => p.type === 'text')
+      .map((p) => p.text || '')
       .join('\n\n');
     if (text) return text;
   }
@@ -196,8 +226,10 @@ export function formatSources(
   }
 
   // Check if sources are in message.data (from AI SDK streaming response)
-  if ((message as any).data?.sources && Array.isArray((message as any).data.sources)) {
-    return (message as any).data.sources;
+  const flexibleMessage = message as MessageWithText;
+  const dataSources = flexibleMessage.data?.sources;
+  if (Array.isArray(dataSources)) {
+    return dataSources.filter(isSourceCitation);
   }
 
   // Otherwise, extract from message parts

@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { headers } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
 
@@ -14,7 +14,7 @@ import { RelatedContent } from '@/app/components/content/RelatedContent';
 import { ContentChatWidget } from '@/app/components/content/ContentChatWidget';
 import { OnboardingViewTracker } from '@/app/components/onboarding/OnboardingViewTracker';
 import { fetchKnowledgeStatusForSource } from '@/lib/services/knowledge-status';
-import type { WorkflowStep, Database, Tag } from '@/lib/types/database';
+import type { WorkflowStep, Database, Json, Tag } from '@/lib/types/database';
 import WorkflowViewer from '@/app/components/workflow/WorkflowViewer';
 
 type ContentRow = Database['public']['Tables']['content']['Row'];
@@ -92,11 +92,11 @@ function normalizeDocument(
 
   return {
     id: row.id,
-    content_id: row.content_id,
+    content_id: row.content_id ?? '',
     markdown: row.markdown,
     html: row.html,
     summary: row.summary,
-    version: row.version,
+    version: row.version ?? '1',
     status: row.status,
     model: row.model,
   };
@@ -230,8 +230,12 @@ export default async function LibraryItemDetailPage({
       tag_id,
       tags (
         id,
+        org_id,
         name,
         color,
+        created_by,
+        deleted_at,
+        description,
         created_at,
         updated_at
       )
@@ -242,7 +246,15 @@ export default async function LibraryItemDetailPage({
   const tags =
     itemTags
       ?.map((rt) => rt.tags)
-      .filter((tag): tag is Tag => Boolean(tag)) || [];
+      .filter((tag): tag is TagRow => Boolean(tag))
+      .map((tag): Tag => ({
+        id: tag.id,
+        org_id: tag.org_id,
+        name: tag.name,
+        color: tag.color ?? '#6366f1',
+        created_at: tag.created_at,
+        updated_at: tag.updated_at,
+      })) || [];
 
   // Fetch the most recent non-archived workflow for this content
   const { data: rawWorkflow } = await supabaseAdmin
@@ -261,8 +273,12 @@ export default async function LibraryItemDetailPage({
   let supersededByContentId: string | null = null;
 
   if (rawWorkflow) {
+    const workflowSteps = Array.isArray(rawWorkflow.steps)
+      ? (rawWorkflow.steps as unknown as WorkflowStep[])
+      : [];
+
     const steps = await Promise.all(
-      rawWorkflow.steps.map(async (step: WorkflowStep) => {
+      workflowSteps.map(async (step: WorkflowStep) => {
         if (!step.screenshotPath) return step;
         try {
           const { data } = await supabaseAdmin.storage
@@ -274,7 +290,7 @@ export default async function LibraryItemDetailPage({
         }
       }),
     );
-    workflow = { ...rawWorkflow, steps };
+    workflow = { ...rawWorkflow, steps: steps as unknown as Json };
 
     if (rawWorkflow.superseded_by) {
       const { data: superseding } = await supabaseAdmin
@@ -296,7 +312,7 @@ export default async function LibraryItemDetailPage({
     initialHighlightId: highlight,
   };
 
-  let detailView: React.ReactNode;
+  let detailView: ReactNode;
   switch (item.content_type) {
     case 'recording':
     case 'video':

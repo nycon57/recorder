@@ -9,12 +9,13 @@
 
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { nanoid } from 'nanoid';
+
 import type {
   Conversation,
   ExtendedMessage,
   ConversationContextType,
   ConversationState,
-  ConversationActions,
+  MessageMetadata,
 } from '../types';
 
 /**
@@ -31,6 +32,11 @@ const initialState: ConversationState = {
  * Conversation Context
  */
 const ConversationContext = createContext<ConversationContextType | null>(null);
+
+function getSourceKey(metadata: MessageMetadata | undefined): string | undefined {
+  const sourceKey = metadata?.custom?.sourceKey;
+  return typeof sourceKey === 'string' ? sourceKey : undefined;
+}
 
 /**
  * Conversation Provider Props
@@ -171,7 +177,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
         messageId,
         updates,
         hasMetadata: !!updates.metadata,
-        hasSourceKey: !!(updates.metadata as any)?.custom?.sourceKey,
+        hasSourceKey: !!getSourceKey(updates.metadata),
       });
 
       setState((prev) => {
@@ -188,13 +194,13 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
                     before: {
                       hasSources: !!m.sources,
                       hasMetadata: !!m.metadata,
-                      hasSourceKey: !!(m.metadata as any)?.custom?.sourceKey,
+                      hasSourceKey: !!getSourceKey(m.metadata),
                     },
                     after: {
                       hasSources: !!updatedMessage.sources,
                       hasMetadata: !!updatedMessage.metadata,
-                      hasSourceKey: !!(updatedMessage.metadata as any)?.custom?.sourceKey,
-                      sourceKey: (updatedMessage.metadata as any)?.custom?.sourceKey,
+                      hasSourceKey: !!getSourceKey(updatedMessage.metadata),
+                      sourceKey: getSourceKey(updatedMessage.metadata),
                     },
                   });
                   return updatedMessage;

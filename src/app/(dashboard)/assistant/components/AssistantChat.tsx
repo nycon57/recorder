@@ -11,19 +11,59 @@
 
 'use client';
 
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { toast } from 'sonner';
+
 import {
   PromptInputProvider,
   usePromptInputController,
 } from '@/app/components/ai-elements/prompt-input';
+import { cn } from '@/lib/utils';
+
+import { useConversations } from '../store/ConversationContext';
+import type { ExtendedMessage, MessageAttachment, MessageMetadata, MessagePart, SourceCitation } from '../types';
+
 import { ChatInput } from './ChatInput';
 import { MessageList } from './MessageList';
-import { useConversations } from '../store/ConversationContext';
-import type { ExtendedMessage, MessageAttachment } from '../types';
-import { cn } from '@/lib/utils';
+
+type ChatResponseMessage = ExtendedMessage & {
+  parts?: MessagePart[];
+  sources?: SourceCitation[];
+};
+
+type AiMessageLike = {
+  id: string;
+  role: ExtendedMessage['role'];
+  parts?: unknown;
+  metadata?: unknown;
+  sources?: SourceCitation[];
+};
+
+function isMessagePart(part: unknown): part is MessagePart {
+  return (
+    typeof part === 'object' &&
+    part !== null &&
+    'type' in part &&
+    typeof (part as { type?: unknown }).type === 'string'
+  );
+}
+
+function toMessageParts(parts: unknown): MessagePart[] {
+  return Array.isArray(parts) ? parts.filter(isMessagePart) : [];
+}
+
+function toMessageMetadata(metadata: unknown): MessageMetadata | undefined {
+  return typeof metadata === 'object' && metadata !== null
+    ? (metadata as MessageMetadata)
+    : undefined;
+}
+
+function getSourceKey(metadata: MessageMetadata | undefined): string | undefined {
+  const sourceKey = metadata?.custom?.sourceKey;
+  return typeof sourceKey === 'string' ? sourceKey : undefined;
+}
 
 /**
  * Assistant Chat Props
@@ -93,18 +133,18 @@ function AssistantChatInner({
   /**
    * Store last user message ID for source fetching
    */
-  const lastUserMessageIdRef = React.useRef<string | null>(null);
+  const lastUserMessageIdRef = useRef<string | null>(null);
 
   /**
    * Store last assistant message ID for updating with sources
    */
-  const lastAssistantMessageIdRef = React.useRef<string | null>(null);
+  const lastAssistantMessageIdRef = useRef<string | null>(null);
 
   /**
    * Store sources by USER message ID for merging with aiMessages
    * Key = user message ID, Value = sources for the assistant's response
    */
-  const [messageSourcesMap, setMessageSourcesMap] = React.useState<Map<string, any[]>>(new Map());
+  const [messageSourcesMap, setMessageSourcesMap] = useState<Map<string, SourceCitation[]>>(new Map());
 
   /**
    * AI SDK useChat hook
@@ -115,40 +155,40 @@ function AssistantChatInner({
     regenerate,
     status,
     error,
-    stop,
   } = useChat({
     transport: new DefaultChatTransport({ api: apiEndpoint }),
-    onFinish: async (message: any) => {
+    onFinish: async ({ message }) => {
+      const finishedMessage = message as unknown as ChatResponseMessage;
       console.log('[AssistantChat] onFinish called with message:', {
-        hasId: 'id' in message,
-        id: (message as any).id,
-        keys: Object.keys(message),
-        message: message,
+        hasId: 'id' in finishedMessage,
+        id: finishedMessage.id,
+        keys: Object.keys(finishedMessage),
+        message: finishedMessage,
       });
 
       // Capture the assistant message ID immediately (synchronously)
-      const assistantMessageId = message.id;
+      const assistantMessageId = finishedMessage.id;
       lastAssistantMessageIdRef.current = assistantMessageId;
 
       // Use the stored user message ID to fetch sources
       const cacheKey = lastUserMessageIdRef.current;
 
-      let messageWithSources = message;
+      let messageWithSources = finishedMessage;
 
       if (cacheKey) {
         try {
           const sourcesResponse = await fetch(`${apiEndpoint}?sourcesKey=${cacheKey}`);
-          const { sources } = await sourcesResponse.json();
+          const { sources } = (await sourcesResponse.json()) as { sources?: SourceCitation[] };
 
           if (sources && sources.length > 0) {
             messageWithSources = {
-              ...message,
+              ...finishedMessage,
               sources,
               // Store sourceKey in metadata for building highlight URLs
               metadata: {
-                ...message.metadata,
+                ...finishedMessage.metadata,
                 custom: {
-                  ...message.metadata?.custom,
+                  ...finishedMessage.metadata?.custom,
                   sourceKey: cacheKey,
                 },
               },
@@ -157,11 +197,11 @@ function AssistantChatInner({
             setMessageSourcesMap(prev => new Map(prev).set(cacheKey, sources));
 
             console.log('[AssistantChat] Created message with sources and metadata:', {
-              messageId: message.id,
+              messageId: finishedMessage.id,
               cacheKey,
               sourcesCount: sources.length,
               hasMetadata: !!messageWithSources.metadata,
-              hasSourceKey: !!messageWithSources.metadata?.custom?.sourceKey,
+              hasSourceKey: !!getSourceKey(messageWithSources.metadata),
             });
           }
         } catch (e) {
@@ -178,8 +218,8 @@ function AssistantChatInner({
         hasSources: !!messageWithSources.sources,
         sourcesCount: messageWithSources.sources?.length || 0,
         hasMetadata: !!messageWithSources.metadata,
-        hasSourceKey: !!messageWithSources.metadata?.custom?.sourceKey,
-        sourceKey: messageWithSources.metadata?.custom?.sourceKey,
+        hasSourceKey: !!getSourceKey(messageWithSources.metadata),
+        sourceKey: getSourceKey(messageWithSources.metadata),
       });
 
       updateMessage(assistantMessageId, {
@@ -222,23 +262,23 @@ function AssistantChatInner({
             console.log('[AssistantChat] useEffect adding message from aiMessages:', {
               messageId: msg.id,
               role: msg.role,
-              hasSources: !!(msg as any).sources,
-              hasMetadata: !!(msg as any).metadata,
+              hasSources: !!(msg as AiMessageLike).sources,
+              hasMetadata: !!(msg as AiMessageLike).metadata,
             });
 
             // Extract content from UIMessage (AI SDK v5 uses .parts array)
-            const textContent = 'parts' in msg && Array.isArray((msg as any).parts)
-              ? (msg as any).parts.find((p: any) => p.type === 'text')?.text || ''
-              : '';
+            const parts = toMessageParts((msg as AiMessageLike).parts);
+            const textContent = parts.find((p) => p.type === 'text')?.text || '';
+            const metadata = toMessageMetadata((msg as AiMessageLike).metadata);
 
             const extendedMessage: ExtendedMessage = {
               id: msg.id,
-              role: msg.role,
-              parts: (msg as any).parts || [],
+              role: msg.role as ExtendedMessage['role'],
+              parts: parts as unknown as ExtendedMessage['parts'],
               content: textContent,
               createdAt: new Date(),
               // Only include metadata if it matches our type
-              ...(msg.metadata && typeof msg.metadata === 'object' ? { metadata: msg.metadata as any } : {}),
+              ...(metadata ? { metadata } : {}),
             };
             addMessage(extendedMessage);
           }
@@ -280,7 +320,7 @@ function AssistantChatInner({
           id: messageId,
           role: 'user',
           content: text,
-        } as any);
+        } as unknown as Parameters<typeof sendMessage>[0]);
       } catch (error) {
         console.error('[AssistantChat] sendMessage() failed:', error);
         toast.error('Failed to send message', {
@@ -310,7 +350,7 @@ function AssistantChatInner({
   /**
    * Handle message copy
    */
-  const handleCopy = useCallback((message: ExtendedMessage) => {
+  const handleCopy = useCallback(() => {
     toast.success('Message copied to clipboard');
   }, []);
 
@@ -339,11 +379,11 @@ function AssistantChatInner({
    * Handle message regenerate
    */
   const handleRegenerate = useCallback(
-    async (message: ExtendedMessage) => {
+    async () => {
       try {
         await regenerate();
         toast.success('Regenerating response...');
-      } catch (error) {
+      } catch {
         toast.error('Failed to regenerate response');
       }
     },
@@ -354,7 +394,7 @@ function AssistantChatInner({
    * Handle message branch
    */
   const handleBranch = useCallback(
-    (message: ExtendedMessage) => {
+    () => {
       // TODO: Implement conversation branching
       toast.info('Branching coming soon!');
     },
@@ -380,7 +420,7 @@ function AssistantChatInner({
     () => {
       return aiMessages.map((msg, index) => {
         // For assistant messages, find the preceding user message to get sources
-        let sources: any[] | undefined;
+        let sources: SourceCitation[] | undefined;
 
         if (msg.role === 'assistant' && index > 0) {
           // Look backwards for the most recent user message
@@ -394,7 +434,7 @@ function AssistantChatInner({
         }
 
         // Merge metadata from ConversationStore if message exists there
-        let storeMetadata: any = undefined;
+        let storeMetadata: MessageMetadata | undefined = undefined;
         if (currentConversation) {
           const storeMessage = currentConversation.messages.find((m) => m.id === msg.id);
           if (storeMessage?.metadata) {
@@ -407,7 +447,7 @@ function AssistantChatInner({
           ...(sources && { sources }),
           ...(storeMetadata && { metadata: storeMetadata }),
           createdAt: new Date(),
-        };
+        } as unknown as ExtendedMessage;
       });
     },
     [aiMessages, messageSourcesMap, currentConversation]

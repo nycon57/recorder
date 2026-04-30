@@ -212,6 +212,12 @@ const STATUS_CONFIG = {
   expired: { label: 'Expired', variant: 'secondary' },
 } as const satisfies Record<ApprovalStatus, { label: string; variant: string }>;
 
+function getApprovalStatusConfig(status: string) {
+  return status in STATUS_CONFIG
+    ? STATUS_CONFIG[status as ApprovalStatus]
+    : STATUS_CONFIG.pending;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers (hoisted outside component to avoid redefinition on every render)
 // ---------------------------------------------------------------------------
@@ -882,7 +888,7 @@ export default function AgentsSettingsPage() {
               </Card>
             ) : (
               approvals.map((approval) => {
-                const statusCfg = STATUS_CONFIG[approval.status];
+                const statusCfg = getApprovalStatusConfig(approval.status);
                 const isPending = approval.status === 'pending';
                 const isRejecting = rejectingId === approval.id;
                 const cost = getApprovalCost(approval);
@@ -924,12 +930,17 @@ export default function AgentsSettingsPage() {
                           <p className="text-sm mt-1">{approval.description}</p>
                           <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                             <span>
-                              Created {formatRelativeTime(approval.created_at)}
+                              Created{' '}
+                              {approval.created_at
+                                ? formatRelativeTime(approval.created_at)
+                                : 'unknown'}
                             </span>
                             {isPending && (
                               <span>
                                 Expires in{' '}
-                                {formatExpiresIn(approval.expires_at)}
+                                {approval.expires_at
+                                  ? formatExpiresIn(approval.expires_at)
+                                  : 'No expiry'}
                               </span>
                             )}
                             {approval.reviewed_at && (
