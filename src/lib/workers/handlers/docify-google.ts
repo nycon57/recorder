@@ -215,6 +215,7 @@ export async function generateDocument(
       await enqueueCompileWikiJob(supabase, {
         recordingId,
         orgId,
+        sourceType: existingContent?.content_type,
         source: 'Docify',
       });
     }
@@ -301,7 +302,7 @@ export async function generateDocument(
         .eq('id', recordingId);
 
       // Still enqueue embedding generation for raw transcript
-      await supabase.from('jobs').insert({
+      const embeddingsInsert = supabase.from('jobs').insert({
         type: 'generate_embeddings',
         status: 'pending',
         payload: {
@@ -312,8 +313,18 @@ export async function generateDocument(
         dedupe_key: `generate_embeddings:${recordingId}`,
       });
 
+      await Promise.all([
+        embeddingsInsert,
+        enqueueCompileWikiJob(supabase, {
+          recordingId,
+          orgId,
+          sourceType: recording?.content_type,
+          source: 'Docify',
+        }),
+      ]);
+
       logger.info(
-        'Skipped document generation, enqueued embedding generation',
+        'Skipped document generation, enqueued embedding and compile_wiki jobs',
         {
           context: { recordingId },
         },
@@ -707,6 +718,7 @@ export async function generateDocument(
         enqueueCompileWikiJob(supabase, {
           recordingId,
           orgId,
+          sourceType: recording?.content_type,
           source: 'Docify',
         }),
       ]);

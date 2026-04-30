@@ -5,6 +5,7 @@ type SupabaseAdmin = ReturnType<typeof createAdminClient>;
 interface EnqueueCompileWikiArgs {
   recordingId: string;
   orgId: string;
+  sourceType?: string | null;
   source?: string;
 }
 
@@ -16,13 +17,13 @@ export async function enqueueCompileWikiJob(
   supabase: SupabaseAdmin,
   args: EnqueueCompileWikiArgs,
 ): Promise<void> {
-  const { recordingId, orgId, source = 'CompileWikiQueue' } = args;
+  const { recordingId, orgId, sourceType = null, source = 'CompileWikiQueue' } = args;
   const dedupeKey = `compile_wiki:${recordingId}`;
 
   const { error } = await supabase.from('jobs').insert({
     type: 'compile_wiki',
     status: 'pending',
-    payload: { recordingId, orgId },
+    payload: { recordingId, contentId: recordingId, orgId, sourceType },
     dedupe_key: dedupeKey,
     priority: 2, // JOB_PRIORITY.NORMAL
   });

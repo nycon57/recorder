@@ -15,6 +15,7 @@ describe('shouldDeferCompileWikiToWorkflow', () => {
     expect(shouldDeferCompileWikiToWorkflow('text', true)).toBe(false);
     expect(shouldDeferCompileWikiToWorkflow('document', true)).toBe(false);
     expect(shouldDeferCompileWikiToWorkflow('audio', true)).toBe(false);
+    expect(shouldDeferCompileWikiToWorkflow('video', true)).toBe(false);
     expect(shouldDeferCompileWikiToWorkflow(null, true)).toBe(false);
   });
 });
