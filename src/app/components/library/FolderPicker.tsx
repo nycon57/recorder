@@ -87,7 +87,7 @@ export default function FolderPicker({
   const [error, setError] = useState<string | null>(null);
 
   // Refs
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const createInputRef = useRef<HTMLInputElement>(null);
 
   // Debounce search query

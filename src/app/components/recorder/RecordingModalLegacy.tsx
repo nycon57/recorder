@@ -15,6 +15,13 @@ interface RecordingModalProps {
   onClose: () => void;
 }
 
+const fileDataToArrayBuffer = (data: Awaited<ReturnType<FFmpeg['readFile']>>) => {
+  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+};
+
 export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModalProps) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -89,7 +96,7 @@ export function RecordingModal({ isOpen, recordingBlob, onClose }: RecordingModa
 
       // Read output
       const data = await ffmpeg.readFile('output.mp4');
-      const mp4Blob = new Blob([data], { type: 'video/mp4' });
+      const mp4Blob = new Blob([fileDataToArrayBuffer(data)], { type: 'video/mp4' });
 
       // Download
       const url = URL.createObjectURL(mp4Blob);

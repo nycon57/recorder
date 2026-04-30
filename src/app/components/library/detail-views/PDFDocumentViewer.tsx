@@ -91,6 +91,7 @@ export default function PDFDocumentViewer({
         canvas.width = viewport.width;
 
         const renderContext: Parameters<PDFPageProxy['render']>[0] = {
+          canvas,
           canvasContext: context,
           viewport: viewport,
         };

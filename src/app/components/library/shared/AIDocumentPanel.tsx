@@ -12,7 +12,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -49,6 +49,7 @@ interface Document {
 
 type MarkdownCodeProps = React.ComponentPropsWithoutRef<'code'> & {
   inline?: boolean;
+  node?: unknown;
 };
 
 interface AIDocumentPanelProps {
@@ -57,6 +58,29 @@ interface AIDocumentPanelProps {
   onRegenerate?: () => Promise<void>;
   className?: string;
 }
+
+const markdownComponents: Components = {
+  code(props) {
+    const { inline, className, children, node, ...rest } = props as MarkdownCodeProps;
+    void node;
+    const match = /language-(\w+)/.exec(className || '');
+    const language = match ? match[1] : '';
+
+    return !inline && language ? (
+      <SyntaxHighlighter
+        style={oneDark}
+        language={language}
+        PreTag="div"
+      >
+        {String(children).replace(/\n$/, '')}
+      </SyntaxHighlighter>
+    ) : (
+      <code className={className} {...rest}>
+        {children}
+      </code>
+    );
+  },
+};
 
 export default function AIDocumentPanel({
   document,
@@ -262,29 +286,7 @@ ${document.html || document.markdown}
               {/* Document Content */}
               <ScrollArea className="h-[500px] rounded-md border p-6 bg-card">
                 <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <ReactMarkdown
-                    components={{
-                      code({ inline, className, children, ...props }: MarkdownCodeProps) {
-                        const match = /language-(\w+)/.exec(className || '');
-                        const language = match ? match[1] : '';
-
-                        return !inline && language ? (
-                          <SyntaxHighlighter
-                            style={oneDark}
-                            language={language}
-                            PreTag="div"
-                            {...props}
-                          >
-                            {String(children).replace(/\n$/, '')}
-                          </SyntaxHighlighter>
-                        ) : (
-                          <code className={className} {...props}>
-                            {children}
-                          </code>
-                        );
-                      },
-                    }}
-                  >
+                  <ReactMarkdown components={markdownComponents}>
                     {document.markdown}
                   </ReactMarkdown>
                 </div>
