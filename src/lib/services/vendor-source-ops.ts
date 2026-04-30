@@ -208,14 +208,14 @@ export function buildVendorSourceOpsSnapshot({
       const syncBlockReason = getVendorSourceSyncBlockReason(source);
 
       let status: VendorSourceOpsStatus;
-      if (source.last_error) {
-        status = 'failing';
-      } else if (syncBlockReason) {
+      if (syncBlockReason) {
         status = 'blocked';
-      } else if (!source.last_success_at) {
-        status = 'never_synced';
       } else if (activeJobStatus) {
         status = 'syncing';
+      } else if (source.last_error) {
+        status = 'failing';
+      } else if (!source.last_success_at) {
+        status = 'never_synced';
       } else if (isDueForSync) {
         status = 'stale';
       } else {

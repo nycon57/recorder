@@ -420,7 +420,7 @@ function SourceLedgerTable({
                       {getLifecycleBadge(source)}
                     </div>
                     <Link
-                      href={source.sourceUrl}
+                      href={source.normalizedSourceUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="block break-all text-xs text-primary hover:underline"
@@ -534,7 +534,7 @@ function SourceDetail({
           {getLifecycleBadge(source)}
         </div>
         <Link
-          href={source.sourceUrl}
+          href={source.normalizedSourceUrl}
           target="_blank"
           rel="noreferrer"
           className="block break-all text-xs text-primary hover:underline"

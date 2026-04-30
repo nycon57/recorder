@@ -88,6 +88,20 @@ describe('vendor-source-ops', () => {
       ],
       activeJobs: [
         {
+          id: 'job-source-3',
+          status: 'pending',
+          dedupe_key: 'ingest_vendor_docs:source:source-3',
+          created_at: '2026-04-20T11:58:00.000Z',
+          completed_at: null,
+        },
+        {
+          id: 'job-source-4',
+          status: 'processing',
+          dedupe_key: 'ingest_vendor_docs:source:source-4',
+          created_at: '2026-04-20T11:57:00.000Z',
+          completed_at: null,
+        },
+        {
           id: 'job-source-1',
           status: 'completed',
           dedupe_key: 'ingest_vendor_docs:source:source-1',
@@ -104,26 +118,26 @@ describe('vendor-source-ops', () => {
       ],
     });
 
-      expect(snapshot.summary).toEqual({
-        totalSources: 5,
-        appsCovered: 5,
-        healthySources: 1,
-        syncingSources: 1,
-        staleSources: 0,
-        failingSources: 1,
-        blockedSources: 1,
-        neverSyncedSources: 1,
-        restrictedSources: 1,
+    expect(snapshot.summary).toEqual({
+      totalSources: 5,
+      appsCovered: 5,
+      healthySources: 1,
+      syncingSources: 3,
+      staleSources: 0,
+      failingSources: 0,
+      blockedSources: 1,
+      neverSyncedSources: 0,
+      restrictedSources: 1,
       pausedSources: 0,
       retiredSources: 0,
     });
 
-      expect(snapshot.sources.map((source) => [source.id, source.status])).toEqual([
-        ['source-4', 'failing'],
-        ['source-2', 'blocked'],
-        ['source-3', 'never_synced'],
-        ['source-5', 'syncing'],
-        ['source-1', 'healthy'],
+    expect(snapshot.sources.map((source) => [source.id, source.status])).toEqual([
+      ['source-2', 'blocked'],
+      ['source-4', 'syncing'],
+      ['source-5', 'syncing'],
+      ['source-3', 'syncing'],
+      ['source-1', 'healthy'],
     ]);
 
     expect(snapshot.sources.find((source) => source.id === 'source-1')).toMatchObject({
@@ -149,6 +163,20 @@ describe('vendor-source-ops', () => {
       corpusPageCount: 1,
       legacyPageCount: 1,
       isDueForSync: true,
+      status: 'syncing',
+    });
+
+    expect(snapshot.sources.find((source) => source.id === 'source-3')).toMatchObject({
+      activeJobStatus: 'pending',
+      latestSyncJobId: 'job-source-3',
+      status: 'syncing',
+    });
+
+    expect(snapshot.sources.find((source) => source.id === 'source-4')).toMatchObject({
+      activeJobStatus: 'processing',
+      latestSyncJobId: 'job-source-4',
+      lastError: 'crawler timed out',
+      status: 'syncing',
     });
   });
 });
