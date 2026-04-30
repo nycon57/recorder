@@ -252,7 +252,7 @@ async function maybeFillEmbeddingsDocumentId(job: Job): Promise<Job> {
     return job;
   }
 
-  return updatedJob;
+  return updatedJob as Job;
 }
 
 function hasPrerequisites(job: Pick<Job, 'type' | 'payload'>): boolean {
@@ -311,7 +311,7 @@ export async function findRunnableDependentJobs(
   }
 
   const runnableJobs: Job[] = [];
-  for (const job of jobs) {
+  for (const job of jobs as Job[]) {
     if (seenJobIds.has(job.id)) continue;
     if (!PIPELINE_JOB_TYPES.has(job.type)) continue;
 
@@ -357,9 +357,11 @@ export async function executeJobWithStreaming(
     throw new Error(errorMsg);
   }
 
+  const currentJob = job as Job;
+
   try {
     logger.info('Executing job handler', {
-      context: { jobId, contentId, jobType: job.type },
+      context: { jobId, contentId, jobType: currentJob.type },
     });
 
     const { data: claimedJob, error: claimError } = await supabase
@@ -381,26 +383,28 @@ export async function executeJobWithStreaming(
 
     if (!claimedJob) {
       logger.info('Skipping streaming job because it was already claimed', {
-        context: { jobId, contentId, currentStatus: job.status },
+        context: { jobId, contentId, currentStatus: currentJob.status },
       });
       streamingManager.sendLog(
         contentId,
-        `${job.type} is already running or no longer pending.`,
-        { jobId, jobType: job.type, status: job.status },
+        `${currentJob.type} is already running or no longer pending.`,
+        { jobId, jobType: currentJob.type, status: currentJob.status },
       );
       return;
     }
 
+    const processingJob = claimedJob as Job;
+
     // Stream initial progress
-    streamingManager.sendProgress(contentId, 'all', 0, `Starting ${job.type}...`, {
+    streamingManager.sendProgress(contentId, 'all', 0, `Starting ${currentJob.type}...`, {
       jobId,
-      jobType: claimedJob.type,
+      jobType: processingJob.type,
     });
 
     // Get handler for job type
-    const handler = JOB_HANDLERS[claimedJob.type as JobType];
+    const handler = JOB_HANDLERS[processingJob.type as JobType];
     if (!handler) {
-      throw new Error(`Unknown job type: ${claimedJob.type}`);
+      throw new Error(`Unknown job type: ${processingJob.type}`);
     }
 
     // Create streaming progress callback
@@ -416,13 +420,13 @@ export async function executeJobWithStreaming(
 
     // Execute handler with progress callback
     logger.info('Calling job handler', {
-      context: { jobId, contentId, jobType: claimedJob.type },
+      context: { jobId, contentId, jobType: processingJob.type },
     });
 
-    await handler(claimedJob, progressCallback);
+    await handler(processingJob, progressCallback);
 
     logger.info('Job handler completed successfully', {
-      context: { jobId, contentId, jobType: claimedJob.type },
+      context: { jobId, contentId, jobType: processingJob.type },
     });
 
     // Mark job as completed
@@ -434,16 +438,17 @@ export async function executeJobWithStreaming(
         progress_percent: 100,
         progress_message: 'Completed',
       })
-      .eq('id', jobId);
+      .eq('id', jobId)
+      .eq('status', 'processing' as JobStatus);
 
     // Stream completion
-    streamingManager.sendProgress(contentId, 'all', 100, `${job.type} completed successfully`, {
+    streamingManager.sendProgress(contentId, 'all', 100, `${currentJob.type} completed successfully`, {
       jobId,
-      jobType: claimedJob.type,
+      jobType: processingJob.type,
     });
 
     logger.info('Job completed successfully', {
-      context: { jobId, contentId, jobType: claimedJob.type },
+      context: { jobId, contentId, jobType: processingJob.type },
     });
 
   } catch (error) {
@@ -472,7 +477,8 @@ export async function executeJobWithStreaming(
           progress_percent: null,
           progress_message: `Retry scheduled (${attemptCount}/${maxRetries})`,
         })
-        .eq('id', jobId);
+        .eq('id', jobId)
+        .eq('status', 'processing' as JobStatus);
 
       // Stream retry notification
       streamingManager.sendLog(
@@ -495,7 +501,8 @@ export async function executeJobWithStreaming(
           progress_percent: null,
           progress_message: 'Failed',
         })
-        .eq('id', jobId);
+        .eq('id', jobId)
+        .eq('status', 'processing' as JobStatus);
 
       // Stream error
       streamingManager.sendError(

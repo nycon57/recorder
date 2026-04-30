@@ -1,5 +1,7 @@
 import type { createClient as createAdminClient } from '@/lib/supabase/admin';
 
+import { enqueueUniqueJob } from '../job-enqueue';
+
 type SupabaseAdmin = ReturnType<typeof createAdminClient>;
 
 interface EnqueueCompileWikiArgs {
@@ -20,23 +22,19 @@ export async function enqueueCompileWikiJob(
   const { recordingId, orgId, sourceType = null, source = 'CompileWikiQueue' } = args;
   const dedupeKey = `compile_wiki:${recordingId}`;
 
-  const { error } = await supabase.from('jobs').insert({
+  const result = await enqueueUniqueJob(supabase, {
     type: 'compile_wiki',
     status: 'pending',
     payload: { recordingId, contentId: recordingId, orgId, sourceType },
     dedupe_key: dedupeKey,
     priority: 2, // JOB_PRIORITY.NORMAL
-  });
+  }, 'compile_wiki job');
 
-  if (error) {
-    if (error.code === '23505') {
-      console.log(
-        `[${source}] compile_wiki already queued for ${recordingId} (dedupe_key=${dedupeKey})`,
-      );
-      return;
-    }
-
-    throw new Error(`Failed to enqueue compile_wiki job: ${error.message}`);
+  if (result.duplicate) {
+    console.log(
+      `[${source}] compile_wiki already queued for ${recordingId} (dedupe_key=${dedupeKey})`,
+    );
+    return;
   }
 
   console.log(

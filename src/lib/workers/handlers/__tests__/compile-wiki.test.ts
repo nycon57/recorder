@@ -1,10 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 const fromMock = jest.fn();
+const rpcMock = jest.fn();
 const generateContentMock = jest.fn();
 const runRelationshipExtractionMock = jest.fn();
 const runCrossPageContradictionDetectionMock = jest.fn();
 const generateOrgWikiPageEmbeddingBestEffortMock = jest.fn();
+const shouldAutoApplyWikiContradictionMock = jest.fn(() => false);
 const getApprovedRoutingOverrideMock = jest.fn<
   () => { app: string | null; screen: string | null; topic: string } | null
 >(() => null);
@@ -20,6 +22,7 @@ jest.mock('@google/genai', () => ({
 jest.mock('@/lib/supabase/admin', () => ({
   createClient: jest.fn(() => ({
     from: fromMock,
+    rpc: rpcMock,
   })),
 }));
 
@@ -28,7 +31,7 @@ jest.mock('@/lib/services/agent-config', () => ({
   getWikiCompilationSettings: jest.fn(async () => ({
     contradictionReviewMode: 'manual',
   })),
-  shouldAutoApplyWikiContradiction: jest.fn(() => false),
+  shouldAutoApplyWikiContradiction: shouldAutoApplyWikiContradictionMock,
 }));
 
 jest.mock('@/lib/services/agent-logger', () => ({
@@ -118,6 +121,8 @@ describe('compile-wiki embedding freshness', () => {
     runCrossPageContradictionDetectionMock.mockResolvedValue(undefined as never);
     generateOrgWikiPageEmbeddingBestEffortMock.mockResolvedValue(true as never);
     getApprovedRoutingOverrideMock.mockReturnValue(null);
+    shouldAutoApplyWikiContradictionMock.mockReturnValue(false);
+    rpcMock.mockResolvedValue({ data: null, error: null });
   });
 
   it('refreshes the existing page embedding after an additive update is finalized', async () => {
@@ -423,5 +428,112 @@ describe('compile-wiki embedding freshness', () => {
       contribution_summary:
         'Initial wiki page creation from document Security policy',
     });
+  });
+
+  it('auto-applies contradictions through the atomic supersede RPC', async () => {
+    shouldAutoApplyWikiContradictionMock.mockReturnValue(true);
+    rpcMock.mockResolvedValueOnce({ data: 'page-new', error: null });
+    generateContentMock
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          app: 'salesforce',
+          screen: 'opportunities',
+          topic: 'renewal-workflow',
+          route_confidence: 0.95,
+          route_reason: 'clear workflow',
+        }),
+      } as never)
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          action: 'contradiction',
+          additions: [],
+          contradictions: [
+            {
+              field: 'Renewal step',
+              old: 'Send the renewal reminder after signature.',
+              new: 'Send the renewal reminder before signature.',
+            },
+          ],
+          merged_content: 'Updated wiki content with the corrected renewal step.',
+          confidence_delta: 0.2,
+        }),
+      } as never);
+
+    const existingPage = {
+      id: 'page-existing',
+      org_id: 'org-1',
+      app: 'salesforce',
+      screen: 'opportunities',
+      topic: 'renewal-workflow',
+      content: 'Original wiki content.',
+      confidence: 0.7,
+      valid_until: null,
+      compilation_log: [],
+    };
+    const sourceInsertQuery = insertResponse();
+
+    fromMock
+      .mockReturnValueOnce(queryResponse({
+        id: 'rec-1',
+        title: 'Renewal walkthrough',
+        description: null,
+        content_type: 'text',
+        metadata: null,
+      }))
+      .mockReturnValueOnce(queryResponse({
+        id: 'workflow-1',
+        title: 'Renewal workflow',
+        description: null,
+        steps: [{ title: 'Send reminder', description: 'Notify the CSM' }],
+        step_count: 1,
+        confidence: 0.9,
+        status: 'completed',
+      }))
+      .mockReturnValueOnce(queryResponse(null))
+      .mockReturnValueOnce(queryResponse(null))
+      .mockReturnValueOnce(queryResponse(existingPage))
+      .mockReturnValueOnce(sourceInsertQuery);
+
+    await handleCompileWiki({
+      id: 'job-1',
+      payload: { recordingId: 'rec-1', orgId: 'org-1' },
+    } as never);
+
+    const [rpcName, rpcArgs] = rpcMock.mock.calls[0];
+    expect(rpcName).toBe('supersede_org_wiki_page');
+    expect(rpcArgs).toMatchObject({
+      p_existing_page_id: 'page-existing',
+      p_org_id: 'org-1',
+      p_app: 'salesforce',
+      p_screen: 'opportunities',
+      p_topic: 'renewal-workflow',
+      p_content: 'Updated wiki content with the corrected renewal step.',
+      p_supersedes_id: 'page-existing',
+      p_compilation_log: [
+        expect.objectContaining({
+          action: 'applied',
+          source_recording_id: 'rec-1',
+          merged_content: 'Updated wiki content with the corrected renewal step.',
+        }),
+      ],
+      p_valid_until: expect.any(String),
+    });
+    expect(rpcArgs.p_confidence).toBeCloseTo(0.9);
+    expect(sourceInsertQuery.insert).toHaveBeenCalledWith({
+      page_id: 'page-new',
+      source_type: 'text',
+      source_id: 'rec-1',
+      contribution_summary:
+        'Auto-applied contradiction resolution (supersedes page-existing, 1 conflicts) [text note: Renewal walkthrough]',
+    });
+    expect(generateOrgWikiPageEmbeddingBestEffortMock).toHaveBeenCalledWith(
+      'page-new',
+      expect.objectContaining({
+        source: 'compile-wiki.auto-supersede',
+        orgId: 'org-1',
+        recordingId: 'rec-1',
+        contentChanged: true,
+      })
+    );
   });
 });

@@ -98,6 +98,21 @@ type JobPayloadWithIds = {
   recordingId?: string;
 };
 
+class JobTimeoutError extends Error {
+  constructor(timeoutMs: number, jobId: string, jobType: string) {
+    super(
+      `Job timeout exceeded (${Math.round(timeoutMs / 60000)} minutes). ` +
+        `Job ID: ${jobId}, Type: ${jobType}. ` +
+        'This may indicate the content is too large to process. Consider reducing file size or duration.',
+    );
+    this.name = 'JobTimeoutError';
+  }
+}
+
+function isJobTimeoutError(error: unknown): error is JobTimeoutError {
+  return error instanceof JobTimeoutError;
+}
+
 /**
  * Get contextual completion message for job type
  */
@@ -357,11 +372,7 @@ async function withTimeout<T>(
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      reject(new Error(
-        `Job timeout exceeded (${Math.round(timeoutMs / 60000)} minutes). ` +
-        `Job ID: ${jobId}, Type: ${jobType}. ` +
-        `This may indicate the content is too large to process. Consider reducing file size or duration.`
-      ));
+      reject(new JobTimeoutError(timeoutMs, jobId, jobType));
     }, timeoutMs);
 
     fn()
@@ -524,7 +535,8 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
         progress_percent: 100,
         progress_message: completionMessage,
       })
-      .eq('id', job.id);
+      .eq('id', job.id)
+      .eq('status', 'processing' as JobStatus);
 
     // Stream completion
     if (contentId) {
@@ -555,7 +567,8 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
     });
 
     const attemptCount = (job.attempts ?? 0) + 1;
-    const shouldRetry = attemptCount < maxRetries;
+    const timedOut = isJobTimeoutError(error);
+    const shouldRetry = !timedOut && attemptCount < maxRetries;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     if (shouldRetry) {
@@ -573,7 +586,8 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
           progress_percent: null,
           progress_message: `Retry scheduled (${attemptCount}/${maxRetries})`,
         })
-        .eq('id', job.id);
+        .eq('id', job.id)
+        .eq('status', 'processing' as JobStatus);
 
       // Stream retry notification
       if (contentId) {
@@ -590,7 +604,8 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
     } else {
       // PERF-WK-002: Determine if job should go to dead letter queue
       // Jobs that exceed deadLetterAfterRetries go to dead_letter for manual review
-      const isDeadLetter = attemptCount >= CONFIG.deadLetterAfterRetries;
+      const isDeadLetter =
+        !timedOut && attemptCount >= CONFIG.deadLetterAfterRetries;
       const finalStatus = isDeadLetter ? 'dead_letter' : 'failed';
 
       await supabase
@@ -600,9 +615,14 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
           attempts: attemptCount,
           error: errorMessage,
           progress_percent: null,
-          progress_message: isDeadLetter ? 'Moved to dead letter queue' : 'Failed',
+          progress_message: timedOut
+            ? 'Timed out; retry disabled because the original handler may still be running'
+            : isDeadLetter
+              ? 'Moved to dead letter queue'
+              : 'Failed',
         })
-        .eq('id', job.id);
+        .eq('id', job.id)
+        .eq('status', 'processing' as JobStatus);
 
       // Stream error
       if (contentId) {
@@ -610,7 +630,9 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
           contentId,
           isDeadLetter
             ? `Job moved to dead letter queue after ${attemptCount} attempts: ${errorMessage}`
-            : `Job failed after ${maxRetries} attempts: ${errorMessage}`
+            : timedOut
+              ? `Job timed out and will not be retried automatically: ${errorMessage}`
+              : `Job failed after ${maxRetries} attempts: ${errorMessage}`
         );
       }
 
