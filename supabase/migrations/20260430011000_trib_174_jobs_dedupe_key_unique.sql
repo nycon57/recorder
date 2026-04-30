@@ -76,3 +76,29 @@ begin
   return v_new_page_id;
 end;
 $$;
+
+revoke all on function public.supersede_org_wiki_page(
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  double precision,
+  uuid,
+  jsonb,
+  timestamptz
+) from public, anon, authenticated;
+
+grant execute on function public.supersede_org_wiki_page(
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  double precision,
+  uuid,
+  jsonb,
+  timestamptz
+) to service_role;
