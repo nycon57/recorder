@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 type CheckStatus = 'pass' | 'fail';
@@ -14,7 +14,7 @@ interface QuarantineVerificationResult {
   checks: QuarantineCheck[];
 }
 
-const PRODUCTION_RECALL_FILES = [
+const PRODUCTION_ANSWER_RECALL_FILES = [
   'src/app/api/chat/route.ts',
   'src/app/api/chat/stream/route.ts',
   'src/app/api/extension/query/route.ts',
@@ -22,6 +22,26 @@ const PRODUCTION_RECALL_FILES = [
   'src/lib/mcp/server.ts',
   'src/lib/services/chat-tools.ts',
 ];
+
+const PRODUCTION_ENTRYPOINT_ROOTS = [
+  'src/app/api',
+  'src/app/components/content',
+  'src/lib/mcp',
+  'src/lib/services/chat-tools.ts',
+];
+
+const RAW_EVIDENCE_ALLOWLIST: Record<string, string> = {
+  'src/app/api/search/route.ts':
+    'Dedicated raw-evidence search endpoint; not used as canonical answer context.',
+  'src/app/api/recordings/[id]/search/route.ts':
+    'Recording-local exact evidence search endpoint.',
+  'src/app/api/conversations/route.ts':
+    'Conversation persistence compatibility wrapper; not recall/answer generation.',
+  'src/app/api/conversations/[id]/route.ts':
+    'Conversation history compatibility wrapper; not recall/answer generation.',
+  'src/app/components/content/RelatedContent.tsx':
+    'Related-content fallback surface; not chat answer context.',
+};
 
 const PROHIBITED_RECALL_IMPORTS = [
   '@/lib/services/rag',
@@ -88,6 +108,31 @@ function readRequiredFile(root: string, relativePath: string): string {
   return readFileSync(absolutePath, 'utf8');
 }
 
+function walkProductionFiles(root: string, relativePath: string): string[] {
+  const absolutePath = path.join(root, relativePath);
+  if (!existsSync(absolutePath)) {
+    return [];
+  }
+
+  if (statSync(absolutePath).isFile()) {
+    return [relativePath];
+  }
+
+  return readdirSync(absolutePath).flatMap((entry) => {
+    if (entry === '__tests__' || entry.endsWith('.test.ts') || entry.endsWith('.test.tsx')) {
+      return [];
+    }
+
+    const childRelativePath = path.join(relativePath, entry);
+    const childAbsolutePath = path.join(root, childRelativePath);
+    if (statSync(childAbsolutePath).isDirectory()) {
+      return walkProductionFiles(root, childRelativePath);
+    }
+
+    return /\.(ts|tsx)$/.test(entry) ? [childRelativePath] : [];
+  });
+}
+
 function importPattern(importPath: string): RegExp {
   return new RegExp(
     String.raw`from\s+['"]${importPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`,
@@ -111,6 +156,62 @@ function checkNoLegacyImport(root: string, relativePath: string): QuarantineChec
       );
 }
 
+function findLegacyImport(text: string): string | undefined {
+  return PROHIBITED_RECALL_IMPORTS.find((importPath) =>
+    importPattern(importPath).test(text),
+  );
+}
+
+function checkLegacyProductionImportsRegistered(root: string): QuarantineCheck {
+  const files = Array.from(
+    new Set(
+      PRODUCTION_ENTRYPOINT_ROOTS.flatMap((entrypoint) =>
+        walkProductionFiles(root, entrypoint),
+      ),
+    ),
+  );
+
+  const unregisteredImports = files.flatMap((file) => {
+    const absolutePath = path.join(root, file);
+    const text = readFileSync(absolutePath, 'utf8');
+    const prohibited = findLegacyImport(text);
+
+    if (!prohibited || PRODUCTION_ANSWER_RECALL_FILES.includes(file)) {
+      return [];
+    }
+
+    return RAW_EVIDENCE_ALLOWLIST[file] == null
+      ? [`${file} -> ${prohibited}`]
+      : [];
+  });
+
+  return unregisteredImports.length > 0
+    ? fail(
+        'production legacy recall imports are registered',
+        `Found unregistered production legacy imports: ${unregisteredImports.join(', ')}`,
+      )
+    : pass(
+        'production legacy recall imports are registered',
+        'All remaining production legacy imports are explicit raw-evidence/compatibility allowlist entries.',
+      );
+}
+
+function checkRawEvidenceAllowlistDocumented(root: string): QuarantineCheck {
+  const missingEntries = Object.keys(RAW_EVIDENCE_ALLOWLIST).filter(
+    (file) => !existsSync(path.join(root, file)),
+  );
+
+  return missingEntries.length > 0
+    ? fail(
+        'raw-evidence allowlist is documented',
+        `Allowlist references missing production file(s): ${missingEntries.join(', ')}`,
+      )
+    : pass(
+        'raw-evidence allowlist is documented',
+        `${Object.keys(RAW_EVIDENCE_ALLOWLIST).length} raw-evidence/compatibility production entries are documented separately from answer recall.`,
+      );
+}
+
 function checkRequiredSnippet(
   root: string,
   required: (typeof REQUIRED_CANONICAL_SNIPPETS)[number],
@@ -128,10 +229,14 @@ export function runLegacyRecallQuarantineVerification(
   root = process.cwd(),
 ): QuarantineVerificationResult {
   const checks = [
-    ...PRODUCTION_RECALL_FILES.map((file) => checkNoLegacyImport(root, file)),
+    ...PRODUCTION_ANSWER_RECALL_FILES.map((file) =>
+      checkNoLegacyImport(root, file),
+    ),
     ...REQUIRED_CANONICAL_SNIPPETS.map((required) =>
       checkRequiredSnippet(root, required),
     ),
+    checkLegacyProductionImportsRegistered(root),
+    checkRawEvidenceAllowlistDocumented(root),
   ];
 
   return {

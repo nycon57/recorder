@@ -10,6 +10,7 @@ import { NextRequest } from 'next/server';
 import {
   buildCompiledMemoryCitations,
   resolveCompiledMemoryAnswerContext,
+  resolveScopedCompiledMemoryAnswerContext,
 } from '@/lib/services/compiled-memory-answer-context';
 import { generateCompiledMemoryGroundedAnswer } from '@/lib/services/compiled-memory-answer';
 import { rateLimiters } from '@/lib/rate-limit/limiter';
@@ -80,6 +81,7 @@ async function saveChatMessage(
  * - conversationId?: string — existing conversation to continue
  * - app?: string — optional app hint for compiled memory.
  * - screen?: string — optional screen hint for compiled memory.
+ * - recordingIds?: string[] — optional content-source scope for detail chat.
  * - limit?: number — max compiled Wiki sources (default: 5)
  */
 export async function POST(request: NextRequest) {
@@ -119,6 +121,7 @@ export async function POST(request: NextRequest) {
       conversationId,
       app,
       screen,
+      recordingIds,
       limit = 5,
     } = body;
 
@@ -155,14 +158,29 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          const answerContext = await resolveCompiledMemoryAnswerContext({
-            orgId,
-            userId,
-            question: message,
-            app,
-            screen,
-            limit,
-          });
+          const scopedRecordingIds = Array.isArray(recordingIds)
+            ? recordingIds.filter(
+                (recordingId): recordingId is string =>
+                  typeof recordingId === 'string' && recordingId.trim().length > 0,
+              )
+            : [];
+          const answerContext =
+            scopedRecordingIds.length > 0
+              ? await resolveScopedCompiledMemoryAnswerContext({
+                  orgId,
+                  userId,
+                  question: message,
+                  sourceIds: scopedRecordingIds,
+                  limit,
+                })
+              : await resolveCompiledMemoryAnswerContext({
+                  orgId,
+                  userId,
+                  question: message,
+                  app,
+                  screen,
+                  limit,
+                });
           const sources = buildCompiledMemoryCitations(answerContext.sources);
           controller.enqueue(encodeEvent(encoder, { type: 'sources', sources }));
 

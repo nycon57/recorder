@@ -13,6 +13,11 @@ const FILES = [
   'src/lib/mcp/handlers.ts',
   'src/lib/mcp/server.ts',
   'src/lib/services/chat-tools.ts',
+  'src/app/api/search/route.ts',
+  'src/app/api/recordings/[id]/search/route.ts',
+  'src/app/api/conversations/route.ts',
+  'src/app/api/conversations/[id]/route.ts',
+  'src/app/components/content/RelatedContent.tsx',
 ];
 
 function writeFixture(root: string, relativePath: string, content: string): void {
@@ -82,6 +87,25 @@ describe('legacy recall quarantine verification', () => {
     expect(result.checks).toContainEqual(
       expect.objectContaining({
         name: 'src/app/api/chat/route.ts has no legacy recall import',
+        status: 'fail',
+      }),
+    );
+  });
+
+  it('fails when an unregistered production entrypoint imports legacy RAG/vector modules', () => {
+    const root = createCompleteFixture();
+    writeFixture(
+      root,
+      'src/app/api/unregistered/route.ts',
+      'import { vectorSearch } from "@/lib/services/vector-search-google";',
+    );
+
+    const result = runLegacyRecallQuarantineVerification(root);
+
+    expect(result.ok).toBe(false);
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({
+        name: 'production legacy recall imports are registered',
         status: 'fail',
       }),
     );

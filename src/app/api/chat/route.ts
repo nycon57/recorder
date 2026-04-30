@@ -290,7 +290,7 @@ export async function POST(req: Request) {
       isMetaDiscoveryQuery =
         preprocessed.wasTransformed &&
         preprocessed.transformation === 'meta-question-extraction-and-expansion';
-      useToolDiscovery = isMetaDiscoveryQuery;
+      useToolDiscovery = isMetaDiscoveryQuery || isScopedDiscoveryMode;
 
       if (useToolDiscovery || isScopedDiscoveryMode) {
         answerMode = 'tool-discovery';
@@ -450,7 +450,11 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
         description: toolDescriptions.searchRecordings,
         inputSchema: searchRecordingsInputSchema,
         execute: async (args: any) => {
-          return await executeSearchRecordings(args, { orgId, userId });
+          return await executeSearchRecordings(args, {
+            orgId,
+            userId,
+            contentIds: isScopedDiscoveryMode ? recordingIds : undefined,
+          });
         },
       }),
       getDocument: tool({

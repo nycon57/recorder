@@ -4,6 +4,7 @@ import {
   buildCompiledMemoryAnswerContext,
   buildExtensionCompiledMemoryPrompt,
   resolveCompiledMemoryAnswerContext,
+  resolveScopedCompiledMemoryAnswerContext,
   summarizeCompiledMemoryAnswerObservability,
   DEFAULT_CHAT_COMPILED_MEMORY_SCOPE,
 } from '../compiled-memory-answer-context';
@@ -526,6 +527,87 @@ test('resolveCompiledMemoryAnswerContext falls back to vendor-compatible resolut
   } finally {
     console.error = originalConsoleError;
   }
+});
+
+test('resolveScopedCompiledMemoryAnswerContext limits org knowledge to source-linked wiki pages', async () => {
+  const sourceInCalls: Array<[string, unknown[]]> = [];
+  const sourceQuery = {
+    select() {
+      return sourceQuery;
+    },
+    in(column: string, values: unknown[]) {
+      sourceInCalls.push([column, values]);
+      if (sourceInCalls.length === 1) {
+        return sourceQuery;
+      }
+      return {
+        data: [
+          {
+            page_id: 'page-1',
+            source_id: 'recording-1',
+            source_type: 'recording',
+          },
+        ],
+        error: null,
+      };
+    },
+  };
+  const pageEqCalls: Array<[string, unknown]> = [];
+  const pageQuery = {
+    select() {
+      return pageQuery;
+    },
+    eq(column: string, value: unknown) {
+      pageEqCalls.push([column, value]);
+      return pageQuery;
+    },
+    is() {
+      return pageQuery;
+    },
+    in() {
+      return {
+      data: [
+        {
+          id: 'page-1',
+          app: 'workspace',
+          screen: 'content-detail',
+          topic: 'Scoped customer knowledge',
+          content: 'Only this selected recording should be available.',
+          confidence: 0.87,
+          updated_at: '2026-04-30T01:00:00.000Z',
+        },
+      ],
+      error: null,
+      };
+    },
+  };
+  const createAdminClient = () => ({
+    from(table: string) {
+      if (table === 'wiki_page_sources') return sourceQuery;
+      if (table === 'org_wiki_pages') return pageQuery;
+      throw new Error(`Unexpected table: ${table}`);
+    },
+  });
+
+  const result = await resolveScopedCompiledMemoryAnswerContext(
+    {
+      orgId: 'org-123',
+      userId: 'user-123',
+      question: 'What did this recording say?',
+      sourceIds: ['recording-1'],
+      limit: 5,
+    },
+    { createAdminClient: createAdminClient as any },
+  );
+
+  assert.deepEqual(
+    result.sources.map((source) => source.sourceId),
+    ['page-1'],
+  );
+  assert.equal(result.sources[0]?.url, '/dashboard/recordings/recording-1');
+  assert.match(result.context, /Scoped customer knowledge/);
+  assert.deepEqual(sourceInCalls[0], ['source_id', ['recording-1']]);
+  assert.deepEqual(pageEqCalls[0], ['org_id', 'org-123']);
 });
 
 test('summarizeCompiledMemoryAnswerObservability captures shared vendor freshness and retrieval mode', () => {

@@ -23,6 +23,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   buildCompiledMemoryCitations,
   resolveCompiledMemoryAnswerContext,
+  resolveScopedCompiledMemoryAnswerContext,
 } from './compiled-memory-answer-context';
 import { searchCompiledOrgWikiPages } from './wiki-search';
 
@@ -33,6 +34,7 @@ import { searchCompiledOrgWikiPages } from './wiki-search';
 export interface ToolContext {
   orgId: string;
   userId: string;
+  contentIds?: string[];
 }
 
 /**
@@ -145,7 +147,7 @@ export async function executeSearchRecordings(
     query,
     limit,
   }: any,
-  { orgId }: ToolContext
+  { orgId, userId, contentIds }: ToolContext
 ): Promise<ToolResponse> {
     try {
       // Input validation
@@ -156,11 +158,35 @@ export async function executeSearchRecordings(
         };
       }
 
-      const pages = await searchCompiledOrgWikiPages({
-        orgId,
-        query,
-        limit: limit || 5,
-      });
+      const scopedContentIds = Array.isArray(contentIds)
+        ? contentIds.filter(Boolean)
+        : [];
+      const scopedContext =
+        scopedContentIds.length > 0
+          ? await resolveScopedCompiledMemoryAnswerContext({
+              orgId,
+              userId,
+              question: query,
+              sourceIds: scopedContentIds,
+              limit: limit || 5,
+            })
+          : null;
+      const pages =
+        scopedContext != null
+          ? scopedContext.sources.map((source) => ({
+              id: source.sourceId,
+              title: source.title,
+              snippet: source.excerpt,
+              content: source.content,
+              app: null,
+              screen: null,
+              similarity: source.confidence,
+            }))
+          : await searchCompiledOrgWikiPages({
+              orgId,
+              query,
+              limit: limit || 5,
+            });
 
       // Check if results found
       if (pages.length === 0) {
@@ -168,10 +194,15 @@ export async function executeSearchRecordings(
           success: true,
           data: {
             message:
-              'No compiled Wiki knowledge matched your query yet. Try a different topic or inspect a specific recording/document.',
+              scopedContentIds.length > 0
+                ? 'No compiled Wiki knowledge is linked to the selected recording yet.'
+                : 'No compiled Wiki knowledge matched your query yet. Try a different topic or inspect a specific recording/document.',
             results: [],
             searchMetadata: {
-              searchMode: 'compiled_wiki',
+              searchMode:
+                scopedContentIds.length > 0
+                  ? 'compiled_wiki_scoped'
+                  : 'compiled_wiki',
               cacheHit: false,
             },
           },
@@ -207,7 +238,11 @@ export async function executeSearchRecordings(
           message: `Found ${pages.length} compiled Wiki result(s)`,
           results: formattedResults,
           searchMetadata: {
-            searchMode: 'compiled_wiki',
+            searchMode:
+              scopedContentIds.length > 0
+                ? 'compiled_wiki_scoped'
+                : 'compiled_wiki',
+            scopedContentIds,
             cacheHit: false,
           },
         },
