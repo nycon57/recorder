@@ -90,9 +90,13 @@ type TranscriptRowForCompile = Pick<
 >;
 
 interface CompileWikiPayload {
-  recordingId: string;
+  recordingId?: string;
+  contentId?: string;
   orgId: string;
+  sourceType?: string | null;
 }
+
+type WikiPageSourceType = 'recording' | 'video' | 'audio' | 'document' | 'text';
 
 /** Output of the LLM classification step. */
 interface WikiClassification {
@@ -107,6 +111,13 @@ const AGENT_TYPE = 'wiki_compiler';
 const MAX_TRANSCRIPT_CHARS = 12000;
 const MAX_DOCUMENT_CHARS = 8000;
 const MAX_WORKFLOW_STEPS_IN_PROMPT = 50;
+const WIKI_PAGE_SOURCE_TYPES = new Set<WikiPageSourceType>([
+  'recording',
+  'video',
+  'audio',
+  'document',
+  'text',
+]);
 
 // ---------------------------------------------------------------------------
 // Gemini client (lazy init — matches workflow-extraction.ts pattern)
@@ -148,6 +159,19 @@ function checkAndLogPII(text: string, source: string, recordingId?: string): voi
   }
 }
 
+function normalizeWikiPageSourceType(
+  value: string | null | undefined
+): WikiPageSourceType {
+  return WIKI_PAGE_SOURCE_TYPES.has(value as WikiPageSourceType)
+    ? (value as WikiPageSourceType)
+    : 'recording';
+}
+
+function wikiSourceLabel(sourceType: WikiPageSourceType): string {
+  if (sourceType === 'text') return 'text note';
+  return sourceType;
+}
+
 // ---------------------------------------------------------------------------
 // Agent gate
 // ---------------------------------------------------------------------------
@@ -183,11 +207,13 @@ export async function handleCompileWiki(
   progressCallback?: ProgressCallback
 ): Promise<void> {
   const payload = job.payload as unknown as CompileWikiPayload;
-  const { recordingId, orgId } = payload ?? {};
+  const { orgId } = payload ?? {};
+  const contentId = payload?.contentId ?? payload?.recordingId;
+  const payloadSourceType = payload?.sourceType ?? null;
 
-  if (!recordingId || !orgId) {
+  if (!contentId || !orgId) {
     console.warn(
-      '[compile-wiki] Missing recordingId or orgId in payload, skipping',
+      '[compile-wiki] Missing contentId or orgId in payload, skipping',
       { payload }
     );
     return;
@@ -195,7 +221,7 @@ export async function handleCompileWiki(
 
   if (!(await isWikiCompilerEnabled(orgId))) {
     console.log(
-      `[compile-wiki] Agent disabled for org ${orgId}, skipping recording ${recordingId}`
+      `[compile-wiki] Agent disabled for org ${orgId}, skipping content ${contentId}`
     );
     return;
   }
@@ -205,10 +231,10 @@ export async function handleCompileWiki(
       orgId,
       agentType: AGENT_TYPE,
       actionType: 'compile_wiki_page',
-      contentId: recordingId,
-      inputSummary: `Compile wiki page from recording ${recordingId}`,
+      contentId,
+      inputSummary: `Compile wiki page from content ${contentId}`,
     },
-    () => runCompilationPipeline(recordingId, orgId, progressCallback)
+    () => runCompilationPipeline(contentId, orgId, payloadSourceType, progressCallback)
   );
 }
 
@@ -219,6 +245,7 @@ export async function handleCompileWiki(
 async function runCompilationPipeline(
   recordingId: string,
   orgId: string,
+  payloadSourceType?: string | null,
   progressCallback?: ProgressCallback
 ): Promise<void> {
   const supabase = createAdminClient();
@@ -242,6 +269,11 @@ async function runCompilationPipeline(
     );
     return;
   }
+
+  const sourceType = normalizeWikiPageSourceType(
+    recording.content_type ?? payloadSourceType
+  );
+  const sourceLabel = wikiSourceLabel(sourceType);
 
   progressCallback?.(10, 'Fetching workflow, document, and transcript...');
 
@@ -370,6 +402,8 @@ async function runCompilationPipeline(
       orgId,
       recordingId,
       recordingTitle: recording.title,
+      sourceType,
+      sourceLabel,
       workflow,
       workflowSteps,
       document,
@@ -388,6 +422,8 @@ async function runCompilationPipeline(
     classification,
     recordingTitle: recording.title,
     recordingDescription: recording.description,
+    sourceType,
+    sourceLabel,
     workflowTitle: workflow?.title ?? null,
     workflowDescription: workflow?.description ?? null,
     workflowSteps,
@@ -413,6 +449,8 @@ async function runCompilationPipeline(
   const compilationLogEntry = {
     action: 'created' as const,
     source_recording_id: recordingId,
+    source_content_id: recordingId,
+    source_type: sourceType,
     detected_at: nowIso,
     classification,
     confidence,
@@ -444,7 +482,7 @@ async function runCompilationPipeline(
   }
 
   // ---- Step 6 — Insert source reference ------------------------------------
-  progressCallback?.(92, 'Linking source recording...');
+  progressCallback?.(92, `Linking source ${sourceLabel}...`);
 
   const titleForSummary = recording.title?.trim()
     ? recording.title.trim()
@@ -452,9 +490,9 @@ async function runCompilationPipeline(
 
   const sourceInsert: WikiPageSourceInsert = {
     page_id: newPage.id,
-    source_type: 'recording',
+    source_type: sourceType,
     source_id: recordingId,
-    contribution_summary: `Initial wiki page creation from recording ${titleForSummary}`,
+    contribution_summary: `Initial wiki page creation from ${sourceLabel} ${titleForSummary}`,
   };
 
   const { error: sourceError } = await supabase
@@ -821,6 +859,8 @@ async function generateWikiPageContent(params: {
   classification: WikiClassification;
   recordingTitle: string | null;
   recordingDescription: string | null;
+  sourceType: WikiPageSourceType;
+  sourceLabel: string;
   workflowTitle: string | null;
   workflowDescription: string | null;
   workflowSteps: WorkflowStep[];
@@ -873,7 +913,7 @@ async function generateWikiPageContent(params: {
   // This prompt follows product-architecture-v2.md Part 3 Component 4 Step 3a
   // (new page creation). Step 3b (contradiction detection on existing pages)
   // is the subject of TRIB-32 and is intentionally NOT handled here.
-  const prompt = `You are a knowledge compiler. Your job is to turn a single screen recording into a clean, self-contained wiki page describing how this organization actually does a specific workflow. This is the FIRST wiki page for this topic — there is no existing page to merge with.
+  const prompt = `You are a knowledge compiler. Your job is to turn a single first-party ${params.sourceLabel} into a clean, self-contained wiki page describing how this organization actually does a specific workflow or process. This is the FIRST wiki page for this topic — there is no existing page to merge with.
 
 Produce exactly one Markdown document with a YAML frontmatter header, and nothing else. Do NOT wrap the output in code fences. Do NOT include any commentary before or after the document.
 
@@ -886,7 +926,7 @@ screen: ${params.classification.screen ? `"${params.classification.screen}"` : '
 topic: "${params.classification.topic}"
 confidence: <number between 0 and 1>
 sources:
-  - type: recording
+  - type: ${params.sourceType}
     id: "${params.recordingId}"
     title: "${escapeYamlString(titleInput)}"
     recorded_at: ${validFrom}
@@ -983,6 +1023,8 @@ type CompilationLogAction =
 interface CompilationLogEntry {
   action: CompilationLogAction;
   source_recording_id: string;
+  source_content_id?: string;
+  source_type?: WikiPageSourceType;
   detected_at: string;
   classification?: WikiClassification;
   confidence?: number;
@@ -1024,6 +1066,8 @@ interface UpdatePathInputs {
   orgId: string;
   recordingId: string;
   recordingTitle: string | null;
+  sourceType: WikiPageSourceType;
+  sourceLabel: string;
   workflow: WorkflowRowForCompile | null;
   workflowSteps: WorkflowStep[];
   document: DocumentRowForCompile | null;
@@ -1039,6 +1083,8 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
     orgId,
     recordingId,
     recordingTitle,
+    sourceType,
+    sourceLabel,
     workflow,
     workflowSteps,
     document,
@@ -1062,6 +1108,7 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
   const diffResponseText = await callUpdateDiffLLM({
     existingPage,
     recordingTitle,
+    sourceLabel,
     workflow,
     workflowSteps,
     document,
@@ -1086,6 +1133,8 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
       pageId: existingPage.id,
       recordingId,
       recordingTitle,
+      sourceType,
+      sourceLabel,
       summary: 'Source recorded (LLM diff unparseable — no content changes applied)',
     });
     progressCallback?.(100, 'Update path completed (no content changes)');
@@ -1114,6 +1163,8 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
       existingPage,
       recordingId,
       recordingTitle,
+      sourceType,
+      sourceLabel,
       nowIso,
     });
   } else if (diff.action === 'additive') {
@@ -1122,6 +1173,8 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
       existingPage,
       recordingId,
       recordingTitle,
+      sourceType,
+      sourceLabel,
       diff,
       nowIso,
     });
@@ -1140,6 +1193,8 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
         orgId,
         recordingId,
         recordingTitle,
+        sourceType,
+        sourceLabel,
         diff,
         nowIso,
         classification,
@@ -1155,6 +1210,8 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
         existingPage,
         recordingId,
         recordingTitle,
+        sourceType,
+        sourceLabel,
         diff,
         nowIso,
       });
@@ -1208,6 +1265,7 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
 async function callUpdateDiffLLM(params: {
   existingPage: OrgWikiPageRow;
   recordingTitle: string | null;
+  sourceLabel: string;
   workflow: WorkflowRowForCompile | null;
   workflowSteps: WorkflowStep[];
   document: DocumentRowForCompile | null;
@@ -1253,15 +1311,15 @@ async function callUpdateDiffLLM(params: {
   );
 
   // Follows product-architecture-v2.md Part 3 Component 4 Step 3b template.
-  const prompt = `You are a knowledge compiler. You maintain a wiki page about a specific workflow inside one organization's knowledge base. A new screen recording covering the same workflow has just been processed and you must decide how it changes the page.
+  const prompt = `You are a knowledge compiler. You maintain a wiki page about a specific workflow inside one organization's knowledge base. A new ${params.sourceLabel} covering the same workflow or process has just been processed and you must decide how it changes the page.
 
 EXISTING PAGE (Markdown with YAML frontmatter):
 """
 ${params.existingPage.content}
 """
 
-NEW RECORDING DATA:
-- Recording title: ${titleInput}
+NEW SOURCE DATA:
+- Source title: ${titleInput}
 - Workflow steps (extracted from UI state transitions):
 ${workflowStepsBlock || '(no structured steps available)'}
 - Generated document excerpt:
@@ -1390,6 +1448,8 @@ async function applyRedundantUpdate(args: {
   existingPage: OrgWikiPageRow;
   recordingId: string;
   recordingTitle: string | null;
+  sourceType: WikiPageSourceType;
+  sourceLabel: string;
   nowIso: string;
 }): Promise<{
   pageId: string;
@@ -1397,7 +1457,15 @@ async function applyRedundantUpdate(args: {
   contentChanged: boolean;
   embeddingContext: string;
 }> {
-  const { supabase, existingPage, recordingId, recordingTitle, nowIso } = args;
+  const {
+    supabase,
+    existingPage,
+    recordingId,
+    recordingTitle,
+    sourceType,
+    sourceLabel,
+    nowIso,
+  } = args;
 
   const newConfidence = clampConfidence(
     (existingPage.confidence ?? 0.5) + REDUNDANT_CONFIDENCE_DELTA
@@ -1406,6 +1474,8 @@ async function applyRedundantUpdate(args: {
   const logEntry: CompilationLogEntry = {
     action: 'redundant',
     source_recording_id: recordingId,
+    source_content_id: recordingId,
+    source_type: sourceType,
     detected_at: nowIso,
     confidence_delta: REDUNDANT_CONFIDENCE_DELTA,
   };
@@ -1430,7 +1500,9 @@ async function applyRedundantUpdate(args: {
     pageId: existingPage.id,
     recordingId,
     recordingTitle,
-    summary: `Redundant corroboration from recording (confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`,
+    sourceType,
+    sourceLabel,
+    summary: `Redundant corroboration from ${sourceLabel} (confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`,
   });
 
   console.log(
@@ -1453,6 +1525,8 @@ async function applyAdditiveUpdate(args: {
   existingPage: OrgWikiPageRow;
   recordingId: string;
   recordingTitle: string | null;
+  sourceType: WikiPageSourceType;
+  sourceLabel: string;
   diff: WikiDiffResult;
   nowIso: string;
 }): Promise<{
@@ -1461,7 +1535,16 @@ async function applyAdditiveUpdate(args: {
   contentChanged: boolean;
   embeddingContext: string;
 }> {
-  const { supabase, existingPage, recordingId, recordingTitle, diff, nowIso } = args;
+  const {
+    supabase,
+    existingPage,
+    recordingId,
+    recordingTitle,
+    sourceType,
+    sourceLabel,
+    diff,
+    nowIso,
+  } = args;
 
   const mergedContent = diff.merged_content?.trim();
 
@@ -1477,6 +1560,8 @@ async function applyAdditiveUpdate(args: {
       pageId: existingPage.id,
       recordingId,
       recordingTitle,
+      sourceType,
+      sourceLabel,
       summary: 'Additive classification but LLM returned no merged content — source recorded only',
     });
     return {
@@ -1494,6 +1579,8 @@ async function applyAdditiveUpdate(args: {
   const logEntry: CompilationLogEntry = {
     action: 'additive',
     source_recording_id: recordingId,
+    source_content_id: recordingId,
+    source_type: sourceType,
     detected_at: nowIso,
     additions: diff.additions,
     confidence_delta: diff.confidence_delta,
@@ -1520,7 +1607,9 @@ async function applyAdditiveUpdate(args: {
     pageId: existingPage.id,
     recordingId,
     recordingTitle,
-    summary: `Additive update — ${diff.additions.length} new fact(s) merged (confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`,
+    sourceType,
+    sourceLabel,
+    summary: `Additive update from ${sourceLabel} — ${diff.additions.length} new fact(s) merged (confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`,
   });
 
   console.log(
@@ -1541,10 +1630,21 @@ async function applyContradictionFlagged(args: {
   existingPage: OrgWikiPageRow;
   recordingId: string;
   recordingTitle: string | null;
+  sourceType: WikiPageSourceType;
+  sourceLabel: string;
   diff: WikiDiffResult;
   nowIso: string;
 }): Promise<void> {
-  const { supabase, existingPage, recordingId, recordingTitle, diff, nowIso } = args;
+  const {
+    supabase,
+    existingPage,
+    recordingId,
+    recordingTitle,
+    sourceType,
+    sourceLabel,
+    diff,
+    nowIso,
+  } = args;
 
   // Leave page content untouched; TRIB-34's admin review UI will surface the
   // flagged entry and let a human decide whether to accept merged_content.
@@ -1559,6 +1659,8 @@ async function applyContradictionFlagged(args: {
   const logEntry: CompilationLogEntry = {
     action: 'flagged',
     source_recording_id: recordingId,
+    source_content_id: recordingId,
+    source_type: sourceType,
     detected_at: nowIso,
     contradictions: diff.contradictions,
     additions: diff.additions,
@@ -1592,6 +1694,8 @@ async function applyContradictionFlagged(args: {
     pageId: existingPage.id,
     recordingId,
     recordingTitle,
+    sourceType,
+    sourceLabel,
     summary: `Contradiction flagged for admin review — ${diff.contradictions.length} conflict(s)`,
   });
 
@@ -1607,6 +1711,8 @@ async function applyContradictionWithSupersede(args: {
   orgId: string;
   recordingId: string;
   recordingTitle: string | null;
+  sourceType: WikiPageSourceType;
+  sourceLabel: string;
   diff: WikiDiffResult;
   nowIso: string;
   classification: WikiClassification;
@@ -1622,6 +1728,8 @@ async function applyContradictionWithSupersede(args: {
     orgId,
     recordingId,
     recordingTitle,
+    sourceType,
+    sourceLabel,
     diff,
     nowIso,
     classification,
@@ -1642,6 +1750,8 @@ async function applyContradictionWithSupersede(args: {
       existingPage,
       recordingId,
       recordingTitle,
+      sourceType,
+      sourceLabel,
       diff,
       nowIso,
     });
@@ -1667,6 +1777,8 @@ async function applyContradictionWithSupersede(args: {
   const appliedLogEntry: CompilationLogEntry = {
     action: 'applied',
     source_recording_id: recordingId,
+    source_content_id: recordingId,
+    source_type: sourceType,
     detected_at: nowIso,
     contradictions: diff.contradictions,
     additions: diff.additions,
@@ -1714,6 +1826,8 @@ async function applyContradictionWithSupersede(args: {
     pageId: newPage.id,
     recordingId,
     recordingTitle,
+    sourceType,
+    sourceLabel,
     summary: `Auto-applied contradiction resolution (supersedes ${existingPage.id}, ${diff.contradictions.length} conflicts)`,
   });
 
@@ -1790,6 +1904,8 @@ async function insertWikiPageSource(
     pageId: string;
     recordingId: string;
     recordingTitle: string | null;
+    sourceType: WikiPageSourceType;
+    sourceLabel: string;
     summary: string;
   }
 ): Promise<void> {
@@ -1799,9 +1915,9 @@ async function insertWikiPageSource(
 
   const sourceInsert: WikiPageSourceInsert = {
     page_id: params.pageId,
-    source_type: 'recording',
+    source_type: params.sourceType,
     source_id: params.recordingId,
-    contribution_summary: `${params.summary} [recording: ${titleForSummary}]`,
+    contribution_summary: `${params.summary} [${params.sourceLabel}: ${titleForSummary}]`,
   };
 
   const { error } = await supabase

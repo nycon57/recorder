@@ -152,13 +152,14 @@ describe('compile-wiki embedding freshness', () => {
       valid_until: null,
       compilation_log: [],
     };
+    const sourceInsertQuery = insertResponse();
 
     fromMock
       .mockReturnValueOnce(queryResponse({
         id: 'rec-1',
         title: 'Renewal walkthrough',
         description: null,
-        content_type: 'recording',
+        content_type: 'text',
         metadata: null,
       }))
       .mockReturnValueOnce(queryResponse({
@@ -174,7 +175,7 @@ describe('compile-wiki embedding freshness', () => {
       .mockReturnValueOnce(queryResponse(null))
       .mockReturnValueOnce(queryResponse(existingPage))
       .mockReturnValueOnce(updateResponse())
-      .mockReturnValueOnce(insertResponse());
+      .mockReturnValueOnce(sourceInsertQuery);
 
     await handleCompileWiki({
       id: 'job-1',
@@ -200,6 +201,13 @@ describe('compile-wiki embedding freshness', () => {
         backlinksChanged: false,
       })
     );
+    expect(sourceInsertQuery.insert).toHaveBeenCalledWith({
+      page_id: 'page-existing',
+      source_type: 'text',
+      source_id: 'rec-1',
+      contribution_summary:
+        'Additive update from text note — 1 new fact(s) merged (confidence 0.70 → 0.80) [text note: Renewal walkthrough]',
+    });
     expect(
       runRelationshipExtractionMock.mock.invocationCallOrder[0]
     ).toBeLessThan(runCrossPageContradictionDetectionMock.mock.invocationCallOrder[0]);
@@ -334,5 +342,86 @@ describe('compile-wiki embedding freshness', () => {
         recordingId: 'rec-1',
       })
     );
+  });
+
+  it('links non-recording content with its actual wiki source type', async () => {
+    getApprovedRoutingOverrideMock.mockReturnValue({
+      app: null,
+      screen: null,
+      topic: 'security-policy',
+    });
+    generateContentMock.mockResolvedValueOnce({
+      text: [
+        '---',
+        'layer: org',
+        'org_id: "org-1"',
+        'app: null',
+        'screen: null',
+        'topic: "security-policy"',
+        'confidence: 0.8',
+        'sources:',
+        '  - type: document',
+        '    id: "doc-content-1"',
+        '---',
+        '# Security Policy',
+        '',
+        '## When This Applies',
+        'Use this policy before sharing customer data.',
+      ].join('\n'),
+    } as never);
+
+    const pageInsertQuery = insertSelectSingleResponse({ id: 'page-doc-1' });
+    const sourceInsertQuery = insertResponse();
+
+    fromMock
+      .mockReturnValueOnce(queryResponse({
+        id: 'doc-content-1',
+        title: 'Security policy',
+        description: null,
+        content_type: 'document',
+        metadata: null,
+      }))
+      .mockReturnValueOnce(queryResponse(null))
+      .mockReturnValueOnce(queryResponse({
+        id: 'document-1',
+        markdown: 'Customer data must not be shared externally.',
+        summary: 'Security policy',
+      }))
+      .mockReturnValueOnce(queryResponse(null))
+      .mockReturnValueOnce(queryResponse(null))
+      .mockReturnValueOnce(pageInsertQuery)
+      .mockReturnValueOnce(sourceInsertQuery);
+
+    await handleCompileWiki({
+      id: 'job-1',
+      payload: {
+        contentId: 'doc-content-1',
+        orgId: 'org-1',
+        sourceType: 'document',
+      },
+    } as never);
+
+    expect(pageInsertQuery.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        org_id: 'org-1',
+        topic: 'security-policy',
+        content: expect.stringContaining('# Security Policy'),
+        compilation_log: [
+          expect.objectContaining({
+            action: 'created',
+            source_recording_id: 'doc-content-1',
+            source_content_id: 'doc-content-1',
+            source_type: 'document',
+          }),
+        ],
+      })
+    );
+    expect(sourceInsertQuery.insert).toHaveBeenCalledWith({
+      page_id: 'page-doc-1',
+      source_type: 'document',
+      source_id: 'doc-content-1',
+      contribution_summary:
+        'Initial wiki page creation from document Security policy',
+    });
   });
 });

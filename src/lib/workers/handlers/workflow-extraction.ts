@@ -303,7 +303,11 @@ async function enqueueCompileWikiAfterWorkflow(
   args: { recordingId: string; orgId: string }
 ): Promise<void> {
   try {
-    await enqueueCompileWikiJob(supabase, { ...args, source: 'WorkflowExtraction' });
+    await enqueueCompileWikiJob(supabase, {
+      ...args,
+      sourceType: 'recording',
+      source: 'WorkflowExtraction',
+    });
   } catch (error) {
     console.error(
       `[WorkflowExtraction] Failed to enqueue compile_wiki for ${args.recordingId}:`,

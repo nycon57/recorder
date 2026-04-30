@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
+import type { KnowledgeSourceType } from '@/lib/types/knowledge-docs';
 import {
   extractPendingContradictions,
   listPendingReviewPages,
@@ -11,7 +12,7 @@ export type ReviewQueueKind = 'contradiction' | 'routing';
 
 export interface RoutingReviewSourceLink {
   sourceId: string;
-  sourceType: 'recording' | 'document' | 'manual';
+  sourceType: KnowledgeSourceType;
   contributedAt: string;
   sourceTitle?: string | null;
 }
@@ -69,10 +70,12 @@ type RoutingPageRow = Pick<
   'id' | 'topic' | 'app' | 'screen' | 'created_at' | 'updated_at' | 'compilation_log'
 >;
 
-type RoutingSourceRow = Pick<
-  Database['public']['Tables']['wiki_page_sources']['Row'],
-  'page_id' | 'source_id' | 'source_type' | 'contributed_at'
->;
+interface RoutingSourceRow {
+  page_id: string;
+  source_id: string;
+  source_type: KnowledgeSourceType;
+  contributed_at: string;
+}
 
 type ContentTitleRow = Pick<
   Database['public']['Tables']['content']['Row'],

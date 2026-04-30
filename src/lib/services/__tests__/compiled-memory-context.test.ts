@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 jest.mock('@/lib/services/vendor-wiki-resolver', () => ({
@@ -264,7 +265,7 @@ describe('resolveCompiledMemoryContext', () => {
           {
             page_id: 'org-3',
             source_id: 'recording-3',
-            source_type: 'recording',
+            source_type: 'document',
           },
         ],
         orgFreshnessRows: [

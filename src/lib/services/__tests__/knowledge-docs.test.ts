@@ -1,3 +1,5 @@
+import { describe, expect, test } from '@jest/globals';
+
 import { knowledgeDocsQuerySchema } from '@/lib/types/knowledge-docs';
 
 import { assembleKnowledgeDocsList } from '../knowledge-docs';
@@ -53,15 +55,13 @@ describe('knowledge-docs service', () => {
       pageSources: [
         {
           page_id: 'page-live',
-          source_type: 'recording',
-          source_id: 'source-1',
+          source_type: 'video',
         },
         {
           page_id: 'page-review',
           source_type: 'document',
-          source_id: 'source-2',
         },
-        { page_id: 'page-review', source_type: 'manual', source_id: 'source-3' },
+        { page_id: 'page-review', source_type: 'manual' },
       ],
       clusters: [{ id: 'cluster-revops', name: 'Revenue Ops' }],
       vendorPages: [{ app: 'hubspot', screen: 'deals' }],
@@ -71,6 +71,8 @@ describe('knowledge-docs service', () => {
     expect(payload.items[0]?.id).toBe('page-live');
     expect(payload.items[0]?.detailHref).toBe('/knowledge/pages/page-live');
     expect(payload.items[0]?.status).toBe('live');
+    expect(payload.items[0]?.type).toBe('video');
+    expect(payload.items[0]?.sourceTypes).toEqual(['video']);
     expect(payload.items[0]?.vendorCoverage).toBe('covered');
     expect(payload.items[1]?.status).toBe('needs_review');
     expect(payload.items[1]?.type).toBe('mixed');
@@ -113,8 +115,8 @@ describe('knowledge-docs service', () => {
         },
       ],
       pageSources: [
-        { page_id: 'page-a', source_type: 'recording', source_id: 'source-a' },
-        { page_id: 'page-b', source_type: 'manual', source_id: 'source-b' },
+        { page_id: 'page-a', source_type: 'recording' },
+        { page_id: 'page-b', source_type: 'manual' },
       ],
       clusters: [{ id: 'cluster-a', name: 'Cluster A' }],
       vendorPages: [{ app: 'hubspot', screen: 'deals' }],

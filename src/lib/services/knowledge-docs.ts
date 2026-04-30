@@ -4,10 +4,12 @@ import type { Database } from '@/lib/types/database';
 import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 import {
   KNOWLEDGE_DOC_TYPES,
+  KNOWLEDGE_SOURCE_TYPES,
   type KnowledgeDocType,
   type KnowledgeDocsListItem,
   type KnowledgeDocsPayload,
   type KnowledgeDocsQueryInput,
+  type KnowledgeSourceType,
   type KnowledgeVendorCoverage,
 } from '@/lib/types/knowledge-docs';
 import { resolveKnowledgeStatusForWikiPage } from '@/lib/utils/knowledge-status';
@@ -74,7 +76,7 @@ function normalizeTuple(
 }
 
 function deriveDocType(
-  sourceTypes: Array<'recording' | 'document' | 'manual'>
+  sourceTypes: KnowledgeSourceType[]
 ): KnowledgeDocType {
   if (sourceTypes.length === 0) return 'unknown';
   if (sourceTypes.length > 1) return 'mixed';
@@ -83,6 +85,12 @@ function deriveDocType(
     return only;
   }
   return 'unknown';
+}
+
+function normalizeKnowledgeSourceType(sourceType: string): KnowledgeSourceType {
+  return KNOWLEDGE_SOURCE_TYPES.includes(sourceType as KnowledgeSourceType)
+    ? (sourceType as KnowledgeSourceType)
+    : 'manual';
 }
 
 function deriveVendorCoverage(input: {
@@ -137,11 +145,11 @@ export function assembleKnowledgeDocsList(
 
   const sourceTypesByPageId = new Map<
     string,
-    Set<'recording' | 'document' | 'manual'>
+    Set<KnowledgeSourceType>
   >();
   for (const sourceRow of args.pageSources) {
     const existing = sourceTypesByPageId.get(sourceRow.page_id) ?? new Set();
-    existing.add(sourceRow.source_type);
+    existing.add(normalizeKnowledgeSourceType(sourceRow.source_type));
     sourceTypesByPageId.set(sourceRow.page_id, existing);
   }
 
@@ -154,7 +162,7 @@ export function assembleKnowledgeDocsList(
   const allDocs: KnowledgeDocsListItem[] = args.pages.map((page) => {
     const pageSourceTypes = Array.from(
       sourceTypesByPageId.get(page.id) ?? []
-    ).sort() as Array<'recording' | 'document' | 'manual'>;
+    ).sort();
     const docType = deriveDocType(pageSourceTypes);
     const pageHasPendingReview = hasPendingReview(page.compilation_log);
     const status: KnowledgeStatus = resolveKnowledgeStatusForWikiPage({
