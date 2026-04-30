@@ -9,7 +9,6 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { injectRAGContext } from '@/lib/services/chat-rag-integration';
 import {
   buildCompiledMemoryCitations,
   resolveCompiledMemoryAnswerContext,
@@ -170,66 +169,25 @@ export async function handleSearchRecordings(
   input: SearchRecordingsInput,
   ctx: McpToolContext
 ): Promise<SearchRecordingResult[]> {
-  const { query, limit, contentTypes } = input;
-
-  // Map contentTypes filter to RAG options; empty array is treated as "no filter".
-  const includeTranscripts =
-    !contentTypes || contentTypes.length === 0 || contentTypes.some((t) => ['recording', 'video', 'audio'].includes(t));
-  const includeDocuments =
-    !contentTypes || contentTypes.length === 0 || contentTypes.some((t) => ['document', 'text'].includes(t));
-
-  const ragContext = await injectRAGContext(query, ctx.orgId, {
+  const { query, limit } = input;
+  const pages = await searchCompiledOrgWikiPages({
+    orgId: ctx.orgId,
+    query,
     limit,
-    minRelevance: 0.3,
-    includeTranscripts,
-    includeDocuments,
-    useHierarchical: true,
-    enableCache: true,
   });
 
-  if (!ragContext.sources || ragContext.sources.length === 0) {
+  if (pages.length === 0) {
     return [];
   }
 
-  // Look up content metadata for sources that have contentId
-  const contentIds = [
-    ...new Set(ragContext.sources.map((s) => s.contentId).filter(Boolean)),
-  ] as string[];
-
-  const contentMap = new Map<
-    string,
-    { title: string; content_type: string; created_at: string }
-  >();
-
-  if (contentIds.length > 0) {
-    const { data: contentItems } = await supabaseAdmin
-      .from('content')
-      .select('id, title, content_type, created_at')
-      .in('id', contentIds)
-      .eq('org_id', ctx.orgId);
-
-    for (const item of contentItems ?? []) {
-      contentMap.set(item.id, {
-        title: item.title ?? 'Untitled',
-        content_type: item.content_type ?? 'recording',
-        created_at: item.created_at,
-      });
-    }
-  }
-
-  return ragContext.sources
-    .filter((s) => s.contentId)
-    .map((source) => {
-      const meta = contentMap.get(source.contentId!);
-      return {
-        id: source.contentId!,
-        title: meta?.title ?? source.title,
-        contentType: meta?.content_type ?? (source.type === 'document' ? 'document' : 'recording'),
-        snippet: source.excerpt,
-        similarity: Math.round(source.relevanceScore * 100) / 100,
-        createdAt: meta?.created_at ?? '',
-      };
-    });
+  return pages.map((page) => ({
+    id: page.id,
+    title: page.title,
+    contentType: 'compiled_wiki',
+    snippet: page.snippet,
+    similarity: Math.round(page.similarity * 100) / 100,
+    createdAt: page.updatedAt,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +203,6 @@ interface SearchKnowledgeInput {
 }
 
 type SearchKnowledgeResult =
-  | (SearchRecordingResult & { source: 'recording' })
   | Awaited<ReturnType<typeof searchCompiledOrgWikiPages>>[number]
   | Awaited<ReturnType<typeof searchVendorWikiPages>>[number];
 
@@ -254,18 +211,7 @@ export async function handleSearchKnowledge(
   ctx: McpToolContext
 ): Promise<SearchKnowledgeResult[]> {
   const limit = Math.max(1, Math.min(20, input.limit ?? 5));
-  const [recordings, orgWiki, vendorWiki] = await Promise.all([
-    handleSearchRecordings(
-      {
-        query: input.query,
-        limit,
-        contentTypes: input.contentTypes,
-      },
-      ctx,
-    ).catch((error) => {
-      console.warn('[MCP] searchKnowledge recording search failed:', error);
-      return [] as SearchRecordingResult[];
-    }),
+  const [orgWiki, vendorWiki] = await Promise.all([
     searchCompiledOrgWikiPages({
       orgId: ctx.orgId,
       query: input.query,
@@ -282,12 +228,6 @@ export async function handleSearchKnowledge(
   return [
     ...orgWiki.sort((left, right) => right.similarity - left.similarity),
     ...vendorWiki.sort((left, right) => right.similarity - left.similarity),
-    ...recordings
-      .map((recording) => ({
-        ...recording,
-        source: 'recording' as const,
-      }))
-      .sort((left, right) => right.similarity - left.similarity),
   ].slice(0, limit);
 }
 

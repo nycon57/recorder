@@ -8,15 +8,14 @@
 import { NextRequest } from 'next/server';
 
 import {
-  generateStreamingRAGResponse,
-  saveChatMessage,
-  createConversation,
-  getConversationHistory,
-  type CitedSource,
-} from '@/lib/services/rag-google';
+  buildCompiledMemoryCitations,
+  resolveCompiledMemoryAnswerContext,
+} from '@/lib/services/compiled-memory-answer-context';
+import { generateCompiledMemoryGroundedAnswer } from '@/lib/services/compiled-memory-answer';
 import { rateLimiters } from '@/lib/rate-limit/limiter';
 import { requireOrg } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/types/database';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,6 +23,51 @@ export const dynamic = 'force-dynamic';
 /** Encode an SSE event as bytes for streaming. */
 function encodeEvent(encoder: TextEncoder, data: Record<string, unknown>): Uint8Array {
   return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+type StreamSource = ReturnType<typeof buildCompiledMemoryCitations>[number];
+
+async function createConversation(
+  orgId: string,
+  userId: string,
+  title = 'New Chat',
+): Promise<string> {
+  const { data, error } = await supabaseAdmin
+    .from('chat_conversations')
+    .insert({
+      org_id: orgId,
+      user_id: userId,
+      title,
+    })
+    .select('id')
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to create conversation: ${error?.message ?? 'missing row'}`);
+  }
+
+  return data.id;
+}
+
+async function saveChatMessage(
+  conversationId: string,
+  message: {
+    role: 'user' | 'assistant';
+    content: string;
+    metadata?: { sources?: StreamSource[] };
+  },
+): Promise<void> {
+  const { error } = await supabaseAdmin.from('chat_messages').insert({
+    conversation_id: conversationId,
+    role: message.role,
+    content: message.content,
+    sources: (message.metadata?.sources ?? null) as Json,
+    metadata: (message.metadata ?? {}) as Json,
+  });
+
+  if (error) {
+    throw new Error(`Failed to save chat message: ${error.message}`);
+  }
 }
 
 /**
@@ -34,12 +78,9 @@ function encodeEvent(encoder: TextEncoder, data: Record<string, unknown>): Uint8
  * Request body:
  * - message: string (required) — the user's chat message
  * - conversationId?: string — existing conversation to continue
- * - recordingIds?: string[] — scope RAG retrieval to specific content IDs.
- *     When provided, only transcript chunks belonging to these content items
- *     are searched. Pass an empty array or omit to search all org content.
- * - maxChunks?: number — max context chunks (default: 5)
- * - threshold?: number — similarity threshold (default: 0.7)
- * - rerank?: boolean — enable Cohere reranking (default: false)
+ * - app?: string — optional app hint for compiled memory.
+ * - screen?: string — optional screen hint for compiled memory.
+ * - limit?: number — max compiled Wiki sources (default: 5)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -76,10 +117,9 @@ export async function POST(request: NextRequest) {
     const {
       message,
       conversationId,
-      recordingIds,
-      maxChunks = 5,
-      threshold = 0.7,
-      rerank = false,
+      app,
+      screen,
+      limit = 5,
     } = body;
 
     if (!message || typeof message !== 'string') {
@@ -106,8 +146,6 @@ export async function POST(request: NextRequest) {
     } else {
       convId = await createConversation(orgId, userId, 'New Chat');
     }
-    const history = await getConversationHistory(convId, orgId);
-
     await saveChatMessage(convId, {
       role: 'user',
       content: message,
@@ -117,33 +155,29 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          let fullResponse = '';
-          let sources: CitedSource[] = [];
+          const answerContext = await resolveCompiledMemoryAnswerContext({
+            orgId,
+            userId,
+            question: message,
+            app,
+            screen,
+            limit,
+          });
+          const sources = buildCompiledMemoryCitations(answerContext.sources);
+          controller.enqueue(encodeEvent(encoder, { type: 'sources', sources }));
 
-          const generator = generateStreamingRAGResponse(message, orgId, {
-            conversationHistory: history,
-            maxChunks,
-            threshold,
-            contentIds: recordingIds?.length ? recordingIds : undefined,
-            rerank,
+          const answer = await generateCompiledMemoryGroundedAnswer({
+            question: message,
+            answerContext,
           });
 
-          for await (const chunk of generator) {
-            if (chunk.type === 'context') {
-              sources = chunk.data.sources;
-              controller.enqueue(encodeEvent(encoder, { type: 'sources', sources }));
-            } else if (chunk.type === 'token') {
-              fullResponse += chunk.data.token;
-              controller.enqueue(encodeEvent(encoder, { type: 'token', token: chunk.data.token }));
-            } else if (chunk.type === 'done') {
-              await saveChatMessage(convId, {
-                role: 'assistant',
-                content: fullResponse,
-                metadata: { sources },
-              });
-              controller.enqueue(encodeEvent(encoder, { type: 'done', conversationId: convId }));
-            }
-          }
+          controller.enqueue(encodeEvent(encoder, { type: 'token', token: answer }));
+          await saveChatMessage(convId, {
+            role: 'assistant',
+            content: answer,
+            metadata: { sources },
+          });
+          controller.enqueue(encodeEvent(encoder, { type: 'done', conversationId: convId }));
 
           controller.close();
         } catch (error) {
