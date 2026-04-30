@@ -1,5 +1,7 @@
 'use client';
 
+/* global HTMLCanvasElement, HTMLVideoElement */
+
 import { useEffect, useState, useCallback } from 'react';
 
 import { useRecording } from '@/app/(dashboard)/record/contexts/RecordingContext';

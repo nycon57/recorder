@@ -1,5 +1,7 @@
 'use client';
 
+/* global EventSource */
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, XCircle, ExternalLink, AlertCircle } from 'lucide-react';
@@ -108,7 +110,7 @@ export default function UploadProgressStep({
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const startTimeRef = useRef<number>(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSSEMessageRef = useRef<((message: SSEMessage) => void) | null>(null);
   const progressRef = useRef<number>(0);
 

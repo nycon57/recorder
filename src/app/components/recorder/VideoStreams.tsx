@@ -1,5 +1,7 @@
 'use client';
 
+/* global HTMLVideoElement */
+
 /**
  * PERF-FE-002: Code-split heavy components
  *

@@ -1,5 +1,7 @@
 'use client';
 
+/* global HTMLAudioElement */
+
 import * as React from 'react';
 import { Download } from 'lucide-react';
 import { toast } from 'sonner';

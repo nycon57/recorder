@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+/* global HTMLAudioElement, HTMLVideoElement */
+
+import { useState, useRef, useCallback, useEffect, useMemo, type ChangeEvent, type DragEvent } from 'react';
 import { Upload, X, AlertCircle, FileIcon, Video, Music, FileText } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
@@ -241,7 +243,7 @@ export default function FileUploadStep({
    * Handle file selection from input
    */
   const handleFileSelect = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
+    (event: ChangeEvent<HTMLInputElement>) => {
       const selectedFile = event.target.files?.[0];
       if (selectedFile) {
         processFile(selectedFile);
@@ -253,25 +255,25 @@ export default function FileUploadStep({
   /**
    * Handle drag events
    */
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
+  const handleDragEnter = useCallback((e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
+  const handleDragLeave = useCallback((e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
   }, []);
 
   const handleDrop = useCallback(
-    (e: React.DragEvent) => {
+    (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
       setIsDragging(false);

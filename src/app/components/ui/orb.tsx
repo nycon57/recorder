@@ -22,7 +22,7 @@
  * DO NOT import this component directly - it will add ~350KB to your bundle.
  */
 
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, type RefObject } from "react"
 import { useTexture } from "@react-three/drei"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import * as THREE from "three"
@@ -31,15 +31,15 @@ export type AgentState = null | "thinking" | "listening" | "talking"
 
 type OrbProps = {
   colors?: [string, string]
-  colorsRef?: React.RefObject<[string, string]>
+  colorsRef?: RefObject<[string, string]>
   resizeDebounce?: number
   seed?: number
   agentState?: AgentState
   volumeMode?: "auto" | "manual"
   manualInput?: number
   manualOutput?: number
-  inputVolumeRef?: React.RefObject<number>
-  outputVolumeRef?: React.RefObject<number>
+  inputVolumeRef?: RefObject<number>
+  outputVolumeRef?: RefObject<number>
   getInputVolume?: () => number
   getOutputVolume?: () => number
   className?: string
@@ -102,14 +102,14 @@ function Scene({
   getOutputVolume,
 }: {
   colors: [string, string]
-  colorsRef?: React.RefObject<[string, string]>
+  colorsRef?: RefObject<[string, string]>
   seed?: number
   agentState: AgentState
   volumeMode: "auto" | "manual"
   manualInput?: number
   manualOutput?: number
-  inputVolumeRef?: React.RefObject<number>
-  outputVolumeRef?: React.RefObject<number>
+  inputVolumeRef?: RefObject<number>
+  outputVolumeRef?: RefObject<number>
   getInputVolume?: () => number
   getOutputVolume?: () => number
 }) {
@@ -257,7 +257,6 @@ function Scene({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability -- Three.js textures require mutable wrapping configuration.
     perlinNoiseTexture.wrapS = THREE.RepeatWrapping
-    // eslint-disable-next-line react-hooks/immutability -- Three.js textures require mutable wrapping configuration.
     perlinNoiseTexture.wrapT = THREE.RepeatWrapping
   }, [perlinNoiseTexture])
 

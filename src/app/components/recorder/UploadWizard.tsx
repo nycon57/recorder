@@ -106,10 +106,10 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
       return;
     }
 
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    const handleBeforeUnload = (e: Event) => {
       // Modern browsers require returnValue to be set
       e.preventDefault();
-      e.returnValue = '';
+      (e as unknown as { returnValue: string }).returnValue = '';
       return '';
     };
 

@@ -1,5 +1,7 @@
 'use client';
 
+/* global MediaQueryListEvent */
+
 import { useState, useEffect } from 'react';
 import { Loader2, Bell, Monitor } from 'lucide-react';
 
@@ -139,7 +141,6 @@ export function PreferencesForm() {
     };
 
     fetchProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const savePreferences = async () => {

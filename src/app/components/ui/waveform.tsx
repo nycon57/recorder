@@ -1,5 +1,7 @@
 "use client"
 
+/* global AnalyserNode, AudioBuffer, AudioBufferSourceNode, AudioContext, HTMLCanvasElement, MediaRecorder, MediaStream, MouseEvent */
+
 import {
   useCallback,
   useEffect,
@@ -7,6 +9,9 @@ import {
   useRef,
   useState,
   type HTMLAttributes,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type MutableRefObject,
 } from "react"
 
 import { cn } from "@/lib/utils"
@@ -120,7 +125,7 @@ export const Waveform = ({
     return () => resizeObserver.disconnect()
   }, [data, barWidth, barGap, barRadius, barColor, fadeEdges, fadeWidth])
 
-  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleClick = (e: ReactMouseEvent<HTMLCanvasElement>) => {
     if (!onBarClick) return
 
     const rect = canvasRef.current?.getBoundingClientRect()
@@ -415,7 +420,7 @@ export const AudioScrubber = ({
     [duration, onSeek]
   )
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
     e.preventDefault()
     setIsDragging(true)
     handleScrub(e.clientX)
@@ -430,7 +435,7 @@ export const AudioScrubber = ({
    * Meets WCAG 2.1 Success Criterion 2.1.1 (Keyboard Accessible)
    */
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
       if (!onSeek || duration <= 0) return
 
       const SEEK_STEP = 5 // seconds
@@ -757,7 +762,7 @@ export type LiveMicrophoneWaveformProps = Omit<
   onError?: (error: Error) => void
   historySize?: number
   updateRate?: number
-  savedHistoryRef?: React.MutableRefObject<number[]>
+  savedHistoryRef?: MutableRefObject<number[]>
   dragOffset?: number
   setDragOffset?: (offset: number) => void
   enableAudioPlayback?: boolean
@@ -1222,7 +1227,7 @@ export const LiveMicrophoneWaveform = ({
     historyRef,
   ])
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
     if (active || historyRef.current.length === 0) return
 
     e.preventDefault()
@@ -1240,7 +1245,7 @@ export const LiveMicrophoneWaveform = ({
    * Meets WCAG 2.1 Success Criterion 2.1.1 (Keyboard Accessible)
    */
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
       if (active || historyRef.current.length === 0) return
 
       const step = barWidth + barGap
@@ -1704,7 +1709,7 @@ export const RecordingWaveform = ({
     [recording, isRecordingComplete]
   )
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
     if (recording || !isRecordingComplete) return
 
     e.preventDefault()
@@ -1721,7 +1726,7 @@ export const RecordingWaveform = ({
    * Meets WCAG 2.1 Success Criterion 2.1.1 (Keyboard Accessible)
    */
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
       if (recording || !isRecordingComplete) return
 
       const POSITION_STEP = 0.05 // 5% per keypress

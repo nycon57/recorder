@@ -1,5 +1,7 @@
 'use client';
 
+/* global HTMLCanvasElement */
+
 import * as React from 'react';
 import {
   Download,
