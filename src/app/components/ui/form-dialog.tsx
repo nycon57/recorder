@@ -67,7 +67,7 @@ export interface FormDialogProps<
 
   // Form props
   /** Zod schema for form validation */
-  schema: z.ZodType<TSchema, TSchema>
+  schema: z.ZodType<TSchema, FieldValues>
   /** Default values for the form */
   defaultValues: TSchema | (() => TSchema)
   /** Optional mode for form validation */
