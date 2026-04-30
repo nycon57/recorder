@@ -559,7 +559,8 @@ export async function POST(request: NextRequest) {
           hadOrgKnowledge,
           hadVendorKnowledge,
           vendorOrgId,
-          customerOrgId: orgId !== vendorOrgId ? orgId : null,
+          customerOrgId:
+            vendorOrgId && orgId !== vendorOrgId ? orgId : null,
           knowledgeMode: hadOrgKnowledge
             ? 'org_backed'
             : hadVendorKnowledge
