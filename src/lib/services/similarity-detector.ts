@@ -16,11 +16,14 @@ import { promisify } from 'util';
 import * as tmp from 'tmp-promise';
 
 import { createClient } from '@/lib/supabase/admin';
-import type { StorageProvider } from '@/lib/types/database';
 
-import { StorageManager } from './storage-manager';
+import { StorageManager, type StorageProvider } from './storage-manager';
 
 const execFileAsync = promisify(execFile);
+
+function toStorageProvider(value: string | null | undefined): StorageProvider {
+  return value === 'r2' ? 'r2' : 'supabase';
+}
 
 // Timeout for ffmpeg operations (30 seconds)
 const FFMPEG_TIMEOUT_MS = 30000;
@@ -588,7 +591,7 @@ export async function batchProcessSimilarity(
       const hash = await calculatePerceptualHash(
         recording.id,
         storagePath,
-        recording.storage_provider || 'supabase'
+        toStorageProvider(recording.storage_provider)
       );
 
       if (!hash) {

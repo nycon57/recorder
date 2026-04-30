@@ -5,19 +5,14 @@
  * Uses Google text-embedding-004 for query embeddings.
  */
 
-import { GoogleGenAI } from '@google/genai';
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 
-import { GOOGLE_CONFIG } from '@/lib/google/client';
-import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/types/database';
 
 import { EmbeddingCache } from './cache';
 import { generateEmbeddingWithFallback } from './embedding-fallback';
 import { expandShortQuery } from './query-preprocessor';
 import { findMatchingConcepts, getConceptContentIds } from './concept-search';
-
-type TranscriptChunk = Database['public']['Tables']['transcript_chunks']['Row'];
 
 // Embedding cache for common queries
 const embeddingCache = new Map<string, number[]>();
@@ -213,9 +208,13 @@ export async function vectorSearch(
       id: r.id,
       contentId: r.contentId,
       contentTitle: r.contentTitle,
+      contentType: r.metadata.source === 'document' ? 'document' : 'recording',
       chunkText: r.chunkText,
       similarity: r.similarity,
-      metadata: r.metadata,
+      metadata: {
+        ...r.metadata,
+        contentType: r.metadata.source === 'document' ? 'document' : 'recording',
+      },
       createdAt: r.createdAt,
     }));
 
@@ -446,9 +445,9 @@ async function getEligibleContentIds(
   if (tagIds && tagIds.length > 0) {
     const { data: taggedContent, error: tagError } = await supabase
       .from('content_tags')
-      .select('content_id')
+      .select('content_id, content!inner(org_id)')
       .in('tag_id', tagIds)
-      .eq('org_id', orgId);
+      .eq('content.org_id', orgId);
 
     if (tagError) {
       console.error('[Vector Search] Tag filter error:', tagError);
@@ -489,16 +488,16 @@ async function getEligibleContentIds(
   if (collectionId) {
     const { data: collectionItems, error: collectionError } = await supabase
       .from('collection_items')
-      .select('item_id')
+      .select('content_id, content!inner(org_id)')
       .eq('collection_id', collectionId)
-      .eq('org_id', orgId);
+      .eq('content.org_id', orgId);
 
     if (collectionError) {
       console.error('[Vector Search] Collection filter error:', collectionError);
       return [];
     }
 
-    const collectionContentIds = collectionItems?.map((i: { item_id: string }) => i.item_id) || [];
+    const collectionContentIds = collectionItems?.map((i: { content_id: string }) => i.content_id) || [];
 
     eligibleContentIds = eligibleContentIds
       ? eligibleContentIds.filter((id: string) => collectionContentIds.includes(id))
@@ -727,7 +726,9 @@ async function generateQueryEmbedding(query: string, orgId: string): Promise<num
       // Also populate in-memory cache for faster subsequent access
       if (embeddingCache.size >= CACHE_MAX_SIZE) {
         const firstKey = embeddingCache.keys().next().value;
-        embeddingCache.delete(firstKey);
+        if (firstKey) {
+          embeddingCache.delete(firstKey);
+        }
       }
       embeddingCache.set(memCacheKey, redisCached);
       return redisCached;
@@ -749,7 +750,9 @@ async function generateQueryEmbedding(query: string, orgId: string): Promise<num
   // Tier 1: In-memory cache (with LRU eviction)
   if (embeddingCache.size >= CACHE_MAX_SIZE) {
     const firstKey = embeddingCache.keys().next().value;
-    embeddingCache.delete(firstKey);
+    if (firstKey) {
+      embeddingCache.delete(firstKey);
+    }
   }
   embeddingCache.set(memCacheKey, embedding);
 

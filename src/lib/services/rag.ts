@@ -6,8 +6,9 @@
  */
 
 import { openai, PROMPTS, OPENAI_CONFIG } from '@/lib/openai/client';
-import { vectorSearch, type SearchResult } from '@/lib/services/vector-search';
+import { vectorSearch } from '@/lib/services/vector-search';
 import { createClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/types/database';
 
 export interface ChatMessage {
   id: string;
@@ -35,6 +36,26 @@ export interface RAGContext {
   context: string;
   sources: CitedSource[];
   totalChunks: number;
+}
+
+function toJson(value: unknown): Json {
+  return value as Json;
+}
+
+function parseMessageMetadata(value: Json | null): ChatMessage['metadata'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    sources: Array.isArray(record.sources) ? record.sources as CitedSource[] : undefined,
+    tokensUsed: typeof record.tokensUsed === 'number' ? record.tokensUsed : undefined,
+  };
+}
+
+function isChatRole(value: string): value is ChatMessage['role'] {
+  return value === 'user' || value === 'assistant';
 }
 
 /**
@@ -100,7 +121,6 @@ export async function generateRAGResponse(
     maxChunks?: number;
     threshold?: number;
     contentIds?: string[];
-    stream?: boolean;
   }
 ): Promise<{
   response: string;
@@ -112,7 +132,6 @@ export async function generateRAGResponse(
     maxChunks = 5,
     threshold = 0.5, // Lowered from 0.7 - balancing precision/recall for knowledge management
     contentIds,
-    stream = false,
   } = options || {};
 
   // Retrieve relevant context
@@ -158,7 +177,7 @@ export async function* generateStreamingRAGResponse(
   }
 ): AsyncGenerator<{
   type: 'context' | 'token' | 'done';
-  data?: any;
+  data?: unknown;
 }> {
   const {
     conversationHistory = [],
@@ -259,7 +278,7 @@ export async function saveChatMessage(
       conversation_id: conversationId,
       role: message.role,
       content: message.content,
-      metadata: message.metadata || {},
+      metadata: toJson(message.metadata || {}),
     })
     .select()
     .single();
@@ -270,10 +289,10 @@ export async function saveChatMessage(
 
   return {
     id: data.id,
-    role: data.role,
-    content: data.content,
+    role: isChatRole(data.role) ? data.role : 'user',
+    content: typeof data.content === 'string' ? data.content : JSON.stringify(data.content),
     createdAt: new Date(data.created_at),
-    metadata: data.metadata,
+    metadata: parseMessageMetadata(data.metadata),
   };
 }
 
@@ -350,10 +369,10 @@ export async function getConversationHistory(
 
   return chronologicalMessages.map((msg) => ({
     id: msg.id,
-    role: msg.role,
-    content: msg.content,
+    role: isChatRole(msg.role) ? msg.role : 'user',
+    content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
     createdAt: new Date(msg.created_at),
-    metadata: msg.metadata,
+    metadata: parseMessageMetadata(msg.metadata),
   }));
 }
 
@@ -389,7 +408,7 @@ export async function listConversations(
     throw new Error(`Failed to list conversations: ${error.message}`);
   }
 
-  return conversations.map((conv: any) => ({
+  return conversations.map((conv) => ({
     id: conv.id,
     title: conv.title,
     lastMessageAt: new Date(conv.updated_at),
@@ -416,8 +435,8 @@ export function extractQuestionIntent(query: string): {
 } {
   const lowerQuery = query.toLowerCase();
 
-  const questionWords = ['what', 'how', 'why', 'when', 'where', 'who'];
-  const questionType = questionWords.find((word) => lowerQuery.startsWith(word)) as any;
+  const questionWords = ['what', 'how', 'why', 'when', 'where', 'who'] as const;
+  const questionType = questionWords.find((word) => lowerQuery.startsWith(word));
 
   const isQuestion =
     lowerQuery.includes('?') ||

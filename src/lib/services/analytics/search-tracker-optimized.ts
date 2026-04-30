@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/types/database';
 
 import { getCache } from '../cache/multi-layer-cache';
 
@@ -9,7 +10,7 @@ export interface SearchTrackingData {
   latencyMs: number;
   cacheHit: boolean;
   cacheLayer?: 'edge' | 'redis' | 'memory' | 'none';
-  filters?: Record<string, any>;
+  filters?: Json;
   clickedResultIds?: string[];
   sessionId?: string;
   userId?: string;
@@ -54,8 +55,19 @@ export class SearchTrackerOptimized {
   /**
    * Track user feedback on search results (async, batched)
    */
-  private static feedbackBatch: any[] = [];
-  private static feedbackTimer: NodeJS.Timeout | null = null;
+  private static feedbackBatch: Array<{
+    user_id: string;
+    org_id: string;
+    query: string;
+    result_id: string;
+    result_type: string;
+    feedback_type: 'click' | 'thumbs_up' | 'thumbs_down' | 'bookmark' | 'skip';
+    position?: number;
+    time_to_click_ms?: number;
+    dwell_time_ms?: number;
+    comment?: string;
+  }> = [];
+  private static feedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   static async trackFeedback(data: {
     query: string;
@@ -163,15 +175,20 @@ export class SearchTrackerOptimized {
           .limit(10);
 
         return {
-          totalSearches: stats.total_searches || 0,
-          avgLatency: stats.avg_latency || 0,
-          p95Latency: stats.p95_latency || 0,
-          cacheHitRate: stats.cache_hit_rate || 0,
+          totalSearches: stats.total_searches ?? 0,
+          avgLatency: stats.avg_latency ?? 0,
+          p95Latency: stats.p95_latency ?? 0,
+          cacheHitRate: stats.cache_hit_rate ?? 0,
           topQueries: (topQueries || []).map((q) => ({
-            query: q.query,
-            count: q.query_count,
+            query: q.query ?? '',
+            count: q.query_count ?? 0,
           })),
-          searchesByMode: stats.searches_by_mode || {},
+          searchesByMode:
+            stats.searches_by_mode &&
+            typeof stats.searches_by_mode === 'object' &&
+            !Array.isArray(stats.searches_by_mode)
+              ? (stats.searches_by_mode as Record<string, number>)
+              : {},
         };
       },
       {
@@ -218,10 +235,10 @@ export class SearchTrackerOptimized {
         }
 
         return data.map((row) => ({
-          query: row.query,
-          count: row.query_count,
-          avgLatency: row.avg_latency,
-          cacheHitRate: row.cache_hit_rate,
+          query: row.query ?? '',
+          count: row.query_count ?? 0,
+          avgLatency: row.avg_latency ?? 0,
+          cacheHitRate: row.cache_hit_rate ?? 0,
         }));
       },
       {

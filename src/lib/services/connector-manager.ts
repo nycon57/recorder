@@ -8,21 +8,20 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { ConnectorRegistry } from '@/lib/connectors/registry';
 import {
-  Connector,
   ConnectorType,
   ConnectorCredentials,
   SyncOptions,
   SyncResult,
   ConnectorFile,
 } from '@/lib/connectors/base';
-import type { ConnectorConfig } from '@/lib/types/connectors';
+import type { Database, Json } from '@/lib/types/database';
 
 export interface CreateConnectorOptions {
   orgId: string;
   connectorType: ConnectorType;
   name?: string;
   credentials: ConnectorCredentials;
-  settings?: Record<string, any>;
+  settings?: Record<string, unknown>;
   syncFrequency?: 'manual' | 'hourly' | 'daily' | 'weekly';
   createdBy?: string;
 }
@@ -30,10 +29,12 @@ export interface CreateConnectorOptions {
 export interface UpdateConnectorOptions {
   name?: string;
   credentials?: ConnectorCredentials;
-  settings?: Record<string, any>;
+  settings?: Record<string, unknown>;
   syncFrequency?: 'manual' | 'hourly' | 'daily' | 'weekly';
   isActive?: boolean;
 }
+
+type ConnectorConfigUpdate = Database['public']['Tables']['connector_configs']['Update'];
 
 export interface SyncConnectorOptions extends SyncOptions {
   connectorId: string;
@@ -47,6 +48,20 @@ export interface ConnectorStats {
   errorConnectors: number;
   lastSyncAt?: Date;
   documentCount: number;
+}
+
+function jsonObject(value: Json | null): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function connectorCredentials(value: Json): ConnectorCredentials {
+  return jsonObject(value) as ConnectorCredentials;
+}
+
+function toJson(value: unknown): Json {
+  return value as Json;
 }
 
 /**
@@ -99,8 +114,9 @@ export class ConnectorManager {
           connector_type: connectorType,
           name: name || connector.name,
           credentials,
-          settings,
+          settings: toJson(settings),
           sync_status: 'idle',
+          sync_frequency: syncFrequency,
           is_active: true,
           created_by: createdBy,
         })
@@ -131,10 +147,10 @@ export class ConnectorManager {
     options: UpdateConnectorOptions
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const updateData: any = {};
+      const updateData: ConnectorConfigUpdate = {};
 
       if (options.name) updateData.name = options.name;
-      if (options.settings) updateData.settings = options.settings;
+      if (options.settings) updateData.settings = toJson(options.settings);
       if (options.isActive !== undefined) updateData.is_active = options.isActive;
 
       // If credentials are being updated, validate them first
@@ -226,7 +242,7 @@ export class ConnectorManager {
    */
   static async getConnector(
     connectorId: string
-  ): Promise<{ success: boolean; connector?: any; error?: string }> {
+  ): Promise<{ success: boolean; connector?: unknown; error?: string }> {
     try {
       const { data, error } = await supabaseAdmin
         .from('connector_configs')
@@ -258,7 +274,7 @@ export class ConnectorManager {
       limit?: number;
       offset?: number;
     }
-  ): Promise<{ success: boolean; connectors?: any[]; error?: string }> {
+  ): Promise<{ success: boolean; connectors?: unknown[]; error?: string }> {
     try {
       let query = supabaseAdmin
         .from('connector_configs')
@@ -330,8 +346,8 @@ export class ConnectorManager {
       // Create connector instance
       const connector = ConnectorRegistry.create(
         config.connector_type as ConnectorType,
-        config.credentials,
-        config.settings
+        connectorCredentials(config.credentials),
+        jsonObject(config.settings)
       );
 
       // Perform sync
@@ -401,8 +417,8 @@ export class ConnectorManager {
 
       const connector = ConnectorRegistry.create(
         config.connector_type as ConnectorType,
-        config.credentials,
-        config.settings
+        connectorCredentials(config.credentials),
+        jsonObject(config.settings)
       );
 
       const testResult = await connector.testConnection();
@@ -428,7 +444,7 @@ export class ConnectorManager {
     options?: {
       limit?: number;
       offset?: number;
-      filters?: Record<string, any>;
+      filters?: Record<string, unknown>;
     }
   ): Promise<{ success: boolean; files?: ConnectorFile[]; error?: string }> {
     try {
@@ -444,8 +460,8 @@ export class ConnectorManager {
 
       const connector = ConnectorRegistry.create(
         config.connector_type as ConnectorType,
-        config.credentials,
-        config.settings
+        connectorCredentials(config.credentials),
+        jsonObject(config.settings)
       );
 
       const files = await connector.listFiles(options);
@@ -529,15 +545,17 @@ export class ConnectorManager {
 
       const connector = ConnectorRegistry.create(
         config.connector_type as ConnectorType,
-        config.credentials,
-        config.settings
+        connectorCredentials(config.credentials),
+        jsonObject(config.settings)
       );
 
       if (!connector.refreshCredentials) {
         return { success: false, error: 'Connector does not support credential refresh' };
       }
 
-      const newCredentials = await connector.refreshCredentials(config.credentials);
+      const newCredentials = await connector.refreshCredentials(
+        connectorCredentials(config.credentials)
+      );
 
       await supabaseAdmin
         .from('connector_configs')

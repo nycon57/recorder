@@ -19,6 +19,7 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { ConceptType } from '@/lib/validations/knowledge';
 
 import {
   buildCompiledMemoryCitations,
@@ -40,7 +41,7 @@ export interface ToolContext {
 /**
  * Standard tool response format
  */
-interface ToolResponse<T = any> {
+interface ToolResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -81,7 +82,7 @@ function formatDuration(seconds: number): string {
  * and source precedence from the dashboard chat experience.
  */
 export async function executeAnswerQuestion(
-  { question, app, screen, limit }: any,
+  { question, app, screen, limit }: { question: string; app?: string; screen?: string; limit?: number },
   { orgId, userId }: ToolContext
 ): Promise<ToolResponse> {
   try {
@@ -146,7 +147,7 @@ export async function executeSearchRecordings(
   {
     query,
     limit,
-  }: any,
+  }: { query: string; limit?: number },
   { orgId, userId, contentIds }: ToolContext
 ): Promise<ToolResponse> {
     try {
@@ -267,7 +268,7 @@ export async function executeSearchRecordings(
  * Verifies user has access via organization membership.
  */
 export async function executeGetDocument(
-  { documentId, includeMetadata }: any,
+  { documentId, includeMetadata }: { documentId: string; includeMetadata?: boolean },
   { orgId }: ToolContext
 ): Promise<ToolResponse> {
     try {
@@ -310,11 +311,14 @@ export async function executeGetDocument(
       }
 
       // Format response
-      const content = Array.isArray(document.content)
-        ? document.content[0]
-        : document.content;
+      const joinedDocument = document as typeof document & {
+        content?: { title?: string; duration_sec?: number | null } | Array<{ title?: string; duration_sec?: number | null }>;
+      };
+      const content = Array.isArray(joinedDocument.content)
+        ? joinedDocument.content[0]
+        : joinedDocument.content;
 
-      const result: any = {
+      const result: Record<string, unknown> = {
         documentId: document.id,
         content: document.markdown,
         summary: document.summary,
@@ -358,7 +362,7 @@ export async function executeGetDocument(
  * Returns formatted transcript with word-level timing information.
  */
 export async function executeGetTranscript(
-  { contentId, recordingId, includeTimestamps, formatTimestamps }: any,
+  { contentId, recordingId, includeTimestamps, formatTimestamps }: { contentId?: string; recordingId?: string; includeTimestamps?: boolean; formatTimestamps?: boolean },
   { orgId }: ToolContext
 ): Promise<ToolResponse> {
     try {
@@ -406,11 +410,14 @@ export async function executeGetTranscript(
       }
 
       // Verify organization access
-      const content = Array.isArray(transcript.content)
-        ? transcript.content[0]
-        : transcript.content;
+      const joinedTranscript = transcript as typeof transcript & {
+        content?: { org_id?: string; title?: string; content_type?: string; duration_sec?: number | null; status?: string | null } | Array<{ org_id?: string; title?: string; content_type?: string; duration_sec?: number | null; status?: string | null }>;
+      };
+      const content = Array.isArray(joinedTranscript.content)
+        ? joinedTranscript.content[0]
+        : joinedTranscript.content;
 
-      if (content.org_id !== orgId) {
+      if (content?.org_id !== orgId) {
         return {
           success: false,
           error: 'You do not have permission to access this transcript',
@@ -433,13 +440,27 @@ export async function executeGetTranscript(
             let currentChunk = '';
             let currentTime = 0;
 
-            words.forEach((word: any, index: number) => {
-              const timestamp = word.start || word.timestamp || 0;
+            words.forEach((wordValue, index: number) => {
+              const word = wordValue && typeof wordValue === 'object'
+                ? wordValue as Record<string, unknown>
+                : {};
+              const timestamp =
+                typeof word.start === 'number'
+                  ? word.start
+                  : typeof word.timestamp === 'number'
+                    ? word.timestamp
+                    : 0;
+              const wordText =
+                typeof word.word === 'string'
+                  ? word.word
+                  : typeof word.text === 'string'
+                    ? word.text
+                    : '';
 
               // Add timestamp marker every 30 seconds or at sentence boundaries
               if (
                 timestamp - currentTime >= 30 ||
-                (index > 0 && /[.!?]$/.test(word.word || word.text || ''))
+                (index > 0 && /[.!?]$/.test(wordText))
               ) {
                 if (currentChunk) {
                   const timeStr = formatTimestamps
@@ -451,7 +472,7 @@ export async function executeGetTranscript(
                 currentTime = timestamp;
               }
 
-              currentChunk += (word.word || word.text || '') + ' ';
+              currentChunk += `${wordText} `;
             });
 
             // Add remaining chunk
@@ -509,7 +530,7 @@ export async function executeGetTranscript(
  * status, and creation date.
  */
 export async function executeGetRecordingMetadata(
-  { contentId, recordingId, includeStats }: any,
+  { contentId, recordingId, includeStats }: { contentId?: string; recordingId?: string; includeStats?: boolean },
   { orgId }: ToolContext
 ): Promise<ToolResponse> {
     try {
@@ -551,7 +572,7 @@ export async function executeGetRecordingMetadata(
         };
       }
 
-      const result: any = {
+      const result: Record<string, unknown> = {
         contentId: content.id,
         title: content.title || 'Untitled Content',
         description: content.description,
@@ -569,7 +590,7 @@ export async function executeGetRecordingMetadata(
 
       // Include additional stats if requested
       if (includeStats !== false) {
-        const stats: any = {
+        const stats: Record<string, unknown> = {
           durationSeconds: content.duration_sec,
         };
 
@@ -632,7 +653,7 @@ export async function executeGetRecordingMetadata(
  * Useful for browsing available content.
  */
 export async function executeListRecordings(
-  { limit, status, sortBy, sortOrder }: any,
+  { limit, status, sortBy, sortOrder }: { limit?: number; status?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' },
   { orgId }: ToolContext
 ): Promise<ToolResponse> {
     try {
@@ -746,7 +767,7 @@ export async function executeSearchConcepts(
 
     const concepts = await findMatchingConcepts(query, orgId, {
       limit,
-      types: types as any,
+      types: types as ConceptType[] | undefined,
       minMentions,
     });
 
@@ -823,8 +844,8 @@ export async function executeGetConceptDetails(
       };
     }
 
-    let relatedConcepts: any[] = [];
-    let recentMentions: any[] = [];
+    let relatedConcepts: Array<Record<string, unknown>> = [];
+    let recentMentions: Array<Record<string, unknown>> = [];
 
     // Get related concepts if requested
     // SECURITY NOTE: concept_relationships table is scoped by org_id via RLS.
@@ -836,20 +857,21 @@ export async function executeGetConceptDetails(
           `
           strength,
           relationship_type,
-          related:related_concept_id(id, name, concept_type, mention_count)
+          concept_b_id
         `
         )
-        .eq('concept_id', conceptId)
+        .eq('concept_a_id', conceptId)
+        .eq('org_id', orgId)
         .order('strength', { ascending: false })
         .limit(10);
 
       relatedConcepts = (related || [])
-        .map((r: any) => ({
-          id: r.related?.id,
-          name: r.related?.name,
-          type: r.related?.concept_type,
+        .map((r) => ({
+          id: r.concept_b_id,
+          name: r.concept_b_id,
+          type: undefined,
           relationshipType: r.relationship_type,
-          strength: Math.round(r.strength * 100),
+          strength: Math.round((r.strength ?? 0) * 100),
         }))
         .filter((r) => r.id);
     }
@@ -872,14 +894,20 @@ export async function executeGetConceptDetails(
         .limit(5);
 
       recentMentions = (mentions || [])
-        .map((m: any) => ({
-          contentId: m.content?.id,
-          contentTitle: m.content?.title || 'Untitled',
-          contentType: m.content?.content_type,
-          context:
-            m.context?.substring(0, 200) + (m.context?.length > 200 ? '...' : ''),
-          confidence: Math.round(m.confidence * 100),
-        }))
+        .map((mention) => {
+          const joinedMention = mention as typeof mention & {
+            content?: { id?: string; title?: string | null; content_type?: string | null };
+          };
+          return {
+          contentId: joinedMention.content?.id,
+          contentTitle: joinedMention.content?.title || 'Untitled',
+          contentType: joinedMention.content?.content_type,
+          context: `${mention.context?.substring(0, 200) ?? ''}${
+            (mention.context?.length ?? 0) > 200 ? '...' : ''
+          }`,
+          confidence: Math.round((mention.confidence ?? 0) * 100),
+        };
+        })
         .filter((m) => m.contentId);
     }
 
@@ -956,6 +984,10 @@ export async function executeExploreKnowledgeGraph(
       query = query.in('concept_type', types);
     }
 
+    if (focusConceptId) {
+      query = query.eq('id', focusConceptId);
+    }
+
     const { data: concepts, error } = await query;
 
     if (error) {
@@ -979,9 +1011,9 @@ export async function executeExploreKnowledgeGraph(
     const conceptIds = concepts.map((c) => c.id);
     const { data: relationships } = await supabaseAdmin
       .from('concept_relationships')
-      .select('concept_id, related_concept_id, relationship_type, strength')
-      .in('concept_id', conceptIds)
-      .in('related_concept_id', conceptIds)
+      .select('concept_a_id, concept_b_id, relationship_type, strength')
+      .in('concept_a_id', conceptIds)
+      .in('concept_b_id', conceptIds)
       .gte('strength', 0.3);
 
     // Group by type for summary
@@ -1015,10 +1047,10 @@ export async function executeExploreKnowledgeGraph(
           description: c.description,
         })),
         relationships: (relationships || []).map((r) => ({
-          from: r.concept_id,
-          to: r.related_concept_id,
+          from: r.concept_a_id,
+          to: r.concept_b_id,
           type: r.relationship_type,
-          strength: Math.round(r.strength * 100),
+          strength: Math.round((r.strength ?? 0) * 100),
         })),
         stats: {
           totalConcepts: concepts.length,

@@ -6,10 +6,10 @@
  */
 
 import { createClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/types/database';
 import type {
   AgenticSearchResult,
   IterationResult,
-  SubQuery,
   QueryDecomposition,
 } from '@/lib/types/agentic-rag';
 
@@ -279,7 +279,7 @@ async function logAgenticSearch(
       user_id: userId || null,
       original_query: result.query,
       query_intent: result.intent,
-      subqueries: result.decomposition.subQueries,
+      subqueries: result.decomposition.subQueries as unknown as Json,
       iterations: result.iterations.map((iter) => ({
         iteration: iter.iterationNumber,
         subQuery: iter.subQuery.text,
@@ -287,8 +287,8 @@ async function logAgenticSearch(
         confidence: iter.confidence,
         gaps: iter.gapsIdentified,
         durationMs: iter.durationMs,
-      })),
-      final_results: result.finalResults.map((r) => r.id),
+      })) as unknown as Json,
+      final_results: result.finalResults.map((r) => r.id) as unknown as Json,
       total_duration_ms: result.totalDurationMs,
       chunks_retrieved: result.metadata.chunksRetrieved,
       confidence_score: result.confidence,

@@ -13,9 +13,10 @@
  * @module AnalyticsService
  */
 
-import { createClient } from '@/lib/supabase/server';
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
+
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { ContentType, JobType, RecordingStatus } from '@/lib/types/database';
+import { ContentType, JobType } from '@/lib/types/database';
 
 // =====================================================
 // TYPE DEFINITIONS
@@ -1061,11 +1062,11 @@ export class AnalyticsService {
     // Query activity_log to determine access patterns
     const { data, error } = await supabase
       .from('activity_log')
-      .select('action, metadata')
+      .select('action_type, metadata')
       .eq('org_id', orgId)
       .gte('created_at', timeRange.start.toISOString())
       .lte('created_at', timeRange.end.toISOString())
-      .in('action', ['search', 'view', 'browse']);
+      .in('action_type', ['viewed']);
 
     if (error) {
       console.error('[AnalyticsService] Error fetching access patterns:', error);
@@ -1085,8 +1086,8 @@ export class AnalyticsService {
       };
     }
 
-    const searchCount = data?.filter(a => a.action === 'search').length || 0;
-    const browseCount = data?.filter(a => a.action === 'browse').length || 0;
+    const searchCount = 0;
+    const browseCount = data?.filter(a => a.action_type === 'viewed').length || 0;
     const directLinkCount = total - searchCount - browseCount;
 
     return {

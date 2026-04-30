@@ -5,11 +5,10 @@
  * Supports multiple search modes and filtering options.
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { openai } from '@/lib/openai/client';
 import { createClient } from '@/lib/supabase/server';
-import type { Database } from '@/lib/types/database';
-
-type TranscriptChunk = Database['public']['Tables']['transcript_chunks']['Row'];
 
 export interface SearchResult {
   id: string;
@@ -44,6 +43,42 @@ export interface SearchOptions {
   /** Filter by date range */
   dateFrom?: Date;
   dateTo?: Date;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' ? value : undefined;
+}
+
+function normalizeSearchMetadata(metadata: unknown): SearchResult['metadata'] {
+  const raw = isRecord(metadata) ? metadata : {};
+  const source = raw.source === 'document' ? 'document' : 'transcript';
+
+  return {
+    source,
+    transcriptId: optionalString(raw.transcriptId),
+    documentId: optionalString(raw.documentId),
+    chunkIndex: optionalNumber(raw.chunkIndex),
+    startTime: optionalNumber(raw.startTime),
+    endTime: optionalNumber(raw.endTime),
+    startChar: optionalNumber(raw.startChar),
+    endChar: optionalNumber(raw.endChar),
+  };
+}
+
+function getJoinedContentTitle(row: unknown): string {
+  if (!isRecord(row) || !isRecord(row.content)) {
+    return 'Untitled';
+  }
+
+  return typeof row.content.title === 'string' ? row.content.title : 'Untitled';
 }
 
 /**
@@ -243,7 +278,7 @@ export async function hybridSearch(
   query: string,
   options: SearchOptions
 ): Promise<SearchResult[]> {
-  const { orgId, limit = 10 } = options;
+  const { limit = 10 } = options;
 
   // Perform vector search
   const vectorResults = await vectorSearch(query, {
@@ -304,10 +339,10 @@ async function keywordSearch(
   return chunks.map((chunk) => ({
     id: chunk.id,
     contentId: chunk.content_id,
-    contentTitle: (chunk.content as any)?.title || 'Untitled',
+    contentTitle: getJoinedContentTitle(chunk),
     chunkText: chunk.chunk_text,
     similarity: 0.9, // Keyword matches get high score
-    metadata: chunk.metadata || {},
+    metadata: normalizeSearchMetadata(chunk.metadata),
     createdAt: chunk.created_at,
   }));
 }

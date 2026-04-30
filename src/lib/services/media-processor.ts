@@ -5,7 +5,6 @@
  * Handles format conversion, thumbnail generation, audio extraction, and media validation.
  */
 
-import { Readable } from 'stream';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
@@ -99,7 +98,7 @@ export class MediaProcessor {
       if (Buffer.isBuffer(input)) {
         // Create temporary file for buffer input
         const tempFile = path.join(os.tmpdir(), `media-${Date.now()}`);
-        fs.writeFile(tempFile, input)
+        fs.writeFile(tempFile, new Uint8Array(input))
           .then(() => {
             command.input(tempFile);
           })
@@ -485,7 +484,7 @@ export class MediaProcessor {
     try {
       const info = await this.getMediaInfo(input);
       return !!info.videoCodec;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -497,7 +496,7 @@ export class MediaProcessor {
     try {
       const info = await this.getMediaInfo(input);
       return !!info.audioCodec;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -514,7 +513,7 @@ export class MediaProcessor {
       const fileBuffer = await fs.readFile(filePath);
       const mimeType = this.getMimeType(filePath);
 
-      const { data, error } = await supabaseAdmin.storage
+      const { error } = await supabaseAdmin.storage
         .from(bucket)
         .upload(storagePath, fileBuffer, {
           contentType: mimeType,
@@ -548,7 +547,7 @@ export class MediaProcessor {
   ): Promise<string> {
     const ext = type === 'video' ? 'mp4' : type === 'audio' ? 'mp3' : 'jpg';
     const tempFile = path.join(os.tmpdir(), `${type}-${Date.now()}.${ext}`);
-    await fs.writeFile(tempFile, buffer);
+    await fs.writeFile(tempFile, new Uint8Array(buffer));
     return tempFile;
   }
 

@@ -11,9 +11,9 @@ import { createHash, randomBytes } from 'crypto';
 import busboy from 'busboy';
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/types/database';
 
 import { DocumentParser } from './document-parser';
-import { MediaProcessor } from './media-processor';
 
 export interface UploadedFile {
   id: string;
@@ -74,6 +74,21 @@ export interface BatchProgress {
 // Default limits
 const DEFAULT_MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const DEFAULT_MAX_FILES = 50;
+
+function toJson(value: unknown): Json {
+  return value as Json;
+}
+
+function normalizeBatchStatus(
+  status: string | null
+): BatchProgress['status'] {
+  return status === 'uploading' ||
+    status === 'processing' ||
+    status === 'completed' ||
+    status === 'failed'
+    ? status
+    : 'uploading';
+}
 
 /**
  * Batch Uploader - Main upload service
@@ -151,7 +166,7 @@ export class BatchUploader {
         fileCount++;
         options?.onFileStart?.(filename);
 
-        const chunks: Buffer[] = [];
+        const chunks: Uint8Array[] = [];
         let fileSize = 0;
 
         file.on('data', (chunk: Buffer) => {
@@ -164,7 +179,7 @@ export class BatchUploader {
               code: 'FILE_SIZE_EXCEEDED',
             });
           } else {
-            chunks.push(chunk);
+            chunks.push(new Uint8Array(chunk));
           }
         });
 
@@ -360,6 +375,48 @@ export class BatchUploader {
   /**
    * Create imported document record
    */
+  private async getDirectUploadConnectorId(): Promise<string> {
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from('connector_configs')
+      .select('id')
+      .eq('org_id', this.orgId)
+      .eq('connector_type', 'direct_upload')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingError) {
+      throw new Error(`Failed to load direct upload connector: ${existingError.message}`);
+    }
+
+    if (existing?.id) {
+      return existing.id;
+    }
+
+    const { data: created, error: createError } = await supabaseAdmin
+      .from('connector_configs')
+      .insert({
+        org_id: this.orgId,
+        created_by: this.userId,
+        connector_type: 'direct_upload',
+        name: 'Direct uploads',
+        description: 'Internal connector record for files uploaded directly into Tribora.',
+        credentials: toJson({ kind: 'direct_upload' }),
+        settings: toJson({ managedBy: 'batch-uploader' }),
+        is_active: true,
+        supports_publish: false,
+        sync_status: 'completed',
+      })
+      .select('id')
+      .single();
+
+    if (createError || !created) {
+      throw new Error(`Failed to create direct upload connector: ${createError?.message ?? 'missing row'}`);
+    }
+
+    return created.id;
+  }
+
   private async createDocumentRecord(
     file: UploadedFile,
     storagePath: string
@@ -367,7 +424,7 @@ export class BatchUploader {
     try {
       // Parse document content if it's a supported format
       let content: string | null = null;
-      let metadata: any = {};
+      let metadata: Record<string, unknown> = {};
 
       if (DocumentParser.isSupported(file.mimeType)) {
         try {
@@ -384,26 +441,29 @@ export class BatchUploader {
 
       // Generate content hash
       const contentHash = createHash('sha256')
-        .update(file.buffer)
+        .update(new Uint8Array(file.buffer))
         .digest('hex');
 
+      const connectorId = await this.getDirectUploadConnectorId();
+
       await supabaseAdmin.from('imported_documents').insert({
-        connector_id: null, // No connector for direct uploads
+        connector_id: connectorId,
         org_id: this.orgId,
         external_id: file.id,
         title: file.filename,
         content,
         content_hash: contentHash,
         file_type: file.mimeType,
-        file_size_bytes: file.size,
-        source_url: storagePath,
+        file_size: file.size,
+        external_url: storagePath,
         sync_status: this.autoProcess ? 'pending' : 'completed',
-        metadata: {
+        metadata: toJson({
           ...metadata,
           batchId: this.batchId,
+          uploadSource: 'direct_upload',
           originalFilename: file.filename,
           uploadedAt: new Date().toISOString(),
-        },
+        }),
       });
 
       // If auto-process is enabled, create a job to process the document
@@ -462,10 +522,10 @@ export class BatchUploader {
       return {
         batchId: data.id,
         totalFiles: data.total_files,
-        processedFiles: data.processed_files,
-        failedFiles: data.failed_files,
-        progressPercent: data.progress_percent,
-        status: data.status,
+        processedFiles: data.processed_files ?? 0,
+        failedFiles: data.failed_files ?? 0,
+        progressPercent: data.progress_percent ?? 0,
+        status: normalizeBatchStatus(data.status),
       };
     } catch (error) {
       console.error('[BatchUploader] Failed to get batch stats:', error);
@@ -511,10 +571,10 @@ export class BatchUploader {
       return data.map((batch) => ({
         batchId: batch.id,
         totalFiles: batch.total_files,
-        processedFiles: batch.processed_files,
-        failedFiles: batch.failed_files,
-        progressPercent: batch.progress_percent,
-        status: batch.status,
+        processedFiles: batch.processed_files ?? 0,
+        failedFiles: batch.failed_files ?? 0,
+        progressPercent: batch.progress_percent ?? 0,
+        status: normalizeBatchStatus(batch.status),
       }));
     } catch (error) {
       console.error('[BatchUploader] Failed to list batches:', error);

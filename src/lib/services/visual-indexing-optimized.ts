@@ -70,7 +70,7 @@ export async function describeFrameOptimized(
   const cached = await frameCache.getCachedDescription(imageBuffer);
   if (cached) {
     console.log('[Visual Indexing] Cache hit');
-    return cached;
+    return cached as VisualDescription;
   }
 
   // Use provided model or create new one
@@ -363,7 +363,7 @@ export async function indexRecordingFramesOptimized(
           .from('video_frames')
           .update({
             visual_description: update.visual_description,
-            visual_embedding: update.visual_embedding,
+            visual_embedding: JSON.stringify(update.visual_embedding),
             metadata: update.metadata,
           })
           .eq('id', update.id)

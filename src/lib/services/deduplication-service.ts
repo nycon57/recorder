@@ -11,9 +11,17 @@
 import { createHash } from 'crypto';
 
 import { createClient } from '@/lib/supabase/admin';
-import type { StorageProvider, StorageTier } from '@/lib/types/database';
 
-import { StorageManager } from './storage-manager';
+import { StorageManager, type StorageProvider, type StorageTier } from './storage-manager';
+
+function toStorageProvider(value: string | null | undefined): StorageProvider {
+  return value === 'r2' ? 'r2' : 'supabase';
+}
+
+function toStorageTier(value: string | null | undefined): StorageTier {
+  if (value === 'warm' || value === 'cold') return value;
+  return 'hot';
+}
 
 /**
  * File hash and metadata
@@ -112,8 +120,8 @@ export async function findDuplicateByHash(
     fileSize: data.file_size,
     contentId: data.id,
     storagePath,
-    storageProvider: data.storage_provider || 'supabase',
-    storageTier: data.storage_tier || 'hot',
+    storageProvider: toStorageProvider(data.storage_provider),
+    storageTier: toStorageTier(data.storage_tier),
     createdAt: new Date(data.created_at),
   };
 }
@@ -297,7 +305,7 @@ export async function batchDeduplicateOrganization(
     try {
       // Download file to calculate hash
       const storagePath = getContentStoragePath(recording);
-      const provider = recording.storage_provider || 'supabase';
+      const provider = toStorageProvider(recording.storage_provider);
 
       if (!storagePath) {
         errors.push(`Missing storage path for ${recording.id}`);
@@ -411,11 +419,25 @@ export async function cleanupOrphanedReferences(
 ): Promise<{ cleaned: number; errors: string[] }> {
   const supabase = createClient();
 
+  const { data: orgContentRows, error: contentError } = await supabase
+    .from('content')
+    .select('id')
+    .eq('org_id', orgId);
+
+  if (contentError) {
+    return { cleaned: 0, errors: [contentError.message] };
+  }
+
+  const orgContentIds = (orgContentRows ?? []).map((row) => row.id);
+  if (orgContentIds.length === 0) {
+    return { cleaned: 0, errors: [] };
+  }
+
   // Find references where original recording is deleted
   const { data: orphaned } = await supabase
     .from('file_references')
     .select('id, content_id, original_content_id')
-    .eq('org_id', orgId);
+    .in('content_id', orgContentIds);
 
   if (!orphaned || orphaned.length === 0) {
     return { cleaned: 0, errors: [] };

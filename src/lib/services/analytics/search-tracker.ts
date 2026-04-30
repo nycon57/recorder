@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/types/database';
 
 export interface SearchTrackingData {
   query: string;
@@ -7,7 +8,7 @@ export interface SearchTrackingData {
   latencyMs: number;
   cacheHit: boolean;
   cacheLayer?: 'edge' | 'redis' | 'memory' | 'none';
-  filters?: Record<string, any>;
+  filters?: Json;
   clickedResultIds?: string[];
   sessionId?: string;
   userId?: string;
@@ -122,11 +123,12 @@ export class SearchTracker {
     // Calculate metrics
     const totalSearches = analytics.length;
     const avgLatency =
-      analytics.reduce((sum, a) => sum + a.latency_ms, 0) / totalSearches;
+      analytics.reduce((sum, a) => sum + (a.latency_ms ?? 0), 0) /
+      totalSearches;
 
     // P95 latency
     const sortedLatencies = analytics
-      .map((a) => a.latency_ms)
+      .map((a) => a.latency_ms ?? 0)
       .sort((a, b) => a - b);
     const p95Index = Math.floor(sortedLatencies.length * 0.95);
     const p95Latency = sortedLatencies[p95Index] || 0;
@@ -138,7 +140,8 @@ export class SearchTracker {
     // Top queries
     const queryCounts = new Map<string, number>();
     analytics.forEach((a) => {
-      queryCounts.set(a.query, (queryCounts.get(a.query) || 0) + 1);
+      const query = a.query ?? '';
+      queryCounts.set(query, (queryCounts.get(query) || 0) + 1);
     });
 
     const topQueries = Array.from(queryCounts.entries())
@@ -149,7 +152,8 @@ export class SearchTracker {
     // Searches by mode
     const searchesByMode: Record<string, number> = {};
     analytics.forEach((a) => {
-      searchesByMode[a.mode] = (searchesByMode[a.mode] || 0) + 1;
+      const mode = a.mode ?? 'unknown';
+      searchesByMode[mode] = (searchesByMode[mode] || 0) + 1;
     });
 
     return {
@@ -191,10 +195,10 @@ export class SearchTracker {
     }
 
     return data.map((row) => ({
-      query: row.query,
-      count: row.query_count,
-      avgLatency: row.avg_latency,
-      cacheHitRate: row.cache_hit_rate,
+      query: row.query ?? '',
+      count: row.query_count ?? 0,
+      avgLatency: row.avg_latency ?? 0,
+      cacheHitRate: row.cache_hit_rate ?? 0,
     }));
   }
 }

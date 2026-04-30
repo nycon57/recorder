@@ -35,6 +35,15 @@ interface QuotaCacheEntry {
 const CACHE_TTL = 60000; // 60 seconds
 const quotaCache = new Map<string, QuotaCacheEntry>();
 
+function normalizePlanTier(value: string): PlanTier {
+  return value === 'free' ||
+    value === 'starter' ||
+    value === 'professional' ||
+    value === 'enterprise'
+    ? value
+    : 'free';
+}
+
 export class QuotaManager {
   /**
    * Clear cache for an organization (e.g., after consumption)
@@ -80,18 +89,18 @@ export class QuotaManager {
     }
 
     const orgQuota: OrgQuota = {
-      planTier: quota.plan_tier as PlanTier,
+      planTier: normalizePlanTier(quota.plan_tier),
       searchesPerMonth: quota.searches_per_month,
-      searchesUsed: quota.searches_used,
+      searchesUsed: quota.searches_used ?? 0,
       storageGb: quota.storage_gb,
-      storageUsedGb: quota.storage_used_gb,
+      storageUsedGb: quota.storage_used_gb ?? 0,
       recordingsPerMonth: quota.recordings_per_month,
-      recordingsUsed: quota.recordings_used,
+      recordingsUsed: quota.recordings_used ?? 0,
       aiRequestsPerMonth: quota.ai_requests_per_month,
-      aiRequestsUsed: quota.ai_requests_used,
+      aiRequestsUsed: quota.ai_requests_used ?? 0,
       connectorsAllowed: quota.connectors_allowed,
-      connectorsUsed: quota.connectors_used,
-      quotaResetAt: new Date(quota.quota_reset_at),
+      connectorsUsed: quota.connectors_used ?? 0,
+      quotaResetAt: new Date(quota.quota_reset_at ?? Date.now()),
     };
 
     // Store in cache

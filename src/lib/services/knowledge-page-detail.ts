@@ -234,7 +234,7 @@ function extractPendingContradictions(log: CompilationLogEntry[]): PendingContra
   return pending;
 }
 
-function pickLatestByContentId<Row extends { content_id: string; updated_at: string }>(
+function pickLatestByContentId<Row extends { content_id: string; updated_at: string | null }>(
   rows: Row[]
 ): Map<string, Row> {
   const latest = new Map<string, Row>();
@@ -314,7 +314,7 @@ export function buildKnowledgePageRelationships(input: {
         : relationship.source_page_id;
       const relatedPage = input.pagesById.get(relatedPageId) ?? null;
 
-      return {
+      const mapped: KnowledgePageRelationship = {
         id: relationship.id,
         direction: isOutgoing ? 'outgoing' : 'incoming',
         relationshipType: relationship.relationship_type,
@@ -332,6 +332,7 @@ export function buildKnowledgePageRelationships(input: {
             }
           : null,
       };
+      return mapped;
     })
     .sort((left, right) => toTimestamp(right.createdAt) - toTimestamp(left.createdAt));
 }
