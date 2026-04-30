@@ -68,11 +68,13 @@ interface Document {
   model?: string | null;
 }
 
+type InitialTag = Omit<Tag, 'color'> & { color: string | null };
+
 interface Recording {
   id: string;
   title: string | null;
   description: string | null;
-  status: RecordingStatus;
+  status: string;
   duration_sec: number | null;
   storage_path_raw: string | null;
   storage_path_processed: string | null;
@@ -84,8 +86,8 @@ interface Recording {
   updated_at: string;
   completed_at: string | null;
   deleted_at: string | null;
-  content_type: ContentType | null;
-  file_type: FileType | null;
+  content_type: string | null;
+  file_type: string | null;
   original_filename: string | null;
   file_size: number | null;
 }
@@ -95,7 +97,7 @@ interface DocumentDetailViewProps {
   transcript: Transcript | null; // For documents, transcript contains extracted text
   document: Document | null; // AI-generated summary
   knowledgeStatus: KnowledgeStatus;
-  initialTags: Tag[];
+  initialTags: Array<InitialTag | null>;
   sourceKey?: string; // Cache key for fetching highlight sources
   initialHighlightId?: string; // Initial chunk to scroll to
 }
@@ -128,7 +130,11 @@ export default function DocumentDetailView({
   );
 
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
-  const [tags, setTags] = React.useState<Tag[]>(initialTags);
+  const [tags, setTags] = React.useState<Tag[]>(() =>
+    initialTags
+      .filter((tag): tag is InitialTag => Boolean(tag))
+      .map((tag) => ({ ...tag, color: tag.color ?? '#64748b' }))
+  );
   const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
@@ -549,8 +555,8 @@ export default function DocumentDetailView({
 
                 <ContentTabsContent value="content">
                   <UnifiedContentViewer
-                    contentType={recording.content_type}
-                    fileType={recording.file_type}
+                    contentType={recording.content_type as ContentType | null}
+                    fileType={recording.file_type as FileType | null}
                     recordingId={recording.id}
                     documentUrl={recording.downloadUrl}
                     textContent={transcript?.text}
@@ -585,8 +591,8 @@ export default function DocumentDetailView({
               </ContentTabs>
             ) : (
               <UnifiedContentViewer
-                contentType={recording.content_type}
-                fileType={recording.file_type}
+                contentType={recording.content_type as ContentType | null}
+                fileType={recording.file_type as FileType | null}
                 recordingId={recording.id}
                 documentUrl={recording.downloadUrl}
                 textContent={transcript?.text}
@@ -603,9 +609,9 @@ export default function DocumentDetailView({
             <div className="lg:sticky lg:top-6">
               <ContentSidebar
                 recordingId={recording.id}
-                contentType={recording.content_type}
-                fileType={recording.file_type}
-                status={recording.status}
+                contentType={recording.content_type as ContentType | null}
+                fileType={recording.file_type as FileType | null}
+                status={recording.status as RecordingStatus}
                 knowledgeStatus={knowledgeStatus}
                 fileSize={recording.file_size}
                 duration={recording.duration_sec}
@@ -696,7 +702,7 @@ export default function DocumentDetailView({
       <KeyboardShortcutsDialog
         open={showKeyboardShortcuts}
         onOpenChange={setShowKeyboardShortcuts}
-        contentType={recording.content_type}
+        contentType={recording.content_type as ContentType | null}
       />
 
       {/* Highlight Toolbar */}

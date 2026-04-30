@@ -19,7 +19,7 @@ import {
 import { toast } from '@/app/components/ui/use-toast';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import type { ContentType, FileType, RecordingStatus, Tag } from '@/lib/types/database';
+import type { ContentType, FileType, Json, RecordingStatus, Tag } from '@/lib/types/database';
 import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
 import ContentSidebar from '../viewers/ContentSidebar';
@@ -53,24 +53,26 @@ interface Document {
   model?: string | null;
 }
 
+type InitialTag = Omit<Tag, 'color'> & { color: string | null };
+
 interface Recording {
   id: string;
   title: string | null;
   description: string | null;
-  status: RecordingStatus;
+  status: string;
   duration_sec: number | null;
   storage_path_raw: string | null;
   storage_path_processed: string | null;
   thumbnail_url: string | null;
   videoUrl: string | null;
   downloadUrl: string | null;
-  metadata: Record<string, unknown> | null;
+  metadata: Json | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
   deleted_at: string | null;
-  content_type: ContentType | null;
-  file_type: FileType | null;
+  content_type: string | null;
+  file_type: string | null;
   original_filename: string | null;
   file_size: number | null;
 }
@@ -80,7 +82,7 @@ export interface TextNoteDetailViewProps {
   transcript: Transcript | null; // For text notes, the content is stored in transcript.text
   document: Document | null; // AI-enhanced summary/document
   knowledgeStatus: KnowledgeStatus;
-  initialTags: Tag[];
+  initialTags: Array<InitialTag | null>;
   /** Cache key for fetching highlight sources */
   sourceKey?: string;
   /** ID of transcript chunk to highlight (from search) */
@@ -96,7 +98,11 @@ export default function TextNoteDetailView({
 }: TextNoteDetailViewProps) {
   const router = useRouter();
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
-  const [tags, setTags] = React.useState<Tag[]>(initialTags);
+  const [tags, setTags] = React.useState<Tag[]>(() =>
+    initialTags
+      .filter((tag): tag is InitialTag => Boolean(tag))
+      .map((tag) => ({ ...tag, color: tag.color ?? '#64748b' }))
+  );
   const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
@@ -438,9 +444,9 @@ export default function TextNoteDetailView({
             <div className="lg:sticky lg:top-6">
               <ContentSidebar
                 recordingId={recording.id}
-                contentType={recording.content_type}
-                fileType={recording.file_type}
-                status={recording.status}
+                contentType={recording.content_type as ContentType | null}
+                fileType={recording.file_type as FileType | null}
+                status={recording.status as RecordingStatus}
                 knowledgeStatus={knowledgeStatus}
                 fileSize={recording.file_size}
                 duration={recording.duration_sec}
@@ -529,7 +535,7 @@ export default function TextNoteDetailView({
       <KeyboardShortcutsDialog
         open={showKeyboardShortcuts}
         onOpenChange={setShowKeyboardShortcuts}
-        contentType={recording.content_type}
+        contentType={recording.content_type as ContentType | null}
       />
     </div>
   );
