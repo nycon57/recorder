@@ -13,6 +13,7 @@ import {
   type EdgeMouseHandler,
   MarkerType,
   type NodeProps,
+  type NodeTypes,
   Handle,
   Position,
 } from '@xyflow/react';
@@ -56,11 +57,13 @@ export interface KnowledgeGraphProps {
   height?: string | number;
 }
 
-interface ConceptNodeData extends BaseGraphNode {
+interface ConceptNodeData extends BaseGraphNode, Record<string, unknown> {
   selected?: boolean;
   highlighted?: boolean;
   onNodeClick?: (conceptId: string) => void;
 }
+
+type ConceptFlowNode = Node<ConceptNodeData, 'concept'>;
 
 interface SelectedEdgeInfo {
   edge: BaseGraphEdge;
@@ -82,8 +85,8 @@ interface SelectedEdgeInfo {
  * - Selected state styling
  * - Hover effects
  */
-function ConceptNode({ data, selected }: NodeProps<ConceptNodeData>) {
-  const nodeData = data as ConceptNodeData;
+function ConceptNode({ data, selected }: NodeProps<ConceptFlowNode>) {
+  const nodeData = data;
   const color = CONCEPT_TYPE_COLORS[nodeData.type];
   const isSelected = selected || nodeData.selected;
   const isHighlighted = nodeData.highlighted;
@@ -193,8 +196,8 @@ function ConceptNode({ data, selected }: NodeProps<ConceptNodeData>) {
 
 // Register custom node type
 const nodeTypes = {
-  concept: ConceptNode,
-};
+  concept: ConceptNode as React.ComponentType<NodeProps>,
+} satisfies NodeTypes;
 
 // ============================================================================
 // Edge Legend Component
@@ -514,8 +517,8 @@ function convertToFlowData(
   highlightedNodeIds: Set<string>,
   selectedEdgeId: string | null,
   onNodeClick?: (conceptId: string) => void
-): { nodes: Node<ConceptNodeData>[]; edges: Edge[] } {
-  const nodes: Node<ConceptNodeData>[] = graphNodes.map((node) => ({
+): { nodes: ConceptFlowNode[]; edges: Edge[] } {
+  const nodes: ConceptFlowNode[] = graphNodes.map((node) => ({
     id: node.id,
     type: 'concept',
     position: { x: node.x || 0, y: node.y || 0 },
@@ -704,7 +707,7 @@ export function KnowledgeGraph({
     );
   }, [layoutNodes, propEdges, selectedNodeId, highlightedNodeIds, selectedEdge, onNodeClick]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState<ConceptFlowNode>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   // Update nodes when props change
@@ -795,7 +798,7 @@ export function KnowledgeGraph({
       className={cn('relative w-full rounded-lg border bg-background', className)}
       style={{ height }}
     >
-      <ReactFlow
+      <ReactFlow<ConceptFlowNode, Edge>
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
@@ -820,7 +823,7 @@ export function KnowledgeGraph({
         <Controls showInteractive={false} aria-label="Graph controls" />
         <MiniMap
           nodeColor={(node) => {
-            const data = node.data as ConceptNodeData;
+            const data = node.data as unknown as ConceptNodeData;
             return CONCEPT_TYPE_COLORS[data.type];
           }}
           aria-label="Graph minimap"

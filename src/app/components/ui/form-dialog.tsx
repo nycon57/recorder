@@ -5,6 +5,7 @@ import {
   useForm,
   type DefaultValues,
   type FieldValues,
+  type Resolver,
   type UseFormReturn,
 } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -46,7 +47,10 @@ const sizeClasses: Record<DialogSize, string> = {
  *
  * @template TSchema - Zod schema type that extends FieldValues
  */
-export interface FormDialogProps<TSchema extends FieldValues = FieldValues> {
+export interface FormDialogProps<
+  TSchema extends FieldValues = FieldValues,
+  TMutationData = unknown
+> {
   // Dialog props
   /** Controls the open/closed state of the dialog */
   open: boolean
@@ -63,7 +67,7 @@ export interface FormDialogProps<TSchema extends FieldValues = FieldValues> {
 
   // Form props
   /** Zod schema for form validation */
-  schema: z.ZodSchema<TSchema>
+  schema: z.ZodType<TSchema, TSchema>
   /** Default values for the form */
   defaultValues: TSchema | (() => TSchema)
   /** Optional mode for form validation */
@@ -71,7 +75,7 @@ export interface FormDialogProps<TSchema extends FieldValues = FieldValues> {
 
   // Mutation props
   /** Function to execute when form is submitted */
-  mutationFn: (data: TSchema) => Promise<unknown>
+  mutationFn: (data: TSchema) => Promise<TMutationData>
   /** Optional query key(s) to invalidate on success */
   queryKey?: string | string[]
   /** Success message to display in toast (default: "Success") */
@@ -102,7 +106,7 @@ export interface FormDialogProps<TSchema extends FieldValues = FieldValues> {
 
   // Optional callbacks
   /** Callback executed on successful mutation, before standard success handling */
-  onSuccess?: (data: unknown) => void
+  onSuccess?: (data: TMutationData) => void
   /** Callback executed on mutation error, before standard error handling */
   onError?: (error: Error) => void
   /** Custom cleanup function called when dialog closes */
@@ -146,7 +150,10 @@ export interface FormDialogProps<TSchema extends FieldValues = FieldValues> {
  * </FormDialog>
  * ```
  */
-export function FormDialog<TSchema extends FieldValues = FieldValues>({
+export function FormDialog<
+  TSchema extends FieldValues = FieldValues,
+  TMutationData = unknown
+>({
   // Dialog props
   open,
   onOpenChange,
@@ -180,12 +187,12 @@ export function FormDialog<TSchema extends FieldValues = FieldValues>({
   onSuccess,
   onError,
   onCleanup,
-}: FormDialogProps<TSchema>) {
+}: FormDialogProps<TSchema, TMutationData>) {
   const queryClient = useQueryClient()
 
   // Initialize form with schema validation
   const form = useForm<TSchema>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as Resolver<TSchema>,
     defaultValues: defaultValues as DefaultValues<TSchema>,
     mode,
   })
@@ -309,5 +316,4 @@ export function FormDialog<TSchema extends FieldValues = FieldValues>({
  * type SchemaType = InferSchema<typeof schema> // { name: string }
  * ```
  */
-export type InferSchema<T extends z.ZodType<unknown, z.ZodTypeDef, unknown>> =
-  z.infer<T>
+export type InferSchema<T extends z.ZodType> = z.infer<T>
