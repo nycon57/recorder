@@ -17,7 +17,7 @@ export async function createConversation(
   title?: string,
 ): Promise<string> {
   const { data, error } = await supabaseAdmin
-    .from('conversations')
+    .from('chat_conversations')
     .insert({
       org_id: orgId,
       user_id: userId,
@@ -98,7 +98,7 @@ export async function listConversations(
   }>
 > {
   const { data: conversations, error } = await supabaseAdmin
-    .from('conversations')
+    .from('chat_conversations')
     .select(
       `
       id,
