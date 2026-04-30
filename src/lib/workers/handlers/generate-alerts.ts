@@ -12,6 +12,16 @@ import { createLogger } from '@/lib/utils/logger';
 const logger = createLogger({ service: 'generate-alerts' });
 
 type Job = Database['public']['Tables']['jobs']['Row'];
+type StorageMetricRow = Database['public']['Tables']['storage_metrics']['Row'];
+type AlertRow = Database['public']['Tables']['alerts']['Row'];
+type AlertConfig = {
+  organization_id: string;
+  storage_threshold: number;
+  cost_threshold: number;
+  enable_email_notifications: boolean;
+  enable_slack_notifications: boolean;
+  slack_webhook_url?: string | null;
+};
 
 interface GenerateAlertsPayload {
   organizationId?: string;
@@ -27,12 +37,12 @@ export async function handleGenerateAlerts(job: Job): Promise<void> {
 
   try {
     // Get all alert configs
-    let configQuery = supabase.from('alert_config' as any).select('*');
+    let configQuery = supabase.from('alert_config').select('*');
     if (payload.organizationId) {
       configQuery = configQuery.eq('organization_id', payload.organizationId);
     }
 
-    let configs: any[] = [];
+    let configs: AlertConfig[] = [];
     try {
       const { data, error } = await configQuery;
       if (error) {
@@ -53,9 +63,9 @@ export async function handleGenerateAlerts(job: Job): Promise<void> {
           }));
         }
       } else {
-        configs = data || [];
+        configs = data ?? [];
       }
-    } catch (error) {
+    } catch {
       // Table doesn't exist, use defaults
       logger.debug('Using default alert configuration');
       const { data: organizations } = await supabase
@@ -101,17 +111,17 @@ export async function handleGenerateAlerts(job: Job): Promise<void> {
 
 async function generateAlertsForOrganization(
   supabase: ReturnType<typeof createAdminClient>,
-  config: any
+  config: AlertConfig
 ): Promise<void> {
   logger.debug('Generating alerts for organization', {
     context: { organizationId: config.organization_id },
   });
 
   // Get latest metrics for this org
-  let latestMetric: any = null;
+  let latestMetric: StorageMetricRow | null = null;
   try {
     const { data } = await supabase
-      .from('storage_metrics' as any)
+      .from('storage_metrics')
       .select('*')
       .eq('organization_id', config.organization_id)
       .order('recorded_at', { ascending: false })
@@ -119,7 +129,7 @@ async function generateAlertsForOrganization(
       .maybeSingle();
 
     latestMetric = data;
-  } catch (error) {
+  } catch {
     logger.debug('storage_metrics table not found, skipping metric-based alerts');
   }
 
@@ -173,7 +183,7 @@ async function generateAlertsForOrganization(
   const { count: failedJobs } = await supabase
     .from('jobs')
     .select('id', { count: 'exact', head: true })
-    .eq('organization_id', config.organization_id)
+    .eq('payload->>orgId', config.organization_id)
     .eq('status', 'failed')
     .gte('created_at', oneHourAgo);
 
@@ -219,7 +229,7 @@ async function createOrUpdateAlert(
   try {
     // Check if alert already exists and is not resolved
     const { data: existingAlert } = await supabase
-      .from('alerts' as any)
+      .from('alerts')
       .select('id')
       .eq('organization_id', alertData.organization_id)
       .eq('type', alertData.type)
@@ -228,7 +238,7 @@ async function createOrUpdateAlert(
 
     if (!existingAlert) {
       // Create new alert
-      const { error } = await supabase.from('alerts' as any).insert({
+      const { error } = await supabase.from('alerts').insert({
         organization_id: alertData.organization_id,
         severity: alertData.severity,
         type: alertData.type,
@@ -242,16 +252,17 @@ async function createOrUpdateAlert(
         throw new Error(`Failed to create alert: ${error.message}`);
       }
     } else {
+      const alert = existingAlert as Pick<AlertRow, 'id'>;
       // Update existing alert
       const { error } = await supabase
-        .from('alerts' as any)
+        .from('alerts')
         .update({
           severity: alertData.severity,
           message: alertData.message,
           details: alertData.details,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', existingAlert.id);
+        .eq('id', alert.id);
 
       if (error) {
         logger.warn('Failed to update existing alert', { error: new Error(error.message) });
