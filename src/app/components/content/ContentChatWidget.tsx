@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+/* eslint-env browser */
+/* global KeyboardEvent, DOMException */
+
+import { useState, useRef, useEffect, useCallback, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { MessageSquare, Send, Trash2, X, Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -9,12 +12,25 @@ import { ResponseRating } from '@/app/components/chat/ResponseRating';
 
 const DEFAULT_ERROR = 'Unable to get a response. Please try again.';
 
+interface ChatSource {
+  contentId?: string;
+  contentTitle?: string;
+  title?: string;
+  chunkText?: string;
+  snippet?: string;
+  url?: string;
+  timestampRange?: string;
+  timestamp?: number;
+  similarity?: number;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   done?: boolean;
   query?: string;
   ratingId?: string;
+  sources?: ChatSource[];
 }
 
 interface ContentChatWidgetProps {
@@ -101,6 +117,14 @@ export function ContentChatWidget({
     });
   }, []);
 
+  const appendSources = useCallback((sources: ChatSource[]) => {
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last?.role !== 'assistant') return prev;
+      return [...prev.slice(0, -1), { ...last, sources }];
+    });
+  }, []);
+
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
@@ -162,6 +186,11 @@ export function ContentChatWidget({
             const event = JSON.parse(jsonStr);
 
             switch (event.type) {
+              case 'sources':
+                if (Array.isArray(event.sources)) {
+                  appendSources(event.sources);
+                }
+                break;
               case 'token':
                 appendToken(event.token);
                 break;
@@ -202,10 +231,10 @@ export function ContentChatWidget({
       abortControllerRef.current = null;
       setIsStreaming(false);
     }
-  }, [input, isStreaming, contentId, appendToken]);
+  }, [input, isStreaming, contentId, appendToken, appendSources]);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
+    (e: ReactKeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSend();
@@ -282,6 +311,48 @@ export function ContentChatWidget({
                     </>
                   )}
                 </div>
+                {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
+                  <div className="mt-2 space-y-1 text-left">
+                    {msg.sources.slice(0, 3).map((source, sourceIndex) => {
+                      const label = source.title || source.contentTitle || 'Source';
+                      const href = source.url || (source.contentId ? `/library/${source.contentId}` : null);
+                      const detail = source.snippet || source.chunkText || '';
+                      const timestamp = source.timestampRange ||
+                        (typeof source.timestamp === 'number'
+                          ? `${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')}`
+                          : null);
+
+                      return (
+                        <div
+                          key={`${label}-${sourceIndex}`}
+                          className="max-w-[85%] rounded-md border border-border/50 bg-background px-2 py-1.5 text-xs text-muted-foreground"
+                        >
+                          <div className="flex items-center gap-1 text-foreground">
+                            <span className="font-medium">[{sourceIndex + 1}]</span>
+                            {href ? (
+                              <a href={href} className="truncate underline-offset-2 hover:underline">
+                                {label}
+                              </a>
+                            ) : (
+                              <span className="truncate">{label}</span>
+                            )}
+                            {timestamp && <span className="shrink-0 text-muted-foreground">{timestamp}</span>}
+                          </div>
+                          {detail && (
+                            <p className="mt-1 line-clamp-2">
+                              {detail}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {msg.sources.length > 3 && (
+                      <div className="text-xs text-muted-foreground">
+                        +{msg.sources.length - 3} more sources
+                      </div>
+                    )}
+                  </div>
+                )}
                 {msg.role === 'assistant' && msg.done && msg.content && msg.ratingId && (
                   <ResponseRating
                     responseId={msg.ratingId}

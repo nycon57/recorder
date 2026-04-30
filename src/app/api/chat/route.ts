@@ -65,15 +65,29 @@ const ENABLE_RERANKING = process.env.ENABLE_RERANKING !== 'false';
 const ENABLE_CHAT_TOOLS = process.env.ENABLE_CHAT_TOOLS !== 'false';
 const ENABLE_SEARCH_MONITORING = process.env.ENABLE_SEARCH_MONITORING === 'true';
 
-// Store sources temporarily (keyed by timestamp for retrieval)
+type CachedSourcesEntry = {
+  sources: unknown[];
+  orgId: string;
+  userId: string;
+  timestamp: number;
+  expiresAt: number;
+};
+
+// Store sources temporarily (keyed by opaque server-generated keys)
 // This is a workaround since AI SDK v5 doesn't support custom data in streaming responses
-// Cache entries: { sources: any[], timestamp: number }
-const sourcesCache = new Map<string, { sources: any[]; timestamp: number }>();
+const sourcesCache = new Map<string, CachedSourcesEntry>();
 
 // Cache TTL: 5 minutes (enough time for navigation between chat and detail pages)
 const SOURCES_CACHE_TTL = 5 * 60 * 1000;
 
 function createQueryId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createSourcesCacheKey() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
@@ -86,10 +100,28 @@ function createQueryId() {
 function cleanupExpiredCache() {
   const now = Date.now();
   for (const [key, entry] of sourcesCache.entries()) {
-    if (now - entry.timestamp > SOURCES_CACHE_TTL) {
+    if (entry.expiresAt <= now) {
       sourcesCache.delete(key);
     }
   }
+}
+
+export function __setSourcesCacheEntryForTest(
+  key: string,
+  entry: Omit<CachedSourcesEntry, 'timestamp' | 'expiresAt'> & {
+    timestamp?: number;
+    expiresAt?: number;
+  },
+) {
+  sourcesCache.set(key, {
+    ...entry,
+    timestamp: entry.timestamp ?? Date.now(),
+    expiresAt: entry.expiresAt ?? Date.now() + SOURCES_CACHE_TTL,
+  });
+}
+
+export function __clearSourcesCacheForTest() {
+  sourcesCache.clear();
 }
 
 /**
@@ -120,57 +152,61 @@ async function alertSearchFailure(
  * GET /api/chat - Retrieve sources by cache key
  */
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const cacheKey = url.searchParams.get('sourcesKey');
+  try {
+    const { orgId, userId } = await requireOrg();
+    const url = new URL(req.url);
+    const cacheKey = url.searchParams.get('sourcesKey');
 
-  console.log('[Chat API GET] Retrieving sources:', {
-    cacheKey,
-    cacheSize: sourcesCache.size,
-    cacheKeys: Array.from(sourcesCache.keys()),
-  });
+    if (!cacheKey) {
+      return new Response(JSON.stringify({ sources: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-  if (!cacheKey) {
-    return new Response(JSON.stringify({ sources: [] }), {
+    cleanupExpiredCache();
+
+    const cacheEntry = sourcesCache.get(cacheKey);
+
+    if (!cacheEntry) {
+      return new Response(JSON.stringify({ sources: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (cacheEntry.orgId !== orgId || cacheEntry.userId !== userId) {
+      return new Response(JSON.stringify({ sources: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(JSON.stringify({ sources: cacheEntry.sources }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  }
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === 'Unauthorized') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (error.message === 'Organization context required') {
+        return new Response(JSON.stringify({ error: 'Organization context required' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
 
-  // Clean up expired entries
-  cleanupExpiredCache();
-
-  const cacheEntry = sourcesCache.get(cacheKey);
-
-  if (!cacheEntry) {
-    console.warn('[Chat API GET] Cache miss for key:', cacheKey);
-    return new Response(JSON.stringify({ sources: [] }), {
-      status: 200,
+    return new Response(JSON.stringify({ error: 'Failed to retrieve sources' }), {
+      status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
   }
-
-  // Check if entry is expired
-  const now = Date.now();
-  if (now - cacheEntry.timestamp > SOURCES_CACHE_TTL) {
-    console.warn('[Chat API GET] Cache entry expired for key:', cacheKey);
-    sourcesCache.delete(cacheKey);
-    return new Response(JSON.stringify({ sources: [] }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  console.log('[Chat API GET] Cache hit:', {
-    cacheKey,
-    sourcesCount: cacheEntry.sources.length,
-    age: Math.round((now - cacheEntry.timestamp) / 1000) + 's',
-  });
-
-  // Don't delete - allow multiple retrievals within TTL
-  return new Response(JSON.stringify({ sources: cacheEntry.sources }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
 }
 
 export async function POST(req: Request) {
@@ -988,13 +1024,22 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
       firstSourceUrl: sourceCitations[0]?.url,
     });
 
-    // Store sources in cache using user message ID as key
+    // Store sources in cache using an opaque, org/user-scoped key.
     // This allows the frontend to fetch sources after the assistant response completes
-    const cacheKey = lastUserMessage?.id || Date.now().toString();
-    sourcesCache.set(cacheKey, {
+    const cacheKey = createSourcesCacheKey();
+    const compatibilityCacheKey = lastUserMessage?.id;
+    const now = Date.now();
+    const cacheEntry = {
       sources: sourceCitations,
-      timestamp: Date.now(),
-    });
+      orgId,
+      userId,
+      timestamp: now,
+      expiresAt: now + SOURCES_CACHE_TTL,
+    };
+    sourcesCache.set(cacheKey, cacheEntry);
+    if (compatibilityCacheKey) {
+      sourcesCache.set(compatibilityCacheKey, cacheEntry);
+    }
     console.log('[Chat API] Stored sources with cache key:', {
       cacheKey,
       sourcesCount: sourceCitations.length,
