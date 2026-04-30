@@ -73,7 +73,7 @@ export function extractProjectRef(connectionString: string): string | null {
 export function checkGuard(opts: {
   env: SeedEnv;
   stagingConfirmToken: string | undefined;
-  envRecord?: Partial<NodeJS.ProcessEnv>;
+  envRecord?: Partial<Record<string, string | undefined>>;
 }): GuardResult {
   const env = opts.envRecord ?? process.env;
 

@@ -13,13 +13,14 @@
  *   SUPABASE_DB_URL="postgresql://..." npx tsx scripts/apply-performance-migrations.ts
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+import { createClient } from '@supabase/supabase-js';
+import { config } from 'dotenv';
+
 // Load environment variables
-import dotenv from 'dotenv';
-dotenv.config();
+config();
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -66,16 +67,19 @@ async function applyMigration(migrationFile: string): Promise<boolean> {
             // Continue with other statements
           }
         }
-      } catch (err: any) {
-        console.warn(`⚠️  Warning on statement ${i + 1}: ${err.message}`);
+      } catch (err: unknown) {
+        console.warn(`⚠️  Warning on statement ${i + 1}: ${err instanceof Error ? err.message : err}`);
         // Continue with other statements
       }
     }
 
     console.log(`✅ Migration applied: ${migrationFile}`);
     return true;
-  } catch (error: any) {
-    console.error(`❌ Error applying migration ${migrationFile}:`, error.message);
+  } catch (error: unknown) {
+    console.error(
+      `❌ Error applying migration ${migrationFile}:`,
+      error instanceof Error ? error.message : error
+    );
     return false;
   }
 }
@@ -88,14 +92,14 @@ async function main() {
 
   // Test connection
   try {
-    const { data, error } = await supabase.from('organizations').select('id').limit(1);
+    const { error } = await supabase.from('organizations').select('id').limit(1);
     if (error) {
       console.error('❌ Connection test failed:', error.message);
       process.exit(1);
     }
     console.log('✅ Connection successful\n');
-  } catch (error: any) {
-    console.error('❌ Connection test failed:', error.message);
+  } catch (error: unknown) {
+    console.error('❌ Connection test failed:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
 

@@ -6,8 +6,26 @@
  * It will log all events received from the server.
  */
 
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
 import * as EventSourceModule from 'eventsource';
-const EventSource = (EventSourceModule as any).default || EventSourceModule;
+
+type EventSourceConstructor = new (
+  url: string,
+  init?: { withCredentials?: boolean }
+) => {
+  onopen: (() => void) | null;
+  onmessage: ((event: { data: string }) => void) | null;
+  onerror: ((error: { type?: string; status?: number; message?: string }) => void) | null;
+  readyState: number;
+  close: () => void;
+};
+
+const EventSource = ((EventSourceModule as { default?: unknown }).default || EventSourceModule) as EventSourceConstructor & {
+  CLOSED: number;
+  CONNECTING: number;
+};
 
 const RECORDING_ID = '80e70735-9b25-4c8a-8345-c7d41545ccc7';
 const BASE_URL = 'http://localhost:3000';
@@ -40,7 +58,7 @@ async function testSSEConnection() {
     console.log();
   };
 
-  eventSource.onmessage = (event: any) => {
+  eventSource.onmessage = (event) => {
     messageCount++;
     console.log(`📨 Message #${messageCount} received at ${new Date().toISOString()}`);
 
@@ -60,23 +78,23 @@ async function testSSEConnection() {
       if (data.data) {
         console.log('   Data:', JSON.stringify(data.data, null, 2));
       }
-    } catch (error) {
+    } catch {
       console.log('   Raw data:', event.data);
     }
 
     console.log();
   };
 
-  eventSource.onerror = (error: any) => {
+  eventSource.onerror = (error) => {
     console.error('❌ SSE Error occurred:');
     console.error('   Type:', error.type);
 
-    if ((error as any).status) {
-      console.error('   Status:', (error as any).status);
+    if (error.status) {
+      console.error('   Status:', error.status);
     }
 
-    if ((error as any).message) {
-      console.error('   Message:', (error as any).message);
+    if (error.message) {
+      console.error('   Message:', error.message);
     }
 
     console.error('   Time:', new Date().toISOString());
@@ -107,16 +125,12 @@ async function testSSEConnection() {
   console.log();
 }
 
-// Check if we need to install eventsource
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
 const execAsync = promisify(exec);
 
 async function checkAndInstallDependencies() {
   try {
     require.resolve('eventsource');
-  } catch (e) {
+  } catch {
     console.log('📦 Installing eventsource package...');
     await execAsync('npm install --no-save eventsource @types/eventsource');
     console.log('✅ Package installed\n');

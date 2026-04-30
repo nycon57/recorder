@@ -6,6 +6,7 @@
  */
 
 import { tool } from 'ai';
+
 import {
   executeAnswerQuestion,
   executeSearchRecordings,
@@ -24,6 +25,13 @@ import {
   listRecordingsInputSchema,
 } from '../src/lib/validations/chat';
 
+type ZodLikeSchema = {
+  _def?: {
+    typeName?: string;
+    shape?: () => Record<string, unknown>;
+  };
+};
+
 // ANSI colors
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';
@@ -37,42 +45,42 @@ const toolsWithContext = {
   answerQuestion: tool({
     description: toolDescriptions.answerQuestion,
     inputSchema: answerQuestionInputSchema,
-    execute: async (args: any) => {
+    execute: async (args: Parameters<typeof executeAnswerQuestion>[0]) => {
       return await executeAnswerQuestion(args, { orgId: 'test', userId: 'test' });
     },
   }),
   searchRecordings: tool({
     description: toolDescriptions.searchRecordings,
     inputSchema: searchRecordingsInputSchema,
-    execute: async (args: any) => {
+    execute: async (args: Parameters<typeof executeSearchRecordings>[0]) => {
       return await executeSearchRecordings(args, { orgId: 'test', userId: 'test' });
     },
   }),
   getDocument: tool({
     description: toolDescriptions.getDocument,
     inputSchema: getDocumentInputSchema,
-    execute: async (args: any) => {
+    execute: async (args: Parameters<typeof executeGetDocument>[0]) => {
       return await executeGetDocument(args, { orgId: 'test', userId: 'test' });
     },
   }),
   getTranscript: tool({
     description: toolDescriptions.getTranscript,
     inputSchema: getTranscriptInputSchema,
-    execute: async (args: any) => {
+    execute: async (args: Parameters<typeof executeGetTranscript>[0]) => {
       return await executeGetTranscript(args, { orgId: 'test', userId: 'test' });
     },
   }),
   getRecordingMetadata: tool({
     description: toolDescriptions.getRecordingMetadata,
     inputSchema: getRecordingMetadataInputSchema,
-    execute: async (args: any) => {
+    execute: async (args: Parameters<typeof executeGetRecordingMetadata>[0]) => {
       return await executeGetRecordingMetadata(args, { orgId: 'test', userId: 'test' });
     },
   }),
   listRecordings: tool({
     description: toolDescriptions.listRecordings,
     inputSchema: listRecordingsInputSchema,
-    execute: async (args: any) => {
+    execute: async (args: Parameters<typeof executeListRecordings>[0]) => {
       return await executeListRecordings(args, { orgId: 'test', userId: 'test' });
     },
   }),
@@ -98,10 +106,10 @@ for (const [toolName, toolDef] of Object.entries(toolsWithContext)) {
     allPassed = false;
   } else {
     // Verify it's a Zod schema with the right shape
-    const schema = toolDef.inputSchema as any;
+    const schema = toolDef.inputSchema as ZodLikeSchema;
 
     // Check if it's a Zod object schema
-    if (schema._def && schema._def.typeName === 'ZodObject') {
+    if (schema._def && schema._def.typeName === 'ZodObject' && schema._def.shape) {
       console.log(`  ${GREEN}✓${RESET} Parameters: Valid Zod Object schema`);
 
       // List the fields

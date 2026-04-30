@@ -15,7 +15,6 @@
 
 const { performance } = require('perf_hooks');
 const fs = require('fs').promises;
-const path = require('path');
 const { spawn } = require('child_process');
 
 // Color codes for output

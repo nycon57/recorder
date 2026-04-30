@@ -29,11 +29,38 @@ interface IndexUsage {
   idx_tup_fetch: number;
 }
 
-interface TableBloat {
+interface SequentialScanStats {
   tablename: string;
-  real_size: string;
-  extra_size: string;
-  bloat_pct: number;
+  rows: number;
+  seq_scan: number;
+  idx_scan: number;
+  seq_scan_pct: number;
+}
+
+interface TableBloatStats {
+  tablename: string;
+  total_size: string;
+  live_rows: number;
+  dead_rows: number;
+  dead_row_pct: number;
+}
+
+interface RlsPolicyStats {
+  tablename: string;
+  policyname: string;
+  roles: string[];
+  cmd: string;
+  qual: string | null;
+}
+
+interface VectorIndexStats {
+  tablename: string;
+  indexname: string;
+  indexdef: string;
+}
+
+interface RowCountStats {
+  row_count: number;
 }
 
 async function analyzeSlowQueries() {
@@ -172,7 +199,7 @@ async function analyzeMissingIndexes() {
   console.log('\nTable'.padEnd(25), 'Rows'.padEnd(10), 'SeqScans'.padEnd(12), 'IdxScans'.padEnd(12), 'SeqScan%');
   console.log('-'.repeat(100));
 
-  data?.forEach((table: any) => {
+  data?.forEach((table: SequentialScanStats) => {
     const warning = table.seq_scan_pct > 50 ? '⚠️ ' : '';
     console.log(
       `${warning}${table.tablename}`.padEnd(25),
@@ -220,7 +247,7 @@ async function analyzeTableBloat() {
   console.log('\nTable'.padEnd(25), 'Total Size'.padEnd(12), 'Live Rows'.padEnd(12), 'Dead Rows'.padEnd(12), 'Dead%');
   console.log('-'.repeat(100));
 
-  data?.forEach((table: any) => {
+  data?.forEach((table: TableBloatStats) => {
     const warning = table.dead_row_pct > 20 ? '⚠️ ' : '';
     console.log(
       `${warning}${table.tablename}`.padEnd(25),
@@ -259,15 +286,16 @@ async function analyzeRLSPolicies() {
     return;
   }
 
-  const policiesByTable = data?.reduce((acc: any, policy: any) => {
+  const policies = (data ?? []) as RlsPolicyStats[];
+  const policiesByTable = policies.reduce<Record<string, RlsPolicyStats[]>>((acc, policy) => {
     if (!acc[policy.tablename]) acc[policy.tablename] = [];
     acc[policy.tablename].push(policy);
     return acc;
   }, {});
 
-  Object.entries(policiesByTable || {}).forEach(([table, policies]: [string, any]) => {
+  Object.entries(policiesByTable || {}).forEach(([table, policies]) => {
     console.log(`\n${table}: (${policies.length} policies)`);
-    policies.forEach((policy: any) => {
+    policies.forEach((policy) => {
       console.log(`  - ${policy.policyname} (${policy.cmd})`);
       console.log(`    Roles: ${policy.roles.join(', ')}`);
       if (policy.qual) {
@@ -307,7 +335,7 @@ async function analyzeVectorIndexes() {
     return;
   }
 
-  data.forEach((idx: any) => {
+  data.forEach((idx: VectorIndexStats) => {
     console.log(`\n${idx.tablename}.${idx.indexname}:`);
     console.log(`  ${idx.indexdef}`);
   });
@@ -324,7 +352,7 @@ async function analyzeVectorIndexes() {
     });
 
   if (rowCounts && rowCounts.length > 0) {
-    const rowCount = rowCounts[0].row_count;
+    const rowCount = (rowCounts[0] as RowCountStats).row_count;
     const recommendedLists = Math.ceil(Math.sqrt(rowCount));
 
     console.log(`\n💡 Vector Index Recommendations:`);

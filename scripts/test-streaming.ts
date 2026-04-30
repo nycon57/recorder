@@ -6,11 +6,13 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
+
 import { streamDocumentGeneration } from '@/lib/services/llm-streaming-helper';
 import { streamingManager } from '@/lib/services/streaming-processor';
 
 // Mock recording ID
 const TEST_RECORDING_ID = 'test-recording-123';
+type StreamingController = Parameters<typeof streamingManager.register>[1];
 
 async function testDocumentStreaming() {
   console.log('🧪 Testing Document Generation Streaming...\n');
@@ -38,14 +40,14 @@ Your recording will be processed and saved.`;
 
   // Set up mock SSE connection
   const mockController = {
-    enqueue: (data: any) => {
+    enqueue: (data: Uint8Array) => {
       const text = new TextDecoder().decode(data);
       console.log('📨 SSE Event:', text);
     },
     close: () => {
       console.log('🔌 SSE Connection closed');
     },
-  } as any;
+  } as StreamingController;
 
   // Register mock connection
   streamingManager.register(TEST_RECORDING_ID, mockController);
@@ -87,7 +89,7 @@ async function testEmbeddingProgress() {
 
   // Set up mock SSE connection
   const mockController = {
-    enqueue: (data: any) => {
+    enqueue: (data: Uint8Array) => {
       const text = new TextDecoder().decode(data);
       const lines = text.split('\n').filter(line => line.startsWith('data: '));
       for (const line of lines) {
@@ -96,11 +98,13 @@ async function testEmbeddingProgress() {
           if (event.type === 'progress') {
             console.log(`📊 Progress: ${event.progress}% - ${event.message}`);
           }
-        } catch {}
+        } catch {
+          // Ignore non-JSON chunks in this debug script.
+        }
       }
     },
     close: () => {},
-  } as any;
+  } as StreamingController;
 
   streamingManager.register(TEST_RECORDING_ID, mockController);
 

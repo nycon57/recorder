@@ -73,7 +73,7 @@ interface TestResult {
   passed: boolean;
   duration: number;
   error?: string;
-  details?: any;
+  details?: unknown;
 }
 
 const testResults: TestResult[] = [];
@@ -691,7 +691,7 @@ async function runTests() {
     const { orgId, userId } = await getTestOrgAndUser();
 
     // Create test recording
-    const { recordingId, storagePath } = await createTestRecording(orgId, userId);
+    const { recordingId } = await createTestRecording(orgId, userId);
     logInfo(`Test recording ID: ${recordingId}\n`);
 
     // Test 1: Non-streaming finalize

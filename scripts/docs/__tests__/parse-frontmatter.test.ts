@@ -1,3 +1,5 @@
+/* global describe, expect, it */
+
 import { parseFrontmatter } from '../lib/parse-frontmatter';
 
 describe('parseFrontmatter', () => {

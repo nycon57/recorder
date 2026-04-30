@@ -1,3 +1,5 @@
+/* global afterEach, describe, expect, jest, test */
+
 /**
  * @jest-environment node
  *

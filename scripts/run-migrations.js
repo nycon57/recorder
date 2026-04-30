@@ -5,9 +5,10 @@
  * It uses the service role key to bypass RLS policies.
  */
 
-const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
+
+const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config({ path: '.env.local' });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -38,7 +39,7 @@ async function runMigration(filename) {
   console.log(`🚀 Executing migration...`);
 
   try {
-    const { data, error } = await supabase.rpc('exec_sql', { sql_query: sql }).single();
+    const { error } = await supabase.rpc('exec_sql', { sql_query: sql }).single();
 
     if (error) {
       // Try direct SQL execution if RPC doesn't exist

@@ -1,6 +1,7 @@
+import { resolve } from 'path';
+
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
-import { resolve } from 'path';
 
 // Load environment variables
 dotenv.config({ path: resolve(process.cwd(), '.env.local') });
@@ -11,6 +12,12 @@ const supabase = createClient(
 );
 
 const recordingId = '80e70735-9b25-4c8a-8345-c7d41545ccc7';
+
+interface DocumentRecord {
+  title?: string | null;
+  content?: string | null;
+  markdown?: string | null;
+}
 
 async function main() {
   // Check transcript
@@ -35,9 +42,11 @@ async function main() {
   console.log('📄 DOCUMENT:');
   console.log('All columns:', Object.keys(doc || {}).join(', '));
   console.log('Title:', doc?.title || '(no title)');
-  console.log('Content length:', (doc as any)?.content?.length || 0);
-  console.log('Markdown length:', (doc as any)?.markdown?.length || 0);
-  console.log('Content preview:', ((doc as any)?.content || (doc as any)?.markdown || '').substring(0, 500) || '(empty)');
+  const document = doc as DocumentRecord | null;
+  const content = document?.content || document?.markdown || '';
+  console.log('Content length:', document?.content?.length || 0);
+  console.log('Markdown length:', document?.markdown?.length || 0);
+  console.log('Content preview:', content.substring(0, 500) || '(empty)');
 }
 
 main().catch(console.error);

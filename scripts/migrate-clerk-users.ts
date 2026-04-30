@@ -20,9 +20,12 @@
  *   - Run with --dry-run first to verify the mapping before committing changes.
  */
 
-import 'dotenv/config';
-import { Pool } from 'pg';
 import crypto from 'crypto';
+
+import { config } from 'dotenv';
+import { Pool } from 'pg';
+
+config();
 
 // ---------------------------------------------------------------------------
 // Types
@@ -376,13 +379,14 @@ async function migrateUsers() {
           accountsCreated,
           supabaseUserUpdated: supabaseUpdated,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         await client.query('ROLLBACK');
-        console.error(`  ✗ Failed: ${email} (${clerkUser.id}): ${err.message}`);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`  ✗ Failed: ${email} (${clerkUser.id}): ${message}`);
         errors.push({
           clerkId: clerkUser.id,
           email,
-          error: err.message,
+          error: message,
         });
       } finally {
         client.release();

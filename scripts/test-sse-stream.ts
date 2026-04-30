@@ -17,6 +17,10 @@
 import { streamingManager } from '@/lib/services/streaming-processor';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 
+type StreamData = Record<string, unknown>;
+type StreamEvent = { type: string; message: string; data?: StreamData };
+type StreamingController = Parameters<typeof streamingManager.register>[1];
+
 // Color output helpers
 const colors = {
   reset: '\x1b[0m',
@@ -40,7 +44,7 @@ function logSection(title: string) {
   console.log('='.repeat(80) + '\n');
 }
 
-function logEvent(type: string, message: string, data?: any) {
+function logEvent(type: string, message: string, data?: StreamData) {
   const emoji = {
     progress: '📊',
     log: '📝',
@@ -76,7 +80,7 @@ async function testStreamingManagerInternal(recordingId: string) {
   // Try creating a mock connection
   log('Creating mock SSE connection...', 'blue');
 
-  const events: any[] = [];
+  const events: StreamEvent[] = [];
   let controllerClosed = false;
 
   const mockController = {
@@ -87,10 +91,10 @@ async function testStreamingManagerInternal(recordingId: string) {
       if (text.startsWith('data: ')) {
         try {
           const jsonStr = text.replace('data: ', '').trim();
-          const event = JSON.parse(jsonStr);
+          const event = JSON.parse(jsonStr) as StreamEvent;
           events.push(event);
           logEvent(event.type, event.message, event.data);
-        } catch (e) {
+        } catch {
           // Might be heartbeat or other non-JSON
           if (text.includes('heartbeat')) {
             log('💓 Heartbeat received', 'gray');
@@ -105,7 +109,7 @@ async function testStreamingManagerInternal(recordingId: string) {
   };
 
   // Register connection
-  streamingManager.register(recordingId, mockController as any);
+  streamingManager.register(recordingId, mockController as StreamingController);
   log('✓ Connection registered', 'green');
 
   // Send test events

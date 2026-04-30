@@ -9,10 +9,11 @@
  * Usage: node scripts/benchmark-connectors.js
  */
 
-const { createClient } = require('@supabase/supabase-js');
 const { performance } = require('perf_hooks');
 const fs = require('fs').promises;
 const path = require('path');
+
+const { createClient } = require('@supabase/supabase-js');
 
 // Configuration
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -27,7 +28,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // Test data
 const TEST_ORG_ID = 'test-org-' + Date.now();
-const TEST_USER_ID = 'test-user-' + Date.now();
 
 // Benchmark results
 const results = {
@@ -46,11 +46,10 @@ const results = {
  */
 async function measureTime(name, fn) {
   const start = performance.now();
-  let result;
   let error;
 
   try {
-    result = await fn();
+    await fn();
   } catch (e) {
     error = e;
   }
@@ -455,7 +454,7 @@ function generateReport() {
 
   // Summary statistics
   const allDurations = [];
-  for (const [name, stats] of Object.entries(results.benchmarks)) {
+  for (const stats of Object.values(results.benchmarks)) {
     if (stats.mean) {
       allDurations.push(stats.mean);
     }

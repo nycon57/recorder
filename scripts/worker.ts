@@ -11,11 +11,9 @@
  */
 
 // Load environment variables from .env.local
-import { config } from 'dotenv';
 import { resolve } from 'path';
 
-// Load .env.local file
-config({ path: resolve(process.cwd(), '.env.local') });
+import { config } from 'dotenv';
 
 import { processJobs, processJobById } from '@/lib/workers/job-processor';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
@@ -25,6 +23,9 @@ import {
   scheduleAnalyzeKnowledgeGapsJobs,
   GAP_ANALYSIS_SCHEDULE_INTERVAL_MS,
 } from '@/lib/workers/scheduler';
+
+// Load .env.local file
+config({ path: resolve(process.cwd(), '.env.local') });
 
 const args = process.argv.slice(2);
 const command = args[0];
