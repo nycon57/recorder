@@ -4,9 +4,9 @@
  * Returns vendor branding, voice config, and knowledge scope for the
  * embeddable SDK widget. Authenticated via API key only (not session).
  *
- * The API key's `white_label_config_id` is used to look up the vendor's
- * config row. This keeps the SDK from needing a full session while still
- * scoping data to the correct vendor.
+ * The API key resolves the vendor org/config, and
+ * `x-tribora-customer-org-id` resolves the customer org linked to that
+ * vendor. SDK install requests fail closed without both sides of that scope.
  *
  * Response:
  *   {
@@ -61,19 +61,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const customerOrgId = request.headers.get('x-tribora-customer-org-id');
-    if (customerOrgId) {
-      const customerOrg = await resolveCustomerOrgForVendor(
-        keyData.vendorOrgId,
-        customerOrgId,
+    const customerOrgId = request.headers
+      .get('x-tribora-customer-org-id')
+      ?.trim();
+    if (!customerOrgId) {
+      return NextResponse.json(
+        { error: 'Customer organization required' },
+        { status: 400, headers: CORS_HEADERS },
       );
+    }
 
-      if (!customerOrg) {
-        return NextResponse.json(
-          { error: 'Customer organization is not linked to this vendor' },
-          { status: 403, headers: CORS_HEADERS },
-        );
-      }
+    const customerOrg = await resolveCustomerOrgForVendor(
+      keyData.vendorOrgId,
+      customerOrgId,
+    );
+
+    if (!customerOrg) {
+      return NextResponse.json(
+        { error: 'Customer organization is not linked to this vendor' },
+        { status: 403, headers: CORS_HEADERS },
+      );
     }
 
     // Fetch the white-label config associated with this API key

@@ -4,13 +4,19 @@
  * Usage (UMD):
  *   <script src="https://cdn.tribora.ai/sdk/tribora-sdk.js"></script>
  *   <script>
- *     const tribora = new Tribora({ apiKey: 'sk_live_...' });
+ *     const tribora = new Tribora({
+ *       apiKey: 'sk_live_...',
+ *       customerOrgId: 'org_...',
+ *     });
  *     tribora.init();
  *   </script>
  *
  * Usage (ESM):
  *   import { Tribora } from '@tribora/sdk';
- *   const tribora = new Tribora({ apiKey: 'sk_live_...' });
+ *   const tribora = new Tribora({
+ *     apiKey: 'sk_live_...',
+ *     customerOrgId: 'org_...',
+ *   });
  *   tribora.init();
  */
 
@@ -24,7 +30,7 @@ export interface TriboraOptions {
   /** Vendor API key (sk_live_...) */
   apiKey: string;
   /** Customer organization to target for customer-specific recall. */
-  customerOrgId?: string;
+  customerOrgId: string;
   /** Container element or CSS selector for the widget. Default: floating FAB. */
   container?: string | HTMLElement;
   /** Tribora API base URL. Default: https://app.tribora.ai */
@@ -49,6 +55,9 @@ export class Tribora {
   constructor(options: TriboraOptions) {
     if (!options.apiKey) {
       throw new Error('[Tribora] apiKey is required');
+    }
+    if (!options.customerOrgId) {
+      throw new Error('[Tribora] customerOrgId is required');
     }
 
     this.options = {
