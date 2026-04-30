@@ -15,8 +15,6 @@ const FILES = [
   'src/lib/services/chat-tools.ts',
   'src/app/api/search/route.ts',
   'src/app/api/recordings/[id]/search/route.ts',
-  'src/app/api/conversations/route.ts',
-  'src/app/api/conversations/[id]/route.ts',
   'src/app/components/content/RelatedContent.tsx',
 ];
 

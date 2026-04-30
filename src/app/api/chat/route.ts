@@ -431,6 +431,13 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
       systemPrompt = 'You are a helpful AI assistant. The user has no recordings yet. Let them know they need to create recordings first before you can answer questions about them.';
     }
 
+    if (isScopedDiscoveryMode) {
+      systemPrompt += `\n\nSCOPED RECORDING MODE:
+- The user selected specific recording IDs. Stay within that selected content.
+- Use searchRecordings only; it is constrained to compiled Wiki pages linked to the selected recording IDs.
+- Do not browse, summarize, or infer from the broader organization library.`;
+    }
+
     if (answerMode === 'compiled-memory' && compiledAnswerContext) {
       console.log('[Chat API] ===== COMPILED MEMORY DEBUG =====');
       compiledAnswerContext.sources.forEach((source, idx) => {
@@ -445,7 +452,7 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
 
     // Create tools with bound context
     // Pass Zod schemas directly - AI SDK v5 handles conversion for Gemini
-    const toolsWithContext = ENABLE_CHAT_TOOLS && useToolDiscovery ? {
+    const scopedSearchRecordingsTool = {
       searchRecordings: tool({
         description: toolDescriptions.searchRecordings,
         inputSchema: searchRecordingsInputSchema,
@@ -457,6 +464,9 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
           });
         },
       }),
+    };
+
+    const unscopedDiscoveryTools = {
       getDocument: tool({
         description: toolDescriptions.getDocument,
         inputSchema: getDocumentInputSchema,
@@ -507,7 +517,15 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
           return await executeExploreKnowledgeGraph(args, { orgId, userId });
         },
       }),
-    } : undefined;
+    };
+
+    const toolsWithContext =
+      ENABLE_CHAT_TOOLS && useToolDiscovery
+        ? {
+            ...scopedSearchRecordingsTool,
+            ...(isScopedDiscoveryMode ? {} : unscopedDiscoveryTools),
+          }
+        : undefined;
 
     const shouldPreferTools = useToolDiscovery;
 
@@ -601,6 +619,7 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
         if (step.toolCalls && step.toolCalls.length > 0) {
           console.log('[Chat API] Tool calls in this step:');
           step.toolCalls.forEach((toolCall, idx) => {
+            if (!toolCall) return;
             console.log(`  [${idx + 1}] ${toolCall.toolName}:`,
               'args' in toolCall ? JSON.stringify(toolCall.args, null, 2) : '(streaming)'
             );
@@ -611,6 +630,7 @@ Tell the user that you don't have compiled knowledge about that yet and offer to
         if (step.toolResults && step.toolResults.length > 0) {
           console.log('[Chat API] Tool results in this step:');
           step.toolResults.forEach((result, idx) => {
+            if (!result) return;
             const resultData = 'result' in result ? result.result : '(no result)';
             console.log(`  [${idx + 1}] ${result.toolName}:`,
               typeof resultData === 'string'

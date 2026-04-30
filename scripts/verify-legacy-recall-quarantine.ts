@@ -35,10 +35,6 @@ const RAW_EVIDENCE_ALLOWLIST: Record<string, string> = {
     'Dedicated raw-evidence search endpoint; not used as canonical answer context.',
   'src/app/api/recordings/[id]/search/route.ts':
     'Recording-local exact evidence search endpoint.',
-  'src/app/api/conversations/route.ts':
-    'Conversation persistence compatibility wrapper; not recall/answer generation.',
-  'src/app/api/conversations/[id]/route.ts':
-    'Conversation history compatibility wrapper; not recall/answer generation.',
   'src/app/components/content/RelatedContent.tsx':
     'Related-content fallback surface; not chat answer context.',
 };
