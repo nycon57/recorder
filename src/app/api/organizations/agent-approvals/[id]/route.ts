@@ -228,6 +228,18 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
     );
   }
   if (routingApproval) {
+    const result = await reviewApproval(
+      id,
+      orgId,
+      userId,
+      action,
+      typeof rejection_reason === 'string' ? rejection_reason : undefined,
+    );
+
+    if (!result) {
+      return errors.notFound('Approval');
+    }
+
     try {
       await applyRoutingReviewDecision({
         approval: routingApproval.approval,
@@ -243,6 +255,20 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
         error instanceof Error ? error.message : 'Failed to review routing approval',
       );
     }
+
+    if (action === 'rejected') {
+      await logAgentAction({
+        orgId,
+        agentType: result.agent_type,
+        actionType: result.action_type,
+        contentId: result.content_id ?? undefined,
+        outcome: 'skipped',
+        outputSummary: `Approval rejected: ${rejection_reason ?? 'No reason provided'}`,
+        metadata: { approvalId: id, reviewedBy: userId },
+      });
+    }
+
+    return successResponse(result);
   }
 
   const result = await reviewApproval(

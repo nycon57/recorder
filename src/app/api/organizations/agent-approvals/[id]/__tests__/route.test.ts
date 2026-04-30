@@ -186,6 +186,9 @@ describe('PATCH /api/organizations/agent-approvals/[id]', () => {
       'approved',
       undefined,
     );
+    expect(reviewApprovalMock.mock.invocationCallOrder[0]).toBeLessThan(
+      enqueueRoutingCompileWikiJobMock.mock.invocationCallOrder[0],
+    );
   });
 
   it('persists rejected routing without enqueuing compile_wiki', async () => {
@@ -222,5 +225,18 @@ describe('PATCH /api/organizations/agent-approvals/[id]', () => {
         metadata: { approvalId: 'approval_1', reviewedBy: 'user_1' },
       }),
     );
+  });
+
+  it('does not apply routing side effects when the approval claim fails', async () => {
+    reviewApprovalMock.mockResolvedValue(null as never);
+    setupRoutingQueries();
+
+    const response = await PATCH(makeRequest({ action: 'approved' }), {
+      params: Promise.resolve({ id: 'approval_1' }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(writeRoutingReviewStateMock).not.toHaveBeenCalled();
+    expect(enqueueRoutingCompileWikiJobMock).not.toHaveBeenCalled();
   });
 });
