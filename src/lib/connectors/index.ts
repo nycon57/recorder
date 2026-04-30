@@ -53,6 +53,7 @@ export function createConnector(options: ConnectorFactoryOptions): Connector {
       }
       return new NotionConnector(options.credentials, {
         orgId: options.orgId,
+        connectorId: options.connectorId,
       });
 
     case ConnectorType.ZOOM:

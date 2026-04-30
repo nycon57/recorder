@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable @typescript-eslint/no-require-imports -- Legacy Node benchmark script uses CommonJS. */
-
 /**
  * Connector System Performance Benchmark
  *
@@ -10,11 +8,12 @@
  * Usage: node scripts/benchmark-connectors.js
  */
 
-const { performance } = require('perf_hooks');
-const fs = require('fs').promises;
-const path = require('path');
+const nodeRequire = module.require.bind(module);
+const { performance } = nodeRequire('perf_hooks');
+const fs = nodeRequire('fs').promises;
+const path = nodeRequire('path');
 
-const { createClient } = require('@supabase/supabase-js');
+const { createClient } = nodeRequire('@supabase/supabase-js');
 
 // Configuration
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;

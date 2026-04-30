@@ -138,8 +138,9 @@ export class NotionConnector implements Connector {
   private refreshToken?: string;
   private expiresAt?: Date;
   private orgId?: string;
+  private connectorId?: string;
 
-  constructor(credentials: ConnectorCredentials, config?: { orgId: string }) {
+  constructor(credentials: ConnectorCredentials, config?: { orgId: string; connectorId?: string }) {
     if (!credentials.accessToken) {
       throw new Error('Notion access token is required');
     }
@@ -148,6 +149,7 @@ export class NotionConnector implements Connector {
     this.refreshToken = credentials.refreshToken;
     this.expiresAt = credentials.expiresAt ? new Date(credentials.expiresAt) : undefined;
     this.orgId = config?.orgId;
+    this.connectorId = config?.connectorId;
 
     // Initialize Notion client
     this.notion = new Client({
@@ -1046,9 +1048,13 @@ export class NotionConnector implements Connector {
             .eq('id', existing.id);
         }
       } else {
+        if (!this.connectorId) {
+          throw new Error('Notion connector ID is required to store imported documents');
+        }
+
         // Insert new document
         await supabase.from('imported_documents').insert({
-          connector_id: null as unknown as string,
+          connector_id: this.connectorId,
           org_id: this.orgId,
           external_id: doc.externalId,
           external_url: doc.externalUrl,

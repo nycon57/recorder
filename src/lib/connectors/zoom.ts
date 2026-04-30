@@ -555,6 +555,10 @@ export class ZoomConnector implements Connector {
     fileSize: number;
     sourceMetadata: Json;
   }): Promise<void> {
+    if (!this.connectorId) {
+      throw new Error('Zoom connector ID is required to store imported documents');
+    }
+
     const supabase = createClient();
 
     // Convert buffer to base64 if needed
@@ -568,7 +572,7 @@ export class ZoomConnector implements Connector {
     const { data: existing } = await supabase
       .from('imported_documents')
       .select('id, content_hash, sync_count')
-      .eq('connector_id', (this.connectorId || null) as unknown as string)
+      .eq('connector_id', this.connectorId)
       .eq('external_id', doc.externalId)
       .single();
 
@@ -589,7 +593,7 @@ export class ZoomConnector implements Connector {
     // Insert or update document
     const { error } = await supabase.from('imported_documents').upsert(
       {
-        connector_id: (this.connectorId || null) as unknown as string,
+        connector_id: this.connectorId,
         org_id: this.orgId,
         external_id: doc.externalId,
         title: doc.title,

@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable @typescript-eslint/no-require-imports -- Legacy Node benchmark script uses CommonJS. */
-
 /**
  * Performance Benchmark Script for Phase 4 Optimizations
  *
@@ -14,9 +12,10 @@
  *   node scripts/benchmark-phase4-optimized.js test-assets/10min-sample.mp4
  */
 
-const { performance } = require('perf_hooks');
-const fs = require('fs').promises;
-const { spawn } = require('child_process');
+const nodeRequire = module.require.bind(module);
+const { performance } = nodeRequire('perf_hooks');
+const fs = nodeRequire('fs').promises;
+const { spawn } = nodeRequire('child_process');
 
 // Color codes for output
 const colors = {

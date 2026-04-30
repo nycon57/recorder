@@ -48,7 +48,7 @@ export async function validateApiKey(
     // We need to fetch candidates and use bcrypt.compare() to find the match
     const { data: apiKeys, error: fetchError } = await supabaseAdmin
       .from('api_keys')
-      .select('id, key_hash, org_id, scopes, rate_limit, status, expires_at, ip_whitelist')
+      .select('id, key_hash, org_id, scopes, rate_limit, status, expires_at, ip_whitelist, usage_count')
       .eq('key_prefix', keyPrefix)
       .eq('status', 'active');
 
@@ -150,7 +150,7 @@ export async function validateApiKey(
       .from('api_keys')
       .update({
         last_used_at: new Date().toISOString(),
-        usage_count: ((matchedKey as { usage_count?: number }).usage_count ?? 0) + 1,
+        usage_count: (matchedKey.usage_count ?? 0) + 1,
       })
       .eq('id', matchedKey.id)
       .then(({ error }) => {

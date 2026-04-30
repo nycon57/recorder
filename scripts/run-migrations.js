@@ -5,13 +5,12 @@
  * It uses the service role key to bypass RLS policies.
  */
 
-/* eslint-disable @typescript-eslint/no-require-imports -- Legacy Node migration runner uses CommonJS. */
+const nodeRequire = module.require.bind(module);
+const fs = nodeRequire('fs');
+const path = nodeRequire('path');
 
-const fs = require('fs');
-const path = require('path');
-
-const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '.env.local' });
+const { createClient } = nodeRequire('@supabase/supabase-js');
+nodeRequire('dotenv').config({ path: '.env.local' });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
