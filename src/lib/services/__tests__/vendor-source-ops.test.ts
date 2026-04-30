@@ -10,7 +10,8 @@ function makeSource(
     id: 'source-1',
     app: 'hubspot',
     source_kind: 'documentation',
-    source_url: 'https://knowledge.hubspot.com/contacts/view-and-filter-records',
+    source_url:
+      'https://knowledge.hubspot.com/contacts/view-and-filter-records?utm_source=ops#gated',
     publisher_hostname: 'hubspot.com',
     official_source: true,
     fetch_strategy: 'sanctioned_crawl',
@@ -87,8 +88,18 @@ describe('vendor-source-ops', () => {
       ],
       activeJobs: [
         {
+          id: 'job-source-1',
+          status: 'completed',
+          dedupe_key: 'ingest_vendor_docs:source:source-1',
+          created_at: '2026-04-20T11:00:00.000Z',
+          completed_at: '2026-04-20T11:30:00.000Z',
+        },
+        {
+          id: 'job-source-5',
           status: 'processing',
           dedupe_key: 'ingest_vendor_docs:source:source-5',
+          created_at: '2026-04-20T11:55:00.000Z',
+          completed_at: null,
         },
       ],
     });
@@ -118,6 +129,13 @@ describe('vendor-source-ops', () => {
     expect(snapshot.sources.find((source) => source.id === 'source-1')).toMatchObject({
       corpusPageCount: 2,
       legacyPageCount: 1,
+      normalizedSourceUrl: 'https://knowledge.hubspot.com/contacts/view-and-filter-records',
+      sourceUrl:
+        'https://knowledge.hubspot.com/contacts/view-and-filter-records?utm_source=ops#gated',
+      latestSyncJobId: 'job-source-1',
+      latestSyncJobStatus: 'completed',
+      latestSyncJobCreatedAt: '2026-04-20T11:00:00.000Z',
+      latestSyncJobCompletedAt: '2026-04-20T11:30:00.000Z',
       isDueForSync: false,
       termsReviewStatus: 'approved',
       lifecycle: 'active',
@@ -126,6 +144,8 @@ describe('vendor-source-ops', () => {
 
     expect(snapshot.sources.find((source) => source.id === 'source-5')).toMatchObject({
       activeJobStatus: 'processing',
+      latestSyncJobId: 'job-source-5',
+      latestSyncJobStatus: 'processing',
       corpusPageCount: 1,
       legacyPageCount: 1,
       isDueForSync: true,

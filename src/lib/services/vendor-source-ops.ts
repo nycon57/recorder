@@ -20,7 +20,7 @@ interface LegacyVendorSourcePageCountRow {
 }
 type VendorSourceJobRow = Pick<
   Database['public']['Tables']['jobs']['Row'],
-  'status' | 'dedupe_key'
+  'id' | 'status' | 'dedupe_key' | 'created_at' | 'completed_at'
 >;
 
 export type VendorSourceOpsStatus =
@@ -37,6 +37,7 @@ export interface VendorSourceOpsItem {
   status: VendorSourceOpsStatus;
   sourceKind: VendorSourceRow['source_kind'];
   sourceUrl: string;
+  normalizedSourceUrl: string;
   publisherHostname: string;
   fetchStrategy: VendorSourceRow['fetch_strategy'];
   officialSource: boolean;
@@ -58,6 +59,10 @@ export interface VendorSourceOpsItem {
   retirementReason: string | null;
   replacementSourceId: string | null;
   contentHash: string | null;
+  latestSyncJobId: string | null;
+  latestSyncJobStatus: string | null;
+  latestSyncJobCreatedAt: string | null;
+  latestSyncJobCompletedAt: string | null;
   corpusPageCount: number;
   legacyPageCount: number;
   activeJobStatus: 'pending' | 'processing' | null;
@@ -129,6 +134,35 @@ function resolveActiveJobStatus(
   return activeJobsByDedupeKey.get(buildVendorSourceSyncDedupeKey(sourceId)) ?? null;
 }
 
+function resolveLatestJob(
+  sourceId: string,
+  latestJobsByDedupeKey: Map<string, VendorSourceJobRow>,
+): VendorSourceJobRow | null {
+  return latestJobsByDedupeKey.get(buildVendorSourceSyncDedupeKey(sourceId)) ?? null;
+}
+
+function normalizeSourceUrlForLedger(sourceUrl: string): string {
+  try {
+    const parsed = new URL(sourceUrl.trim());
+    parsed.hash = '';
+
+    for (const key of Array.from(parsed.searchParams.keys())) {
+      const normalizedKey = key.toLowerCase();
+      if (
+        normalizedKey.startsWith('utm_') ||
+        normalizedKey === 'gclid' ||
+        normalizedKey === 'fbclid'
+      ) {
+        parsed.searchParams.delete(key);
+      }
+    }
+
+    return parsed.toString();
+  } catch {
+    return sourceUrl.trim();
+  }
+}
+
 export function buildVendorSourceOpsSnapshot({
   sources,
   corpusPages,
@@ -140,6 +174,7 @@ export function buildVendorSourceOpsSnapshot({
   const corpusPagesBySourceId = new Map<string, number>();
   const legacyPagesBySourceId = new Map<string, number>();
   const activeJobsByDedupeKey = new Map<string, 'pending' | 'processing'>();
+  const latestJobsByDedupeKey = new Map<string, VendorSourceJobRow>();
 
   for (const page of corpusPages) {
     setCount(corpusPagesBySourceId, page.vendor_source_id, page.page_count);
@@ -150,6 +185,10 @@ export function buildVendorSourceOpsSnapshot({
   }
 
   for (const job of activeJobs) {
+    if (job.dedupe_key && !latestJobsByDedupeKey.has(job.dedupe_key)) {
+      latestJobsByDedupeKey.set(job.dedupe_key, job);
+    }
+
     if (
       job.dedupe_key &&
       (job.status === 'pending' || job.status === 'processing')
@@ -164,6 +203,7 @@ export function buildVendorSourceOpsSnapshot({
         source.id,
         activeJobsByDedupeKey,
       );
+      const latestSyncJob = resolveLatestJob(source.id, latestJobsByDedupeKey);
       const isDueForSync = isVendorSourceDueForSync(source, now);
       const syncBlockReason = getVendorSourceSyncBlockReason(source);
 
@@ -188,6 +228,7 @@ export function buildVendorSourceOpsSnapshot({
         status,
         sourceKind: source.source_kind,
         sourceUrl: source.source_url,
+        normalizedSourceUrl: normalizeSourceUrlForLedger(source.source_url),
         publisherHostname: source.publisher_hostname,
         fetchStrategy: source.fetch_strategy,
         officialSource: source.official_source,
@@ -209,6 +250,10 @@ export function buildVendorSourceOpsSnapshot({
         retirementReason: source.retirement_reason,
         replacementSourceId: source.replacement_source_id,
         contentHash: source.content_hash,
+        latestSyncJobId: latestSyncJob?.id ?? null,
+        latestSyncJobStatus: latestSyncJob?.status ?? null,
+        latestSyncJobCreatedAt: latestSyncJob?.created_at ?? null,
+        latestSyncJobCompletedAt: latestSyncJob?.completed_at ?? null,
         corpusPageCount: corpusPagesBySourceId.get(source.id) ?? 0,
         legacyPageCount: legacyPagesBySourceId.get(source.id) ?? 0,
         activeJobStatus,
@@ -268,9 +313,10 @@ export function createVendorSourceOpsService(supabase = createAdminClient()) {
             .select('vendor_source_id, page_count'),
           supabase
             .from('jobs')
-            .select('status, dedupe_key')
+            .select('id, status, dedupe_key, created_at, completed_at')
             .eq('type', 'ingest_vendor_docs')
-            .in('status', ['pending', 'processing']),
+            .order('created_at', { ascending: false })
+            .limit(500),
         ]);
 
       if (sourcesResult.error) {
@@ -293,7 +339,7 @@ export function createVendorSourceOpsService(supabase = createAdminClient()) {
 
       if (jobsResult.error) {
         throw new Error(
-          `[vendor-source-ops] Failed to load active vendor sync jobs: ${jobsResult.error.message}`,
+          `[vendor-source-ops] Failed to load vendor sync jobs: ${jobsResult.error.message}`,
         );
       }
 

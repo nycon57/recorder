@@ -22,6 +22,12 @@ export function SourceStatusBadge({ status }: { status: VendorSourceOpsStatus })
           Stale
         </Badge>
       );
+    case 'blocked':
+      return (
+        <Badge variant="outline" className="border-orange-500/40 text-orange-700">
+          Blocked
+        </Badge>
+      );
     case 'failing':
       return <Badge variant="destructive">Failing</Badge>;
     case 'never_synced':
