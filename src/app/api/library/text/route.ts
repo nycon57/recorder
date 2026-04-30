@@ -10,6 +10,7 @@ import {
   generateRequestId,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { hasPermission, type OrganizationRole } from '@/lib/security/rbac';
 import { createTextNoteSchema } from '@/lib/validations/library';
 import type { JobType } from '@/lib/types/database';
 import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
@@ -54,7 +55,11 @@ import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
  */
 export const POST = apiHandler(async (request: NextRequest) => {
   const requestId = generateRequestId();
-  const { orgId, userId } = await requireOrg();
+  const { orgId, userId, role } = await requireOrg();
+
+  if (!hasPermission(role as OrganizationRole, 'recording:create')) {
+    return errors.forbidden(requestId);
+  }
 
   // Parse and validate request body
   const body = await parseBody(request, createTextNoteSchema);

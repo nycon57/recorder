@@ -18,6 +18,7 @@ import {
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { withRateLimit } from '@/lib/rate-limit/middleware';
 import { QuotaManager } from '@/lib/services/quotas/quota-manager';
+import { hasPermission, type OrganizationRole } from '@/lib/security/rbac';
 import { createLogger } from '@/lib/utils/logger';
 import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
 import {
@@ -80,10 +81,18 @@ function getIdempotencyKey(
 export const POST = withRateLimit(
   apiHandler(async (request: NextRequest) => {
     const requestId = generateRequestId();
-    const { orgId, userId } = await requireOrg();
+    const { orgId, userId, role } = await requireOrg();
     const supabase = supabaseAdmin;
 
     try {
+      if (!hasPermission(role as OrganizationRole, 'recording:create')) {
+        logger.warn('Upload init denied for non-writer role', {
+          context: { requestId, orgId, userId },
+          data: { role },
+        });
+        return errors.forbidden(requestId);
+      }
+
       // Parse and validate request body
       const body = await request.json();
       const validationResult = initUploadSchema.safeParse(body);

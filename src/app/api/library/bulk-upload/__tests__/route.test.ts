@@ -10,13 +10,15 @@ import {
   jest,
 } from '@jest/globals';
 
-const mockRequireOrg = jest.fn();
+const mockRequireOrg = jest.fn<
+  () => Promise<{ orgId: string; userId: string }>
+>();
 
 type MockHandler = (...args: unknown[]) => unknown;
 
 jest.mock('@/lib/utils/api', () => ({
   apiHandler: <THandler extends MockHandler>(fn: THandler) => fn,
-  requireOrg: (...args: unknown[]) => mockRequireOrg(...args),
+  requireOrg: () => mockRequireOrg(),
 }));
 
 let POST: typeof import('../route').POST;

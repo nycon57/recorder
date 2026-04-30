@@ -28,6 +28,8 @@ jest.mock('@/lib/utils/api', () => ({
       Response.json({ message, details, requestId }, { status: 400 }),
     internalError: (requestId?: string) =>
       Response.json({ message: 'Internal error', requestId }, { status: 500 }),
+    forbidden: (requestId?: string) =>
+      Response.json({ message: 'Forbidden', requestId }, { status: 403 }),
     quotaExceeded: (details?: unknown) =>
       Response.json({ message: 'Quota exceeded', details }, { status: 402 }),
   },
@@ -81,6 +83,7 @@ describe('POST /api/recordings/upload/init', () => {
     mockRequireOrg.mockImplementation(() => Promise.resolve({
       orgId: 'org_1',
       userId: 'user_1',
+      role: 'contributor',
     }));
     mockCheckAndConsumeQuota.mockImplementation(() => Promise.resolve({
       allowed: true,
@@ -162,6 +165,30 @@ describe('POST /api/recordings/upload/init', () => {
       uploadPath: 'org_1/recordings/rec_1/raw.webm',
       thumbnailPath: 'org_org_1/recordings/rec_1/thumbnail.jpg',
     });
+  });
+
+  it('rejects reader users before consuming quota or creating upload URLs', async () => {
+    mockRequireOrg.mockImplementation(() => Promise.resolve({
+      orgId: 'org_1',
+      userId: 'reader_1',
+      role: 'reader',
+    }));
+
+    const response = await POST(
+      new Request('http://localhost/api/recordings/upload/init', {
+        method: 'POST',
+        body: JSON.stringify({
+          filename: 'screen demo.webm',
+          mimeType: 'video/webm',
+          fileSize: 1024,
+        }),
+      }) as unknown as NextRequest,
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockCheckAndConsumeQuota).not.toHaveBeenCalled();
+    expect(mockDbFrom).not.toHaveBeenCalled();
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
   });
 
   it('reuses an existing extension upload for the same idempotency key', async () => {
